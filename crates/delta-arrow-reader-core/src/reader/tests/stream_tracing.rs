@@ -1,11 +1,11 @@
 use super::*;
-use crate::test_tracing::{Captured, Collector};
+use crate::test_tracing::{CapturedTraceRecord, TraceCollector};
 use serde_json::json;
 use tracing::instrument::WithSubscriber;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn terminal(collector: &Collector, outcome: &str) -> Captured {
+fn assert_terminal_event(collector: &TraceCollector, outcome: &str) -> CapturedTraceRecord {
     let events = collector.events();
     assert_eq!(events.len(), 2, "{events:?}");
     assert_eq!(events[0].fields["event"], "scan_execution.started");
@@ -21,8 +21,8 @@ fn terminal(collector: &Collector, outcome: &str) -> Captured {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion() -> TestResult {
     for stop in ["resume", "drop", "cancel"] {
-        let collector = Collector::new(Level::INFO);
-        let unrelated = Collector::new(Level::INFO);
+        let collector = TraceCollector::new(Level::INFO);
+        let unrelated = TraceCollector::new(Level::INFO);
         let ControlledMerge {
             mut stream,
             limiter,
@@ -47,7 +47,7 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
                         assert_eq!(ids, [2, 10, 20]);
                         assert!(!cancellation.is_cancelled());
                         assert_eq!(
-                            terminal(&collector, "completed").fields["completion_reason"],
+                            assert_terminal_event(&collector, "completed").fields["completion_reason"],
                             "eof"
                         );
                         drop(stream);
@@ -57,12 +57,12 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
                         while stream.next_batch().await?.is_some() {}
                         assert!(stream.next_batch().await?.is_none());
                         drop(stream);
-                        assert_eq!(terminal(&collector, "cancelled").level, Level::INFO);
+                        assert_eq!(assert_terminal_event(&collector, "cancelled").level, Level::INFO);
                     }
                     _ => {
                         with_default(unrelated.clone(), || drop(stream));
                         assert!(cancellation.is_cancelled());
-                        let event = terminal(&collector, "dropped");
+                        let event = assert_terminal_event(&collector, "dropped");
                         assert_eq!(event.level, Level::INFO);
                         assert_eq!(event.fields["output_started"], true);
                     }
@@ -86,7 +86,7 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
 
 #[tokio::test]
 async fn cancellation_before_first_poll_is_not_eof() -> TestResult {
-    let collector = Collector::new(Level::INFO);
+    let collector = TraceCollector::new(Level::INFO);
     let ControlledMerge {
         mut stream,
         cancellation,
@@ -102,7 +102,7 @@ async fn cancellation_before_first_poll_is_not_eof() -> TestResult {
             .is_none()
     );
     drop(stream);
-    let event = terminal(&collector, "cancelled");
+    let event = assert_terminal_event(&collector, "cancelled");
     assert_eq!(event.fields["output_started"], false);
     assert_eq!(metrics.snapshot().file_tasks_started, 0);
     Ok(())
@@ -125,7 +125,7 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
             cancellation,
         );
         let mut stream = direct_stream(VecDeque::from([partition]), metrics, 1);
-        let collector = Collector::new(Level::INFO);
+        let collector = TraceCollector::new(Level::INFO);
         let error = stream
             .next_batch()
             .with_subscriber(collector.clone())
@@ -136,11 +136,11 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
         assert!(stream.next_batch().await?.is_none());
         drop(stream);
         let event = if reason == "scan_execution_cancelled" {
-            let event = terminal(&collector, "cancelled");
+            let event = assert_terminal_event(&collector, "cancelled");
             assert_eq!(event.level, Level::INFO);
             event
         } else {
-            let event = terminal(&collector, "failed");
+            let event = assert_terminal_event(&collector, "failed");
             assert_eq!(event.level, Level::ERROR);
             assert_eq!(event.fields["error_reason"], reason);
             assert_eq!(event.fields["partition"], 0);
@@ -153,7 +153,7 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
 
 #[tokio::test]
 async fn finalizing_a_batch_reports_one_error_and_releases_reads() -> TestResult {
-    let collector = Collector::new(Level::ERROR);
+    let collector = TraceCollector::new(Level::ERROR);
     let ControlledMerge {
         mut stream,
         limiter,
@@ -188,9 +188,9 @@ async fn finalizing_a_batch_reports_one_error_and_releases_reads() -> TestResult
 #[test]
 fn terminal_subscriber_panic_never_reports_another_outcome() -> TestResult {
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let mut collector = Collector::new(Level::INFO);
+    let mut collector = TraceCollector::new(Level::INFO);
     let callback_calls = Arc::clone(&calls);
-    collector.probe = Some(Arc::new(move || {
+    collector.on_capture = Some(Arc::new(move || {
         if callback_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
             panic!("terminal subscriber failed");
         }
@@ -213,7 +213,7 @@ fn terminal_subscriber_panic_never_reports_another_outcome() -> TestResult {
     drop(stream);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(
-        terminal(&collector, "completed").fields["completion_reason"],
+        assert_terminal_event(&collector, "completed").fields["completion_reason"],
         json!("eof")
     );
     Ok(())

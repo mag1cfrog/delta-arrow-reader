@@ -109,7 +109,8 @@ fn executable_names_preserve_help_version_and_redacted_errors()
         )?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        let diagnostic = check_failure(&output.stderr, "configuration", "invalid_cli_argument");
+        let diagnostic =
+            assert_failure_diagnostic(&output.stderr, "configuration", "invalid_cli_argument");
         assert!(diagnostic.contains("argument_kind=UnknownArgument"));
         fs::remove_file(executable)?;
     }
@@ -140,7 +141,8 @@ fn argument_failures_keep_distinct_safe_kinds() -> Result<(), Box<dyn std::error
         let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(arguments))?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        let diagnostic = check_failure(&output.stderr, "configuration", "invalid_cli_argument");
+        let diagnostic =
+            assert_failure_diagnostic(&output.stderr, "configuration", "invalid_cli_argument");
         assert!(
             diagnostic.contains(&format!("argument_kind={kind}")),
             "{diagnostic}"
@@ -189,7 +191,8 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
             )?;
             assert_eq!(output.status.code(), Some(2), "{output:?}");
             assert!(output.stdout.is_empty());
-            let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
+            let diagnostic =
+                assert_failure_diagnostic(&output.stderr, "configuration", "invalid_input_json");
             let field = if detail.starts_with("kind=") {
                 format!("json_{detail}")
             } else {
@@ -306,7 +309,8 @@ fn predicate_validation_reasons_survive_json_decoding() -> Result<(), Box<dyn st
         )?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
+        let diagnostic =
+            assert_failure_diagnostic(&output.stderr, "configuration", "invalid_input_json");
         assert!(
             diagnostic.contains(&format!("error_reason=\"{reason}\"")),
             "{diagnostic}"
@@ -496,6 +500,40 @@ fn sort_by_id(batch: &RecordBatch) -> Result<RecordBatch, arrow::error::ArrowErr
     take_record_batch(batch, &indices)
 }
 
+#[cfg(target_os = "linux")]
+fn create_full_pipe() -> io::Result<(io::PipeReader, io::PipeWriter)> {
+    use std::{io::Write, os::fd::AsRawFd};
+
+    let (reader, mut writer) = io::pipe()?;
+    // SAFETY: fcntl only queries this live pipe descriptor's capacity.
+    let capacity = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETPIPE_SZ) };
+    assert!(capacity > 0);
+    writer.write_all(&vec![0; capacity as usize])?;
+    Ok((reader, writer))
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_exit_or_kill(
+    child: &mut std::process::Child,
+    timeout: Duration,
+) -> io::Result<std::process::ExitStatus> {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if started.elapsed() > timeout {
+            child.kill()?;
+            child.wait()?;
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "CLI fixture did not exit",
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
     run_with_stdout(command, Stdio::piped())
 }
@@ -579,7 +617,7 @@ fn assert_fixture_schema_fields(actual: &Fields, oracle: &Fields, delta: &[Value
     }
 }
 
-fn check_failure<'a>(stderr: &'a [u8], phase: &str, code: &str) -> &'a str {
+fn assert_failure_diagnostic<'a>(stderr: &'a [u8], phase: &str, code: &str) -> &'a str {
     let text = std::str::from_utf8(stderr).unwrap();
     assert!(text.ends_with('\n'), "{text}");
     assert_eq!(text.lines().count(), 1, "{text}");

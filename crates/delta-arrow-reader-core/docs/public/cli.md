@@ -110,6 +110,8 @@ names in `authorization.guides`; the storage-options guide lists
 for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
 The default guide lists canonical JSON credential keys. Its `full_command`
 supplies alternate spellings and complete service metadata when needed.
+For AWS and Azure identity providers, `--full` includes JSON reference examples,
+environment variable names, precedence, and renewal rules in `provider_configuration`.
 These responses contain no credential values and do not check the caller's access.
 
 For a provisioned credential env file, a read command's guide gives the
@@ -1521,9 +1523,11 @@ Use the exact status when a script needs to distinguish failures:
 | 0 | Complete success, including help and version |
 | 2 | Invalid CLI arguments or local input configuration before loading |
 | 1 | Runtime, reader, SQL, resource-limit, or Arrow IPC encoding failure |
-| 3 | stdout write or flush failure, including a broken pipe |
+| 3 | Result or machine-completion output failure, including a broken pipe |
+| 130 / 143 | Handled cancellation by Ctrl-C / Unix SIGTERM |
 
-For target-specific filters, diagnostic fields, or process lifecycle rules,
+Capabilities, preview, query, and UC-backed inspect/scan handle cancellation.
+For command-specific signal behavior, target filters, or diagnostic fields,
 see the [CLI diagnostics reference](reference/cli-diagnostics.md).
 
 ## Installation alternatives

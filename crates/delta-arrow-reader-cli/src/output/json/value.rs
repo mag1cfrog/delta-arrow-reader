@@ -15,7 +15,10 @@ use serde::{Serialize, Serializer, ser::SerializeSeq};
 
 use crate::Error;
 
-pub(super) fn validate_type(data_type: &DataType, command: &'static str) -> Result<(), Error> {
+pub(super) fn validate_json_type_support(
+    data_type: &DataType,
+    command: &'static str,
+) -> Result<(), Error> {
     match data_type {
         DataType::Union(..) | DataType::Interval(..) | DataType::RunEndEncoded(..) => {
             Err(Error::UnsupportedJsonType { command })
@@ -25,11 +28,11 @@ pub(super) fn validate_type(data_type: &DataType, command: &'static str) -> Resu
         | DataType::ListView(field)
         | DataType::LargeListView(field)
         | DataType::FixedSizeList(field, _)
-        | DataType::Map(field, _) => validate_type(field.data_type(), command),
+        | DataType::Map(field, _) => validate_json_type_support(field.data_type(), command),
         DataType::Struct(fields) => fields
             .iter()
-            .try_for_each(|field| validate_type(field.data_type(), command)),
-        DataType::Dictionary(_, values) => validate_type(values, command),
+            .try_for_each(|field| validate_json_type_support(field.data_type(), command)),
+        DataType::Dictionary(_, values) => validate_json_type_support(values, command),
         DataType::Null
         | DataType::Boolean
         | DataType::Int8
@@ -117,24 +120,24 @@ impl Serialize for JsonCell<'_> {
         DataType::Float16 => serialize_float(array.as_primitive::<Float16Type>().value(index).to_f32(), serializer),
         DataType::Float32 => serialize_float(array.as_primitive::<Float32Type>().value(index), serializer),
         DataType::Float64 => serialize_float(array.as_primitive::<Float64Type>().value(index), serializer),
-        DataType::Decimal32(..) => self.serialize_decimal_string::<Decimal32Type, _>(serializer),
-        DataType::Decimal64(..) => self.serialize_decimal_string::<Decimal64Type, _>(serializer),
-        DataType::Decimal128(..) => self.serialize_decimal_string::<Decimal128Type, _>(serializer),
-        DataType::Decimal256(..) => self.serialize_decimal_string::<Decimal256Type, _>(serializer),
-        DataType::Date32 => self.serialize_decimal_string::<Date32Type, _>(serializer),
-        DataType::Date64 => self.serialize_decimal_string::<Date64Type, _>(serializer),
-        DataType::Time32(TimeUnit::Second) => self.serialize_decimal_string::<Time32SecondType, _>(serializer),
-        DataType::Time32(TimeUnit::Millisecond) => self.serialize_decimal_string::<Time32MillisecondType, _>(serializer),
-        DataType::Time64(TimeUnit::Microsecond) => self.serialize_decimal_string::<Time64MicrosecondType, _>(serializer),
-        DataType::Time64(TimeUnit::Nanosecond) => self.serialize_decimal_string::<Time64NanosecondType, _>(serializer),
-        DataType::Timestamp(TimeUnit::Second, _) => self.serialize_decimal_string::<TimestampSecondType, _>(serializer),
-        DataType::Timestamp(TimeUnit::Millisecond, _) => self.serialize_decimal_string::<TimestampMillisecondType, _>(serializer),
-        DataType::Timestamp(TimeUnit::Microsecond, _) => self.serialize_decimal_string::<TimestampMicrosecondType, _>(serializer),
-        DataType::Timestamp(TimeUnit::Nanosecond, _) => self.serialize_decimal_string::<TimestampNanosecondType, _>(serializer),
-        DataType::Duration(TimeUnit::Second) => self.serialize_decimal_string::<DurationSecondType, _>(serializer),
-        DataType::Duration(TimeUnit::Millisecond) => self.serialize_decimal_string::<DurationMillisecondType, _>(serializer),
-        DataType::Duration(TimeUnit::Microsecond) => self.serialize_decimal_string::<DurationMicrosecondType, _>(serializer),
-        DataType::Duration(TimeUnit::Nanosecond) => self.serialize_decimal_string::<DurationNanosecondType, _>(serializer),
+        DataType::Decimal32(..) => self.serialize_integer_string::<Decimal32Type, _>(serializer),
+        DataType::Decimal64(..) => self.serialize_integer_string::<Decimal64Type, _>(serializer),
+        DataType::Decimal128(..) => self.serialize_integer_string::<Decimal128Type, _>(serializer),
+        DataType::Decimal256(..) => self.serialize_integer_string::<Decimal256Type, _>(serializer),
+        DataType::Date32 => self.serialize_integer_string::<Date32Type, _>(serializer),
+        DataType::Date64 => self.serialize_integer_string::<Date64Type, _>(serializer),
+        DataType::Time32(TimeUnit::Second) => self.serialize_integer_string::<Time32SecondType, _>(serializer),
+        DataType::Time32(TimeUnit::Millisecond) => self.serialize_integer_string::<Time32MillisecondType, _>(serializer),
+        DataType::Time64(TimeUnit::Microsecond) => self.serialize_integer_string::<Time64MicrosecondType, _>(serializer),
+        DataType::Time64(TimeUnit::Nanosecond) => self.serialize_integer_string::<Time64NanosecondType, _>(serializer),
+        DataType::Timestamp(TimeUnit::Second, _) => self.serialize_integer_string::<TimestampSecondType, _>(serializer),
+        DataType::Timestamp(TimeUnit::Millisecond, _) => self.serialize_integer_string::<TimestampMillisecondType, _>(serializer),
+        DataType::Timestamp(TimeUnit::Microsecond, _) => self.serialize_integer_string::<TimestampMicrosecondType, _>(serializer),
+        DataType::Timestamp(TimeUnit::Nanosecond, _) => self.serialize_integer_string::<TimestampNanosecondType, _>(serializer),
+        DataType::Duration(TimeUnit::Second) => self.serialize_integer_string::<DurationSecondType, _>(serializer),
+        DataType::Duration(TimeUnit::Millisecond) => self.serialize_integer_string::<DurationMillisecondType, _>(serializer),
+        DataType::Duration(TimeUnit::Microsecond) => self.serialize_integer_string::<DurationMicrosecondType, _>(serializer),
+        DataType::Duration(TimeUnit::Nanosecond) => self.serialize_integer_string::<DurationNanosecondType, _>(serializer),
         DataType::Utf8 => array.as_string::<i32>().value(index).serialize(serializer),
         DataType::LargeUtf8 => array.as_string::<i64>().value(index).serialize(serializer),
         DataType::Utf8View => array.as_string_view().value(index).serialize(serializer),
@@ -160,7 +163,7 @@ impl Serialize for JsonCell<'_> {
 }
 
 impl JsonCell<'_> {
-    fn serialize_decimal_string<T: ArrowPrimitiveType, S: Serializer>(
+    fn serialize_integer_string<T: ArrowPrimitiveType, S: Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
@@ -201,7 +204,7 @@ mod tests {
 
     use super::*;
 
-    fn values(array: &dyn Array) -> Value {
+    fn encode_array_to_json(array: &dyn Array) -> Value {
         // Use the actual writer so float formatting and streaming Display match stdout.
         serde_json::from_str(&serde_json::to_string(&JsonArrayValues(array)).unwrap()).unwrap()
     }
@@ -292,12 +295,17 @@ mod tests {
             ),
         ];
         for (array, expected) in cases {
-            validate_type(array.data_type(), "query").unwrap();
-            assert_eq!(values(array.as_ref()), expected, "{:?}", array.data_type());
+            validate_json_type_support(array.data_type(), "query").unwrap();
+            assert_eq!(
+                encode_array_to_json(array.as_ref()),
+                expected,
+                "{:?}",
+                array.data_type()
+            );
         }
         let half =
             arrow::compute::cast(&Float32Array::from(vec![1.5, -0.0]), &DataType::Float16).unwrap();
-        assert_eq!(values(half.as_ref()), json!([1.5, "-0"]));
+        assert_eq!(encode_array_to_json(half.as_ref()), json!([1.5, "-0"]));
         let temporal: Vec<ArrayRef> = vec![
             Arc::new(Date32Array::from(vec![-1])),
             Arc::new(Date64Array::from(vec![-1])),
@@ -315,7 +323,7 @@ mod tests {
             Arc::new(DurationNanosecondArray::from(vec![-1])),
         ];
         for array in temporal {
-            assert_eq!(values(array.as_ref()), json!(["-1"]));
+            assert_eq!(encode_array_to_json(array.as_ref()), json!(["-1"]));
         }
     }
 
@@ -324,7 +332,10 @@ mod tests {
         for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
             let source = StringArray::from(vec![Some("中文\n\""), Some(""), None]);
             let array = arrow::compute::cast(&source, &data_type).unwrap();
-            assert_eq!(values(array.as_ref()), json!(["中文\n\"", "", null]));
+            assert_eq!(
+                encode_array_to_json(array.as_ref()),
+                json!(["中文\n\"", "", null])
+            );
         }
         for data_type in [
             DataType::Binary,
@@ -333,22 +344,31 @@ mod tests {
         ] {
             let source = BinaryArray::from(vec![Some(&[0_u8, 255][..]), Some(&[][..]), None]);
             let array = arrow::compute::cast(&source, &data_type).unwrap();
-            assert_eq!(values(array.as_ref()), json!(["AP8=", "", null]));
+            assert_eq!(
+                encode_array_to_json(array.as_ref()),
+                json!(["AP8=", "", null])
+            );
         }
         let fixed = FixedSizeBinaryArray::try_from_iter([&[0_u8, 255][..]].into_iter()).unwrap();
-        assert_eq!(values(&fixed), json!(["AP8="]));
+        assert_eq!(encode_array_to_json(&fixed), json!(["AP8="]));
         assert_eq!(
-            values(&BooleanArray::from(vec![Some(true), Some(false), None])),
+            encode_array_to_json(&BooleanArray::from(vec![Some(true), Some(false), None])),
             json!([true, false, null])
         );
-        assert_eq!(values(&NullArray::new(1)), json!([null]));
+        assert_eq!(encode_array_to_json(&NullArray::new(1)), json!([null]));
         let dictionary = DictionaryArray::<Int8Type>::try_new(
             Int8Array::from(vec![Some(1), Some(0), None, Some(2)]),
             Arc::new(StringArray::from(vec![Some("value"), None, Some("")])),
         )
         .unwrap();
-        assert_eq!(values(&dictionary.slice(1, 3)), json!(["value", null, ""]));
-        assert_eq!(values(&dictionary), json!([null, "value", null, ""]));
+        assert_eq!(
+            encode_array_to_json(&dictionary.slice(1, 3)),
+            json!(["value", null, ""])
+        );
+        assert_eq!(
+            encode_array_to_json(&dictionary),
+            json!([null, "value", null, ""])
+        );
     }
 
     #[test]
@@ -362,7 +382,7 @@ mod tests {
             Field::new("same", DataType::Utf8, false),
         ];
         let structure = StructArray::new(fields.into(), columns, Some(vec![true, false].into()));
-        assert_eq!(values(&structure), json!([["1", "a"], null]));
+        assert_eq!(encode_array_to_json(&structure), json!([["1", "a"], null]));
 
         let mut map = MapBuilder::new(None, StringBuilder::new(), Int64Builder::new());
         map.keys().append_value("k");
@@ -373,7 +393,7 @@ mod tests {
         map.append(true).unwrap();
         map.append(false).unwrap();
         assert_eq!(
-            values(&map.finish()),
+            encode_array_to_json(&map.finish()),
             json!([[["k", "1"], ["k", null]], [], null])
         );
 
@@ -390,12 +410,15 @@ mod tests {
             DataType::LargeListView(child),
         ] {
             let array = arrow::compute::cast(&list, &data_type).unwrap();
-            assert_eq!(values(array.as_ref()), json!([["1", null], [], null]));
+            assert_eq!(
+                encode_array_to_json(array.as_ref()),
+                json!([["1", null], [], null])
+            );
         }
         let mut fixed = FixedSizeListBuilder::new(Int64Builder::new(), 2);
         fixed.values().append_value(1);
         fixed.values().append_null();
         fixed.append(true);
-        assert_eq!(values(&fixed.finish()), json!([["1", null]]));
+        assert_eq!(encode_array_to_json(&fixed.finish()), json!([["1", null]]));
     }
 }

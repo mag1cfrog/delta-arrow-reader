@@ -384,7 +384,7 @@ mod tests {
                     FileAdmissionDecision, FileBatchStream, FileExecutor, PartitionStream,
                 },
             },
-            test_tracing::Collector,
+            test_tracing::TraceCollector,
         };
         use futures_util::FutureExt;
         use std::{collections::VecDeque, sync::Mutex};
@@ -441,7 +441,7 @@ mod tests {
             metrics.clone(),
             cancellation.clone(),
         );
-        let collector = Collector::new(tracing::Level::INFO);
+        let collector = TraceCollector::new(tracing::Level::INFO);
         let parent = tracing::subscriber::with_default(
             collector.clone(),
             || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),

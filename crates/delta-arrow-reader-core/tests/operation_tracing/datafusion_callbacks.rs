@@ -1,6 +1,6 @@
 //! Physical-plan callbacks report only the operation they own.
 
-use super::{datafusion_execution::plan, *};
+use super::{datafusion_execution::build_test_scan_plan, *};
 use ::datafusion::{
     common::{DataFusionError, config::ConfigOptions},
     physical_plan::collect,
@@ -14,11 +14,15 @@ fn rejected_children_preserve_native_errors_and_the_original_plan() -> TestResul
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
+        fixture.write_commit(
+            1,
+            &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+        )?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
         let mut identities = std::collections::HashSet::new();
         for level in [Level::WARN, Level::ERROR, Level::DEBUG] {
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let error = with_default(collector.clone(), || {
                 Arc::clone(&plan).with_new_children(vec![Arc::clone(&plan)])
             })
@@ -72,17 +76,18 @@ fn callback_milestones_keep_plan_identity_and_capability_results() -> TestResult
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(
+        fixture.write_commit(
             1,
             &[
-                fixture.parquet("secret-first.parquet", &[1, 2])?,
-                fixture.parquet("secret-second.parquet", &[3, 4])?,
+                fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?,
+                fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 4))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 4))?;
         let mut config = ConfigOptions::default();
         config.optimizer.repartition_file_min_size = 0;
-        let collector = Collector::new(Level::INFO);
+        let collector = TraceCollector::new(Level::INFO);
         let mut identities = std::collections::HashSet::new();
         let mut candidates = vec![Arc::clone(&plan)];
         for callback in [
@@ -142,7 +147,7 @@ fn callback_milestones_keep_plan_identity_and_capability_results() -> TestResult
             assert_eq!(events[0].fields["partition_count"], before);
             assert_eq!(events[1].fields["partition_count"], after);
             assert!(identities.insert(events[0].fields["operation_id"].as_u64().unwrap()));
-            collector.clear();
+            collector.clear_records();
             if let Some(updated) = updated {
                 candidates.push(updated);
             }
@@ -162,8 +167,12 @@ fn callback_milestones_keep_plan_identity_and_capability_results() -> TestResult
 fn inherited_statistics_failures_remain_owned_by_datafusion() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    let (_, plan, _) = runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
-    let collector = Collector::new(Level::DEBUG);
+    let (_, plan, _) = runtime.block_on(build_test_scan_plan(
+        &fixture,
+        ParquetReaderBackend::Direct,
+        1,
+    ))?;
+    let collector = TraceCollector::new(Level::DEBUG);
     with_default(collector.clone(), || -> TestResult {
         assert!(plan.partition_statistics(None).is_ok());
         assert!(plan.partition_statistics(Some(0)).is_ok());

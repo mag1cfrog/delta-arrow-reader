@@ -1,6 +1,6 @@
 use super::*;
 
-fn assert_diagnostics(
+fn assert_exception_fields(
     error: &PyErr,
     phase: &str,
     code: &str,
@@ -215,7 +215,7 @@ fn public_errors_preserve_fields_and_validation_logs() -> PyResult<()> {
                 } else {
                     assert_error::<DeltaReaderError>(result)
                 };
-                assert_diagnostics(&error, phase, code, Some(reason), source)?;
+                assert_exception_fields(&error, phase, code, Some(reason), source)?;
                 if disabled || level == 50 {
                     assert!(records.is_empty());
                     continue;
@@ -275,7 +275,7 @@ fn public_errors_preserve_fields_and_validation_logs() -> PyResult<()> {
         ] {
             records.call_method0("clear")?;
             let error = assert_error::<DeltaReaderError>(session.call_method1("sql", (query,)));
-            assert_diagnostics(&error, "datafusion", "sql_planning", None, None)?;
+            assert_exception_fields(&error, "datafusion", "sql_planning", None, None)?;
             assert_eq!(records.len(), 1);
             let record = records.get_item(0)?;
             assert_eq!(record.getattr("levelno")?.extract::<u8>()?, 40);

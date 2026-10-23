@@ -12,7 +12,7 @@ pub(crate) enum StreamOutcome<'a> {
     Failed(&'a DeltaReaderError),
 }
 
-pub(crate) struct StreamOperation {
+pub(crate) struct StreamTrace {
     operation: &'static str,
     id: u64,
     plan_id: u64,
@@ -27,7 +27,7 @@ pub(crate) struct StreamOperation {
     finished: bool,
 }
 
-impl StreamOperation {
+impl StreamTrace {
     pub(crate) fn start(
         plan_id: u64,
         snapshot_version: u64,
@@ -84,7 +84,7 @@ impl StreamOperation {
             output_started: false,
             finished: false,
         };
-        operation.milestone("started", None);
+        operation.emit_lifecycle_event("started", None);
         operation
     }
 
@@ -96,7 +96,7 @@ impl StreamOperation {
         // A subscriber panic must not make Drop report a second terminal event.
         self.finished = true;
         match outcome {
-            StreamOutcome::Eof | StreamOutcome::RowLimit => self.milestone(
+            StreamOutcome::Eof | StreamOutcome::RowLimit => self.emit_lifecycle_event(
                 "completed",
                 Some(match outcome {
                     StreamOutcome::Eof => "eof",
@@ -104,7 +104,7 @@ impl StreamOperation {
                 }),
             ),
             StreamOutcome::Cancelled => {
-                self.milestone("cancelled", None);
+                self.emit_lifecycle_event("cancelled", None);
             }
             StreamOutcome::Failed(error) => self.in_scope(|| {
                 tracing::error!(target: TARGET,
@@ -121,7 +121,7 @@ impl StreamOperation {
         }
     }
 
-    fn milestone(&self, outcome: &'static str, reason: Option<&'static str>) {
+    fn emit_lifecycle_event(&self, outcome: &'static str, reason: Option<&'static str>) {
         self.in_scope(|| {
             tracing::info!(target: TARGET,
                 event = %format_args!("{}.{outcome}", self.operation), operation = self.operation,
@@ -140,10 +140,10 @@ impl StreamOperation {
     }
 }
 
-impl Drop for StreamOperation {
+impl Drop for StreamTrace {
     fn drop(&mut self) {
         if !self.finished && !std::thread::panicking() {
-            self.milestone("dropped", None);
+            self.emit_lifecycle_event("dropped", None);
         }
     }
 }

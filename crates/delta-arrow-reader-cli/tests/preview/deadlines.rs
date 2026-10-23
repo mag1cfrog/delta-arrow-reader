@@ -1,42 +1,14 @@
 //! A blocked input, credential provider, or consumer cannot extend the preview indefinitely.
 
 use std::{
-    io::{self, Write},
-    os::fd::AsRawFd,
-    process::{Child, ExitStatus, Stdio},
+    io,
+    process::Stdio,
     thread,
     time::{Duration, Instant},
 };
 
 use super::*;
-use crate::run_with_stdout;
-
-fn filled_pipe() -> io::Result<(io::PipeReader, io::PipeWriter)> {
-    let (reader, mut writer) = io::pipe()?;
-    // SAFETY: fcntl only queries this live pipe descriptor's capacity.
-    let capacity = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETPIPE_SZ) };
-    assert!(capacity > 0);
-    writer.write_all(&vec![0; capacity as usize])?;
-    Ok((reader, writer))
-}
-
-fn wait_for_exit(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus> {
-    let started = Instant::now();
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(status);
-        }
-        if started.elapsed() > timeout {
-            child.kill()?;
-            child.wait()?;
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                "preview did not exit",
-            ));
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-}
+use crate::{create_full_pipe, run_with_stdout, wait_for_exit_or_kill};
 
 #[test]
 fn deadline_includes_blocked_inputs_and_synchronous_credential_reads() -> TestResult {
@@ -52,7 +24,7 @@ fn deadline_includes_blocked_inputs_and_synchronous_credential_reads() -> TestRe
         "azure-token",
     ] {
         let mut cmd = if option.starts_with("--") {
-            let mut cmd = command();
+            let mut cmd = preview_command();
             cmd.arg(option).arg(&fifo);
             cmd
         } else {
@@ -101,10 +73,10 @@ fn deadline_includes_blocked_inputs_and_synchronous_credential_reads() -> TestRe
 
 #[test]
 fn blocked_stdout_and_stderr_remain_within_deadline_and_cleanup_grace() -> TestResult {
-    let (_reader, writer) = filled_pipe()?;
+    let (_reader, writer) = create_full_pipe()?;
     let started = Instant::now();
     let output = run_with_stdout(
-        command().args(["--deadline-ms", "200"]),
+        preview_command().args(["--deadline-ms", "200"]),
         Stdio::from(writer),
     )?;
     assert!(started.elapsed() < Duration::from_secs(3));
@@ -114,16 +86,16 @@ fn blocked_stdout_and_stderr_remain_within_deadline_and_cleanup_grace() -> TestR
         "command_deadline_exceeded"
     );
     for invalid_logging in [false, true] {
-        let (_reader, writer) = filled_pipe()?;
+        let (_reader, writer) = create_full_pipe()?;
         let mut cmd = if invalid_logging {
             let mut cmd = Command::new(env!("CARGO_BIN_EXE_dar"));
             cmd.env_clear()
                 .arg("preview")
-                .arg(table_path("partitioned"))
+                .arg(fixture_table_path("partitioned"))
                 .env("RUST_LOG", "secret=invalid");
             cmd
         } else {
-            command()
+            preview_command()
         };
         let mut child = cmd
             .args(["--deadline-ms", "200"])
@@ -131,14 +103,14 @@ fn blocked_stdout_and_stderr_remain_within_deadline_and_cleanup_grace() -> TestR
             .stderr(Stdio::from(writer))
             .spawn()?;
         assert_eq!(
-            wait_for_exit(&mut child, Duration::from_secs(3))?.code(),
+            wait_for_exit_or_kill(&mut child, Duration::from_secs(3))?.code(),
             Some(1)
         );
     }
     let (reader, writer) = io::pipe()?;
     drop(reader);
     let output = run_with_stdout(
-        command().args(["--deadline-ms", "2000"]),
+        preview_command().args(["--deadline-ms", "2000"]),
         Stdio::from(writer),
     )?;
     assert_eq!(output.status.code(), Some(3));
@@ -149,9 +121,9 @@ fn blocked_stdout_and_stderr_remain_within_deadline_and_cleanup_grace() -> TestR
 #[test]
 fn blocked_completion_can_be_cancelled_without_a_success_record() -> TestResult {
     for (signal, status) in [(libc::SIGINT, 130), (libc::SIGTERM, 143)] {
-        let (_reader, writer) = filled_pipe()?;
+        let (_reader, writer) = create_full_pipe()?;
         let stdout = tempfile::tempfile()?;
-        let mut child = command()
+        let mut child = preview_command()
             .args(["--deadline-ms", "5000"])
             .stdout(stdout.try_clone()?)
             .stderr(Stdio::from(writer))
@@ -168,7 +140,7 @@ fn blocked_completion_can_be_cancelled_without_a_success_record() -> TestResult 
         // SAFETY: this process was started above and has not been reaped.
         assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
         assert_eq!(
-            wait_for_exit(&mut child, Duration::from_secs(3))?.code(),
+            wait_for_exit_or_kill(&mut child, Duration::from_secs(3))?.code(),
             Some(status)
         );
     }

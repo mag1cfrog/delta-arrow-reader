@@ -5,10 +5,11 @@ use std::{fs, path::Path, process::Command};
 use serde_json::{Value, json};
 
 use super::{
-    TestResult, assert_single_terminal_record, decode_query_result, fixture_path, run_with_timeout,
+    TestResult, assert_query_success_and_decode_arrow, assert_single_terminal_record, fixture_path,
+    run_with_timeout,
 };
 
-fn manifest_directory() -> TestResult<tempfile::TempDir> {
+fn create_manifest_query_directory() -> TestResult<tempfile::TempDir> {
     let directory = tempfile::Builder::new()
         .prefix("secret-manifest-")
         .tempdir()?;
@@ -46,7 +47,7 @@ fn copy_directory(source: &Path, destination: &Path) -> TestResult {
 
 #[test]
 fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for name in ["partitioned", "deletion_vectors"] {
         copy_directory(
             &fixture_path(name).join("table"),
@@ -145,7 +146,7 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         }
         fs::write(&path, manifest.to_string())?;
         let output = run_with_timeout(&mut command)?;
-        let actual = super::json::decode_json(&output)?;
+        let actual = super::json::assert_query_success_and_decode_json(&output)?;
         let fields = actual["schema"]["fields"].as_array().unwrap();
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0]["name"], "id");
@@ -190,7 +191,7 @@ fn assert_manifest_rejected(directory: &Path, contents: impl AsRef<[u8]>) -> Tes
 
 #[test]
 fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     fs::write(
         directory.path().join("query.sql"),
         "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
@@ -203,7 +204,7 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         ]}))?,
     )?;
     let output = run_with_timeout(manifest_command(directory.path()).args(["--format", "json"]))?;
-    let result = super::json::decode_json(&output)?;
+    let result = super::json::assert_query_success_and_decode_json(&output)?;
     assert_eq!(
         result["rows"],
         json!([["1", "1"], ["2", null], ["3", "3"], ["4", "4"], ["5", null]])
@@ -242,7 +243,10 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         diagnostic["argument"].as_str().unwrap(),
         &output.stdout.len().to_string(),
     ]))?;
-    assert_eq!(super::json::decode_json(&exact)?, result);
+    assert_eq!(
+        super::json::assert_query_success_and_decode_json(&exact)?,
+        result
+    );
     // An explicit byte budget survives a format change and can still reject Arrow.
     let arrow_overflow = run_with_timeout(manifest_command(directory.path()).args([
         "--format",
@@ -267,15 +271,89 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         "--max-output-bytes",
         "8192",
     ]))?;
-    assert_eq!(decode_query_result(&saved)?.num_rows(), 5);
+    assert_eq!(assert_query_success_and_decode_arrow(&saved)?.num_rows(), 5);
     let receipt = assert_single_terminal_record(&saved.stderr, "completion");
     assert_eq!(receipt["bindings"], result["bindings"]);
     Ok(())
 }
 
 #[test]
+fn failed_queries_report_snapshots_for_retry_after_tables_change() -> TestResult {
+    let directory = create_manifest_query_directory()?;
+    let fixture = fixture_path("deletion_vectors").join("table");
+    let commit = "_delta_log/00000000000000000001.json";
+    let mut tables = Vec::new();
+    for alias in ["orders", "customers"] {
+        let location = directory.path().join(alias);
+        copy_directory(&fixture, &location)?;
+        fs::remove_file(location.join(commit))?;
+        tables.push(json!({"alias": alias, "location": location}));
+    }
+    let mut manifest = json!({"format_version": 1, "tables": tables});
+    let manifest_path = directory.path().join("inputs/tables.json");
+    fs::write(&manifest_path, manifest.to_string())?;
+    fs::write(
+        directory.path().join("query.sql"),
+        "SELECT o.id FROM orders o JOIN customers c ON o.id = c.id ORDER BY o.id",
+    )?;
+    let expected_bindings = json!([
+        {"alias": "orders", "table_version": "0"},
+        {"alias": "customers", "table_version": "0"}
+    ]);
+    for (format, budget, reason) in [
+        ("json", "--max-output-bytes", "json_output_limit_exceeded"),
+        ("json", "--max-rows", "output_row_limit_exceeded"),
+        ("arrow", "--max-output-bytes", "output_byte_limit_exceeded"),
+        ("arrow", "--max-rows", "output_row_limit_exceeded"),
+    ] {
+        let failed = run_with_timeout(
+            manifest_command(directory.path()).args(["--format", format, budget, "1"]),
+        )?;
+        assert_eq!(failed.status.code(), Some(1));
+        if format == "json" {
+            assert!(failed.stdout.is_empty());
+        }
+        let diagnostic = assert_single_terminal_record(&failed.stderr, "diagnostic");
+        assert_eq!(diagnostic["reason"], reason);
+        assert_eq!(diagnostic["bindings"], expected_bindings);
+        crate::capabilities::assert_output_matches_schema("diagnostic", &diagnostic);
+        assert!(!String::from_utf8_lossy(&failed.stderr).contains("secret"));
+        for (table, binding) in manifest["tables"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .zip(diagnostic["bindings"].as_array().unwrap())
+        {
+            table["table_version"] = binding["table_version"].clone();
+        }
+    }
+    for alias in ["orders", "customers"] {
+        fs::copy(
+            fixture.join(commit),
+            directory.path().join(alias).join(commit),
+        )?;
+    }
+    let unpinned = super::json::assert_query_success_and_decode_json(&run_with_timeout(
+        manifest_command(directory.path()).args(["--format", "json"]),
+    )?)?;
+    assert_eq!(unpinned["bindings"][0]["table_version"], "1");
+    assert_ne!(unpinned["row_count"], "12");
+
+    fs::write(&manifest_path, manifest.to_string())?;
+    let recovered = super::json::assert_query_success_and_decode_json(&run_with_timeout(
+        manifest_command(directory.path()).args(["--format", "json"]),
+    )?)?;
+    assert_eq!(recovered["bindings"], expected_bindings);
+    assert_eq!(
+        recovered["rows"],
+        json!((1..=12).map(|id| vec![id.to_string()]).collect::<Vec<_>>())
+    );
+    Ok(())
+}
+
+#[test]
 fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for (alias, location, reason, field) in [
         (
             "orders",
@@ -348,7 +426,89 @@ fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
 
 #[test]
 fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
+    for (input, field_path) in [
+        (
+            r#"{"format_version":1,"format_version":1,"tables":[]}"#,
+            "/format_version",
+        ),
+        (
+            r#"{"format_version":1,"tables":[{"alias":"orders","alias":"customers","location":"secret-table"}]}"#,
+            "/tables/0/alias",
+        ),
+        (
+            r#"{"format_version":1,"tables":[{"alias":"orders","location":"secret-table","authorization":{"source":"env","source":"json"}}]}"#,
+            "/tables/0/authorization/source",
+        ),
+    ] {
+        let record = assert_manifest_rejected(directory.path(), input)?;
+        assert_eq!(record["field_path"], field_path);
+        assert_eq!(record["expected"], "one occurrence of this field");
+    }
+    for (table, field_path, expected) in [
+        (
+            json!({"alias": 0, "location": "secret-table"}),
+            "/tables/0/alias",
+            "a string",
+        ),
+        (
+            json!({"alias": "orders", "location": null}),
+            "/tables/0/location",
+            "a string",
+        ),
+        (
+            json!({"location": "secret-table"}),
+            "/tables/0/alias",
+            "a required field",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": []}),
+            "/tables/0/authorization",
+            "a JSON object",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": {}}),
+            "/tables/0/authorization/source",
+            "a required field",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "secret/key": "secret-value"}),
+            "/tables/0",
+            "object fields: alias, location, table_version, authorization",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": {"source": "env", "secret/key": "secret-value"}}),
+            "/tables/0/authorization",
+            "object fields: source, storage_options_file, env_file, databricks_profile",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": {"source": "env", "alias": "secret-value"}}),
+            "/tables/0/authorization",
+            "object fields: source, storage_options_file, env_file, databricks_profile",
+        ),
+    ] {
+        let record = assert_manifest_rejected(
+            directory.path(),
+            json!({"format_version": 1, "tables": [table]}).to_string(),
+        )?;
+        assert_eq!(record["field_path"], field_path);
+        assert_eq!(record["expected"], expected);
+    }
+    for field in [
+        "source",
+        "storage_options_file",
+        "env_file",
+        "databricks_profile",
+    ] {
+        let record = assert_manifest_rejected(directory.path(), json!({"format_version": 1, "tables": [
+            {"alias": "orders", "location": "secret-table", "authorization": {"source": "env", field: false}}
+        ]}).to_string())?;
+        assert_eq!(
+            record["field_path"],
+            format!("/tables/0/authorization/{field}")
+        );
+        assert_eq!(record["expected"], "a string");
+    }
     for input in [
         r#"[1,[]]"#,
         r#"{"format_version":1,"tables":[]}"#,
@@ -370,13 +530,22 @@ fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
         json!("-0"),
         json!("18446744073709551616"),
     ] {
-        assert_manifest_rejected(
+        let record = assert_manifest_rejected(
             directory.path(),
             json!({"format_version":1,"tables":[
                 {"alias":"orders","location":"secret-table","table_version":version}
             ]})
             .to_string(),
         )?;
+        assert_eq!(record["field_path"], "/tables/0/table_version");
+        assert_eq!(
+            record["expected"],
+            "canonical decimal integer string from 0 to 18446744073709551615"
+        );
+        assert_eq!(
+            record["hint"],
+            "Use a decimal string within the stated range, with no '+', leading zeros, or negative zero."
+        );
     }
     let record = assert_manifest_rejected(directory.path(), vec![b' '; 1024 * 1024 + 1])?;
     assert_eq!(record["reason"], "input_file_too_large");
@@ -393,7 +562,7 @@ fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
 
 #[test]
 fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for arguments in [
         vec!["secret-table"],
         vec!["--table-version", "0"],
@@ -418,7 +587,7 @@ fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
 
 #[test]
 fn authorization_requires_a_named_source_and_file_references() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for authorization in [
         json!(null),
         json!([]),
@@ -479,8 +648,8 @@ fn authorization_requires_a_named_source_and_file_references() -> TestResult {
 }
 
 #[test]
-fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
-    let directory = manifest_directory()?;
+fn manifest_table_count_keeps_terminal_records_bounded() -> TestResult {
+    let directory = create_manifest_query_directory()?;
     let tables: Vec<_> = (0..64)
         .map(|index| {
             json!({
@@ -494,16 +663,35 @@ fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
         directory.path().join("inputs/tables.json"),
         manifest.to_string(),
     )?;
-    let output = run_with_timeout(&mut manifest_command(directory.path()))?;
-    decode_query_result(&output)?;
-    assert!(output.stderr.len() <= 8192);
-    assert_eq!(
-        assert_single_terminal_record(&output.stderr, "completion")["bindings"]
-            .as_array()
-            .unwrap()
-            .len(),
-        64
-    );
+    for format in ["arrow", "json"] {
+        let output =
+            run_with_timeout(manifest_command(directory.path()).args(["--format", format]))?;
+        if format == "arrow" {
+            assert_query_success_and_decode_arrow(&output)?;
+        } else {
+            super::json::assert_query_success_and_decode_json(&output)?;
+        }
+        assert!(output.stderr.len() > 4096);
+        assert!(output.stderr.len() <= 8192);
+        assert_eq!(
+            assert_single_terminal_record(&output.stderr, "completion")["bindings"]
+                .as_array()
+                .unwrap()
+                .len(),
+            64
+        );
+        let failed = run_with_timeout(manifest_command(directory.path()).args([
+            "--format",
+            format,
+            "--max-rows",
+            "0",
+        ]))?;
+        assert_eq!(failed.status.code(), Some(1));
+        assert!(failed.stderr.len() <= 8192);
+        let diagnostic = assert_single_terminal_record(&failed.stderr, "diagnostic");
+        assert_eq!(diagnostic["bindings"].as_array().unwrap().len(), 64);
+        crate::capabilities::assert_output_matches_schema("diagnostic", &diagnostic);
+    }
 
     manifest["tables"].as_array_mut().unwrap().push(json!({
         "alias":"customers","location":"secret-missing-table"

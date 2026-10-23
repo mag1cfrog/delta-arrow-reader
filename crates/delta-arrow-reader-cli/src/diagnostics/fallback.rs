@@ -11,7 +11,9 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::os::windows::io::AsHandle;
 
-use super::{DiagnosticFormat, TERMINAL_RECORD_WRITTEN, log_targets, stderr_capacity, subscriber};
+use super::{
+    DiagnosticFormat, TERMINAL_RECORD_STARTED, build_subscriber, log_targets, stderr_capacity,
+};
 
 impl DiagnosticFormat {
     pub(super) fn report_failure_without_thread(self, error: &crate::Error) {
@@ -26,12 +28,12 @@ impl DiagnosticFormat {
             Self::Text => {
                 let (targets, _) = log_targets();
                 tracing::subscriber::with_default(
-                    subscriber(targets, std::sync::Mutex::new(writer)),
-                    || error.log_failure(),
+                    build_subscriber(targets, std::sync::Mutex::new(writer)),
+                    || error.emit_tracing_diagnostic(),
                 );
             }
             Self::Json => {
-                let mut written = match TERMINAL_RECORD_WRITTEN.try_lock() {
+                let mut written = match TERMINAL_RECORD_STARTED.try_lock() {
                     Ok(guard) => guard,
                     Err(TryLockError::Poisoned(error)) => error.into_inner(),
                     Err(TryLockError::WouldBlock) => return,

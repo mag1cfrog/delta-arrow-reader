@@ -1005,7 +1005,7 @@ pub(in crate::reader) mod tests {
     #[tokio::test]
     async fn failed_network_recovery_warns_once_without_failing_public_scans()
     -> Result<(), Box<dyn std::error::Error>> {
-        use crate::test_tracing::Collector;
+        use crate::test_tracing::TraceCollector;
         use futures_util::TryStreamExt;
         use tracing::{Level, instrument::WithSubscriber};
 
@@ -1027,7 +1027,7 @@ pub(in crate::reader) mod tests {
                 }
                 let original = table.range_read_estimator();
                 table.range_read_state.defer_network_warmup(warmup).await;
-                let collector = Collector::new(level.unwrap_or(Level::ERROR));
+                let collector = TraceCollector::new(level.unwrap_or(Level::ERROR));
                 let dispatch = match level {
                     Some(_) => tracing::Dispatch::new(collector.clone()),
                     None => tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
@@ -1099,7 +1099,7 @@ pub(in crate::reader) mod tests {
     #[tokio::test]
     async fn incomplete_network_recovery_keeps_the_profile_and_reports_insufficient_samples()
     -> Result<(), Box<dyn std::error::Error>> {
-        use crate::test_tracing::Collector;
+        use crate::test_tracing::TraceCollector;
         use futures_util::TryStreamExt;
         use tracing::{Level, instrument::WithSubscriber};
 
@@ -1123,7 +1123,7 @@ pub(in crate::reader) mod tests {
             op: crate::DeltaComparison::Gt,
             value: crate::DeltaScalar::Int32(1),
         };
-        let collector = Collector::new(Level::DEBUG);
+        let collector = TraceCollector::new(Level::DEBUG);
         let planning = table
             .scan()
             .with_predicate(predicate.clone())
@@ -4799,7 +4799,7 @@ pub(in crate::reader) mod tests {
     #[tokio::test]
     async fn public_stream_reports_deletion_vector_and_transform_failures_in_both_backends()
     -> Result<(), Box<dyn std::error::Error>> {
-        use crate::{reader::DeltaScan, test_tracing::Collector};
+        use crate::{reader::DeltaScan, test_tracing::TraceCollector};
         use tracing::{Level, instrument::WithSubscriber};
 
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
@@ -4832,7 +4832,7 @@ pub(in crate::reader) mod tests {
                         range_read_estimator: Arc::default(),
                     }
                     .into_stream();
-                    let collector = Collector::new(level);
+                    let collector = TraceCollector::new(level);
                     let error = stream
                         .next_batch()
                         .with_subscriber(collector.clone())

@@ -175,6 +175,7 @@ Known argument/field names and line/column locations provide safe error context:
   "format_version": 2, "kind": "diagnostic", "terminal": true,
   "phase": "configuration", "code": "invalid_input_json",
   "reason": "input_json_decode_failed", "argument": "--predicate-file",
+  "source_kind": null,
   "line": 3, "column": 12, "retryable": false, "recovery": "fix_input"
 }
 ```
@@ -183,7 +184,8 @@ Recovery distinguishes `fix_input`, `authorize`, `request_access`, `retry`,
 `change_request`, and `adjust_budget`. Unclassified failures remain `unknown`
 with `retryable: null`; do not guess from error text. Preserve exits: 0 success,
 2 argument/local-input failure, 1 runtime/planning/auth/resource failure,
-3 stdout failure. Handled interrupt/termination uses 130/143 where supported.
+3 result or machine-completion output failure.
+Handled interrupt/termination uses 130/143 where supported.
 A predicate that parses but fails table planning remains a runtime error.
 
 Give the safe cause, affected input where known, and the applicable next action.

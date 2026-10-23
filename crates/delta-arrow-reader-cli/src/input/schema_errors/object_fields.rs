@@ -26,7 +26,7 @@ use serde_json::value::RawValue;
 use serde_value::DeserializerError;
 use strum::VariantNames;
 
-use super::{FieldLocation, correction_from_serde_error};
+use super::{InputFieldLocation, correction_from_serde_error};
 use crate::diagnostics::InputCorrection;
 
 pub(in crate::input) struct ObjectFields<T> {
@@ -35,7 +35,7 @@ pub(in crate::input) struct ObjectFields<T> {
 }
 
 impl<'de> ObjectFields<&'de RawValue> {
-    fn field_value(&self, name: &str) -> Option<&'de RawValue> {
+    pub(super) fn field_value(&self, name: &str) -> Option<&'de RawValue> {
         for (field, value) in &self.entries {
             if field == name {
                 return Some(*value);
@@ -47,26 +47,26 @@ impl<'de> ObjectFields<&'de RawValue> {
     pub(in crate::input) fn required_field(
         &self,
         name: &'static str,
-        location: &FieldLocation,
+        location: &InputFieldLocation,
     ) -> Result<&'de RawValue, InputCorrection> {
         match self.field_value(name) {
             Some(value) => Ok(value),
             None => Err(location
-                .field(name)
-                .invalid("a required field", "Supply the missing field.")),
+                .child_field(name)
+                .build_correction("a required field", "Supply the missing field.")),
         }
     }
 
     pub(in crate::input) fn deserialize_tag<T: DeserializeOwned + VariantNames>(
         &self,
         name: &'static str,
-        location: &FieldLocation,
+        location: &InputFieldLocation,
     ) -> Result<T, InputCorrection> {
         let expected = format!("one of: {}", T::VARIANTS.join(", "));
         let Some(value) = self.field_value(name) else {
             return Err(location
-                .field(name)
-                .invalid(expected, "Supply the missing field."));
+                .child_field(name)
+                .build_correction(expected, "Supply the missing field."));
         };
         let occurrences = self
             .entries
@@ -74,7 +74,7 @@ impl<'de> ObjectFields<&'de RawValue> {
             .filter(|(field, _)| field == name)
             .count();
         if occurrences > 1 {
-            return Err(location.field(name).invalid(
+            return Err(location.child_field(name).build_correction(
                 "one occurrence of this field",
                 "Remove the duplicate field.",
             ));
@@ -83,21 +83,21 @@ impl<'de> ObjectFields<&'de RawValue> {
             Ok(text) => text,
             Err(_) => {
                 return Err(location
-                    .field(name)
-                    .invalid(expected, "Use one of the listed values."));
+                    .child_field(name)
+                    .build_correction(expected, "Use one of the listed values."));
             }
         };
         T::deserialize(StringDeserializer::<DeserializerError>::new(tag_text)).map_err(|_| {
             location
-                .field(name)
-                .invalid(expected, "Use one of the listed values.")
+                .child_field(name)
+                .build_correction(expected, "Use one of the listed values.")
         })
     }
 
     pub(in crate::input) fn check_variant_fields<T: DeserializeOwned>(
         &self,
         tag_field: &'static str,
-        location: &FieldLocation,
+        location: &InputFieldLocation,
     ) -> Result<(), InputCorrection> {
         let mut entries = Vec::new();
         for (name, raw_value) in &self.entries {
@@ -105,7 +105,7 @@ impl<'de> ObjectFields<&'de RawValue> {
                 continue;
             }
             let value = serde_json::from_str::<serde_value::Value>(raw_value.get())
-                .map_err(|_| location.generic_correction())?;
+                .map_err(|_| location.input_format_correction())?;
             entries.push((name.clone(), value));
         }
         let fields = ObjectFields { entries };
@@ -132,8 +132,8 @@ impl ObjectFields<serde_value::Value> {
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for ObjectFields<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ObjectVisitor<T>(PhantomData<T>);
-        impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
+        struct ObjectFieldsVisitor<T>(PhantomData<T>);
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectFieldsVisitor<T> {
             type Value = ObjectFields<T>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -148,6 +148,6 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for ObjectFields<T> {
                 Ok(ObjectFields { entries })
             }
         }
-        deserializer.deserialize_map(ObjectVisitor(PhantomData))
+        deserializer.deserialize_map(ObjectFieldsVisitor(PhantomData))
     }
 }

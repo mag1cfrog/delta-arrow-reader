@@ -17,7 +17,7 @@ use crate::{
     error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, Result},
     platform::Architecture,
     process::run_process_tests,
-    scan::run_scan_tests,
+    scan::{ipc::check_completed_count_query, run_scan_tests},
 };
 
 #[derive(Args)]
@@ -31,7 +31,7 @@ pub(crate) struct TestArchiveArgs {
     /// Extracted dar, LICENSE, and NOTICE, outside the source checkout.
     #[arg(long)]
     extracted: PathBuf,
-    /// Directory containing inspect.json and scan.arrow from the minimal runtime.
+    /// Directory containing inspect, scan, and query outputs from the minimal runtime.
     #[arg(long)]
     smoke_output: PathBuf,
     /// Source checkout containing the acceptance tests and external-writer fixtures.
@@ -208,6 +208,21 @@ fn check_smoke_output(directory: &Path, expected_path: &Path) -> Result<()> {
             message: "unexpected data after the minimal-runtime scan IPC end marker"
         }
     );
+    let query_stdout = directory.join("query.arrow");
+    let query_stderr = directory.join("query.stderr");
+    // The runtime script reaches validation only after every command exits successfully.
+    check_completed_count_query(
+        &std::process::Output {
+            status: std::process::ExitStatus::default(),
+            stdout: fs::read(&query_stdout).context(FileSnafu {
+                path: &query_stdout,
+            })?,
+            stderr: fs::read(&query_stderr).context(FileSnafu {
+                path: &query_stderr,
+            })?,
+        },
+        expected.iter().map(RecordBatch::num_rows).sum(),
+    )?;
     Ok(())
 }
 

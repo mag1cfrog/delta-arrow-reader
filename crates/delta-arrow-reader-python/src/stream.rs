@@ -131,7 +131,7 @@ impl RecordBatchStream {
         py: Python<'py>,
         requested_schema: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Bound<'py, PyCapsule>> {
-        crate::logging::check_reentry()?;
+        crate::logging::reject_logging_reentry()?;
         let mut slot = self
             .reader
             .lock()
@@ -148,7 +148,7 @@ impl RecordBatchStream {
         drop(slot);
         PyCapsule::new_with_value(
             py,
-            crate::arrow_stream::export(Box::new(reader)),
+            crate::arrow_stream::export_reader(Box::new(reader)),
             c"arrow_array_stream",
         )
     }
@@ -157,7 +157,7 @@ impl RecordBatchStream {
     ///
     /// After export, call `close()` on the consuming reader instead.
     fn close(&self) -> PyResult<()> {
-        crate::logging::check_reentry()?;
+        crate::logging::reject_logging_reentry()?;
         let reader = self
             .reader
             .lock()
@@ -287,7 +287,7 @@ impl BatchStream {
                 .try_next()
                 .await
                 .inspect_err(|error| {
-                    if !core_owns_sql_error(error) {
+                    if !sql_error_has_core_diagnostic(error) {
                         tracing::error!(target: "delta_arrow_reader_python",
                             event = "sql_execution.failed", operation = "sql_execution", outcome = "failed",
                             error_phase = "datafusion", error_code = "sql_execution",
@@ -300,7 +300,7 @@ impl BatchStream {
 }
 
 // SQL plans in this binding only obtain reader errors from DAR-owned provider boundaries.
-fn core_owns_sql_error(error: &DataFusionError) -> bool {
+fn sql_error_has_core_diagnostic(error: &DataFusionError) -> bool {
     let mut error: &(dyn Error + 'static) = error;
     for _ in 0..16 {
         let datafusion = error
@@ -398,11 +398,11 @@ impl Iterator for BlockingBatchReader {
             let mut read = || {
                 let dispatch = match &mut self.dispatch {
                     Some(dispatch) => dispatch,
-                    slot => slot.insert(crate::logging::stream_dispatch(Arc::clone(
+                    slot => slot.insert(crate::logging::new_stream_dispatch(Arc::clone(
                         &self.interrupted,
                     ))?),
                 };
-                self.runtime.wait(
+                self.runtime.wait_with_interrupts(
                     py,
                     stream.next_batch().with_subscriber(dispatch.clone()),
                     || {
@@ -726,31 +726,31 @@ mod tests {
                 Some("secret backtrace".into()),
             )),
         )));
-        assert!(core_owns_sql_error(&wrapped));
-        assert!(core_owns_sql_error(&DataFusionError::External(Box::new(
-            Box::new(reader_error())
-        ))));
-        assert!(core_owns_sql_error(&DataFusionError::External(Box::new(
-            Arc::new(reader_error())
-        ))));
+        assert!(sql_error_has_core_diagnostic(&wrapped));
+        assert!(sql_error_has_core_diagnostic(&DataFusionError::External(
+            Box::new(Box::new(reader_error()))
+        )));
+        assert!(sql_error_has_core_diagnostic(&DataFusionError::External(
+            Box::new(Arc::new(reader_error()))
+        )));
         let collection =
             DataFusionError::External(Box::new(Arc::new(DataFusionError::Collection(vec![
                 wrapped,
                 DataFusionError::ArrowError(Box::new(ArrowError::DivideByZero), None),
             ]))));
-        assert!(!core_owns_sql_error(&collection));
+        assert!(!sql_error_has_core_diagnostic(&collection));
         assert_eq!(error_source_kind(&collection), "multiple_errors");
         for error in [
             DataFusionError::Execution("delta reader error: secret".into()),
             DataFusionError::External(Box::new(Unformattable)),
         ] {
-            assert!(!core_owns_sql_error(&error));
+            assert!(!sql_error_has_core_diagnostic(&error));
         }
         let mut deep = DataFusionError::External(Box::new(reader_error()));
         for _ in 0..32 {
             deep = DataFusionError::Context("secret context".into(), Box::new(deep));
         }
-        assert!(!core_owns_sql_error(&deep));
+        assert!(!sql_error_has_core_diagnostic(&deep));
         assert_eq!(error_source_kind(&deep), "source_chain_limit");
     }
 

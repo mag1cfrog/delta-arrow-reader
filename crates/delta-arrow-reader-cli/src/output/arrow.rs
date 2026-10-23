@@ -9,20 +9,20 @@ use snafu::Snafu;
 
 use crate::{Error, StdoutStats};
 
-use super::{OutputLimits, on_stdout_thread};
+use super::{OutputLimits, write_on_stdout_thread};
 
 /// Preserves the resource error through Arrow's io::Error wrapper.
 #[derive(Debug, Snafu)]
 #[snafu(display("Arrow output exceeded its byte ceiling."))]
 pub(crate) struct OutputBytesExceeded;
 
-struct ByteCountingWriter<W> {
+struct ByteBudgetWriter<W> {
     inner: W,
     bytes_written: u64,
     max_bytes: Option<u64>,
 }
 
-impl<W: Write> Write for ByteCountingWriter<W> {
+impl<W: Write> Write for ByteBudgetWriter<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if self
             .max_bytes
@@ -47,10 +47,10 @@ pub(crate) async fn write_arrow_stream_to_stdout(
     limits: Option<OutputLimits>,
 ) -> Result<StdoutStats, Error> {
     let runtime = tokio::runtime::Handle::current();
-    on_stdout_thread(move || {
+    write_on_stdout_thread(move || {
         runtime.block_on(async {
             let mut writer = StreamWriter::try_new(
-                ByteCountingWriter {
+                ByteBudgetWriter {
                     inner: io::stdout().lock(),
                     bytes_written: 0,
                     max_bytes: limits.as_ref().map(|limits| limits.max_bytes),

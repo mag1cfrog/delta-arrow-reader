@@ -70,7 +70,7 @@ pub(crate) enum DiagnosticFormat {
 }
 
 // Serialize terminal writes so simultaneous worker panics cannot interleave records.
-static TERMINAL_RECORD_WRITTEN: Mutex<bool> = Mutex::new(false);
+static TERMINAL_RECORD_STARTED: Mutex<bool> = Mutex::new(false);
 
 impl DiagnosticFormat {
     pub(crate) fn from_cli_args() -> Self {
@@ -93,7 +93,7 @@ impl DiagnosticFormat {
 
     pub(crate) fn report_failure(self, error: &crate::Error) {
         match self {
-            Self::Text => error.log_failure(),
+            Self::Text => error.emit_tracing_diagnostic(),
             Self::Json => self.write_terminal_record(error.to_json_diagnostic()),
         }
     }
@@ -120,34 +120,44 @@ impl DiagnosticFormat {
         status
     }
 
-    /// Waits for space before publishing a terminal record of at most 512 bytes.
-    pub(crate) async fn write_terminal_record_when_writable(self, record: Value) -> io::Result<()> {
+    /// Publishes a terminal record in small writes, remaining cancellable between them.
+    pub(crate) async fn write_terminal_record_when_writable(
+        self,
+        record: &Value,
+    ) -> io::Result<()> {
         if let Self::Json = self {
             let line = format!("{record}\n");
-            // POSIX guarantees at least 512 bytes for an atomic pipe write.
-            // Keep terminal records within the atomic write bound.
-            if line.len() > 512 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "terminal record too large",
-                ));
-            }
+            let mut bytes_written = 0;
             loop {
-                let written = match TERMINAL_RECORD_WRITTEN.try_lock() {
+                let started = match TERMINAL_RECORD_STARTED.try_lock() {
                     Ok(guard) => Some(guard),
                     Err(TryLockError::Poisoned(error)) => Some(error.into_inner()),
                     Err(TryLockError::WouldBlock) => None,
                 };
-                if let Some(mut written) = written {
-                    if *written {
+                let mut wrote_chunk = false;
+                if let Some(mut started) = started {
+                    if *started && bytes_written == 0 {
                         return Ok(());
                     }
-                    if stderr_capacity::can_write(line.len())? {
-                        *written = true;
-                        return io::stderr().lock().write_all(line.as_bytes());
+                    // POSIX guarantees at least 512 bytes for an atomic pipe write.
+                    let end = (bytes_written + 512).min(line.len());
+                    let chunk = &line.as_bytes()[bytes_written..end];
+                    if stderr_capacity::can_write(chunk.len())? {
+                        // A partial record must not be followed by a second terminal record.
+                        *started = true;
+                        io::stderr().lock().write_all(chunk)?;
+                        bytes_written = end;
+                        if bytes_written == line.len() {
+                            return Ok(());
+                        }
+                        wrote_chunk = true;
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                if wrote_chunk {
+                    tokio::task::yield_now().await;
+                } else {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
             }
         }
         Ok(())
@@ -155,7 +165,7 @@ impl DiagnosticFormat {
 
     pub(crate) fn write_terminal_record(self, record: Value) {
         if let Self::Json = self {
-            let mut written = TERMINAL_RECORD_WRITTEN
+            let mut written = TERMINAL_RECORD_STARTED
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !*written {
@@ -209,6 +219,8 @@ impl InputCorrection {
                     }
                     "table_version" => format!("unsigned decimal integer from 0 to {}", u64::MAX),
                     "diagnostic_format" => "json (use --diagnostics=json)".to_owned(),
+                    // Inspect and row-reading commands have different help for this shared value.
+                    "columns" => "a logical column name in the selected snapshot".to_owned(),
                     _ => argument.get_help()?.to_string(),
                 };
                 return Some(Self {
@@ -304,7 +316,7 @@ pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
     }
     let (targets, invalid) = log_targets();
     // Failure reporting can reach this after command setup already installed tracing.
-    if subscriber(targets, io::stderr).try_init().is_ok() && invalid {
+    if build_subscriber(targets, io::stderr).try_init().is_ok() && invalid {
         tracing::warn!(target: "delta_arrow_reader_cli",
             event = "cli.log_filter.invalid",
             reason = "invalid_rust_log",
@@ -324,7 +336,7 @@ fn log_targets() -> (Targets, bool) {
     }
 }
 
-fn subscriber<W>(targets: Targets, writer: W) -> impl Subscriber + Send + Sync
+fn build_subscriber<W>(targets: Targets, writer: W) -> impl Subscriber + Send + Sync
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
@@ -354,12 +366,12 @@ where
 }
 
 #[cfg(test)]
-pub(crate) fn capture(filter: &str, emit: impl FnOnce()) -> String {
+pub(crate) fn capture_tracing_output(filter: &str, emit: impl FnOnce()) -> String {
     use std::io::{Read, Seek};
 
     let mut file = tempfile::tempfile().unwrap();
     tracing::subscriber::with_default(
-        subscriber(
+        build_subscriber(
             if filter.is_empty() {
                 Targets::new()
             } else {
@@ -387,19 +399,10 @@ mod tests {
     use arrow_schema::ArrowError;
     use serde_json::Value;
 
-    use super::{DiagnosticFormat, capture};
+    use super::{DiagnosticFormat, capture_tracing_output};
     use crate::Error;
 
     struct PanicOnFormatError;
-
-    #[tokio::test]
-    async fn oversized_completion_is_rejected_before_writing() {
-        let error = DiagnosticFormat::Json
-            .write_terminal_record_when_writable(serde_json::json!({"padding": "x".repeat(512)}))
-            .await
-            .unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-    }
 
     impl fmt::Debug for PanicOnFormatError {
         fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -417,7 +420,7 @@ mod tests {
 
     // Run through the production panic hook without adding a CLI fault-injection flag.
     #[test]
-    fn diagnostic_subprocess_fixture() {
+    fn run_diagnostic_subprocess_scenario() {
         let Ok(scenario) = std::env::var("DAR_DIAGNOSTIC_TEST_SCENARIO") else {
             return;
         };
@@ -429,6 +432,10 @@ mod tests {
         tracing::error!(target: "delta_arrow_reader_cli", "secret CLI trace");
         let error = match scenario.as_str() {
             "main_panic" => panic!("secret panic payload"),
+            "locked_terminal_panic" => {
+                let _guard = super::TERMINAL_RECORD_STARTED.lock().unwrap();
+                panic!("secret panic while a terminal writer owns the lock");
+            }
             "worker_panics" => {
                 let barrier = Barrier::new(3);
                 std::thread::scope(|scope| {
@@ -461,9 +468,14 @@ mod tests {
     }
 
     #[test]
-    fn panics_and_source_errors_emit_one_safe_terminal_record() {
+    fn panics_and_source_errors_keep_safe_bounded_reporting() {
         for (scenario, code, reason) in [
             ("main_panic", "runtime_initialization", "process_panicked"),
+            (
+                "locked_terminal_panic",
+                "runtime_initialization",
+                "process_panicked",
+            ),
             (
                 "worker_panics",
                 "runtime_initialization",
@@ -477,7 +489,7 @@ mod tests {
                 let mut child = Command::new(std::env::current_exe().unwrap())
                     .args([
                         "--exact",
-                        "diagnostics::tests::diagnostic_subprocess_fixture",
+                        "diagnostics::tests::run_diagnostic_subprocess_scenario",
                         "--nocapture",
                     ])
                     .env("DAR_DIAGNOSTIC_TEST_SCENARIO", scenario)
@@ -487,7 +499,7 @@ mod tests {
                     .stderr(Stdio::piped())
                     .spawn()
                     .unwrap();
-                let deadline = Instant::now() + Duration::from_secs(15);
+                let deadline = Instant::now() + Duration::from_secs(3);
                 while child.try_wait().unwrap().is_none() {
                     if Instant::now() >= deadline {
                         child.kill().unwrap();
@@ -499,6 +511,10 @@ mod tests {
                 let output = child.wait_with_output().unwrap();
                 assert_eq!(output.status.code(), Some(1), "{output:?}");
                 let text = String::from_utf8(output.stderr).unwrap();
+                if scenario == "locked_terminal_panic" {
+                    assert!(text.is_empty(), "{text}");
+                    continue;
+                }
                 assert_eq!(text.lines().count(), 1, "{text}");
                 assert!(text.ends_with('\n') && text.len() <= 8192, "{text}");
                 assert!(!text.contains("secret") && !text.contains('\x1b'), "{text}");
@@ -546,7 +562,7 @@ mod tests {
                 vec!["DEBUG", "TRACE"],
             ),
         ] {
-            let text = capture(filter, emit_levels);
+            let text = capture_tracing_output(filter, emit_levels);
             assert_eq!(
                 text.lines()
                     .map(|line| line.split_whitespace().next().unwrap())
@@ -565,7 +581,7 @@ mod tests {
             "reqwest=trace,object_store=trace,delta_arrow_reader_extra=trace",
             "off,reqwest=error",
         ] {
-            let text = capture(filter, || {
+            let text = capture_tracing_output(filter, || {
                 tracing::error!(target: "reqwest", token = "secret-token", "secret HTTP error");
                 tracing::warn!(target: "object_store", "secret storage error");
                 tracing::trace!(target: "reqwest", "secret HTTP body");

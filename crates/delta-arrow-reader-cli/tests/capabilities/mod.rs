@@ -9,28 +9,28 @@ mod blocked_output;
 pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
     use std::sync::LazyLock;
 
-    static INSPECTION: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("inspection"));
-    static INSPECTION_SUMMARY: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("inspection-summary"));
-    static DIAGNOSTIC: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("diagnostic"));
-    static COMPLETION: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("completion"));
-    static ROWS: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("rows"));
+    static INSPECTION_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("inspection"));
+    static INSPECTION_SUMMARY_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("inspection-summary"));
+    static DIAGNOSTIC_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("diagnostic"));
+    static COMPLETION_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("completion"));
+    static ROWS_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("rows"));
     let validator = match name {
-        "inspection" => &*INSPECTION,
-        "inspection-summary" => &*INSPECTION_SUMMARY,
-        "diagnostic" => &*DIAGNOSTIC,
-        "completion" => &*COMPLETION,
-        "rows" => &*ROWS,
+        "inspection" => &*INSPECTION_VALIDATOR,
+        "inspection-summary" => &*INSPECTION_SUMMARY_VALIDATOR,
+        "diagnostic" => &*DIAGNOSTIC_VALIDATOR,
+        "completion" => &*COMPLETION_VALIDATOR,
+        "rows" => &*ROWS_VALIDATOR,
         _ => panic!("unknown output schema: {name}"),
     };
     validator.validate(output).unwrap();
 }
 
-fn output_schema_validator(name: &str) -> jsonschema::Validator {
+fn load_cli_output_schema_validator(name: &str) -> jsonschema::Validator {
     let output = run_with_timeout(
         Command::new(env!("CARGO_BIN_EXE_dar"))
             .env_clear()
@@ -106,6 +106,32 @@ fn discovered_completion_versions_match_each_command_and_query_format()
         assert!(output.status.success(), "{output:?}");
         let receipt = assert_single_terminal_record(&output.stderr, "completion");
         assert_output_matches_schema("completion", &receipt);
+        let guide = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+            "capabilities",
+            "--command",
+            name,
+        ]))?;
+        assert!(guide.status.success());
+        let guide: Value = serde_json::from_slice(&guide.stdout)?;
+        assert!(
+            guide["output_schemas"]
+                .as_array()
+                .unwrap()
+                .contains(&receipt["kind"])
+        );
+        assert!(
+            metadata["diagnostics"]["json"]["schemas"]
+                .as_array()
+                .unwrap()
+                .contains(&receipt["kind"])
+        );
+        assert!(
+            metadata["output_schemas"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|schema| schema["name"] == receipt["kind"])
+        );
         assert_eq!(receipt["format_version"], expected_version);
         if format.is_none() {
             assert_eq!(
@@ -579,7 +605,6 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "diagnostic",
                     "completion",
                 ],
-                "help" => vec!["diagnostic"],
                 "query" | "preview" => vec!["diagnostic", "completion", "rows"],
                 _ => vec!["diagnostic", "completion"],
             };

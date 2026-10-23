@@ -71,7 +71,7 @@ use crate::{
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu, SnapshotLoadSnafu},
     operation_tracing::{
-        Operation, OperationFields, OperationKind, StreamOperation, StreamOutcome,
+        OperationFields, OperationKind, OperationTrace, StreamOutcome, StreamTrace,
     },
 };
 
@@ -285,7 +285,7 @@ impl DeltaTableBuilder {
     /// warmup can also fail if the table protocol is unsupported or its reusable metadata cannot be
     /// built.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        let operation = Operation::start(
+        let operation = OperationTrace::start(
             OperationKind::LoadTable,
             OperationFields::loading(
                 self.snapshot_selection,
@@ -298,7 +298,7 @@ impl DeltaTableBuilder {
                 self.storage_options,
                 self.credential_provider,
                 self.snapshot_selection,
-                operation.context(),
+                operation.shared_fields(),
             )
             .await?;
             let warmup = self
@@ -319,7 +319,7 @@ impl DeltaTableBuilder {
                 ) {
                     Ok(plan) => plan,
                     Err(error) => {
-                        operation.network_warmup_degraded(
+                        operation.warn_network_warmup_degraded(
                             "initialization",
                             "transport_unavailable",
                             Some(&error),
@@ -356,7 +356,7 @@ impl DeltaTableBuilder {
     /// Returns an error if warmup was requested or if the table location, storage, or snapshot
     /// cannot be loaded.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        let operation = Operation::start(
+        let operation = OperationTrace::start(
             OperationKind::LoadSnapshot,
             OperationFields::loading(
                 self.snapshot_selection,
@@ -375,7 +375,7 @@ impl DeltaTableBuilder {
                 self.storage_options,
                 self.credential_provider,
                 self.snapshot_selection,
-                operation.context(),
+                operation.shared_fields(),
             )
             .await?;
             Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
@@ -456,7 +456,7 @@ impl DeltaTableSnapshot {
 
     /// Converts the logical Arrow schema and finishes constructing the table.
     pub fn into_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        let operation = Operation::start(
+        let operation = OperationTrace::start(
             OperationKind::IntoTable,
             OperationFields {
                 snapshot_version: Some(self.version()),
@@ -574,7 +574,7 @@ impl DeltaTable {
     /// Returns an error if the newer snapshot, schema, or retained query-planning metadata cannot
     /// be loaded. No partially refreshed table is returned.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
-        let operation = Operation::start(
+        let operation = OperationTrace::start(
             OperationKind::Refresh,
             OperationFields {
                 selection: Some("latest"),
@@ -583,7 +583,7 @@ impl DeltaTable {
                 ..OperationFields::default()
             },
         );
-        let context = operation.context();
+        let operation_fields = operation.shared_fields();
         let result = async {
             let snapshot = Arc::clone(&self.snapshot);
             let range_read_estimator = self.range_read_estimator();
@@ -594,7 +594,7 @@ impl DeltaTable {
                     span.in_scope(|| {
                         // Refresh may keep reading metadata after its async caller is dropped.
                         let _active_read = range_read_estimator.start_read();
-                        snapshot.refresh(&context)
+                        snapshot.refresh(&operation_fields)
                     })
                 })
             })
@@ -708,8 +708,8 @@ impl<'table> DeltaScanBuilder<'table> {
         } else {
             DELTA_LOG_SCAN_METADATA_SOURCE
         };
-        let operation = Operation::start(
-            OperationKind::Planning,
+        let operation = OperationTrace::start(
+            OperationKind::ScanPlanning,
             OperationFields {
                 snapshot_version: Some(snapshot_version),
                 backend: Some(backend),
@@ -782,7 +782,9 @@ impl<'table> DeltaScanBuilder<'table> {
             })
             .and_then(|result| result)?;
 
-            operation.context().planned(plan.partitions.len());
+            operation
+                .shared_fields()
+                .record_partition_count(plan.partitions.len());
             if self.limit != Some(0)
                 && physical_row_predicate.is_some()
                 && !plan.partitions.is_empty()
@@ -925,7 +927,7 @@ pub struct DeltaBatchStream {
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
-    operation: Option<StreamOperation>,
+    operation: Option<StreamTrace>,
     done: bool,
 }
 
@@ -949,11 +951,11 @@ impl DeltaBatchStream {
         self.metrics.clone()
     }
 
-    fn start(&mut self) {
+    fn start_trace(&mut self) {
         if self.operation.is_some() {
             return;
         }
-        self.operation = Some(StreamOperation::start(
+        self.operation = Some(StreamTrace::start(
             self.plan_id,
             self.snapshot_version,
             self.backend,
@@ -1003,7 +1005,7 @@ impl Stream for DeltaBatchStream {
         if this.done {
             return Poll::Ready(None);
         }
-        this.start();
+        this.start_trace();
         if this.remaining == Some(0) {
             this.finish(StreamOutcome::RowLimit);
             return Poll::Ready(None);
@@ -1098,7 +1100,7 @@ mod tests {
     };
 
     use super::{DeltaBatchStream, DeltaTable};
-    use crate::operation_tracing::{StreamOperation, StreamOutcome};
+    use crate::operation_tracing::{StreamOutcome, StreamTrace};
     use crate::{
         DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection, DeltaStorageOptions,
         ParquetReaderBackend,
@@ -1459,7 +1461,7 @@ mod tests {
             source: Box::new(SourceProbe),
         };
         with_default(tracing::subscriber::NoSubscriber::default(), || {
-            StreamOperation::start(1, 0, ParquetReaderBackend::Direct, 1)
+            StreamTrace::start(1, 0, ParquetReaderBackend::Direct, 1)
                 .finish(StreamOutcome::Failed(&error), Some(0));
         });
     }

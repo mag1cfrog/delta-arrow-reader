@@ -25,24 +25,24 @@ use serde_json::value::RawValue;
 
 use crate::{
     diagnostics::InputCorrection,
-    input::schema_errors::{FieldLocation, ObjectFields},
+    input::schema_errors::{InputFieldLocation, ObjectFields},
 };
 
 pub(in crate::input) fn diagnose_schema_error(
     raw: &RawValue,
-    location: &FieldLocation,
+    location: &InputFieldLocation,
 ) -> Option<InputCorrection> {
     check_node_schema(raw, location, 1).err()
 }
 
 fn check_node_schema(
     raw: &RawValue,
-    location: &FieldLocation,
+    location: &InputFieldLocation,
     depth: usize,
 ) -> Result<(), InputCorrection> {
     // Check child nodes separately; tagged enums can erase their error paths.
     if depth > super::MAX_PREDICATE_DEPTH {
-        return Err(location.invalid(
+        return Err(location.build_correction(
             format!(
                 "at most {} predicate levels, including the root",
                 super::MAX_PREDICATE_DEPTH
@@ -62,21 +62,21 @@ fn check_node_schema(
         }
         PredicateOperator::And | PredicateOperator::Or => {
             fields.check_variant_fields::<LogicalGroupFields<IgnoredAny>>("op", location)?;
-            let args = location.field("args");
+            let args = location.child_field("args");
             let children: Vec<&RawValue> = parse_json_at(
                 fields.required_field("args", location)?,
                 &args,
                 "an array of predicate objects",
             )?;
             for (index, child) in children.into_iter().enumerate() {
-                check_node_schema(child, &args.index(index), depth + 1)?;
+                check_node_schema(child, &args.array_element(index), depth + 1)?;
             }
         }
         PredicateOperator::Not => {
             fields.check_variant_fields::<NegationFields<IgnoredAny>>("op", location)?;
             check_node_schema(
                 fields.required_field("arg", location)?,
-                &location.field("arg"),
+                &location.child_field("arg"),
                 depth + 1,
             )?;
         }
@@ -92,14 +92,17 @@ fn check_node_schema(
             fields.check_variant_fields::<ComparisonFields<IgnoredAny>>("op", location)?;
             check_scalar_schema(
                 fields.required_field("value", location)?,
-                &location.field("value"),
+                &location.child_field("value"),
             )?;
         }
     }
     Ok(())
 }
 
-fn check_scalar_schema(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
+fn check_scalar_schema(
+    raw: &RawValue,
+    location: &InputFieldLocation,
+) -> Result<(), InputCorrection> {
     use super::{
         Decimal128Fields, FixedSizeBinaryFields, IntegerStringFields, ScalarType,
         TimestampMicrosecondFields, ValueFields,
@@ -141,11 +144,11 @@ fn check_scalar_schema(raw: &RawValue, location: &FieldLocation) -> Result<(), I
 
 fn parse_json_at<'de, T: serde::Deserialize<'de>>(
     raw: &'de RawValue,
-    location: &FieldLocation,
+    location: &InputFieldLocation,
     expected: &str,
 ) -> Result<T, InputCorrection> {
     serde_json::from_str(raw.get()).map_err(|_| {
-        location.invalid(
+        location.build_correction(
             expected,
             "Supply a value matching this field's expected format.",
         )

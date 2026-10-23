@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::{
-    check_failure,
+    assert_failure_diagnostic,
     mock_cloud_storage::{CloudStorageProtocol, MockCloudStorageServer},
     run_with_timeout,
 };
@@ -788,7 +788,7 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
             serde_json::to_vec(&json!({key:"secret-sentinel"}))?,
         )?;
         let output = run_with_timeout(fixture.inspect().env("RUST_LOG", "trace"))?;
-        check_failure(
+        assert_failure_diagnostic(
             &output.stderr,
             "configuration",
             "invalid_uc_storage_options",
@@ -806,7 +806,8 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
             .env("PATH", ""),
     )?;
     assert_eq!(output.status.code(), Some(2));
-    let diagnostic = check_failure(&output.stderr, "configuration", "databricks_cli_missing");
+    let diagnostic =
+        assert_failure_diagnostic(&output.stderr, "configuration", "databricks_cli_missing");
     assert!(
         diagnostic.contains("Install the Databricks CLI"),
         "{diagnostic}"
@@ -971,7 +972,7 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
         let output = run_with_timeout(&mut fixture.inspect())?;
         assert_eq!(output.status.code(), Some(1));
         assert!(output.stdout.is_empty());
-        check_failure(&output.stderr, "execution", expected);
+        assert_failure_diagnostic(&output.stderr, "execution", expected);
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
         let output = run_with_timeout(
             fixture
@@ -1004,7 +1005,7 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
     )?;
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
-    check_failure(&output.stderr, "execution", "uc_credential_request_failed");
+    assert_failure_diagnostic(&output.stderr, "execution", "uc_credential_request_failed");
     assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     let output = run_with_timeout(
         fixture
@@ -1072,9 +1073,9 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
             "UC inspection must not report an unsupported snapshot"
         );
         if feature == "madeUpFeature" {
-            check_failure(&output.stderr, "execution", "unsupported_uc_table");
+            assert_failure_diagnostic(&output.stderr, "execution", "unsupported_uc_table");
         } else {
-            check_failure(&output.stderr, "snapshot", "snapshot_load");
+            assert_failure_diagnostic(&output.stderr, "snapshot", "snapshot_load");
         }
         if feature == "madeUpFeature" {
             let output = run_with_timeout(fixture.command(&["inspect"]).arg(directory.path()))?;

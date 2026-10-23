@@ -5,7 +5,7 @@ use std::path::Path;
 use super::*;
 
 fn create_wide_table(directory: &Path) -> TestResult<Value> {
-    let source = table_path("deletion_vectors");
+    let source = fixture_table_path("deletion_vectors");
     let log = fs::read_to_string(source.join("_delta_log/00000000000000000000.json"))?;
     let mut actions: Vec<Value> = log
         .lines()
@@ -46,7 +46,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
     let directory = tempfile::tempdir()?;
     let added_file = create_wide_table(directory.path())?;
     let mut response_sizes = Vec::new();
-    let mut run = |arguments: &[&str]| -> TestResult<Output> {
+    let mut run_and_check_metadata_omission = |arguments: &[&str]| -> TestResult<Output> {
         let output = run_with_timeout(
             Command::new(env!("CARGO_BIN_EXE_dar"))
                 .env_clear()
@@ -62,7 +62,8 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
         assert!(!String::from_utf8_lossy(&output.stderr).contains("private field metadata"));
         Ok(output)
     };
-    let index: Value = serde_json::from_slice(&run(&["capabilities"])?.stdout)?;
+    let index: Value =
+        serde_json::from_slice(&run_and_check_metadata_omission(&["capabilities"])?.stdout)?;
     for name in ["inspect", "preview", "query"] {
         let entry = index["commands"]
             .as_array()
@@ -77,11 +78,18 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
             .skip(1)
             .map(|argument| argument.as_str().unwrap())
             .collect();
-        let guide: Value = serde_json::from_slice(&run(&invocation)?.stdout)?;
+        let guide: Value =
+            serde_json::from_slice(&run_and_check_metadata_omission(&invocation)?.stdout)?;
         assert!(guide.get("arguments").is_none());
         assert!(guide.get("read_support").is_none());
     }
-    let summary = run(&["inspect", ".", "--view", "summary", "--diagnostics=json"])?;
+    let summary = run_and_check_metadata_omission(&[
+        "inspect",
+        ".",
+        "--view",
+        "summary",
+        "--diagnostics=json",
+    ])?;
     assert!(summary.status.success());
     let summary: Value = serde_json::from_slice(&summary.stdout)?;
     assert!(summary.get("fields").is_none());
@@ -99,7 +107,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
             })
         ),
     )?;
-    let names = run(&[
+    let names = run_and_check_metadata_omission(&[
         "inspect",
         ".",
         "--view",
@@ -116,7 +124,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
     assert!(names.get("fields").is_none());
     assert!(names.get("checks").is_none());
     let column = names["column_names"][0].as_str().unwrap();
-    let types = run(&[
+    let types = run_and_check_metadata_omission(&[
         "inspect",
         ".",
         "--view",
@@ -133,7 +141,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
         types["fields"],
         json!([{"name": "id", "data_type": "Int32", "nullable": true}])
     );
-    let missing = run(&[
+    let missing = run_and_check_metadata_omission(&[
         "preview",
         ".",
         "--table-version",
@@ -147,7 +155,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
     assert!(!missing.status.success());
     assert!(missing.stdout.is_empty());
     assert_single_terminal_record(&missing.stderr, "diagnostic");
-    let too_wide = run(&[
+    let too_wide = run_and_check_metadata_omission(&[
         "preview",
         ".",
         "--table-version",
@@ -161,7 +169,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
     let diagnostic = assert_single_terminal_record(&too_wide.stderr, "diagnostic");
     assert_eq!(diagnostic["reason"], "preview_schema_limit_exceeded");
     assert!(diagnostic["hint"].as_str().unwrap().contains("--column"));
-    let preview = run(&[
+    let preview = run_and_check_metadata_omission(&[
         "preview",
         ".",
         "--table-version",
@@ -172,14 +180,14 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
         "2",
         "--diagnostics=json",
     ])?;
-    let sample = decode_sample(&preview)?;
+    let sample = assert_preview_success(&preview)?;
     assert_eq!(sample["bindings"][0]["table_version"], version);
     assert_eq!(sample["schema"]["fields"], types["fields"]);
     assert_eq!(sample["rows"], json!([["1"], ["2"]]));
     assert_eq!(sample["stop_reason"], "row_limit");
     assert!(sample["has_more"].is_null());
     // Reading an evolved column proves the fixture is a readable 1000-column table.
-    let evolved = decode_sample(&run(&[
+    let evolved = assert_preview_success(&run_and_check_metadata_omission(&[
         "preview",
         ".",
         "--table-version",
@@ -195,7 +203,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
         directory.path().join("count.sql"),
         "SELECT count(*) AS n FROM t",
     )?;
-    let query = run(&[
+    let query = run_and_check_metadata_omission(&[
         "query",
         ".",
         "--table-version",
@@ -218,7 +226,7 @@ fn wide_table_discovery_preview_query_and_repair_keep_the_requested_snapshot() -
     assert_eq!(receipt["bindings"], result["bindings"]);
     assert_eq!(receipt["rows"], "1");
     assert_eq!(receipt["output_bytes"], query.stdout.len().to_string());
-    let latest = decode_sample(&run(&[
+    let latest = assert_preview_success(&run_and_check_metadata_omission(&[
         "preview",
         ".",
         "--column",

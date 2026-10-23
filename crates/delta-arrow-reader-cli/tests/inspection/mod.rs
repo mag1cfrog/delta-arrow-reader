@@ -40,7 +40,7 @@ fn inspect(table: &Path, args: &[&str]) -> Output {
     .unwrap()
 }
 
-fn summary_result(output: &Output, budget: usize) -> Value {
+fn assert_summary_success(output: &Output, budget: usize) -> Value {
     assert!(output.status.success(), "{output:?}");
     assert!(output.stdout.ends_with(b"\n"));
     assert!(output.stdout.len() <= budget);
@@ -83,7 +83,7 @@ fn discovery_finds_only_the_requested_column_in_a_wide_pinned_snapshot() -> Test
             std::ffi::OsStr::new(argument.as_str().unwrap())
         });
     }
-    let overview = summary_result(&run_with_timeout(&mut command)?, 4096);
+    let overview = assert_summary_success(&run_with_timeout(&mut command)?, 4096);
     assert_eq!(overview.as_object().unwrap().len(), 4);
     assert_eq!(
         overview["checks"],
@@ -102,7 +102,7 @@ fn discovery_finds_only_the_requested_column_in_a_wide_pinned_snapshot() -> Test
             }})
         ),
     )?;
-    let names = summary_result(
+    let names = assert_summary_success(
         &inspect(
             table.path(),
             &[
@@ -118,7 +118,7 @@ fn discovery_finds_only_the_requested_column_in_a_wide_pinned_snapshot() -> Test
     );
     assert_eq!(names["column_names"], json!(["column_0999"]));
     assert!(names.get("fields").is_none() && names.get("checks").is_none());
-    let field = summary_result(
+    let field = assert_summary_success(
         &inspect(
             table.path(),
             &[
@@ -137,7 +137,7 @@ fn discovery_finds_only_the_requested_column_in_a_wide_pinned_snapshot() -> Test
         json!([{"name": "column_0999", "data_type": "Int32", "nullable": true}])
     );
     assert!(field.get("checks").is_none());
-    let selected = summary_result(
+    let selected = assert_summary_success(
         &inspect(
             table.path(),
             &[
@@ -162,7 +162,7 @@ fn discovery_finds_only_the_requested_column_in_a_wide_pinned_snapshot() -> Test
             .collect::<Vec<_>>(),
         ["column_0999", "column_0998"]
     );
-    let no_match = summary_result(
+    let no_match = assert_summary_success(
         &inspect(
             table.path(),
             &[
@@ -218,8 +218,8 @@ fn selected_details_have_exact_byte_limits_and_opt_in_metadata() {
         ],
         false,
     );
-    summary_result(&inspect(table.path(), &["--view", "summary"]), 4096);
-    let short = summary_result(
+    assert_summary_success(&inspect(table.path(), &["--view", "summary"]), 4096);
+    let short = assert_summary_success(
         &inspect(table.path(), &["--view", "summary", "--column", "id"]),
         4096,
     );
@@ -252,7 +252,7 @@ fn selected_details_have_exact_byte_limits_and_opt_in_metadata() {
                 "65536",
             ],
         );
-        let result = summary_result(&accepted, 65536);
+        let result = assert_summary_success(&accepted, 65536);
         let exact = accepted.stdout.len().to_string();
         let below = (accepted.stdout.len() - 1).to_string();
         let exact_output = inspect(
@@ -267,7 +267,7 @@ fn selected_details_have_exact_byte_limits_and_opt_in_metadata() {
             ],
         );
         assert_eq!(exact_output.stdout, accepted.stdout);
-        summary_result(&exact_output, accepted.stdout.len());
+        assert_summary_success(&exact_output, accepted.stdout.len());
         let overflow = inspect(
             table.path(),
             &[
@@ -302,7 +302,7 @@ fn selected_details_have_exact_byte_limits_and_opt_in_metadata() {
             "65536",
         ],
     );
-    let selected = summary_result(&selected, 65536);
+    let selected = assert_summary_success(&selected, 65536);
     assert_eq!(
         selected["fields"][0]["metadata"]["comment"],
         "private metadata".repeat(1000)
@@ -323,13 +323,13 @@ fn selected_details_have_exact_byte_limits_and_opt_in_metadata() {
 fn empty_nested_and_unsupported_snapshots_remain_inspectable() {
     for unsupported in [false, true] {
         let table = table_with_fields(vec![], unsupported);
-        let result = summary_result(&inspect(table.path(), &["--view", "summary"]), 4096);
+        let result = assert_summary_success(&inspect(table.path(), &["--view", "summary"]), 4096);
         assert_eq!(
             result["checks"]["scan_protocol"],
             if unsupported { "failed" } else { "passed" }
         );
         assert_eq!(result["checks"]["data_files"], "not_checked");
-        let fields = summary_result(
+        let fields = assert_summary_success(
             &inspect(table.path(), &["--view", "summary", "--column-prefix", ""]),
             4096,
         );
@@ -340,7 +340,7 @@ fn empty_nested_and_unsupported_snapshots_remain_inspectable() {
         nested = json!({"type": "struct", "fields": [column(&"nested_".repeat(40), nested, json!({"comment": "secret nested metadata"}))]});
     }
     let table = table_with_fields(vec![column("record", nested, json!({}))], false);
-    summary_result(&inspect(table.path(), &["--view", "summary"]), 4096);
+    assert_summary_success(&inspect(table.path(), &["--view", "summary"]), 4096);
     let overflow = inspect(table.path(), &["--view", "summary", "--column", "record"]);
     assert_eq!(overflow.status.code(), Some(1));
     assert!(overflow.stdout.is_empty());
@@ -356,7 +356,7 @@ fn empty_nested_and_unsupported_snapshots_remain_inspectable() {
             "16384",
         ],
     );
-    let result = summary_result(&output, 16384);
+    let result = assert_summary_success(&output, 16384);
     let mut field = &result["fields"][0];
     for _ in 0..20 {
         assert!(field.get("metadata").is_none());
@@ -402,7 +402,7 @@ fn projection_and_predicate_repairs_use_selected_names_and_types() -> TestResult
     );
     let directory = tempfile::tempdir()?;
     let predicate_path = directory.path().join("predicate.json");
-    let overview = summary_result(&inspect(&table, &["--view", "summary"]), 4096);
+    let overview = assert_summary_success(&inspect(&table, &["--view", "summary"]), 4096);
     let version = overview["table_version"].as_str().unwrap();
     for failure in ["projection", "predicate_column", "predicate_type"] {
         let predicate = json!({"op": "ge", "column": "secret-wrong-column", "value": {"type": "int32", "value": "1"}});
@@ -440,7 +440,7 @@ fn projection_and_predicate_repairs_use_selected_names_and_types() -> TestResult
                 hint.contains("--view summary --column-prefix PREFIX")
                     && hint.contains("--table-version N")
             );
-            let names = summary_result(
+            let names = assert_summary_success(
                 &inspect(
                     &table,
                     &[
@@ -455,7 +455,7 @@ fn projection_and_predicate_repairs_use_selected_names_and_types() -> TestResult
                 4096,
             );
             assert_eq!(names["column_names"], json!(["id"]));
-            let selected = summary_result(
+            let selected = assert_summary_success(
                 &inspect(
                     &table,
                     &[

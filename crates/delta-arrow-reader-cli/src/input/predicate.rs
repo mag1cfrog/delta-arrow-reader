@@ -18,7 +18,7 @@
 //! Pass the file to `--predicate-file`. Integer literals use decimal strings;
 //! the `type` field determines their width.
 
-use std::{fmt, marker::PhantomData, str::FromStr};
+use std::{fmt, str::FromStr};
 
 use arrow_schema::{DataType, TimeUnit};
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaPredicatePathStep, DeltaScalar};
@@ -29,7 +29,7 @@ use snafu::ensure;
 use crate::{
     Error, InputValidationSnafu,
     diagnostics::InputCorrection,
-    input::{JsonInputKind, JsonObject},
+    input::{JsonInputKind, JsonObject, deserialize_integer_string},
 };
 
 mod json_schema;
@@ -41,8 +41,7 @@ pub(super) use schema_errors::diagnose_schema_error;
 pub(super) const MAX_PREDICATE_NODES: usize = 1024;
 pub(super) const MAX_PREDICATE_DEPTH: usize = 32;
 
-// Schema diagnostics match these custom Serde expectations to select correction hints.
-pub(super) const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
+// Schema diagnostics match this custom Serde expectation to select a correction hint.
 pub(super) const TIMEZONE_EXPECTATION: &str = "null or a nonempty JSON string";
 
 #[derive(Deserialize)]
@@ -224,7 +223,9 @@ impl PredicateNode {
                     .map(|(index, arg)| {
                         arg.0
                             .into_predicate(depth + 1, node_count)
-                            .map_err(|error| prepend_field_path(error, &format!("/args/{index}")))
+                            .map_err(|error| {
+                                prepend_validation_path(error, &format!("/args/{index}"))
+                            })
                     })
                     .collect::<Result<_, _>>()?,
             ),
@@ -234,14 +235,16 @@ impl PredicateNode {
                     .map(|(index, arg)| {
                         arg.0
                             .into_predicate(depth + 1, node_count)
-                            .map_err(|error| prepend_field_path(error, &format!("/args/{index}")))
+                            .map_err(|error| {
+                                prepend_validation_path(error, &format!("/args/{index}"))
+                            })
                     })
                     .collect::<Result<_, _>>()?,
             ),
             Self::Not(NegationFields { arg }) => DeltaPredicate::Not(Box::new(
                 arg.0
                     .into_predicate(depth + 1, node_count)
-                    .map_err(|error| prepend_field_path(error, "/arg"))?,
+                    .map_err(|error| prepend_validation_path(error, "/arg"))?,
             )),
         })
     }
@@ -258,7 +261,7 @@ fn convert_comparison(
         value: value
             .0
             .into_scalar()
-            .map_err(|error| prepend_field_path(error, "/value"))?,
+            .map_err(|error| prepend_validation_path(error, "/value"))?,
     })
 }
 
@@ -430,51 +433,13 @@ fn predicate_type_description(data_type: &DataType) -> Option<String> {
     })
 }
 
-fn prepend_field_path(mut error: Error, prefix: &str) -> Error {
+fn prepend_validation_path(mut error: Error, prefix: &str) -> Error {
     if let Error::InputValidation { correction, .. } = &mut error
         && let Some(path) = &mut correction.field_path
     {
         path.insert_str(0, prefix);
     }
     error
-}
-
-fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr + Bounded + fmt::Display,
-{
-    struct CanonicalIntegerStringVisitor<T>(PhantomData<T>);
-
-    impl<'de, T: FromStr + Bounded + fmt::Display> de::Visitor<'de>
-        for CanonicalIntegerStringVisitor<T>
-    {
-        type Value = T;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                formatter,
-                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
-                T::min_value(),
-                T::max_value()
-            )
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<T, E> {
-            let digits = value.strip_prefix('-').unwrap_or(value).as_bytes();
-            if value != "0"
-                && !(matches!(digits.first(), Some(b'1'..=b'9'))
-                    && digits.iter().all(u8::is_ascii_digit))
-            {
-                return Err(E::invalid_value(de::Unexpected::Str(value), &self));
-            }
-            value
-                .parse()
-                .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self))
-        }
-    }
-
-    deserializer.deserialize_str(CanonicalIntegerStringVisitor(PhantomData))
 }
 
 fn deserialize_timezone<'de, D: Deserializer<'de>>(
@@ -573,17 +538,17 @@ mod tests {
         }
     }
 
-    fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
+    fn parse_with_schema_assertions(text: &str) -> Result<DeltaPredicate, Error> {
         let result =
             crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputKind::Predicate)?
                 .into_predicate();
         if result.is_ok() {
-            static SCHEMA: std::sync::LazyLock<jsonschema::Validator> =
+            static SCHEMA_VALIDATOR: std::sync::LazyLock<jsonschema::Validator> =
                 std::sync::LazyLock::new(|| {
                     jsonschema::validator_for(&JsonInputKind::Predicate.schema_document()["schema"])
                         .unwrap()
                 });
-            SCHEMA
+            SCHEMA_VALIDATOR
                 .validate(&serde_json::from_str(text).unwrap())
                 .unwrap();
             assert!(
@@ -621,12 +586,12 @@ mod tests {
         }
     }
 
-    fn parse(value: Value) -> DeltaPredicate {
-        parse_text(&value.to_string()).unwrap()
+    fn parse_valid_predicate(value: Value) -> DeltaPredicate {
+        parse_with_schema_assertions(&value.to_string()).unwrap()
     }
 
-    fn parse_scalar(value: Value) -> DeltaScalar {
-        match parse(json!({"op": "eq", "column": "id", "value": value})) {
+    fn parse_valid_scalar(value: Value) -> DeltaScalar {
+        match parse_valid_predicate(json!({"op": "eq", "column": "id", "value": value})) {
             DeltaPredicate::Compare { value, .. } => value,
             other => panic!("expected comparison, got {other:?}"),
         }
@@ -666,7 +631,9 @@ mod tests {
                 "op": "eq", "column": "secret-column", "value": scalar,
             }})
             .to_string();
-            let record = parse_text(&text).unwrap_err().to_json_diagnostic();
+            let record = parse_with_schema_assertions(&text)
+                .unwrap_err()
+                .to_json_diagnostic();
             assert_eq!(record["field_path"], "/arg/value/value", "{kind}: {record}");
             assert!(
                 record["expected"].as_str().unwrap().ends_with(range),
@@ -688,7 +655,7 @@ mod tests {
         ] {
             for column in ["id", "", " a,b.c ", "ID"] {
                 assert_eq!(
-                    parse(json!({"op": op, "column": column,
+                    parse_valid_predicate(json!({"op": op, "column": column,
                         "value": {"type": "int32", "value": "10"}})),
                     DeltaPredicate::Compare {
                         column: column.into(),
@@ -700,20 +667,20 @@ mod tests {
         }
         for value in [false, true] {
             assert_eq!(
-                parse(json!({"op": "constant", "value": value})),
+                parse_valid_predicate(json!({"op": "constant", "value": value})),
                 DeltaPredicate::Constant(value)
             );
         }
         assert_eq!(
-            parse(json!({"op": "and", "args": []})),
+            parse_valid_predicate(json!({"op": "and", "args": []})),
             DeltaPredicate::And(vec![])
         );
         assert_eq!(
-            parse(json!({"op": "or", "args": []})),
+            parse_valid_predicate(json!({"op": "or", "args": []})),
             DeltaPredicate::Or(vec![])
         );
         assert_eq!(
-            parse(json!({"op": "and", "args": [
+            parse_valid_predicate(json!({"op": "and", "args": [
                 {"op": "is_null", "column": " a.b "},
                 {"op": "or", "args": [
                     {"op": "is_not_null", "column": ""},
@@ -881,7 +848,7 @@ mod tests {
                 },
             ),
         ] {
-            assert_eq!(parse_scalar(input.clone()), expected, "{input}");
+            assert_eq!(parse_valid_scalar(input.clone()), expected, "{input}");
         }
     }
 
@@ -899,7 +866,7 @@ mod tests {
             0.0,
             -0.0,
         ] {
-            let actual = parse_scalar(json!({"type": "float64", "value": expected}));
+            let actual = parse_valid_scalar(json!({"type": "float64", "value": expected}));
             let DeltaScalar::Float64(actual) = actual else {
                 panic!("expected Float64, got {actual:?}");
             };
@@ -945,7 +912,7 @@ mod tests {
             r#"{"op":"eq","column":"id","value":["int32","1"]}"#,
             r#"{"op":"eq","column":"id","value":{"type":"int32","value":"1"},"value":null}"#,
         ] {
-            assert!(parse_text(text).is_err(), "{text}");
+            assert!(parse_with_schema_assertions(text).is_err(), "{text}");
         }
         for scalar in [
             "{}",
@@ -998,7 +965,7 @@ mod tests {
             r#"{"type":"decimal128","value":"1","precision":1,"precision":1,"scale":0}"#,
         ] {
             let text = format!(r#"{{"op":"eq","column":"id","value":{scalar}}}"#);
-            assert!(parse_text(&text).is_err(), "{text}");
+            assert!(parse_with_schema_assertions(&text).is_err(), "{text}");
         }
     }
 
@@ -1044,7 +1011,10 @@ mod tests {
                     scalar["scale"] = json!(0);
                 }
                 let predicate = json!({"op": "eq", "column": "id", "value": scalar});
-                assert!(parse_text(&predicate.to_string()).is_err(), "{predicate}");
+                assert!(
+                    parse_with_schema_assertions(&predicate.to_string()).is_err(),
+                    "{predicate}"
+                );
             }
         }
     }
@@ -1053,7 +1023,7 @@ mod tests {
     fn enforces_depth_and_node_limits_including_the_root() {
         let mut value = json!({"op": "constant", "value": true});
         for depth in 1..=33 {
-            let result = parse_text(&value.to_string());
+            let result = parse_with_schema_assertions(&value.to_string());
             assert_eq!(result.is_ok(), depth <= 32, "depth {depth}");
             value = match depth % 3 {
                 0 => json!({"op": "not", "arg": value}),
@@ -1064,18 +1034,21 @@ mod tests {
         for nodes in [1024, 1025] {
             let args = vec![json!({"op": "constant", "value": true}); nodes - 1];
             let value = json!({"op": "and", "args": args});
-            assert_eq!(parse_text(&value.to_string()).is_ok(), nodes == 1024);
+            assert_eq!(
+                parse_with_schema_assertions(&value.to_string()).is_ok(),
+                nodes == 1024
+            );
         }
         // Count across sibling subtrees, not just within each branch.
         let args = vec![json!({"op": "not", "arg": {"op": "constant", "value": true}}); 512];
         let value = json!({"op": "or", "args": args});
-        assert!(parse_text(&value.to_string()).is_err());
+        assert!(parse_with_schema_assertions(&value.to_string()).is_err());
         let deeply_nested = format!(
             "{}{}{}",
             r#"{"op":"not","arg":"#.repeat(256),
             r#"{"op":"constant","value":true}"#,
             "}".repeat(256)
         );
-        assert!(parse_text(&deeply_nested).is_err());
+        assert!(parse_with_schema_assertions(&deeply_nested).is_err());
     }
 }

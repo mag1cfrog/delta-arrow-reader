@@ -25,6 +25,9 @@ cli_fixture=/checks/crates/delta-arrow-reader-core/tests/reader/fixtures/externa
 test ! -s inspect.stderr
 /package/dar scan --column id --limit 2 "$cli_fixture" >scan.arrow 2>scan.stderr
 test ! -s scan.stderr
+/package/dar query --help >query-help.txt
+printf 'SELECT COUNT(*) AS n FROM t\n' >query.sql
+/package/dar query "$cli_fixture" --table-version 0 --sql-file query.sql --diagnostics=json >query.arrow 2>query.stderr
 
 case "$ID" in
   debian|ubuntu) apt-get install -y --no-install-recommends binutils build-essential openssl ;;

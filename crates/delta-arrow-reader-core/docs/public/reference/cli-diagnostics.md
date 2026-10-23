@@ -38,7 +38,7 @@ same option. A handled failure produces:
 Core failures retain their typed phase, code, reason, and source category.
 `source_kind` is null when absent. Safe optional fields include `argument_kind`,
 `json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. No raw dependency
-errors, input values, paths, credentials, or captured child output are included.
+errors, arbitrary input values, paths, credentials, or captured child output are included.
 Diagnostic version 2 removes the fixed `message` from version 1. Use the
 classification fields for decisions.
 
@@ -75,6 +75,13 @@ object, since its keys may contain credentials. An empty path, `""`, identifies
 the document root. A missing field's path identifies where to add it. Unknown
 keys and supplied values never appear in these paths or hints. When the document
 cannot be analyzed safely, diagnostics keep the input's general guidance.
+
+With `--env-file`, credential validation identifies the supplying file when its
+origin is known. Credentials in the optional JSON configuration point to
+`--storage-options-file`; an incomplete or conflicting file identity points to
+`--env-file`, with a lookup for that storage service's supported variables.
+Manifest calls identify the corresponding authorization reference in `field_path`.
+Neither form includes credential contents.
 
 Execution settings rejected by a native range check also include `field_path`,
 a JSON Pointer made from known schema fields. For example, an execution file
@@ -127,6 +134,10 @@ starting a new command, after discarding any output from the failed invocation.
 Query byte and row exhaustion use `adjust_budget`, identifying
 `--max-output-bytes` or `--max-rows`. Explicitly increase the applicable budget
 and keep the same SQL, authorization, table bindings, and snapshot versions.
+For SQL planning or result errors after all snapshots load, the diagnostic includes `bindings`
+with the validated aliases and actual versions. Set each manifest entry's
+`table_version` from those bindings before retrying. For positional input, set
+`--table-version` from the `t` binding. Snapshot-loading failures and cancellation omit these fields. A retry without pinned versions can read newer commits.
 For JSON byte exhaustion, another option is Arrow with redirected stdout and an
 explicit byte budget. Adding SQL `LIMIT` changes the result and is not a repair
 for the same request.
@@ -172,7 +183,11 @@ stderr records; extract each response's `schema` field
 for validation. Both commands work offline.
 Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
 unsupported `format_version` values for each record kind. Incompatible field meanings or types
-require a new version. This opt-in format replaces the former unversioned
+require a new version.
+
+<span id="json-stderr-migration"></span>
+
+This opt-in format replaces the former unversioned
 JSON stderr object; plain text remains the default.
 
 ## Target filters
@@ -232,7 +247,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
 | `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
 | `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
-| `execution` | `uc_cancelled` | A UC inspect or scan command was interrupted |
+| `execution` | `uc_cancelled` | A UC inspect, scan, or query command was interrupted |
 
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
@@ -277,8 +292,8 @@ the process with status 1 and a synchronous diagnostic with code
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
 
-UC inspect and scan handle SIGINT/SIGTERM during authorization, metadata loading,
-and scanning, terminate any pending Databricks child, and exit 130/143. In text mode,
+UC inspect, scan, and query handle SIGINT/SIGTERM during authorization, metadata
+loading, and execution, terminate any pending Databricks child, and exit 130/143. In text mode,
 cancellation emits an INFO `cli.cancelled` event with code `uc_cancelled`,
 visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
 that code, including with `RUST_LOG=off`. Cancellation remains responsive

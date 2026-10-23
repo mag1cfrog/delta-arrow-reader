@@ -16,6 +16,26 @@ use crate::{
 
 impl ProcessFixture<'_> {
     pub(super) fn check_failure_reporting_without_threads(&self) -> Result<()> {
+        let panic = run_cli(
+            self.command()
+                .args(["capabilities", "--diagnostics=json"])
+                .env("LD_PRELOAD", self.fault_library)
+                .env("DAR_TEST_REJECT_THREADS", "1"),
+        )?;
+        let diagnostic: serde_json::Value =
+            serde_json::from_slice(&panic.stderr).context(crate::error::JsonSnafu {
+                subject: "thread-exhaustion panic diagnostic",
+            })?;
+        ensure!(
+            panic.status.code() == Some(1)
+                && panic.stdout.is_empty()
+                && diagnostic["kind"] == "diagnostic"
+                && diagnostic["reason"] == "process_panicked"
+                && !String::from_utf8_lossy(&panic.stderr).contains("secret"),
+            InvalidInputSnafu {
+                message: "Thread exhaustion lost the safe panic diagnostic"
+            }
+        );
         for machine in [false, true] {
             for filter in ["warn", "off"] {
                 for args in [
@@ -46,33 +66,36 @@ impl ProcessFixture<'_> {
                 }
             }
 
-            let (_reader, mut writer) = io::pipe().context(IoSnafu {
-                operation: "create a blocked stderr pipe",
-            })?;
-            let capacity = rustix::pipe::fcntl_getpipe_size(&writer)
-                .map_err(io::Error::from)
-                .context(IoSnafu {
-                    operation: "read the stderr pipe capacity",
+            for (argument, status) in [("--secret-invalid-argument", 2), ("capabilities", 1)] {
+                let (_reader, mut writer) = io::pipe().context(IoSnafu {
+                    operation: "create a blocked stderr pipe",
                 })?;
-            writer.write_all(&vec![0; capacity]).context(IoSnafu {
-                operation: "fill the stderr pipe",
-            })?;
-            let mut command = self.command();
-            command
-                .arg("--secret-invalid-argument")
-                .env("LD_PRELOAD", self.fault_library)
-                .env("DAR_TEST_REJECT_THREADS", "1")
-                .stdout(Stdio::null())
-                .stderr(writer);
-            if machine {
-                command.arg("--diagnostics=json");
-            }
-            ensure!(
-                status_with_timeout(&mut command, Duration::from_secs(3))?.code() == Some(2),
-                InvalidInputSnafu {
-                    message: "Blocked stderr changed the failure status under thread exhaustion"
+                let capacity = rustix::pipe::fcntl_getpipe_size(&writer)
+                    .map_err(io::Error::from)
+                    .context(IoSnafu {
+                        operation: "read the stderr pipe capacity",
+                    })?;
+                writer.write_all(&vec![0; capacity]).context(IoSnafu {
+                    operation: "fill the stderr pipe",
+                })?;
+                let mut command = self.command();
+                command
+                    .arg(argument)
+                    .env("LD_PRELOAD", self.fault_library)
+                    .env("DAR_TEST_REJECT_THREADS", "1")
+                    .stdout(Stdio::null())
+                    .stderr(writer);
+                if machine {
+                    command.arg("--diagnostics=json");
                 }
-            );
+                ensure!(
+                    status_with_timeout(&mut command, Duration::from_secs(3))?.code()
+                        == Some(status),
+                    InvalidInputSnafu {
+                        message: "Blocked stderr changed the failure status under thread exhaustion"
+                    }
+                );
+            }
         }
         Ok(())
     }

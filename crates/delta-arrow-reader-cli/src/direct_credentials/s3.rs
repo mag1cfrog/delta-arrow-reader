@@ -77,11 +77,11 @@ pub(super) fn configure_table_credentials(
                 reason: "auth_source_incomplete_credentials"
             }
         );
-        return configure_native_credentials(builder, location, options);
+        return configure_refreshing_credentials(builder, location, options);
     }
     if matches!(source, CredentialSource::AwsContainer) {
         container_credentials::validate_credential_family(&options)?;
-        return configure_native_credentials(builder, location, options);
+        return configure_refreshing_credentials(builder, location, options);
     }
     let credentials = AwsCredential {
         key_id: take_required_credential(&mut options, "aws_access_key_id")?,
@@ -96,7 +96,7 @@ pub(super) fn configure_table_credentials(
         ))))
 }
 
-fn configure_native_credentials(
+fn configure_refreshing_credentials(
     builder: DeltaTableBuilder,
     location: &str,
     mut options: DeltaStorageOptions,

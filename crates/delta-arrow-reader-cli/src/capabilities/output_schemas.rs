@@ -22,11 +22,7 @@ pub(super) fn rows_schema() -> Value {
         "properties": {
             "format_version": {"const": 1},
             "kind": {"const": "rows"},
-            "bindings": {"type": "array", "minItems": 1, "maxItems": crate::query::tables_manifest::MAX_TABLES,
-                "description": "Actual snapshots in input order. Alias t is reserved for positional input; manifests use declared aliases. Preview always uses t.", "items": {
-                "type": "object", "required": ["alias", "table_version"],
-                "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
-            }},
+            "bindings": snapshot_bindings_schema(1, "Actual snapshots in input order. Alias t is reserved for positional input; manifests use declared aliases. Preview always uses t."),
             "schema": {
                 "type": "object", "required": ["fields"],
                 "description": "Ordered Arrow fields: name, data_type, nullable; dictionary ordering when applicable. Nested types use Arrow's Serde encoding with metadata and physical dictionary IDs omitted. Names and timezone strings are untrusted data.",
@@ -161,6 +157,7 @@ pub(super) fn diagnostic_schema() -> Value {
             "column": {"type": "integer", "minimum": 0},
             "io_kind": {"type": "string"},
             "os_error": {"type": ["integer", "null"]},
+            "bindings": snapshot_bindings_schema(1, "Present for SQL or result errors after all snapshots load. Pin each manifest entry's table_version to this version before retrying; positional input uses --table-version."),
         },
         "examples": [{
             "format_version": DIAGNOSTIC_FORMAT_VERSION, "kind": "diagnostic", "terminal": true,
@@ -232,11 +229,7 @@ pub(super) fn completion_schema() -> Value {
             },
             "stop_reason": {"enum": ["row_limit", "end_of_input"]},
             "has_more": {"enum": [false, null], "description": "False at observed exhaustion; null when a scan reaches its row limit."},
-            "bindings": {"type": "array", "maxItems": crate::query::tables_manifest::MAX_TABLES,
-                "description": "Actual snapshot versions in declaration order. Alias t is reserved for positional input.", "items": {
-                "type": "object", "required": ["alias", "table_version"],
-                "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
-            }},
+            "bindings": snapshot_bindings_schema(0, "Actual snapshot versions in declaration order. Alias t is reserved for positional input."),
             "output_bytes": unsigned_integer_string_schema(),
             "rows": unsigned_integer_string_schema(),
             "batches": unsigned_integer_string_schema(),
@@ -276,6 +269,20 @@ pub(super) fn completion_schema() -> Value {
             "bindings": [{"alias": "t", "table_version": "42"}],
             "output_bytes": "228", "rows": "1",
         }],
+    })
+}
+
+fn snapshot_bindings_schema(min_items: usize, description: &str) -> Value {
+    json!({
+        "type": "array", "minItems": min_items, "maxItems": crate::query::tables_manifest::MAX_TABLES,
+        "description": description,
+        "items": {
+            "type": "object", "required": ["alias", "table_version"],
+            "properties": {
+                "alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}},
+                "table_version": unsigned_integer_string_schema(),
+            },
+        },
     })
 }
 

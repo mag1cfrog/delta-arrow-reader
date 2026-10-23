@@ -1,7 +1,7 @@
 //! Terminal diagnostics owned by public reader operations.
 
 mod stream;
-pub(crate) use stream::{StreamOperation, StreamOutcome};
+pub(crate) use stream::{StreamOutcome, StreamTrace};
 
 use std::sync::{
     Arc, Mutex,
@@ -22,7 +22,7 @@ pub(crate) enum OperationKind {
     LoadSnapshot,
     IntoTable,
     Refresh,
-    Planning,
+    ScanPlanning,
     #[cfg(feature = "datafusion")]
     ProviderCreation,
     #[cfg(feature = "datafusion")]
@@ -44,7 +44,7 @@ impl OperationKind {
             Self::LoadSnapshot => "load_snapshot",
             Self::IntoTable => "into_table",
             Self::Refresh => "refresh",
-            Self::Planning => "scan_planning",
+            Self::ScanPlanning => "scan_planning",
             #[cfg(feature = "datafusion")]
             Self::ProviderCreation => "provider_creation",
             #[cfg(feature = "datafusion")]
@@ -60,97 +60,117 @@ impl OperationKind {
         }
     }
 
-    fn event(self, outcome: Outcome) -> &'static str {
+    fn event_name(self, outcome: LifecycleEventKind) -> &'static str {
         match (self, outcome) {
-            (Self::LoadTable, Outcome::Started) => "table_load.started",
-            (Self::LoadTable, Outcome::Completed) => "table_load.completed",
-            (Self::LoadTable, Outcome::Failed) => "table_load.failed",
-            (Self::LoadTable, Outcome::Abandoned) => "table_load.abandoned",
-            (Self::LoadSnapshot, Outcome::Started) => "table_snapshot_load.started",
-            (Self::LoadSnapshot, Outcome::Completed) => "table_snapshot_load.completed",
-            (Self::LoadSnapshot, Outcome::Failed) => "table_snapshot_load.failed",
-            (Self::LoadSnapshot, Outcome::Abandoned) => "table_snapshot_load.abandoned",
-            (Self::IntoTable, Outcome::Started) => "table_conversion.started",
-            (Self::IntoTable, Outcome::Completed) => "table_conversion.completed",
-            (Self::IntoTable, Outcome::Failed) => "table_conversion.failed",
-            (Self::IntoTable, Outcome::Abandoned) => "table_conversion.abandoned",
-            (Self::Refresh, Outcome::Started) => "table_refresh.started",
-            (Self::Refresh, Outcome::Completed) => "table_refresh.completed",
-            (Self::Refresh, Outcome::Failed) => "table_refresh.failed",
-            (Self::Refresh, Outcome::Abandoned) => "table_refresh.abandoned",
-            (Self::Planning, Outcome::Started) => "scan_planning.started",
-            (Self::Planning, Outcome::Completed) => "scan_planning.completed",
-            (Self::Planning, Outcome::Failed) => "scan_planning.failed",
-            (Self::Planning, Outcome::Abandoned) => "scan_planning.abandoned",
+            (Self::LoadTable, LifecycleEventKind::Started) => "table_load.started",
+            (Self::LoadTable, LifecycleEventKind::Completed) => "table_load.completed",
+            (Self::LoadTable, LifecycleEventKind::Failed) => "table_load.failed",
+            (Self::LoadTable, LifecycleEventKind::Abandoned) => "table_load.abandoned",
+            (Self::LoadSnapshot, LifecycleEventKind::Started) => "table_snapshot_load.started",
+            (Self::LoadSnapshot, LifecycleEventKind::Completed) => "table_snapshot_load.completed",
+            (Self::LoadSnapshot, LifecycleEventKind::Failed) => "table_snapshot_load.failed",
+            (Self::LoadSnapshot, LifecycleEventKind::Abandoned) => "table_snapshot_load.abandoned",
+            (Self::IntoTable, LifecycleEventKind::Started) => "table_conversion.started",
+            (Self::IntoTable, LifecycleEventKind::Completed) => "table_conversion.completed",
+            (Self::IntoTable, LifecycleEventKind::Failed) => "table_conversion.failed",
+            (Self::IntoTable, LifecycleEventKind::Abandoned) => "table_conversion.abandoned",
+            (Self::Refresh, LifecycleEventKind::Started) => "table_refresh.started",
+            (Self::Refresh, LifecycleEventKind::Completed) => "table_refresh.completed",
+            (Self::Refresh, LifecycleEventKind::Failed) => "table_refresh.failed",
+            (Self::Refresh, LifecycleEventKind::Abandoned) => "table_refresh.abandoned",
+            (Self::ScanPlanning, LifecycleEventKind::Started) => "scan_planning.started",
+            (Self::ScanPlanning, LifecycleEventKind::Completed) => "scan_planning.completed",
+            (Self::ScanPlanning, LifecycleEventKind::Failed) => "scan_planning.failed",
+            (Self::ScanPlanning, LifecycleEventKind::Abandoned) => "scan_planning.abandoned",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderCreation, Outcome::Started) => "provider_creation.started",
+            (Self::ProviderCreation, LifecycleEventKind::Started) => "provider_creation.started",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderCreation, Outcome::Completed) => "provider_creation.completed",
+            (Self::ProviderCreation, LifecycleEventKind::Completed) => {
+                "provider_creation.completed"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::ProviderCreation, Outcome::Failed) => "provider_creation.failed",
+            (Self::ProviderCreation, LifecycleEventKind::Failed) => "provider_creation.failed",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderCreation, Outcome::Abandoned) => "provider_creation.abandoned",
+            (Self::ProviderCreation, LifecycleEventKind::Abandoned) => {
+                "provider_creation.abandoned"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRegistration, Outcome::Started) => "provider_registration.started",
+            (Self::ProviderRegistration, LifecycleEventKind::Started) => {
+                "provider_registration.started"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRegistration, Outcome::Completed) => "provider_registration.completed",
+            (Self::ProviderRegistration, LifecycleEventKind::Completed) => {
+                "provider_registration.completed"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRegistration, Outcome::Failed) => "provider_registration.failed",
+            (Self::ProviderRegistration, LifecycleEventKind::Failed) => {
+                "provider_registration.failed"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRegistration, Outcome::Abandoned) => "provider_registration.abandoned",
+            (Self::ProviderRegistration, LifecycleEventKind::Abandoned) => {
+                "provider_registration.abandoned"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRefresh, Outcome::Started) => "provider_refresh.started",
+            (Self::ProviderRefresh, LifecycleEventKind::Started) => "provider_refresh.started",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRefresh, Outcome::Completed) => "provider_refresh.completed",
+            (Self::ProviderRefresh, LifecycleEventKind::Completed) => "provider_refresh.completed",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRefresh, Outcome::Failed) => "provider_refresh.failed",
+            (Self::ProviderRefresh, LifecycleEventKind::Failed) => "provider_refresh.failed",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderRefresh, Outcome::Abandoned) => "provider_refresh.abandoned",
+            (Self::ProviderRefresh, LifecycleEventKind::Abandoned) => "provider_refresh.abandoned",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderScan, Outcome::Started) => "provider_scan.started",
+            (Self::ProviderScan, LifecycleEventKind::Started) => "provider_scan.started",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderScan, Outcome::Completed) => "provider_scan.completed",
+            (Self::ProviderScan, LifecycleEventKind::Completed) => "provider_scan.completed",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderScan, Outcome::Failed) => "provider_scan.failed",
+            (Self::ProviderScan, LifecycleEventKind::Failed) => "provider_scan.failed",
             #[cfg(feature = "datafusion")]
-            (Self::ProviderScan, Outcome::Abandoned) => "provider_scan.abandoned",
+            (Self::ProviderScan, LifecycleEventKind::Abandoned) => "provider_scan.abandoned",
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionReplaceChildren, Outcome::Started) => {
+            (Self::DataFusionReplaceChildren, LifecycleEventKind::Started) => {
                 "datafusion_replace_children.started"
             }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionReplaceChildren, Outcome::Completed) => {
+            (Self::DataFusionReplaceChildren, LifecycleEventKind::Completed) => {
                 "datafusion_replace_children.completed"
             }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionReplaceChildren, Outcome::Failed) => {
+            (Self::DataFusionReplaceChildren, LifecycleEventKind::Failed) => {
                 "datafusion_replace_children.failed"
             }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionReplaceChildren, Outcome::Abandoned) => {
+            (Self::DataFusionReplaceChildren, LifecycleEventKind::Abandoned) => {
                 "datafusion_replace_children.abandoned"
             }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionRepartition, Outcome::Started) => "datafusion_repartition.started",
+            (Self::DataFusionRepartition, LifecycleEventKind::Started) => {
+                "datafusion_repartition.started"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionRepartition, Outcome::Completed) => "datafusion_repartition.completed",
+            (Self::DataFusionRepartition, LifecycleEventKind::Completed) => {
+                "datafusion_repartition.completed"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionRepartition, Outcome::Failed) => "datafusion_repartition.failed",
+            (Self::DataFusionRepartition, LifecycleEventKind::Failed) => {
+                "datafusion_repartition.failed"
+            }
             #[cfg(feature = "datafusion")]
-            (Self::DataFusionRepartition, Outcome::Abandoned) => "datafusion_repartition.abandoned",
+            (Self::DataFusionRepartition, LifecycleEventKind::Abandoned) => {
+                "datafusion_repartition.abandoned"
+            }
         }
     }
 }
 
 #[derive(Clone, Copy)]
-enum Outcome {
+enum LifecycleEventKind {
     Started,
     Completed,
     Failed,
     Abandoned,
 }
 
-impl Outcome {
+impl LifecycleEventKind {
     fn as_str(self) -> &'static str {
         match self {
             Self::Started => "started",
@@ -193,24 +213,24 @@ impl OperationFields {
 
 /// Blocking work may update known context, but cannot complete the caller's operation.
 #[derive(Clone, Default)]
-pub(crate) struct OperationContext(Arc<Mutex<OperationFields>>);
+pub(crate) struct SharedOperationFields(Arc<Mutex<OperationFields>>);
 
-impl OperationContext {
-    fn fields(&self) -> OperationFields {
+impl SharedOperationFields {
+    fn snapshot(&self) -> OperationFields {
         *self
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub(crate) fn snapshot_loaded(&self, version: u64) {
+    pub(crate) fn record_snapshot_version(&self, version: u64) {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .snapshot_version = Some(version);
     }
 
-    pub(crate) fn planned(&self, partitions: usize) {
+    pub(crate) fn record_partition_count(&self, partitions: usize) {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -218,21 +238,21 @@ impl OperationContext {
     }
 }
 
-pub(crate) struct Operation {
+pub(crate) struct OperationTrace {
     id: u64,
     kind: OperationKind,
-    context: OperationContext,
+    fields: SharedOperationFields,
     started: Instant,
     dispatch: Dispatch,
     span: Span,
     finished: bool,
 }
 
-impl Operation {
+impl OperationTrace {
     pub(crate) fn start(kind: OperationKind, mut fields: OperationFields) -> Self {
         let id = NEXT_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         match kind {
-            OperationKind::Planning => fields.plan_id = Some(id),
+            OperationKind::ScanPlanning => fields.plan_id = Some(id),
             #[cfg(feature = "datafusion")]
             OperationKind::ProviderScan => fields.plan_id = Some(id),
             _ => {}
@@ -240,13 +260,13 @@ impl Operation {
         let operation = Self {
             id,
             kind,
-            context: OperationContext(Arc::new(Mutex::new(fields))),
+            fields: SharedOperationFields(Arc::new(Mutex::new(fields))),
             started: Instant::now(),
             dispatch: tracing::dispatcher::get_default(Clone::clone),
             span: Span::current(),
             finished: false,
         };
-        operation.milestone(Outcome::Started);
+        operation.emit_lifecycle_event(LifecycleEventKind::Started);
         operation
     }
 
@@ -254,8 +274,8 @@ impl Operation {
         self.id
     }
 
-    pub(crate) fn context(&self) -> OperationContext {
-        self.context.clone()
+    pub(crate) fn shared_fields(&self) -> SharedOperationFields {
+        self.fields.clone()
     }
 
     pub(crate) fn finish<T>(
@@ -265,11 +285,11 @@ impl Operation {
         // Mark terminal before invoking the subscriber, including if its callback unwinds.
         self.finished = true;
         match &result {
-            Ok(_) => self.milestone(Outcome::Completed),
+            Ok(_) => self.emit_lifecycle_event(LifecycleEventKind::Completed),
             Err(error) => self.in_scope(|| {
-                let fields = self.context.fields();
+                let fields = self.fields.snapshot();
                 tracing::error!(target: TARGET,
-                    event = self.kind.event(Outcome::Failed), operation = self.kind.name(),
+                    event = self.kind.event_name(LifecycleEventKind::Failed), operation = self.kind.name(),
                     operation_id = self.id, plan_id = fields.plan_id, outcome = "failed",
                     elapsed_micros = self.started.elapsed().as_micros(),
                     selection = fields.selection,
@@ -287,14 +307,14 @@ impl Operation {
         result
     }
 
-    pub(crate) fn network_warmup_degraded(
+    pub(crate) fn warn_network_warmup_degraded(
         &self,
         phase: &'static str,
         status: &'static str,
         source: Option<&(dyn std::error::Error + 'static)>,
     ) {
         self.in_scope(|| {
-            let fields = self.context.fields();
+            let fields = self.fields.snapshot();
             tracing::warn!(target: TARGET,
                 event = "network_warmup.degraded", operation = self.kind.name(),
                 operation_id = self.id, plan_id = fields.plan_id, outcome = "degraded",
@@ -306,11 +326,11 @@ impl Operation {
         });
     }
 
-    fn milestone(&self, outcome: Outcome) {
+    fn emit_lifecycle_event(&self, outcome: LifecycleEventKind) {
         self.in_scope(|| {
-            let fields = self.context.fields();
+            let fields = self.fields.snapshot();
             tracing::info!(target: TARGET,
-                event = self.kind.event(outcome), operation = self.kind.name(),
+                event = self.kind.event_name(outcome), operation = self.kind.name(),
                 operation_id = self.id, plan_id = fields.plan_id, outcome = outcome.as_str(),
                 elapsed_micros = self.started.elapsed().as_micros(),
                 selection = fields.selection,
@@ -329,11 +349,11 @@ impl Operation {
     }
 }
 
-impl Drop for Operation {
+impl Drop for OperationTrace {
     fn drop(&mut self) {
         // Avoid invoking a possibly panicking subscriber again during unwinding.
         if !self.finished && !std::thread::panicking() {
-            self.milestone(Outcome::Abandoned);
+            self.emit_lifecycle_event(LifecycleEventKind::Abandoned);
         }
     }
 }
@@ -353,9 +373,9 @@ mod tests {
     #[test]
     fn subscriber_panic_does_not_trigger_a_second_callback_during_unwind() {
         let calls = Arc::new(AtomicU64::new(0));
-        let mut collector = crate::test_tracing::Collector::new(tracing::Level::INFO);
+        let mut collector = crate::test_tracing::TraceCollector::new(tracing::Level::INFO);
         let count = Arc::clone(&calls);
-        collector.probe = Some(Arc::new(move || {
+        collector.on_capture = Some(Arc::new(move || {
             if count.fetch_add(1, Ordering::Relaxed) == 0 {
                 panic!("subscriber failed");
             }
@@ -363,7 +383,7 @@ mod tests {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             tracing::subscriber::with_default(collector, || {
                 let _operation =
-                    Operation::start(OperationKind::LoadTable, OperationFields::default());
+                    OperationTrace::start(OperationKind::LoadTable, OperationFields::default());
             });
         }));
         assert!(result.is_err());
@@ -385,8 +405,13 @@ mod tests {
             }
         }
         tracing::subscriber::with_default(tracing::subscriber::NoSubscriber::default(), || {
-            let operation = Operation::start(OperationKind::LoadTable, OperationFields::default());
-            operation.network_warmup_degraded("initialization", "read_failed", Some(&SourceProbe));
+            let operation =
+                OperationTrace::start(OperationKind::LoadTable, OperationFields::default());
+            operation.warn_network_warmup_degraded(
+                "initialization",
+                "read_failed",
+                Some(&SourceProbe),
+            );
             let result: Result<(), _> = operation.finish(Err(DeltaReaderError::SnapshotLoad {
                 reason: "snapshot_load_failed",
                 source: Box::new(SourceProbe),

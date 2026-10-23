@@ -66,7 +66,7 @@ async fn optional_network_sampling_failure_warns_but_table_loading_succeeds() ->
     ]);
     let mut server = JoinSet::new();
     server.spawn(cloud_http::serve(listener, store, None));
-    let collector = capture::Collector::new(Level::WARN);
+    let collector = capture::TraceCollector::new(Level::WARN);
     let table = DeltaTableBuilder::new("s3://bucket/table/")
         .with_storage_options(options)
         .with_warmup(delta_arrow_reader::WarmupMode::Network {
@@ -285,9 +285,16 @@ async fn cloud_table_locations_with_explicit_namespaces() -> TestResult {
                         format!("foreign DV returned rows: {table_url}, {backend:?}, {kind}")
                     })?;
                     assert!(
-                        matches!(error, DeltaReaderError::DeletionVectorRead { .. }),
+                        matches!(
+                            error,
+                            DeltaReaderError::DeletionVectorRead {
+                                reason: "deletion_vector_payload_read_failed",
+                                ..
+                            }
+                        ),
                         "{table_url}, {backend:?}, {kind}: {error:?}"
                     );
+                    assert_eq!(error.source_kind(), Some("unsupported"));
                     let source = error.source().ok_or_else(|| {
                         format!(
                             "missing DV error source: {table_url}, {backend:?}, {kind}: {error:?}"
@@ -453,9 +460,16 @@ async fn azure_tables_with_container_options() -> TestResult {
                             .err()
                             .ok_or_else(|| format!("{case}: foreign DV returned rows"))?;
                         assert!(
-                            matches!(error, DeltaReaderError::DeletionVectorRead { .. }),
+                            matches!(
+                                error,
+                                DeltaReaderError::DeletionVectorRead {
+                                    reason: "deletion_vector_payload_read_failed",
+                                    ..
+                                }
+                            ),
                             "{case}: {error:?}"
                         );
+                        assert_eq!(error.source_kind(), Some("unsupported"));
                         let source = error
                             .source()
                             .ok_or_else(|| format!("{case}: missing DV error source: {error:?}"))?;

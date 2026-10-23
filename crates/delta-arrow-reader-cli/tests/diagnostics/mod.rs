@@ -51,6 +51,40 @@ fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::
     let version_range = format!("unsigned decimal integer from 0 to {}", u64::MAX);
     for (args, kind, argument, expected, hint) in [
         (
+            vec![
+                "capabilities",
+                "--schema",
+                "predicate",
+                "--detail",
+                "secret-detail",
+            ],
+            "InvalidValue",
+            "--detail",
+            "a field, operator, or scalar type listed by the selected schema",
+            "Run capabilities --schema NAME to list available details.",
+        ),
+        (
+            vec!["inspect", "secret-table", "--column"],
+            "InvalidValue",
+            "--column",
+            "a logical column name in the selected snapshot",
+            "Supply a value",
+        ),
+        (
+            vec!["scan", "secret-table", "--column"],
+            "InvalidValue",
+            "--column",
+            "a logical column name in the selected snapshot",
+            "Supply a value",
+        ),
+        (
+            vec!["preview", "secret-table", "--column"],
+            "InvalidValue",
+            "--column",
+            "a logical column name in the selected snapshot",
+            "Supply a value",
+        ),
+        (
             vec!["scan", "secret-table", "--limit", "secret-value"],
             "ValueValidation",
             "--limit",

@@ -20,6 +20,7 @@ use crate::{
     Result,
     command::{KillOnDrop, output_with_redirected_stdout, output_with_timeout, wait_with_timeout},
     process::check_diagnostic,
+    scan::ipc::check_completed_count_query,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -81,7 +82,7 @@ impl Arguments {
             String::from_utf8(version.stdout)?,
             format!("delta-arrow-reader {}\n", self.expected_version)
         );
-        for subcommand in [None, Some("inspect"), Some("scan")] {
+        for subcommand in [None, Some("inspect"), Some("scan"), Some("query")] {
             let mut command = self.command(root)?;
             if let Some(name) = subcommand {
                 command.arg(name);
@@ -215,6 +216,18 @@ impl Arguments {
                 output.stdout,
             )?;
         }
+        let sql_file = directory.join("query.sql");
+        fs::write(&sql_file, "SELECT COUNT(*) AS n FROM t")?;
+        let output = output_with_timeout(
+            self.command(directory)?
+                .arg("query")
+                .arg(table)
+                .args(["--table-version", "0", "--diagnostics=json", "--sql-file"])
+                .arg(&sql_file),
+            TIMEOUT,
+        )?;
+        check_completed_count_query(&output, rows)?;
+        fs::write(self.output_directory.join("query.arrow"), output.stdout)?;
         Ok(())
     }
 

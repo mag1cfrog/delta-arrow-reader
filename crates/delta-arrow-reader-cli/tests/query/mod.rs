@@ -1,5 +1,7 @@
 //! Exact SQL results, read-only admission, output ceilings, and safe failures.
 
+#[cfg(target_os = "linux")]
+mod completion;
 pub(super) mod json;
 mod tables_manifest;
 
@@ -57,7 +59,7 @@ impl SqlCommandFixture {
     }
 }
 
-pub(super) fn decode_query_result(output: &Output) -> TestResult<RecordBatch> {
+pub(super) fn assert_query_success_and_decode_arrow(output: &Output) -> TestResult<RecordBatch> {
     assert!(
         output.status.success(),
         "{}",
@@ -107,7 +109,8 @@ fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestRes
             fixture_path("partitioned").join("table"),
             example.as_str().unwrap(),
         )?;
-        let result = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        let result =
+            assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
         assert!(result.num_rows() > 0, "{example}");
     }
     Ok(())
@@ -133,7 +136,8 @@ fn sql_preserves_values_nulls_deletion_vectors_ordering_and_empty_results() -> T
             fixture_path(name).join("table"),
             format!("SELECT {} FROM t ORDER BY id", columns.join(", ")),
         )?;
-        let actual = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        let actual =
+            assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
         assert_eq!(actual.columns(), expected.columns());
         // Spark's oracle omits Delta column-mapping metadata; compare the logical fields.
         for (actual, expected) in actual
@@ -150,7 +154,8 @@ fn sql_preserves_values_nulls_deletion_vectors_ordering_and_empty_results() -> T
             fixture_path(name).join("table"),
             "SELECT count(*) AS n FROM t",
         )?;
-        let actual = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        let actual =
+            assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
         assert_eq!(actual.num_rows(), 1);
         assert_eq!(
             actual
@@ -163,7 +168,8 @@ fn sql_preserves_values_nulls_deletion_vectors_ordering_and_empty_results() -> T
         );
         let fixture =
             SqlCommandFixture::new(fixture_path(name).join("table"), "SELECT 1 AS n FROM t")?;
-        let actual = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        let actual =
+            assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
         assert_eq!(actual.num_rows(), expected.num_rows());
         assert!(
             actual
@@ -180,7 +186,8 @@ fn sql_preserves_values_nulls_deletion_vectors_ordering_and_empty_results() -> T
         ("SELECT count(*) AS n FROM t WHERE id < 0", 1),
     ] {
         let fixture = SqlCommandFixture::new(fixture_path("partitioned").join("table"), sql)?;
-        let actual = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        let actual =
+            assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
         assert_eq!(actual.num_rows(), rows);
         assert_eq!(actual.num_columns(), 1);
         if rows == 1 {
@@ -231,7 +238,7 @@ fn ctes_filters_groups_and_aggregates_match_fixture_values() -> TestResult {
         fixture_path("partitioned").join("table"),
         "WITH selected AS (SELECT region, value FROM t WHERE id >= 100 AND region IS NOT NULL AND value IS NOT NULL) SELECT region, count(*) AS n, sum(value) AS total FROM selected GROUP BY region ORDER BY region",
     )?;
-    let actual = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+    let actual = assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
     let regions = cast(actual.column(0), &DataType::Utf8)?;
     let regions = regions.as_any().downcast_ref::<StringArray>().unwrap();
     let counts = actual
@@ -298,9 +305,12 @@ fn query_ceilings_fail_instead_of_returning_a_successful_sample() -> TestResult 
         "SELECT id FROM t ORDER BY id LIMIT 3",
     )?;
     let output = run_with_timeout(fixture.command().args(["--max-rows", "3"]))?;
-    assert_eq!(decode_query_result(&output)?.num_rows(), 3);
+    assert_eq!(
+        assert_query_success_and_decode_arrow(&output)?.num_rows(),
+        3
+    );
     let exact_bytes = output.stdout.len().to_string();
-    decode_query_result(&run_with_timeout(
+    assert_query_success_and_decode_arrow(&run_with_timeout(
         fixture.command().args(["--max-output-bytes", &exact_bytes]),
     )?)?;
     let short_by_one = (output.stdout.len() - 1).to_string();
@@ -342,7 +352,7 @@ fn explicit_snapshot_selection_keeps_deleted_rows_in_the_historical_query() -> T
         "SELECT id FROM t ORDER BY id",
     )?;
     let output = run_with_timeout(fixture.command().args(["--table-version", "0"]))?;
-    let actual = decode_query_result(&output)?;
+    let actual = assert_query_success_and_decode_arrow(&output)?;
     let ids = actual
         .column(0)
         .as_any()

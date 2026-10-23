@@ -19,23 +19,23 @@ use super::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-fn table_path(name: &str) -> PathBuf {
+fn fixture_table_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus")
         .join(name)
         .join("table")
 }
 
-fn command() -> Command {
+fn preview_command() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
     command
         .env_clear()
         .args(["preview", "--diagnostics=json"])
-        .arg(table_path("partitioned"));
+        .arg(fixture_table_path("partitioned"));
     command
 }
 
-fn decode_sample(output: &Output) -> TestResult<Value> {
+fn assert_preview_success(output: &Output) -> TestResult<Value> {
     assert!(
         output.status.success(),
         "{}",
@@ -79,15 +79,15 @@ fn row_limits_never_infer_exhaustion_without_observing_it() -> TestResult {
                     "--limit",
                     &limit.to_string(),
                 ])
-                .arg(table_path("deletion_vectors")),
+                .arg(fixture_table_path("deletion_vectors")),
         )?;
-        let sample = decode_sample(&output)?;
+        let sample = assert_preview_success(&output)?;
         assert_eq!(sample["row_count"], count.to_string());
         assert_eq!(sample["stop_reason"], reason);
         assert_eq!(sample["has_more"], more);
         assert_eq!(sample["schema"]["fields"].as_array().unwrap().len(), 1);
     }
-    let empty_columns = decode_sample(&run_with_timeout(command().args([
+    let empty_columns = assert_preview_success(&run_with_timeout(preview_command().args([
         "--no-columns",
         "--limit",
         "2",
@@ -114,7 +114,7 @@ fn preview_reuses_projection_predicate_options_and_pinned_versions() -> TestResu
             )?,
         )?;
         let output = run_with_timeout(
-            command()
+            preview_command()
                 .args([
                     "--column",
                     "value",
@@ -130,7 +130,7 @@ fn preview_reuses_projection_predicate_options_and_pinned_versions() -> TestResu
                 .arg("--execution-options-file")
                 .arg(&execution),
         )?;
-        let sample = decode_sample(&output)?;
+        let sample = assert_preview_success(&output)?;
         assert_eq!(sample["schema"]["fields"][0]["name"], "value");
         assert_eq!(sample["schema"]["fields"][1]["name"], "id");
         assert_eq!(sample["row_count"], "2");
@@ -138,14 +138,14 @@ fn preview_reuses_projection_predicate_options_and_pinned_versions() -> TestResu
             assert!(row[1].as_str().unwrap().parse::<i32>()? < 3);
         }
         fs::write(&predicate, r#"{"op":"constant","value":false}"#)?;
-        let sample = decode_sample(&run_with_timeout(
-            command().arg("--predicate-file").arg(&predicate),
+        let sample = assert_preview_success(&run_with_timeout(
+            preview_command().arg("--predicate-file").arg(&predicate),
         )?)?;
         assert_eq!(sample["rows"], json!([]));
         assert_eq!(sample["stop_reason"], "end_of_input");
     }
     for version in ["0", "1"] {
-        let sample = decode_sample(&run_with_timeout(
+        let sample = assert_preview_success(&run_with_timeout(
             Command::new(env!("CARGO_BIN_EXE_dar"))
                 .args([
                     "preview",
@@ -155,7 +155,7 @@ fn preview_reuses_projection_predicate_options_and_pinned_versions() -> TestResu
                     "--table-version",
                     version,
                 ])
-                .arg(table_path("deletion_vectors")),
+                .arg(fixture_table_path("deletion_vectors")),
         )?)?;
         assert_eq!(sample["bindings"][0]["table_version"], version);
         assert_eq!(sample["row_count"], if version == "0" { "12" } else { "9" });
@@ -165,11 +165,12 @@ fn preview_reuses_projection_predicate_options_and_pinned_versions() -> TestResu
 
 #[test]
 fn whole_response_budget_preserves_exact_boundaries_and_labels_shortened_samples() -> TestResult {
-    let output = run_with_timeout(command().args(["--column", "id", "--target-partitions", "1"]))?;
-    let sample = decode_sample(&output)?;
+    let output =
+        run_with_timeout(preview_command().args(["--column", "id", "--target-partitions", "1"]))?;
+    let sample = assert_preview_success(&output)?;
     let budget = output.stdout.len().to_string();
     assert_eq!(
-        decode_sample(&run_with_timeout(command().args([
+        assert_preview_success(&run_with_timeout(preview_command().args([
             "--column",
             "id",
             "--target-partitions",
@@ -179,7 +180,7 @@ fn whole_response_budget_preserves_exact_boundaries_and_labels_shortened_samples
         ]))?)?,
         sample
     );
-    let shorter = decode_sample(&run_with_timeout(command().args([
+    let shorter = assert_preview_success(&run_with_timeout(preview_command().args([
         "--column",
         "id",
         "--max-output-bytes",
@@ -188,7 +189,7 @@ fn whole_response_budget_preserves_exact_boundaries_and_labels_shortened_samples
     assert_eq!(shorter["stop_reason"], "byte_limit");
     assert_eq!(shorter["has_more"], true);
     assert!(shorter["rows"].as_array().unwrap().len() < sample["rows"].as_array().unwrap().len());
-    let rejected = run_with_timeout(command().args(["--max-output-bytes", "1"]))?;
+    let rejected = run_with_timeout(preview_command().args(["--max-output-bytes", "1"]))?;
     assert_eq!(rejected.status.code(), Some(1));
     assert!(rejected.stdout.is_empty());
     let diagnostic = assert_single_terminal_record(&rejected.stderr, "diagnostic");
@@ -200,7 +201,7 @@ fn whole_response_budget_preserves_exact_boundaries_and_labels_shortened_samples
         ("--limit", "-1"),
         ("--max-output-bytes", "0"),
     ] {
-        let output = run_with_timeout(command().args([option, value]))?;
+        let output = run_with_timeout(preview_command().args([option, value]))?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         assert_single_terminal_record(&output.stderr, "diagnostic");
@@ -210,8 +211,8 @@ fn whole_response_budget_preserves_exact_boundaries_and_labels_shortened_samples
 
 #[test]
 fn first_row_byte_failure_can_be_repaired_without_changing_the_read() -> TestResult {
-    let read = || {
-        let mut invocation = command();
+    let pinned_preview_command = || {
+        let mut invocation = preview_command();
         invocation.args([
             "--table-version",
             "0",
@@ -224,11 +225,12 @@ fn first_row_byte_failure_can_be_repaired_without_changing_the_read() -> TestRes
         ]);
         invocation
     };
-    let complete = run_with_timeout(&mut read())?;
-    let sample = decode_sample(&complete)?;
+    let complete = run_with_timeout(&mut pinned_preview_command())?;
+    let sample = assert_preview_success(&complete)?;
     let exact_bytes = complete.stdout.len();
-    let failed =
-        run_with_timeout(read().args(["--max-output-bytes", &(exact_bytes - 1).to_string()]))?;
+    let failed = run_with_timeout(
+        pinned_preview_command().args(["--max-output-bytes", &(exact_bytes - 1).to_string()]),
+    )?;
     assert_eq!(failed.status.code(), Some(1));
     assert!(failed.stdout.is_empty());
     let diagnostic = assert_single_terminal_record(&failed.stderr, "diagnostic");
@@ -240,11 +242,11 @@ fn first_row_byte_failure_can_be_repaired_without_changing_the_read() -> TestRes
     assert!(hint.contains("same projection, predicate, row limit, authorization"));
     assert!(hint.contains("--table-version N") && hint.contains("--deadline-ms"));
     assert!(!hint.contains("scan"));
-    let recovered = run_with_timeout(read().args([
+    let recovered = run_with_timeout(pinned_preview_command().args([
         diagnostic["argument"].as_str().unwrap(),
         &exact_bytes.to_string(),
     ]))?;
-    assert_eq!(decode_sample(&recovered)?, sample);
+    assert_eq!(assert_preview_success(&recovered)?, sample);
     assert_eq!(recovered.stdout, complete.stdout);
     Ok(())
 }

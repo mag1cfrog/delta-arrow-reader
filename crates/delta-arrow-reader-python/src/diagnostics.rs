@@ -13,10 +13,10 @@ use crate::logging;
 /// interruption takes precedence, as it does during a runtime wait.
 pub(crate) fn log_failure(error: PyErr, emit: impl FnOnce()) -> PyErr {
     // A handler's pure validation must not replace tracing's currently borrowed dispatcher.
-    if logging::is_logging_callback() {
+    if logging::in_logging_callback() {
         return error;
     }
-    match logging::dispatch() {
+    match logging::new_call_dispatch() {
         Ok((dispatch, interrupts)) => {
             tracing::dispatcher::with_default(&dispatch, emit);
             interrupts.try_recv().unwrap_or(error)
@@ -26,7 +26,7 @@ pub(crate) fn log_failure(error: PyErr, emit: impl FnOnce()) -> PyErr {
 }
 
 /// Report a return-only Core validation error using the Core's classification.
-pub(crate) fn validation_error(
+pub(crate) fn log_validation_error(
     error: &delta_arrow_reader::DeltaReaderError,
     argument: &'static str,
     exception: PyErr,

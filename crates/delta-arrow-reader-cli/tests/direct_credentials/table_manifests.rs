@@ -13,17 +13,17 @@ use super::{
     assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
     mock_credential_proxy::{CredentialService, MockCredentialProxy},
     run_with_timeout,
-    s3::signed_session_generations,
+    s3::verify_signed_session_generations,
 };
 use crate::{
     mock_cloud_storage::{
         append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
     },
-    query::decode_query_result,
+    query::assert_query_success_and_decode_arrow,
     sort_by_id,
 };
 
-fn manifest_command(
+fn write_query_files_and_build_command(
     directory: &Path,
     tables: Value,
 ) -> Result<Command, Box<dyn std::error::Error>> {
@@ -129,7 +129,7 @@ fn each_manifest_table_uses_its_selected_identity_even_after_reference_files_cha
             "unused"
         };
         let output = run_with_timeout(
-            manifest_command(directory.path(), tables)?
+            write_query_files_and_build_command(directory.path(), tables)?
                 .arg("--diagnostics=json")
                 .env(
                     "AWS_ACCESS_KEY_ID",
@@ -204,7 +204,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
         {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"aws-web-identity","storage_options_file":orders.directory.path().join("options.json")}},
         {"alias":"customers","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":customers.directory.path().join("options.json")}}
     ]);
-    let mut command = manifest_command(query_directory.path(), tables)?;
+    let mut command = write_query_files_and_build_command(query_directory.path(), tables)?;
     command.arg("--diagnostics=json");
     let output = run_with_timeout(&mut command)?;
     assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
@@ -216,7 +216,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
     );
     assert_read_result(output, "query")?;
 
-    let credential_generations = signed_session_generations(&orders, "sts")?;
+    let credential_generations = verify_signed_session_generations(&orders, "sts")?;
     let storage_requests = orders.server.requests.lock().unwrap();
     let first_parquet_request_index = storage_requests
         .iter()
@@ -238,7 +238,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
 
     // A fresh query must see both new versions, proving the updates were visible and changed data.
     let output = run_with_timeout(&mut command)?;
-    let actual = decode_query_result(&output)?;
+    let actual = assert_query_success_and_decode_arrow(&output)?;
     assert_eq!(
         assert_single_terminal_record(&output.stderr, "completion")["bindings"],
         json!([
@@ -343,7 +343,7 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
             json!({"source":"env-file","env_file":"../incomplete.env"}),
             "invalid_storage_authorization",
             "auth_source_incomplete_credentials",
-            "/tables/1/authorization",
+            "/tables/1/authorization/env_file",
         ),
         (
             json!({"source":"env-file","env_file":"../malformed.env"}),
@@ -355,15 +355,17 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
             json!({"source":"env-file","env_file":"../incomplete.env", "storage_options_file":orders.directory.path().join("options.json")}),
             "invalid_storage_authorization",
             "auth_source_conflicting_credentials",
-            "/tables/1/authorization",
+            "/tables/1/authorization/storage_options_file",
         ),
     ] {
+        let uses_env_file = authorization["source"] == "env-file";
         let tables = json!([
             {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":orders.directory.path().join("options.json")}},
             {"alias":"customers","location":"s3://bucket/table","authorization":authorization}
         ]);
         for machine in [false, true] {
-            let mut command = manifest_command(directory.path(), tables.clone())?;
+            let mut command =
+                write_query_files_and_build_command(directory.path(), tables.clone())?;
             if machine {
                 command.arg("--diagnostics=json");
             }
@@ -377,8 +379,24 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
                 assert_eq!(record["argument"], "--tables-file");
                 assert_eq!(record["field_path"], field_path);
                 if code == "invalid_storage_authorization" {
-                    assert!(record.get("expected").is_none());
-                    assert!(record.get("hint").is_none());
+                    if uses_env_file {
+                        assert!(record["expected"].is_string());
+                        let hint = record["hint"].as_str().unwrap();
+                        if reason == "auth_source_incomplete_credentials" {
+                            assert!(
+                                hint.contains("capabilities --authorization s3 --detail env-file")
+                            );
+                        } else {
+                            assert!(
+                                hint.contains(
+                                    "Remove credential fields from --storage-options-file"
+                                )
+                            );
+                        }
+                    } else {
+                        assert!(record.get("expected").is_none());
+                        assert!(record.get("hint").is_none());
+                    }
                 }
                 if matches!(
                     reason,

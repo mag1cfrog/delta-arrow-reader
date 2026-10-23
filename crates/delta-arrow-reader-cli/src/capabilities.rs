@@ -32,7 +32,7 @@ const MAX_COMMAND_GUIDE_BYTES: usize = 4 * 1024;
 const MAX_SCHEMA_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_AUTHORIZATION_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
-const DEADLINE: Duration = Duration::from_secs(5);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
 #[command(group(ArgGroup::new("full_definition_target").args(["command", "schema", "authorization"])))]
@@ -101,7 +101,7 @@ fn build_capability_index() -> Value {
 fn discovery_limits(max_output_bytes: usize) -> Value {
     json!({
         "max_output_bytes": max_output_bytes,
-        "deadline_ms": DEADLINE.as_millis(),
+        "deadline_ms": DISCOVERY_TIMEOUT.as_millis(),
         "failure_diagnostic_timeout_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
     })
 }
@@ -249,10 +249,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "usage": "For a direct cloud TABLE, pass a provisioned credential file without reading or expanding its values. Selected-file failures never fall back to another identity.",
         });
     }
-    let mut output_schemas = vec![DiscoverySchema::Diagnostic];
-    if name != "help" {
-        output_schemas.push(DiscoverySchema::Completion);
-    }
+    let mut output_schemas = vec![DiscoverySchema::Diagnostic, DiscoverySchema::Completion];
     if name == "inspect" {
         output_schemas.push(DiscoverySchema::InspectionSummary);
     } else if matches!(name, "query" | "preview") {
@@ -292,10 +289,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
         })
         .map(|kind| json!({"name": kind, "argument": kind.argument()}))
         .collect();
-    let mut terminal_schemas = vec![DiscoverySchema::Diagnostic];
-    if selected_command != Some("help") {
-        terminal_schemas.push(DiscoverySchema::Completion);
-    }
+    let terminal_schemas = [DiscoverySchema::Diagnostic, DiscoverySchema::Completion];
     let mut output_schemas: Vec<_> = terminal_schemas
         .iter()
         .map(|schema| json!({"name": schema, "stream": "stderr"}))
@@ -452,7 +446,7 @@ pub(crate) fn run_capabilities(
     options: CapabilitiesArgs,
     diagnostic_format: DiagnosticFormat,
 ) -> ExitCode {
-    let deadline = std::time::Instant::now() + DEADLINE;
+    let deadline = std::time::Instant::now() + DISCOVERY_TIMEOUT;
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -477,7 +471,7 @@ pub(crate) fn run_capabilities(
                 }).await.map_err(io::Error::other).context(RuntimeSnafu {
                     reason: "discovery_output_task_failed",
                 })??;
-                diagnostic_format.write_terminal_record_when_writable(build_completion_record(
+                diagnostic_format.write_terminal_record_when_writable(&build_completion_record(
                     "capabilities", None, stats, None,
                 )).await.context(OutputSnafu)
             } => result,
@@ -498,7 +492,7 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
             (schema.schema_document(), MAX_FULL_RESPONSE_BYTES)
         } else {
             (
-                schema.guide_document(options.detail.as_deref())?,
+                schema.build_schema_guide(options.detail.as_deref())?,
                 MAX_SCHEMA_GUIDE_BYTES,
             )
         }

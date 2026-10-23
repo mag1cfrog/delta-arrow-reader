@@ -696,7 +696,7 @@ impl DeltaKernelEngineContext {
             None => builder.build(self.engine().as_ref())?,
             Some(version) => {
                 if version == u64::MAX {
-                    return Err(delta_kernel::Error::generic(
+                    return Err(delta_kernel::Error::unsupported(
                         "snapshot version exceeds the supported Kernel range",
                     ));
                 }

@@ -15,7 +15,7 @@ use crate::{
     error::{
         ScanPlanningSnafu, SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu,
     },
-    operation_tracing::OperationContext,
+    operation_tracing::SharedOperationFields,
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -142,11 +142,14 @@ impl ArrowTableSnapshot {
         }
     }
 
-    pub(crate) fn refresh(&self, context: &OperationContext) -> Result<Self, DeltaReaderError> {
+    pub(crate) fn refresh(
+        &self,
+        operation_fields: &SharedOperationFields,
+    ) -> Result<Self, DeltaReaderError> {
         let previous_snapshot_version = self.version();
         trace_snapshot_refresh_started(previous_snapshot_version);
         let started_at = Instant::now();
-        let result = self.build_refreshed_snapshot(context);
+        let result = self.build_refreshed_snapshot(operation_fields);
 
         match &result {
             Ok(snapshot) => trace_snapshot_refresh_completed(
@@ -165,7 +168,7 @@ impl ArrowTableSnapshot {
 
     fn build_refreshed_snapshot(
         &self,
-        context: &OperationContext,
+        operation_fields: &SharedOperationFields,
     ) -> Result<Self, DeltaReaderError> {
         let snapshot = self
             .engine_context
@@ -174,7 +177,7 @@ impl ArrowTableSnapshot {
             .context(SnapshotLoadSnafu {
                 reason: "snapshot_refresh_failed",
             })?;
-        context.snapshot_loaded(snapshot.version());
+        operation_fields.record_snapshot_version(snapshot.version());
         if snapshot.version() == self.version() {
             return Ok(self.clone());
         }
@@ -229,7 +232,7 @@ fn load_arrow_snapshot_blocking(
     storage_options: &DeltaStorageOptions,
     credential_provider: Option<&DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
-    context: Option<&OperationContext>,
+    operation_fields: Option<&SharedOperationFields>,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
@@ -240,8 +243,8 @@ fn load_arrow_snapshot_blocking(
         selection,
     )
     .and_then(|snapshot| {
-        if let Some(context) = context {
-            context.snapshot_loaded(snapshot.version());
+        if let Some(operation_fields) = operation_fields {
+            operation_fields.record_snapshot_version(snapshot.version());
         }
         snapshot.into_arrow_snapshot()
     });
@@ -326,7 +329,7 @@ pub(crate) async fn load_delta_table_snapshot(
     storage_options: DeltaStorageOptions,
     credential_provider: Option<DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
-    context: OperationContext,
+    operation_fields: SharedOperationFields,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let dispatch = tracing::dispatcher::get_default(Clone::clone);
@@ -339,7 +342,7 @@ pub(crate) async fn load_delta_table_snapshot(
                     &storage_options,
                     credential_provider.as_ref(),
                     selection,
-                    Some(&context),
+                    Some(&operation_fields),
                 )
             })
         })
@@ -364,7 +367,7 @@ pub(crate) async fn load_kernel_table_snapshot(
     storage_options: DeltaStorageOptions,
     credential_provider: Option<DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
-    context: OperationContext,
+    operation_fields: SharedOperationFields,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let dispatch = tracing::dispatcher::get_default(Clone::clone);
@@ -378,7 +381,7 @@ pub(crate) async fn load_kernel_table_snapshot(
                     credential_provider.as_ref(),
                     selection,
                 )?;
-                context.snapshot_loaded(snapshot.version());
+                operation_fields.record_snapshot_version(snapshot.version());
                 Ok(snapshot)
             })
         })
@@ -1207,12 +1210,12 @@ mod tests {
         )?;
 
         let (result, events) = capture_events(|| {
-            let refreshed_lazy =
-                lazy_snapshot.refresh(&crate::operation_tracing::OperationContext::default())?;
-            let refreshed_warm =
-                warm_snapshot.refresh(&crate::operation_tracing::OperationContext::default())?;
-            let unchanged_warm =
-                refreshed_warm.refresh(&crate::operation_tracing::OperationContext::default())?;
+            let refreshed_lazy = lazy_snapshot
+                .refresh(&crate::operation_tracing::SharedOperationFields::default())?;
+            let refreshed_warm = warm_snapshot
+                .refresh(&crate::operation_tracing::SharedOperationFields::default())?;
+            let unchanged_warm = refreshed_warm
+                .refresh(&crate::operation_tracing::SharedOperationFields::default())?;
             Ok::<_, DeltaReaderError>((refreshed_lazy, refreshed_warm, unchanged_warm))
         });
         let (refreshed_lazy, refreshed_warm, unchanged_warm) = result?;
@@ -1271,7 +1274,7 @@ mod tests {
         )?;
 
         let (result, events) = capture_events(|| {
-            snapshot.refresh(&crate::operation_tracing::OperationContext::default())
+            snapshot.refresh(&crate::operation_tracing::SharedOperationFields::default())
         });
         let error = match result {
             Ok(_) => return Err("malformed refreshed metadata must fail".into()),
@@ -1461,7 +1464,12 @@ mod tests {
     fn snapshot_failures_are_redacted_and_preserve_the_kernel_source()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new("missing-version")?;
-        for version in [2, 1_000_000_000_000, u64::MAX - 1, u64::MAX] {
+        for (version, expected_source_kind) in [
+            (2, "missing_version"),
+            (1_000_000_000_000, "missing_version"),
+            (u64::MAX - 1, "missing_version"),
+            (u64::MAX, "unsupported"),
+        ] {
             let result = load_delta_table_snapshot_blocking(
                 &table.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),
@@ -1475,6 +1483,8 @@ mod tests {
             assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
             assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
             assert_eq!(error.code(), "snapshot_load");
+            assert_eq!(error.reason(), "snapshot_load_failed");
+            assert_eq!(error.source_kind(), Some(expected_source_kind));
             assert!(!error.to_string().contains(&table.0.to_string_lossy()[..]));
             assert!(is_kernel_error(error.source().expect("Kernel source")));
         }
@@ -1787,14 +1797,14 @@ mod tests {
                 DeltaStorageOptions::new(),
                 None,
                 DeltaSnapshotSelection::Latest,
-                crate::operation_tracing::OperationContext::default(),
+                crate::operation_tracing::SharedOperationFields::default(),
             ),
             load_delta_table_snapshot(
                 table_uri,
                 DeltaStorageOptions::new(),
                 None,
                 DeltaSnapshotSelection::Version(0),
-                crate::operation_tracing::OperationContext::default(),
+                crate::operation_tracing::SharedOperationFields::default(),
             ),
         ));
         let first = first?;

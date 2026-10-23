@@ -75,7 +75,9 @@ pub(crate) fn evaluate_dynamic_partition_filter(
             );
         }
         Err(error) => {
-            return DynamicPartitionPruningDecision::Keep(evaluation_failure("snapshot", &error));
+            return DynamicPartitionPruningDecision::Keep(trace_evaluation_failure(
+                "snapshot", &error,
+            ));
         }
     };
     let is_literal_true_placeholder = is_literal_true(snapshot.as_ref());
@@ -87,11 +89,13 @@ pub(crate) fn evaluate_dynamic_partition_filter(
 
     match snapshot.evaluate(&batch) {
         Ok(value) => boolean_decision(value, is_literal_true_placeholder),
-        Err(error) => DynamicPartitionPruningDecision::Keep(evaluation_failure("evaluate", &error)),
+        Err(error) => {
+            DynamicPartitionPruningDecision::Keep(trace_evaluation_failure("evaluate", &error))
+        }
     }
 }
 
-fn evaluation_failure(
+fn trace_evaluation_failure(
     phase: &'static str,
     error: &(dyn std::error::Error + 'static),
 ) -> DynamicPartitionKeepReason {
@@ -146,11 +150,11 @@ fn materialize_partition_batch(
         let scalar = parse_partition_scalar(field, raw_value)?;
         columns[partition_column.index] = scalar
             .to_array_of_size(1)
-            .map_err(|error| evaluation_failure("materialize", &error))?;
+            .map_err(|error| trace_evaluation_failure("materialize", &error))?;
     }
 
     RecordBatch::try_new(nullable_schema(&filter.provider_schema), columns)
-        .map_err(|error| evaluation_failure("materialize", &error))
+        .map_err(|error| trace_evaluation_failure("materialize", &error))
 }
 
 /// Returns a schema shape suitable for a synthetic metadata row.

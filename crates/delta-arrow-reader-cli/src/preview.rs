@@ -32,7 +32,7 @@ pub(crate) struct PreviewArgs {
     deadline_ms: NonZeroUsize,
 }
 
-pub(crate) fn run(args: PreviewArgs, diagnostic_format: DiagnosticFormat) -> ExitCode {
+pub(crate) fn run_preview(args: PreviewArgs, diagnostic_format: DiagnosticFormat) -> ExitCode {
     let started = std::time::Instant::now();
     let time_budget = Duration::from_millis(args.deadline_ms.get() as u64);
     let runtime = match tokio::runtime::Builder::new_current_thread()
@@ -61,7 +61,7 @@ pub(crate) fn run(args: PreviewArgs, diagnostic_format: DiagnosticFormat) -> Exi
                             reason: "runtime_build_failed",
                         })?;
                     let result = runtime.block_on(Abortable::new(
-                        execute_table_command(Command::Preview(args)),
+                        execute_table_command(Command::Preview(args), diagnostic_format),
                         registration,
                     ));
                     // Drop initial and renewal authorization tasks before acknowledging cancellation.
@@ -85,7 +85,7 @@ pub(crate) fn run(args: PreviewArgs, diagnostic_format: DiagnosticFormat) -> Exi
                 let completion = result.map_err(io::Error::other).context(RuntimeSnafu {
                     reason: "preview_thread_result_lost",
                 })??;
-                diagnostic_format.write_terminal_record_when_writable(completion)
+                diagnostic_format.write_terminal_record_when_writable(&completion)
                     .await.context(OutputSnafu)
             } => result,
         };

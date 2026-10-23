@@ -6,9 +6,10 @@ use serde_json::{Value, json};
 use url::form_urlencoded;
 
 use super::{
-    ACCOUNT_KEY, BEARER_TOKEN, CREDENTIALS, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_authorization_input_error, assert_failure_without_stdout, assert_read_result,
-    assert_single_terminal_record, mock_token_server::MockAzureTokenServer, run_with_timeout,
+    ACCOUNT_KEY, BEARER_TOKEN, CloudStorageProtocol, DirectStorageFixture, STATIC_CREDENTIAL_CASES,
+    TestResult, assert_authorization_input_error, assert_failure_without_stdout,
+    assert_read_result, assert_single_terminal_record, mock_token_server::MockAzureTokenServer,
+    run_with_timeout,
 };
 
 // JSON aliases and the only environment variables advertised for this identity.
@@ -210,9 +211,9 @@ fn partial_or_mixed_client_secret_families_fail_before_io() -> TestResult {
         ] {
             for static_credential in [
                 None,
-                Some(CREDENTIALS[0]),
-                Some(CREDENTIALS[1]),
-                Some(CREDENTIALS[2]),
+                Some(STATIC_CREDENTIAL_CASES[0]),
+                Some(STATIC_CREDENTIAL_CASES[1]),
+                Some(STATIC_CREDENTIAL_CASES[2]),
             ] {
                 if present_field_indices.len() == 3 && static_credential.is_none() {
                     continue;

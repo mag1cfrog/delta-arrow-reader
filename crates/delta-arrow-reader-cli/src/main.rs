@@ -162,6 +162,11 @@ enum Error {
     #[snafu(display("Invalid storage authorization (reason={reason})."))]
     StorageAuthorization { reason: &'static str },
     #[snafu(display("{source}"))]
+    CredentialFileValidation {
+        source: Box<Error>,
+        correction: InputCorrection,
+    },
+    #[snafu(display("{source}"))]
     ManifestAuthorizationInput {
         source: Box<Error>,
         field_path: String,
@@ -187,6 +192,11 @@ enum Error {
     UnityCatalog { source: unity_catalog::Error },
     #[snafu(display("{source}"))]
     Query { source: query::QueryError },
+    #[snafu(display("{source}"))]
+    QueryWithResolvedBindings {
+        source: Box<Error>,
+        bindings: Vec<Value>,
+    },
     #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
     OutputLimit { reason: &'static str },
     #[snafu(display("Command exceeded its time budget."))]
@@ -222,7 +232,9 @@ impl fmt::Debug for Error {
 impl Error {
     fn classification(&self) -> ErrorClassification {
         match self {
-            Self::ManifestAuthorizationInput { source, .. } => source.classification(),
+            Self::ManifestAuthorizationInput { source, .. }
+            | Self::CredentialFileValidation { source, .. }
+            | Self::QueryWithResolvedBindings { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
                 code: source.code(),
@@ -331,8 +343,10 @@ impl Error {
 
     fn input_correction(&self) -> Option<InputCorrection> {
         let (input_kind, hint) = match self {
+            Self::QueryWithResolvedBindings { source, .. } => return source.input_correction(),
             Self::Argument { correction, .. } => return correction.clone(),
-            Self::InputValidation { correction, .. } => return Some(correction.clone()),
+            Self::InputValidation { correction, .. }
+            | Self::CredentialFileValidation { correction, .. } => return Some(correction.clone()),
             Self::ManifestAuthorizationInput { source, field_path } => {
                 let mut correction = source.input_correction()?;
                 correction.field_path = Some(field_path.clone());
@@ -482,7 +496,7 @@ impl Error {
                     expected: "arrow for this result type".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Use --format arrow with redirected stdout; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "Use --format arrow with redirected stdout and an explicit byte budget; keep the same SQL, authorization, table bindings, and snapshot versions.",
                 });
             }
             _ => return None,
@@ -490,13 +504,20 @@ impl Error {
         Some(input_kind.correction(hint))
     }
 
-    fn log_failure(&self) {
-        let (source_error, manifest_field_path) = match self {
-            Self::ManifestAuthorizationInput { source, field_path } => {
-                (source.as_ref(), Some(field_path.as_str()))
+    fn emit_tracing_diagnostic(&self) {
+        let mut source_error = self;
+        let mut manifest_field_path = None;
+        loop {
+            match source_error {
+                Self::ManifestAuthorizationInput { source, field_path } => {
+                    source_error = source;
+                    manifest_field_path = Some(field_path.as_str());
+                }
+                Self::QueryWithResolvedBindings { source, .. }
+                | Self::CredentialFileValidation { source, .. } => source_error = source,
+                _ => break,
             }
-            _ => (self, None),
-        };
+        }
         if let Self::Cancelled { status } = source_error {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
@@ -529,10 +550,13 @@ impl Error {
                 .as_ref()
                 .and_then(|value| value.field_path.as_deref())
         });
-        let hint = match source_error {
-            Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
-            _ => correction.as_ref().map(|value| value.hint),
-        };
+        let hint = correction
+            .as_ref()
+            .map(|value| value.hint)
+            .or_else(|| match source_error {
+                Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
+                _ => None,
+            });
         let ErrorClassification {
             phase,
             code,
@@ -633,6 +657,11 @@ impl Error {
             "recovery": recovery,
         });
         match self {
+            Self::CredentialFileValidation { source, .. } => record = source.to_json_diagnostic(),
+            Self::QueryWithResolvedBindings { source, bindings } => {
+                record = source.to_json_diagnostic();
+                record["bindings"] = bindings.clone().into();
+            }
             Self::ManifestAuthorizationInput { source, field_path } => {
                 record = source.to_json_diagnostic();
                 record["argument"] = "--tables-file".into();
@@ -681,7 +710,9 @@ impl Error {
 
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
-            Self::ManifestAuthorizationInput { source, .. } => return source.exit_code(),
+            Self::ManifestAuthorizationInput { source, .. }
+            | Self::CredentialFileValidation { source, .. }
+            | Self::QueryWithResolvedBindings { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput
             | Self::InputJson { .. }
@@ -778,14 +809,17 @@ fn build_completion_record(
     record
 }
 
-fn run_table_command(command: Command) -> Result<Value, Error> {
+fn run_table_command(
+    command: Command,
+    diagnostic_format: DiagnosticFormat,
+) -> Result<Value, Error> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context(RuntimeSnafu {
             reason: "runtime_build_failed",
         })?;
-    let result = runtime.block_on(execute_table_command(command));
+    let result = runtime.block_on(execute_table_command(command, diagnostic_format));
     runtime.shutdown_background();
     result
 }
@@ -805,7 +839,10 @@ fn build_json_read_completion(
     })
 }
 
-async fn execute_table_command(command: Command) -> Result<Value, Error> {
+async fn execute_table_command(
+    command: Command,
+    diagnostic_format: DiagnosticFormat,
+) -> Result<Value, Error> {
     let arrow_stdout = match &command {
         Command::Scan { .. } => true,
         Command::Query(args) => args.output_format == query::QueryOutputFormat::Arrow,
@@ -815,7 +852,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     if let Command::Inspect { inspection, .. } = &command {
-        inspection.validate()?;
+        inspection.validate_view_options()?;
     }
     let uc_target = match &command {
         Command::Capabilities(_) => {
@@ -868,7 +905,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         }
         _ => None,
     };
-    let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
+    let command_output: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let (query_uses_unity_catalog, execution) = args.prepare_execution()?;
@@ -880,7 +917,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         } => async move {
             let (table, _authorized_access) = table.load_table(uc_target).await?;
             let version = table.version();
-            let output = inspection.encode(&table)?;
+            let output = inspection.encode_json(&table)?;
             let stdout_stats = StdoutStats {
                 bytes_written: output.len() as u64,
                 ..Default::default()
@@ -968,9 +1005,25 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         }
         .boxed_local(),
     };
-    if (uses_unity_catalog && !matches!(command, Command::Preview(_)))
-        || matches!(command, Command::Query(_))
-    {
+    let handles_cancellation = (uses_unity_catalog && !matches!(command, Command::Preview(_)))
+        || matches!(command, Command::Query(_));
+    let command_with_completion = async {
+        let completion = tokio::select! {
+            source = stdout_monitor::wait_for_disconnect(), if handles_cancellation && matches!(command, Command::Scan { .. } | Command::Query(_)) => {
+                Err(Error::Output { source })
+            },
+            result = command_output => result,
+        }?;
+        // Preview's supervisor owns its whole-command deadline and terminal record.
+        if !matches!(command, Command::Preview(_)) {
+            diagnostic_format
+                .write_terminal_record_when_writable(&completion)
+                .await
+                .context(OutputSnafu)?;
+        }
+        Ok(completion)
+    };
+    if handles_cancellation {
         tokio::select! {
             // Install listeners before polling work; cancellation drops any pending child.
             biased;
@@ -982,13 +1035,10 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
                     Err(Error::Cancelled { status })
                 }
             },
-            source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_) | Command::Preview(_)) => {
-                Err(Error::Output { source })
-            },
-            result = work => result,
+            result = command_with_completion => result,
         }
     } else {
-        work.await
+        command_with_completion.await
     }
 }
 
@@ -1019,10 +1069,10 @@ fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
 }
 
 fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
-    // Kernel workers can panic without waking their caller. Report synchronously
-    // and exit without unwinding into a blocking join; never format the payload.
+    // Kernel workers can panic without waking their caller. Bound the report and
+    // exit without unwinding into a blocking join; never format the payload.
     std::panic::set_hook(Box::new(move |_| {
-        diagnostic_format.report_failure(&Error::Runtime {
+        diagnostic_format.report_failure_with_timeout(Error::Runtime {
             source: io::Error::other("process panicked"),
             reason: "process_panicked",
         });
@@ -1050,11 +1100,14 @@ fn main() -> ExitCode {
             command: Command::Preview(args),
             ..
         }) => {
-            return preview::run(args, diagnostic_format);
+            return preview::run_preview(args, diagnostic_format);
         }
         Ok(cli) => {
             diagnostics::init_tracing(diagnostic_format);
-            run_table_command(cli.command)
+            return match run_table_command(cli.command, diagnostic_format) {
+                Ok(_) => ExitCode::SUCCESS,
+                Err(error) => diagnostic_format.report_failure_with_timeout(error),
+            };
         }
         Err(error)
             if matches!(
@@ -1098,8 +1151,12 @@ mod tests {
                 source: unity_catalog::Error::Cancelled { status },
             };
             assert_eq!(error.exit_code(), ExitCode::from(status));
-            assert!(diagnostics::capture("warn", || error.log_failure()).is_empty());
-            let text = diagnostics::capture("info", || error.log_failure());
+            assert!(
+                diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic())
+                    .is_empty()
+            );
+            let text =
+                diagnostics::capture_tracing_output("info", || error.emit_tracing_diagnostic());
             assert_eq!(text.lines().count(), 1, "{text}");
             for field in [
                 "INFO delta_arrow_reader_cli",
@@ -1249,19 +1306,20 @@ mod tests {
         let output = Error::from(ArrowError::from(io::Error::other("secret output path")));
         assert_eq!(output.exit_code(), ExitCode::from(3));
         assert!(
-            diagnostics::capture("warn", || output.log_failure())
+            diagnostics::capture_tracing_output("warn", || output.emit_tracing_diagnostic())
                 .contains("error_code=\"output_write\"")
         );
         assert!(output.source().unwrap().is::<io::Error>());
         let encoding = Error::from(ArrowError::IpcError("secret schema".into()));
         assert_eq!(encoding.exit_code(), ExitCode::from(1));
         assert!(
-            diagnostics::capture("warn", || encoding.log_failure())
+            diagnostics::capture_tracing_output("warn", || encoding.emit_tracing_diagnostic())
                 .contains("error_code=\"arrow_ipc\"")
         );
         assert!(encoding.source().unwrap().is::<ArrowError>());
         for error in [output, encoding] {
-            let text = diagnostics::capture("warn", || error.log_failure());
+            let text =
+                diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
             assert!(text.contains("error_phase=\"execution\""));
             assert!(!text.contains("secret"));
             assert_eq!(format!("{error:?}"), error.to_string());
@@ -1286,7 +1344,7 @@ mod tests {
         assert_eq!(record["argument"], "--tables-file");
         assert_eq!(record["field_path"], "/tables/1/authorization/env_file");
         assert_eq!(record["hint"], "Request read access to the input file.");
-        let text = diagnostics::capture("warn", || error.log_failure());
+        let text = diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
         assert_eq!(text.lines().count(), 1, "{text}");
         assert!(text.contains("io_kind=PermissionDenied"), "{text}");
         assert!(
@@ -1367,7 +1425,8 @@ mod tests {
                 }
             }
             for filter in ["warn", "trace"] {
-                let text = diagnostics::capture(filter, || error.log_failure());
+                let text =
+                    diagnostics::capture_tracing_output(filter, || error.emit_tracing_diagnostic());
                 assert_eq!(text.lines().count(), 1, "{text}");
                 assert!(
                     text.contains(&format!("error_source_kind=\"{source_kind}\"")),
@@ -1378,6 +1437,34 @@ mod tests {
                 assert!(!format!("{error:?}").contains("secret"));
             }
         }
+    }
+
+    #[test]
+    fn failed_query_bindings_fit_the_terminal_record_limit() {
+        let source = Error::OutputLimit {
+            reason: "json_output_limit_exceeded",
+        };
+        let expected = source.to_json_diagnostic();
+        let bindings: Vec<_> = (0..query::tables_manifest::MAX_TABLES)
+            .map(|index| {
+                json!({
+                    "alias": format!("table_{index:057}"),
+                    "table_version": u64::MAX.to_string(),
+                })
+            })
+            .collect();
+        let error = Error::QueryWithResolvedBindings {
+            source: Box::new(source),
+            bindings: bindings.clone(),
+        };
+        assert_eq!(error.exit_code(), ExitCode::from(1));
+        let mut record = error.to_json_diagnostic();
+        assert!(record.to_string().len() < 8192);
+        assert_eq!(
+            record.as_object_mut().unwrap().remove("bindings"),
+            Some(json!(bindings))
+        );
+        assert_eq!(record, expected);
     }
 
     #[test]
@@ -1439,7 +1526,10 @@ mod tests {
             assert_eq!(record["recovery"], recovery);
             assert_eq!(record["retryable"], false);
             assert!(!record.to_string().contains("secret"));
-            assert!(!diagnostics::capture("trace", || error.log_failure()).contains("secret"));
+            assert!(
+                !diagnostics::capture_tracing_output("trace", || error.emit_tracing_diagnostic())
+                    .contains("secret")
+            );
         }
     }
 
@@ -1475,7 +1565,10 @@ mod tests {
         assert_eq!(source.classify(), serde_json::error::Category::Data);
         assert!(source.to_string().contains("secret-field"));
         assert!(error.to_string().contains("kind=Data"));
-        assert!(!diagnostics::capture("trace", || error.log_failure()).contains("secret"));
+        assert!(
+            !diagnostics::capture_tracing_output("trace", || error.emit_tracing_diagnostic())
+                .contains("secret")
+        );
         assert!(!format!("{error:?}").contains("secret"));
 
         std::fs::write(&path, b" \n !secret").unwrap();
@@ -1502,7 +1595,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.source().unwrap().is::<io::Error>());
-        let text = diagnostics::capture("warn", || error.log_failure());
+        let text = diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
         assert!(text.contains("error_code=\"input_file_io\""));
         assert!(!text.contains("secret"));
         assert_eq!(format!("{error:?}"), error.to_string());

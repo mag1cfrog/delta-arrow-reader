@@ -1,5 +1,7 @@
 # Tracing event reference
 
+<span id="tracing"></span>
+
 <span id="subscribe-from-rust"></span>
 
 Use this reference when consuming structured events or integrating tracing with
@@ -435,7 +437,9 @@ scopes polling, so applications using local subscribers should also scope
 cleanup. Cancellation requests cleanup without joining blocking workers.
 Workers that have already started may finish later and retain their tracing
 handles until then; their completion cannot report an abandoned public operation
-as successful. Tables, reusable plans, and cached data retain no request context.
+as successful. A DataFusion partition stream releases its subscriber when it
+returns EOF or an error, even if the caller keeps the stream object. Tables,
+reusable plans, and cached data retain no request context.
 
 Subscriber callbacks run synchronously on the polling, worker, or dropping
 thread. Keep callbacks short; do not wait for or synchronously reenter the work
@@ -559,7 +563,7 @@ target without formatting the dependency error.
 [stream-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/tests/stream_tracing.rs
 [scheduling-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/scheduling.rs
 [lifecycle-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/operation_tracing.rs
-[task-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/tasks.rs
+[task-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/task_propagation.rs
 [provider-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion.rs
 [callback-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion_callbacks.rs
 [execution-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/datafusion/execution.rs

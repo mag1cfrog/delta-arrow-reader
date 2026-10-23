@@ -113,7 +113,9 @@ mod tests {
         match full {
             Value::Object(properties) => {
                 for (key, value) in properties {
-                    if key == "dict_id" || (key == "dict_is_ordered" && selected.get(key).is_none())
+                    if key == "dict_id"
+                        || (key == "dict_is_ordered"
+                            && full["data_type"].get("Dictionary").is_none())
                     {
                         continue;
                     }
@@ -135,6 +137,25 @@ mod tests {
                 }
             }
             _ => assert_eq!(selected, full),
+        }
+    }
+
+    #[test]
+    fn dictionary_ordering_is_preserved_at_the_root_and_in_nested_fields() {
+        let dictionary = Field::new_dictionary("labels", DataType::Int32, DataType::Utf8, true)
+            .with_dict_is_ordered(true);
+        let nested = Field::new(
+            "row",
+            DataType::Struct(vec![dictionary.clone()].into()),
+            false,
+        );
+        for include_metadata in [false, true] {
+            let detail = field_details(&dictionary, include_metadata);
+            assert_eq!(detail["dict_is_ordered"], true);
+            assert_same_selected_values(&detail, &json!(dictionary), include_metadata);
+            let detail = field_details(&nested, include_metadata);
+            assert_eq!(detail["data_type"]["Struct"][0]["dict_is_ordered"], true);
+            assert_same_selected_values(&detail, &json!(nested), include_metadata);
         }
     }
 }

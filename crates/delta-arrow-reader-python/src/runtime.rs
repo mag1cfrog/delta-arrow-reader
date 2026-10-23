@@ -18,14 +18,14 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn for_python(kind: &'static str) -> PyResult<Self> {
+    pub(crate) fn new_with_python_diagnostics(runtime_kind: &'static str) -> PyResult<Self> {
         Self::new().map_err(|error| {
             crate::diagnostics::log_failure(
-                PyRuntimeError::new_err(format!("failed to create the {kind} runtime")),
+                PyRuntimeError::new_err(format!("failed to create the {runtime_kind} runtime")),
                 || {
                     tracing::error!(target: "delta_arrow_reader_python",
                         event = "runtime_creation.failed", operation = "runtime_creation", outcome = "failed",
-                        runtime = kind, error_phase = "execution", error_code = "runtime_creation",
+                        runtime = runtime_kind, error_phase = "execution", error_code = "runtime_creation",
                         error_reason = "runtime_creation_failed",
                         error_os_code = error.raw_os_error(),
                         error_source_kind = delta_arrow_reader::error_source_kind(&error));
@@ -38,21 +38,21 @@ impl Runtime {
         self.handle.block_on(future)
     }
 
-    pub(crate) fn wait_logged<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
+    pub(crate) fn wait_with_logging<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
     where
         F: Future + Send,
         F::Output: Send,
     {
-        crate::logging::check_reentry()?;
-        let (dispatch, interrupts) = crate::logging::dispatch()?;
-        self.wait(py, future.with_subscriber(dispatch), || {
+        crate::logging::reject_logging_reentry()?;
+        let (dispatch, interrupts) = crate::logging::new_call_dispatch()?;
+        self.wait_with_interrupts(py, future.with_subscriber(dispatch), || {
             interrupts.try_recv().ok()
         })
     }
 
     /// Check signals and handler interruptions between waits without the GIL.
     /// Returning an error drops the owned future, cancelling further polling.
-    pub(crate) fn wait<F>(
+    pub(crate) fn wait_with_interrupts<F>(
         &self,
         py: Python<'_>,
         future: F,
@@ -62,7 +62,7 @@ impl Runtime {
         F: Future + Send,
         F::Output: Send,
     {
-        crate::logging::check_reentry()?;
+        crate::logging::reject_logging_reentry()?;
         let check_interrupts = || match handler_interrupt() {
             Some(error) => Err(error),
             None => py.check_signals(),
@@ -138,7 +138,7 @@ mod tests {
             let (release, pending) = tokio::sync::oneshot::channel::<()>();
             let (admit, work) = mpsc::channel();
             let error = runtime
-                .wait(
+                .wait_with_interrupts(
                     py,
                     async move {
                         // SAFETY: PyErr_SetInterrupt may be called without the GIL.
@@ -154,7 +154,12 @@ mod tests {
             // Both channel endpoints owned by the future must be gone already.
             assert!(release.send(()).is_err());
             assert_eq!(work.try_recv(), Err(mpsc::TryRecvError::Disconnected));
-            assert_eq!(runtime.wait(py, async { 42 }, || None).unwrap(), 42);
+            assert_eq!(
+                runtime
+                    .wait_with_interrupts(py, async { 42 }, || None)
+                    .unwrap(),
+                42
+            );
 
             signal.call_method1("signal", (sigint, previous)).unwrap();
         });
