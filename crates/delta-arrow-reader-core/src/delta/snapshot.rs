@@ -1483,6 +1483,7 @@ mod tests {
             assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
             assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
             assert_eq!(error.code(), "snapshot_load");
+            assert_eq!(error.reason(), "snapshot_load_failed");
             assert_eq!(error.source_kind(), Some(expected_source_kind));
             assert!(!error.to_string().contains(&table.0.to_string_lossy()[..]));
             assert!(is_kernel_error(error.source().expect("Kernel source")));
