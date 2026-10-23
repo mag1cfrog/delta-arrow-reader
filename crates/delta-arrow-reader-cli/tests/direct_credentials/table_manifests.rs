@@ -23,7 +23,7 @@ use crate::{
     sort_by_id,
 };
 
-fn manifest_command(
+fn write_query_files_and_build_command(
     directory: &Path,
     tables: Value,
 ) -> Result<Command, Box<dyn std::error::Error>> {
@@ -129,7 +129,7 @@ fn each_manifest_table_uses_its_selected_identity_even_after_reference_files_cha
             "unused"
         };
         let output = run_with_timeout(
-            manifest_command(directory.path(), tables)?
+            write_query_files_and_build_command(directory.path(), tables)?
                 .arg("--diagnostics=json")
                 .env(
                     "AWS_ACCESS_KEY_ID",
@@ -204,7 +204,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
         {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"aws-web-identity","storage_options_file":orders.directory.path().join("options.json")}},
         {"alias":"customers","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":customers.directory.path().join("options.json")}}
     ]);
-    let mut command = manifest_command(query_directory.path(), tables)?;
+    let mut command = write_query_files_and_build_command(query_directory.path(), tables)?;
     command.arg("--diagnostics=json");
     let output = run_with_timeout(&mut command)?;
     assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
@@ -363,7 +363,8 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
             {"alias":"customers","location":"s3://bucket/table","authorization":authorization}
         ]);
         for machine in [false, true] {
-            let mut command = manifest_command(directory.path(), tables.clone())?;
+            let mut command =
+                write_query_files_and_build_command(directory.path(), tables.clone())?;
             if machine {
                 command.arg("--diagnostics=json");
             }

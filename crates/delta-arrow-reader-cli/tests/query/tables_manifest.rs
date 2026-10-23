@@ -9,7 +9,7 @@ use super::{
     run_with_timeout,
 };
 
-fn manifest_directory() -> TestResult<tempfile::TempDir> {
+fn create_manifest_query_directory() -> TestResult<tempfile::TempDir> {
     let directory = tempfile::Builder::new()
         .prefix("secret-manifest-")
         .tempdir()?;
@@ -47,7 +47,7 @@ fn copy_directory(source: &Path, destination: &Path) -> TestResult {
 
 #[test]
 fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for name in ["partitioned", "deletion_vectors"] {
         copy_directory(
             &fixture_path(name).join("table"),
@@ -191,7 +191,7 @@ fn assert_manifest_rejected(directory: &Path, contents: impl AsRef<[u8]>) -> Tes
 
 #[test]
 fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     fs::write(
         directory.path().join("query.sql"),
         "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
@@ -276,7 +276,7 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
 
 #[test]
 fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for (alias, location, reason, field) in [
         (
             "orders",
@@ -349,7 +349,7 @@ fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
 
 #[test]
 fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for input in [
         r#"[1,[]]"#,
         r#"{"format_version":1,"tables":[]}"#,
@@ -394,7 +394,7 @@ fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
 
 #[test]
 fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for arguments in [
         vec!["secret-table"],
         vec!["--table-version", "0"],
@@ -419,7 +419,7 @@ fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
 
 #[test]
 fn authorization_requires_a_named_source_and_file_references() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     for authorization in [
         json!(null),
         json!([]),
@@ -481,7 +481,7 @@ fn authorization_requires_a_named_source_and_file_references() -> TestResult {
 
 #[test]
 fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
-    let directory = manifest_directory()?;
+    let directory = create_manifest_query_directory()?;
     let tables: Vec<_> = (0..64)
         .map(|index| {
             json!({
