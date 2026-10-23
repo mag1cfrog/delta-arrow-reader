@@ -1,8 +1,8 @@
 use std::{fs::File, io::Cursor, path::Path, process::Output, sync::Arc};
 
-use arrow_array::{Array, ArrayRef, RecordBatch, StructArray};
+use arrow_array::{Array, ArrayRef, Int64Array, RecordBatch, StructArray};
 use arrow_ipc::reader::{FileReader, StreamReader};
-use arrow_schema::{DataType, Fields, Schema, SchemaRef};
+use arrow_schema::{DataType, Field, Fields, Schema, SchemaRef};
 use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
 
@@ -105,6 +105,25 @@ pub(crate) fn check_completed_query(
         );
     }
     Ok(table)
+}
+
+/// Check the pinned `SELECT COUNT(*) AS n FROM t` used by installed CLI smoke tests.
+pub(crate) fn check_completed_count_query(output: &Output, expected_rows: usize) -> Result<()> {
+    let schema = Arc::new(Schema::new(vec![Field::new("n", DataType::Int64, false)]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(Int64Array::from(vec![expected_rows as i64]))],
+    )
+    .context(ArrowSnafu {
+        path: Path::new("COUNT(*) fixture"),
+    })?;
+    check_completed_query(output, &[("t", 0)])?.check_matches(
+        &IpcTable {
+            schema,
+            batches: vec![batch],
+        },
+        None,
+    )
 }
 
 fn read_completed_arrow_stream(output: &Output, completion: &Value) -> Result<IpcTable> {

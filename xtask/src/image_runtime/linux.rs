@@ -21,7 +21,7 @@ use crate::{
     process::{check_error, check_inspection},
     scan::{
         corpus::check_corpus,
-        ipc::{IpcTable, check_arrow_output},
+        ipc::{IpcTable, check_arrow_output, check_completed_count_query},
     },
 };
 
@@ -85,6 +85,8 @@ pub(super) fn run(args: TestImageArgs) -> Result<()> {
     };
     eprintln!("Image check: defaults, help, version, inspection, and redacted errors");
     fixture.check_basic_commands(&args.expected_version)?;
+    eprintln!("Image check: pinned SQL aggregate and complete result");
+    fixture.check_query()?;
     eprintln!("Image check: Spark corpus, projection, limits, predicates, and execution options");
     check_corpus(&fixture.corpus, fixture.directory.path(), &|| {
         let mut command = fixture.dar_command();
@@ -191,6 +193,23 @@ test -r /usr/share/doc/dar/NOTICE
 "#,
         ]))?;
         Ok(())
+    }
+
+    fn check_query(&self) -> Result<()> {
+        successful_output(self.dar_command().args(["query", "--help"]))?;
+        let sql_file = self.directory.path().join("query.sql");
+        fs::write(&sql_file, "SELECT COUNT(*) AS n FROM t")
+            .context(FileSnafu { path: &sql_file })?;
+        let expected = IpcTable::read_file(&self.corpus.join("partitioned/expected.arrow"))?;
+        let output = output_with_timeout(
+            self.dar_command()
+                .arg("query")
+                .arg(self.corpus.join("partitioned/table"))
+                .args(["--table-version", "0", "--diagnostics=json", "--sql-file"])
+                .arg(&sql_file),
+            Duration::from_secs(30),
+        )?;
+        check_completed_count_query(&output, expected.row_count())
     }
 
     fn check_https(&self) -> Result<()> {

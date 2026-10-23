@@ -32,7 +32,33 @@ impl SmokeFixture {
             br#"{"format_version":1,"table_version":"0"}"#,
         )?;
         fixture.write_batches(&[fixture.batch.slice(0, 2)])?;
+        fixture.write_count_query(360)?;
         Ok(fixture)
+    }
+
+    fn write_count_query(&self, count: i64) -> TestResult {
+        let schema = Arc::new(Schema::new(vec![Field::new("n", DataType::Int64, false)]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(arrow_array::Int64Array::from(vec![count]))],
+        )?;
+        let mut writer = StreamWriter::try_new(Vec::new(), &schema)?;
+        writer.write(&batch)?;
+        writer.finish()?;
+        let stdout = writer.into_inner()?;
+        let completion = serde_json::json!({
+            "format_version": 1, "kind": "completion", "terminal": true,
+            "command": "query", "completion": "complete", "scope": "query",
+            "stop_reason": "end_of_input", "has_more": false,
+            "bindings": [{"alias": "t", "table_version": "0"}],
+            "rows": "1", "batches": "1", "output_bytes": stdout.len().to_string(),
+        });
+        fs::write(self.output.path().join("query.arrow"), stdout)?;
+        fs::write(
+            self.output.path().join("query.stderr"),
+            format!("{completion}\n"),
+        )?;
+        Ok(())
     }
 
     fn write_batches(&self, batches: &[RecordBatch]) -> TestResult {
@@ -160,6 +186,33 @@ fn smoke_inspection_requires_the_expected_snapshot() -> TestResult {
     ] {
         fs::write(fixture.output.path().join("inspect.json"), inspection)?;
         assert!(fixture.check().is_err(), "accepted {inspection}");
+    }
+    Ok(())
+}
+
+#[test]
+fn smoke_query_requires_the_exact_aggregate_complete_ipc_and_pinned_binding() -> TestResult {
+    let fixture = SmokeFixture::new()?;
+    fixture.write_count_query(359)?;
+    assert!(fixture.check().is_err());
+    fixture.write_count_query(360)?;
+    fixture.check()?;
+    let stdout = fixture.output.path().join("query.arrow");
+    let valid = fs::read(&stdout)?;
+    fs::write(&stdout, &valid[..valid.len() - 8])?;
+    assert!(fixture.check().is_err());
+    fs::write(&stdout, valid)?;
+    let stderr = fixture.output.path().join("query.stderr");
+    let completion: Value = serde_json::from_slice(&fs::read(&stderr)?)?;
+    let mut changed = completion.clone();
+    changed["bindings"][0]["table_version"] = serde_json::json!("1");
+    for record in [
+        format!("{changed}\n"),
+        String::new(),
+        format!("{completion}\n{completion}\n"),
+    ] {
+        fs::write(&stderr, record)?;
+        assert!(fixture.check().is_err());
     }
     Ok(())
 }

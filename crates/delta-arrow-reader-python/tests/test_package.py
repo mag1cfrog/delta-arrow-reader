@@ -82,6 +82,12 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(len(set(table.column("id").to_pylist())), table.num_rows)
                 for row in table.to_pylist():
                     self.assertEqual(row["label"], expected_rows[row["id"]])
+        stream = (output / "query.arrow").read_bytes()
+        source = pa.BufferReader(stream)
+        with pa.ipc.open_stream(source) as reader:
+            aggregate = reader.read_all()
+        self.assertEqual(source.tell(), len(stream))
+        self.assertEqual(aggregate.to_pylist(), [{"n": expected.num_rows}])
 
 
 if __name__ == "__main__":
