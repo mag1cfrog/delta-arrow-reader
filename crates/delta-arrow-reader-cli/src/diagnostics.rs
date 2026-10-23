@@ -219,6 +219,8 @@ impl InputCorrection {
                     }
                     "table_version" => format!("unsigned decimal integer from 0 to {}", u64::MAX),
                     "diagnostic_format" => "json (use --diagnostics=json)".to_owned(),
+                    // Inspect and row-reading commands have different help for this shared value.
+                    "columns" => "a logical column name in the selected snapshot".to_owned(),
                     _ => argument.get_help()?.to_string(),
                 };
                 return Some(Self {

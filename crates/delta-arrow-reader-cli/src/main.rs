@@ -529,10 +529,13 @@ impl Error {
                 .as_ref()
                 .and_then(|value| value.field_path.as_deref())
         });
-        let hint = match source_error {
-            Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
-            _ => correction.as_ref().map(|value| value.hint),
-        };
+        let hint = correction
+            .as_ref()
+            .map(|value| value.hint)
+            .or_else(|| match source_error {
+                Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
+                _ => None,
+            });
         let ErrorClassification {
             phase,
             code,
