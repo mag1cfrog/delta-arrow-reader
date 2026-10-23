@@ -154,7 +154,7 @@ fn all_reader_subsets_keep_samples_balanced_and_diagnostics_after_timing() -> Re
                                 )
                         })
                         .collect();
-                    for (index, pair) in diagnostics.chunks_exact(2).enumerate() {
+                    for (index, pair) in diagnostics.as_chunks::<2>().0.iter().enumerate() {
                         let repetition = index / enabled.len();
                         let position = index % enabled.len();
                         let reader = enabled[if repetition == 0 {
