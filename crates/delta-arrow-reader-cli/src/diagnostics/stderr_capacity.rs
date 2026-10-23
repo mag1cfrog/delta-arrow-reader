@@ -4,7 +4,7 @@
 //! lets the command handle cancellation during that wait without queuing a success
 //! record. A stderr pipe must have one command as its writer; terminal writes
 //! within that process are serialized by the diagnostics module.
-//! The caller limits records to 512 bytes, the POSIX minimum atomic pipe write.
+//! The caller limits each write to 512 bytes, the POSIX minimum atomic pipe write.
 
 use std::io;
 

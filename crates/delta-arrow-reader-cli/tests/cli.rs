@@ -500,6 +500,40 @@ fn sort_by_id(batch: &RecordBatch) -> Result<RecordBatch, arrow::error::ArrowErr
     take_record_batch(batch, &indices)
 }
 
+#[cfg(target_os = "linux")]
+fn create_full_pipe() -> io::Result<(io::PipeReader, io::PipeWriter)> {
+    use std::{io::Write, os::fd::AsRawFd};
+
+    let (reader, mut writer) = io::pipe()?;
+    // SAFETY: fcntl only queries this live pipe descriptor's capacity.
+    let capacity = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETPIPE_SZ) };
+    assert!(capacity > 0);
+    writer.write_all(&vec![0; capacity as usize])?;
+    Ok((reader, writer))
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_exit_or_kill(
+    child: &mut std::process::Child,
+    timeout: Duration,
+) -> io::Result<std::process::ExitStatus> {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if started.elapsed() > timeout {
+            child.kill()?;
+            child.wait()?;
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "CLI fixture did not exit",
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
     run_with_stdout(command, Stdio::piped())
 }

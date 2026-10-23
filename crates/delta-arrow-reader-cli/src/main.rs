@@ -778,14 +778,17 @@ fn build_completion_record(
     record
 }
 
-fn run_table_command(command: Command) -> Result<Value, Error> {
+fn run_table_command(
+    command: Command,
+    diagnostic_format: DiagnosticFormat,
+) -> Result<Value, Error> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context(RuntimeSnafu {
             reason: "runtime_build_failed",
         })?;
-    let result = runtime.block_on(execute_table_command(command));
+    let result = runtime.block_on(execute_table_command(command, diagnostic_format));
     runtime.shutdown_background();
     result
 }
@@ -805,7 +808,10 @@ fn build_json_read_completion(
     })
 }
 
-async fn execute_table_command(command: Command) -> Result<Value, Error> {
+async fn execute_table_command(
+    command: Command,
+    diagnostic_format: DiagnosticFormat,
+) -> Result<Value, Error> {
     let arrow_stdout = match &command {
         Command::Scan { .. } => true,
         Command::Query(args) => args.output_format == query::QueryOutputFormat::Arrow,
@@ -868,7 +874,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         }
         _ => None,
     };
-    let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
+    let command_output: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let (query_uses_unity_catalog, execution) = args.prepare_execution()?;
@@ -968,9 +974,25 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         }
         .boxed_local(),
     };
-    if (uses_unity_catalog && !matches!(command, Command::Preview(_)))
-        || matches!(command, Command::Query(_))
-    {
+    let handles_cancellation = (uses_unity_catalog && !matches!(command, Command::Preview(_)))
+        || matches!(command, Command::Query(_));
+    let command_with_completion = async {
+        let completion = tokio::select! {
+            source = stdout_monitor::wait_for_disconnect(), if handles_cancellation && matches!(command, Command::Scan { .. } | Command::Query(_)) => {
+                Err(Error::Output { source })
+            },
+            result = command_output => result,
+        }?;
+        // Preview's supervisor owns its whole-command deadline and terminal record.
+        if !matches!(command, Command::Preview(_)) {
+            diagnostic_format
+                .write_terminal_record_when_writable(&completion)
+                .await
+                .context(OutputSnafu)?;
+        }
+        Ok(completion)
+    };
+    if handles_cancellation {
         tokio::select! {
             // Install listeners before polling work; cancellation drops any pending child.
             biased;
@@ -982,13 +1004,10 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
                     Err(Error::Cancelled { status })
                 }
             },
-            source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_) | Command::Preview(_)) => {
-                Err(Error::Output { source })
-            },
-            result = work => result,
+            result = command_with_completion => result,
         }
     } else {
-        work.await
+        command_with_completion.await
     }
 }
 
@@ -1054,7 +1073,10 @@ fn main() -> ExitCode {
         }
         Ok(cli) => {
             diagnostics::init_tracing(diagnostic_format);
-            run_table_command(cli.command)
+            return match run_table_command(cli.command, diagnostic_format) {
+                Ok(_) => ExitCode::SUCCESS,
+                Err(error) => diagnostic_format.report_failure_with_timeout(error),
+            };
         }
         Err(error)
             if matches!(

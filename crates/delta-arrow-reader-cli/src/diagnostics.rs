@@ -70,7 +70,7 @@ pub(crate) enum DiagnosticFormat {
 }
 
 // Serialize terminal writes so simultaneous worker panics cannot interleave records.
-static TERMINAL_RECORD_WRITTEN: Mutex<bool> = Mutex::new(false);
+static TERMINAL_RECORD_STARTED: Mutex<bool> = Mutex::new(false);
 
 impl DiagnosticFormat {
     pub(crate) fn from_cli_args() -> Self {
@@ -120,34 +120,44 @@ impl DiagnosticFormat {
         status
     }
 
-    /// Waits for space before publishing a terminal record of at most 512 bytes.
-    pub(crate) async fn write_terminal_record_when_writable(self, record: Value) -> io::Result<()> {
+    /// Publishes a terminal record in small writes, remaining cancellable between them.
+    pub(crate) async fn write_terminal_record_when_writable(
+        self,
+        record: &Value,
+    ) -> io::Result<()> {
         if let Self::Json = self {
             let line = format!("{record}\n");
-            // POSIX guarantees at least 512 bytes for an atomic pipe write.
-            // Keep terminal records within the atomic write bound.
-            if line.len() > 512 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "terminal record too large",
-                ));
-            }
+            let mut bytes_written = 0;
             loop {
-                let written = match TERMINAL_RECORD_WRITTEN.try_lock() {
+                let started = match TERMINAL_RECORD_STARTED.try_lock() {
                     Ok(guard) => Some(guard),
                     Err(TryLockError::Poisoned(error)) => Some(error.into_inner()),
                     Err(TryLockError::WouldBlock) => None,
                 };
-                if let Some(mut written) = written {
-                    if *written {
+                let mut wrote_chunk = false;
+                if let Some(mut started) = started {
+                    if *started && bytes_written == 0 {
                         return Ok(());
                     }
-                    if stderr_capacity::can_write(line.len())? {
-                        *written = true;
-                        return io::stderr().lock().write_all(line.as_bytes());
+                    // POSIX guarantees at least 512 bytes for an atomic pipe write.
+                    let end = (bytes_written + 512).min(line.len());
+                    let chunk = &line.as_bytes()[bytes_written..end];
+                    if stderr_capacity::can_write(chunk.len())? {
+                        // A partial record must not be followed by a second terminal record.
+                        *started = true;
+                        io::stderr().lock().write_all(chunk)?;
+                        bytes_written = end;
+                        if bytes_written == line.len() {
+                            return Ok(());
+                        }
+                        wrote_chunk = true;
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                if wrote_chunk {
+                    tokio::task::yield_now().await;
+                } else {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
             }
         }
         Ok(())
@@ -155,7 +165,7 @@ impl DiagnosticFormat {
 
     pub(crate) fn write_terminal_record(self, record: Value) {
         if let Self::Json = self {
-            let mut written = TERMINAL_RECORD_WRITTEN
+            let mut written = TERMINAL_RECORD_STARTED
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !*written {
@@ -391,15 +401,6 @@ mod tests {
     use crate::Error;
 
     struct PanicOnFormatError;
-
-    #[tokio::test]
-    async fn oversized_completion_is_rejected_before_writing() {
-        let error = DiagnosticFormat::Json
-            .write_terminal_record_when_writable(serde_json::json!({"padding": "x".repeat(512)}))
-            .await
-            .unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-    }
 
     impl fmt::Debug for PanicOnFormatError {
         fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {

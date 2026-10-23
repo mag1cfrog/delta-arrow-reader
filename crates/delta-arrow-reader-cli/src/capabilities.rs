@@ -477,7 +477,7 @@ pub(crate) fn run_capabilities(
                 }).await.map_err(io::Error::other).context(RuntimeSnafu {
                     reason: "discovery_output_task_failed",
                 })??;
-                diagnostic_format.write_terminal_record_when_writable(build_completion_record(
+                diagnostic_format.write_terminal_record_when_writable(&build_completion_record(
                     "capabilities", None, stats, None,
                 )).await.context(OutputSnafu)
             } => result,

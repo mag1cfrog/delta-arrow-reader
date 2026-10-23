@@ -1,5 +1,7 @@
 //! Exact SQL results, read-only admission, output ceilings, and safe failures.
 
+#[cfg(target_os = "linux")]
+mod completion;
 pub(super) mod json;
 mod tables_manifest;
 

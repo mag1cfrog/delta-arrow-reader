@@ -498,16 +498,24 @@ fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
         directory.path().join("inputs/tables.json"),
         manifest.to_string(),
     )?;
-    let output = run_with_timeout(&mut manifest_command(directory.path()))?;
-    assert_query_success_and_decode_arrow(&output)?;
-    assert!(output.stderr.len() <= 8192);
-    assert_eq!(
-        assert_single_terminal_record(&output.stderr, "completion")["bindings"]
-            .as_array()
-            .unwrap()
-            .len(),
-        64
-    );
+    for format in ["arrow", "json"] {
+        let output =
+            run_with_timeout(manifest_command(directory.path()).args(["--format", format]))?;
+        if format == "arrow" {
+            assert_query_success_and_decode_arrow(&output)?;
+        } else {
+            super::json::assert_query_success_and_decode_json(&output)?;
+        }
+        assert!(output.stderr.len() > 4096);
+        assert!(output.stderr.len() <= 8192);
+        assert_eq!(
+            assert_single_terminal_record(&output.stderr, "completion")["bindings"]
+                .as_array()
+                .unwrap()
+                .len(),
+            64
+        );
+    }
 
     manifest["tables"].as_array_mut().unwrap().push(json!({
         "alias":"customers","location":"secret-missing-table"

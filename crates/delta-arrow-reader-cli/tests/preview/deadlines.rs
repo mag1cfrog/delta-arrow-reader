@@ -1,42 +1,14 @@
 //! A blocked input, credential provider, or consumer cannot extend the preview indefinitely.
 
 use std::{
-    io::{self, Write},
-    os::fd::AsRawFd,
-    process::{Child, ExitStatus, Stdio},
+    io,
+    process::Stdio,
     thread,
     time::{Duration, Instant},
 };
 
 use super::*;
-use crate::run_with_stdout;
-
-fn create_full_pipe() -> io::Result<(io::PipeReader, io::PipeWriter)> {
-    let (reader, mut writer) = io::pipe()?;
-    // SAFETY: fcntl only queries this live pipe descriptor's capacity.
-    let capacity = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETPIPE_SZ) };
-    assert!(capacity > 0);
-    writer.write_all(&vec![0; capacity as usize])?;
-    Ok((reader, writer))
-}
-
-fn wait_for_exit_or_kill(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus> {
-    let started = Instant::now();
-    loop {
-        if let Some(status) = child.try_wait()? {
-            return Ok(status);
-        }
-        if started.elapsed() > timeout {
-            child.kill()?;
-            child.wait()?;
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                "preview did not exit",
-            ));
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-}
+use crate::{create_full_pipe, run_with_stdout, wait_for_exit_or_kill};
 
 #[test]
 fn deadline_includes_blocked_inputs_and_synchronous_credential_reads() -> TestResult {

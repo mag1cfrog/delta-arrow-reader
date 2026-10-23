@@ -12,7 +12,7 @@ use std::os::fd::AsFd;
 use std::os::windows::io::AsHandle;
 
 use super::{
-    DiagnosticFormat, TERMINAL_RECORD_WRITTEN, build_subscriber, log_targets, stderr_capacity,
+    DiagnosticFormat, TERMINAL_RECORD_STARTED, build_subscriber, log_targets, stderr_capacity,
 };
 
 impl DiagnosticFormat {
@@ -33,7 +33,7 @@ impl DiagnosticFormat {
                 );
             }
             Self::Json => {
-                let mut written = match TERMINAL_RECORD_WRITTEN.try_lock() {
+                let mut written = match TERMINAL_RECORD_STARTED.try_lock() {
                     Ok(guard) => guard,
                     Err(TryLockError::Poisoned(error)) => error.into_inner(),
                     Err(TryLockError::WouldBlock) => return,
