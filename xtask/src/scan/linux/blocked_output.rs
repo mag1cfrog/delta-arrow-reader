@@ -1,4 +1,4 @@
-use std::{fs, io, os::unix::process::ExitStatusExt, time::Duration};
+use std::{fs, io, time::Duration};
 
 use rustix::process::{Pid, Signal, kill_process};
 use snafu::{ResultExt, ensure};
@@ -37,10 +37,11 @@ impl ScanFixture<'_> {
                 })?;
             let (status, stderr) = scan.wait_for_exit(Duration::from_secs(15))?;
             ensure!(
-                status.signal() == Some(signal.as_raw()) && stderr.is_empty(),
+                status.code() == Some(128 + signal.as_raw()) && stderr.is_empty(),
                 InvalidInputSnafu {
                     message: format!(
-                        "expected termination from {signal:?} without stderr, got {status}; stderr={}",
+                        "expected exit {} after {signal:?} without stderr, got {status}; stderr={}",
+                        128 + signal.as_raw(),
                         String::from_utf8_lossy(&stderr)
                     ),
                 }
