@@ -12,7 +12,9 @@ in Apache Arrow format, ready to use in your application.
 
 The reader works with existing Delta tables. It does not write tables or manage
 transactions. Queries run on your machine or in your application's environment,
-without a Spark or Databricks cluster. Cloud tables require direct storage access.
+without a Spark or Databricks cluster. Cloud reads use storage credentials,
+which the CLI can obtain through [Unity Catalog](unity-catalog.md) using your
+existing Databricks profile.
 
 ## Start here
 
@@ -21,6 +23,7 @@ steps for that interface:
 
 - [Python](python.md): read rows with PyArrow or query them with SQL.
 - [Command line](cli-quickstart.md): inspect a table or save rows to a file.
+- [Unity Catalog](unity-catalog.md): use a Databricks profile to read tables and run SQL locally.
 - [Rust](streaming-reader.md): process Arrow batches in your application.
 - [DataFusion in Rust](datafusion.md): register a table and query it with SQL.
 

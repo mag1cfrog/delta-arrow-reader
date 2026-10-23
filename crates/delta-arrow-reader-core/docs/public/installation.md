@@ -188,6 +188,28 @@ for mounting a table or integrating the CLI with a Go service.
 
 </details>
 
+<details markdown="1">
+<summary id="build-cli-from-source">Build the CLI from source</summary>
+
+Use a source build when you need a feature that your installed release does not
+provide. Install Rust 1.94 or newer and the [native build prerequisites](#https-and-build-prerequisites),
+then run these Bash commands:
+
+```sh
+git clone https://github.com/mag1cfrog/delta-arrow-reader.git
+cd delta-arrow-reader
+cargo build --locked --release -p delta-arrow-reader-cli
+export PATH="$PWD/target/release:$PATH"
+dar --version
+```
+
+If you already have a checkout, run the build there. The executable is
+`target/release/dar` (`dar.exe` on Windows). The `PATH` change applies to this
+shell; for later runs, use the executable's path or add its directory to `PATH`.
+This builds for the host platform and does not install the Databricks CLI.
+
+</details>
+
 ## Rust
 
 Use Rust 1.94 or newer. Run the commands below from your Cargo project.

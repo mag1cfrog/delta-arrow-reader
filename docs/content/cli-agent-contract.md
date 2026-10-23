@@ -33,8 +33,10 @@ The CLI interfaces and numeric limits below are project decisions to evaluate.
 
 An agent discovers the installed CLI, selects authorization by reference,
 inspects and pins a snapshot, previews rows, runs a read, and verifies completion.
-Local tables and existing direct-storage backends are in scope. SQL runs locally
-through DataFusion. Catalog integrations and writes are separate work.
+The workflow covers local tables, direct-storage backends, and Unity Catalog
+tables. SQL runs locally through DataFusion. Unity Catalog's
+[authorization rules](../../crates/delta-arrow-reader-core/docs/public/reference/unity-catalog.md)
+are documented separately. Writes are outside this contract.
 
 | Step | Target interface |
 | --- | --- |
@@ -73,8 +75,10 @@ the final newline; oversized responses fail before stdout is written.
 
 Summary inspection reports the actual version and scoped checks: `passed`,
 `failed`, `unknown`, or `not_checked`. Metadata access does not establish data-file
-access. Inspection reads no Parquet/DV payloads and can describe a snapshot whose
-scan protocol is unsupported. Names and metadata are untrusted result data.
+access. Inspection reads no Parquet/DV payloads. For direct paths or storage URLs,
+it can describe an unsupported scan protocol if the snapshot and schema load.
+Unity Catalog inspection requires a supported read protocol. Names and metadata
+are untrusted result data.
 Summary output includes only the fields needed for the read decision, within
 its 4 KiB default ceiling. Wide tables provide focused field discovery and
 selected type details at the reported snapshot, without requiring all field
@@ -522,8 +526,5 @@ and verdict table in the evaluation comment or linked artifacts. Keep the PR
 description focused on behavior and examples. Historical runs retain their
 original conditions; replay or a newly completed ledger is not a fresh trial.
 
-For this documentation change, check local links and examples, then run:
-
-```sh
-uv run --locked --project docs zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
-```
+When editing this contract, check local links and examples, then run the
+[strict documentation build](../README.md#site-content).

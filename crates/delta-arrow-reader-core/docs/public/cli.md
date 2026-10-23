@@ -17,7 +17,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
 | Select Azure credentials from a file or environment | [Azure credential sources](#azure-credential-sources) |
 | Select a GCS credentials file | [GCS credential sources](#gcs-credential-sources) |
-| Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
+| Read a Unity Catalog table by name | [Unity Catalog guide](unity-catalog.md) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
 
@@ -275,6 +275,7 @@ protocol.
 
 ```sh
 dar inspect /data/orders --view summary
+dar inspect /data/orders --view summary --table-version 0 --column-prefix ''
 dar inspect /data/orders --view summary --table-version 0 --column-prefix ord
 dar inspect /data/orders --view summary --table-version 0 --column order_id
 dar inspect --view summary --auth-source json --storage-options-file ./storage.json s3://example-bucket/orders
@@ -330,123 +331,13 @@ Discovery does not search numeric version gaps.
 
 ## Read a Unity Catalog table
 
-Use an existing Databricks CLI workspace profile to resolve a table name and
-obtain temporary cloud credentials. DAR reads the Delta log and data files from
-S3, Azure Blob, GCS, or R2 using local compute. `inspect` reports snapshot metadata
-and version; `scan` streams its rows as Arrow IPC, and `query` runs local SQL.
-Unity Catalog column metadata does not determine the output schema. These commands
-do not submit SQL to Databricks or start a cluster or SQL warehouse.
+Use `uc://catalog.schema.table` and an explicit `--databricks-profile PROFILE`
+with `inspect`, `preview`, `scan`, or `query`. DAR obtains temporary authorization through
+that profile and reads the data locally.
 
-```sh
-dar inspect uc://main.sales.orders --view summary --databricks-profile work
-dar inspect uc://main.sales.orders --view summary --databricks-profile work --table-version 0
-dar scan uc://main.sales.orders --databricks-profile work \
-  --column customer_id --limit 100 > orders.arrow
-```
-
-Install the Databricks CLI in the same environment as DAR and make it available
-on `PATH`. DAR binaries, wheels, and images do not bundle it. The required
-commands and flags were checked with Databricks CLI 1.6.0; live Azure validation
-used 1.15.0. These checks do not establish a minimum supported version. The CLI
-must support
-`tables get --include-manifest-capabilities` and
-`temporary-table-credentials generate-temporary-table-credentials --operation READ`.
-It handles the selected profile's PAT, user OAuth, or service-principal OAuth
-authentication. DAR does not start a login flow or read the CLI's token cache.
-
-For a user OAuth profile, log in once from the environment where DAR will run:
-
-```sh
-databricks auth login --host https://YOUR_WORKSPACE_HOST --profile work
-```
-
-Use your workspace URL, not the account console URL. An existing working profile
-needs no new login. For service-principal OAuth or PAT profiles, follow
-[Databricks CLI authentication](https://docs.databricks.com/aws/en/dev-tools/cli/authentication).
-
-An administrator must enable external data access on the metastore. The
-requesting principal needs `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit
-`EXTERNAL USE SCHEMA`. Both the workspace and storage endpoint must be reachable.
-See [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
-Selecting a profile does not grant additional permissions.
-
-The storage paths and credential forms below have offline test coverage. Live
-inspection, scans, and local SQL passed with Azure Databricks, user OAuth, Azure
-SAS, and a managed Delta table on macOS and Linux ARM64. The macOS source build
-and installed dev-profile wheel, Linux source build, and extracted release archive
-passed; this does not establish the full release matrix. Other storage backends,
-Azure bearer credentials, and other authentication modes remain unverified online.
-A public bucket or a table shared through Delta Sharing/OpenSharing does not
-exercise this authorization flow. Tables in
-[Databricks default storage](https://docs.databricks.com/aws/en/storage/default-storage)
-also cannot vend the credentials needed for direct reads.
-
-For S3, supply the bucket's region through the existing storage options file.
-The credential response does not include it, and DAR does not assume a default:
-
-```json
-{"aws_region": "eu-west-1"}
-```
-
-```sh
-dar inspect uc://main.sales.orders --view summary --databricks-profile work \
-  --storage-options-file ./storage.json
-```
-
-These rules apply to Unity Catalog targets:
-
-- Use exactly three unquoted name components, separated by dots. Each component
-  contains ASCII letters, digits, underscores, or hyphens and cannot start with
-  a hyphen. Quoted identifiers, URL escapes, query strings, and fragments are
-  unsupported. The profile must be explicit and nonempty. Quote profile names
-  containing spaces. `--databricks-profile` is invalid for direct paths or URLs.
-- Only ordinary managed or external Delta tables with a supported read
-  protocol are admitted. Views, pipeline tables, shallow clones, row filters,
-  column masks, catalog commits (`catalogManaged`), and coordinated commits
-  are unsupported. Authorization failures never fall back to cloud credentials
-  from the environment.
-- Supported credentials are S3/R2 temporary key/secret/session-token credentials,
-  Azure user-delegation SAS or Azure AD bearer tokens, and GCS OAuth bearer tokens.
-  GCS locations use `gs://bucket/path`. Azure Blob locations must
-  identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
-  URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
-  or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
-  Other credential types, S3 access points, and other Azure Blob/R2 endpoints are
-  unsupported.
-- Storage options may supply supported region and transport settings, including
-  endpoints, timeouts, and proxies. Credential, bucket, account, container,
-  authentication-source, and unsigned-access overrides are rejected, including
-  their aliases. S3 needs one nonempty region setting. R2 uses `auto` and needs
-  no region option; an explicit region must be `auto`. To override the R2
-  transport endpoint, use `aws_endpoint_url_s3`; the generic endpoint option
-  is rejected because the R2 URL would override it. Unknown options fail.
-- Credentials stay in memory for one command. Storage requests reuse the grant
-  until it approaches expiry, then request new READ credentials for the original
-  table ID and profile. Concurrent requests share one refresh. Every replacement
-  must keep the same storage root and credential type and have a future expiry.
-  If renewal fails, the command fails without using the old grant or falling
-  back to another identity. Renewal keeps the selected Delta snapshot and does
-  not restart a scan or repeat rows already written.
-
-UC scans and previews accept the same projection, predicate, limit,
-snapshot-version, and execution options as direct-path reads. If renewal fails, a scan may leave an incomplete Arrow stream; a preview
-fails with empty stdout.
-
-Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
-a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
-instead of forwarding them. Errors use tracing diagnostics on stderr with fixed
-messages that omit profile names, table names, storage URLs, and credentials.
-See [Errors and process status](#errors-and-process-status) for output and
-filtering rules. Check the selected profile's login and permissions separately
-when a metadata or credential request fails.
-
-If user OAuth login has expired or been revoked, repeat `databricks auth login`
-with the same workspace and profile, then rerun the command. A permissions error
-requires the administrator to check the grants and external-access setting above;
-logging in again cannot grant access. If a scan or query fails after writing rows,
-discard its partial output and rerun the whole command at the same snapshot.
-See [Scan rows](#scan-rows) and [Errors and process status](#errors-and-process-status)
-for the checks needed before accepting IPC output.
+Follow [Read Unity Catalog tables](unity-catalog.md) for setup, a pinned sample,
+SQL, and a UC/local join. Look up accepted table types, storage settings, and
+renewal behavior in the [Unity Catalog access reference](reference/unity-catalog.md).
 
 ## Scan rows
 
@@ -520,7 +411,8 @@ Choose the columns and sample size needed for the task:
 dar --diagnostics=json preview /data/orders --table-version 42 --column id --limit 3
 ```
 
-Replace the version and column with values from `inspect --view summary`.
+Use the version from the inspection summary and a name from a
+[column lookup](#inspect-a-snapshot).
 Preview uses scan's projection, predicate, snapshot, execution options, and
 storage authorization, including Databricks profiles. Row order is unspecified.
 It returns [typed JSON](#read-a-small-result-as-typed-json) and can write to a terminal.
@@ -560,9 +452,8 @@ a matching completion record. A deadline exits 1; closed output exits 3.
 one Delta snapshot as `t` when given `TABLE`, or registers the aliases in a
 [tables manifest](#join-table-snapshots). Positional `TABLE` accepts a local path,
 direct storage URL, or `uc://catalog.schema.table` with `--databricks-profile`.
-UC queries use the same [authorization prerequisites](#read-a-unity-catalog-table)
-and credential renewal as scans. Databricks supplies metadata and READ credentials;
-SQL executes locally without a Databricks cluster or warehouse.
+UC queries use the same [authorization prerequisites](unity-catalog.md#before-you-start)
+and credential renewal as scans.
 
 ```sh
 cat > query.sql <<'SQL'
@@ -574,8 +465,6 @@ LIMIT 100
 SQL
 dar query /data/orders --sql-file query.sql > totals.arrow
 dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
-dar query uc://main.sales.orders --databricks-profile work \
-  --storage-options-file storage.json --sql-file query.sql > totals.arrow
 ```
 
 ```text
@@ -765,33 +654,10 @@ and reread rotating identity-token files under their existing rules.
 
 </details>
 
-<details markdown="1">
-<summary>Join Unity Catalog, local, and direct-storage tables</summary>
-
-Each UC entry uses an existing Databricks CLI profile. The same
-[Unity Catalog permissions and storage options](#read-a-unity-catalog-table)
-apply as for positional UC reads. For example:
-
-```json
-{"format_version":1,"tables":[
-  {"alias":"orders","location":"uc://main.sales.orders",
-   "authorization":{"source":"databricks","databricks_profile":"work",
-                    "storage_options_file":"./uc-region.json"}},
-  {"alias":"customers","location":"./customers"},
-  {"alias":"returned_orders","location":"s3://example-bucket/returns",
-   "authorization":{"source":"env"}}
-]}
-```
-
-Save this as `tables.json` and query the declared aliases with `--tables-file`.
-UC storage options may contain transport and region settings, such as
-`{"aws_region":"eu-west-1"}` for S3. They cannot override the vended credentials.
-Profile names must be nonblank and contain no control characters. Different UC
-entries may select different profiles, including for the same table name in
-different workspaces. Each retains its own table ID, storage root, and provider
-during credential renewal. SQL runs locally; it is not sent to Databricks compute.
-
-</details>
+For a UC/local join, follow the [Unity Catalog example](unity-catalog.md#join-with-a-local-delta-table).
+A manifest can also include direct-storage entries using the authorization
+references above. Different UC entries can select different profiles; see
+[profile and binding rules](reference/unity-catalog.md#table-names-and-profiles).
 
 Each table loads once and retains that snapshot for the query. Completion
 reports the actual version even when latest was requested. These are independent
@@ -1448,8 +1314,8 @@ accepted fields and validation rules are listed below.
 <details markdown="1">
 <summary>Execution flags, complete JSON example, and accepted fields</summary>
 
-`--target-partitions N` sets the execution partition target for one scan. It
-may appear once and accepts positive unsigned decimal digits fitting the
+`--target-partitions N` on `scan` or `preview` sets the execution partition
+target. It may appear once and accepts positive unsigned decimal digits fitting the
 executable's `usize` range. Zero, signs, whitespace, fractions, exponents, and
 overflow are rejected before table loading with status 2 and
 `configuration/invalid_cli_argument`. Leading zeros are accepted.
@@ -1460,8 +1326,8 @@ The built scan may have fewer partitions than requested, for example when
 there are fewer files. This flag does not change the table's partition columns.
 `inspect` rejects it.
 
-`dar scan --execution-options-file PATH` reads execution settings from a local
-UTF-8 JSON object. The option may appear once and is accepted only by `scan`.
+`--execution-options-file PATH` on `scan` or `preview` reads execution settings
+from a local UTF-8 JSON object. The option may appear once.
 Omitting the file or supplying `{}` uses the native reader's defaults. Each
 invocation starts with fresh settings.
 

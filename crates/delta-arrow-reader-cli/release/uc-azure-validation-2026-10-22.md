@@ -1,5 +1,9 @@
 # Azure Unity Catalog live validation, 2026-10-22
 
+This is a maintainer evidence record for one revision and fixture. For usage,
+see [Read Unity Catalog tables](../../delta-arrow-reader-core/docs/public/unity-catalog.md).
+For reproducing checks, use the [validation guide](../../../docs/content/unity-catalog-validation.md).
+
 The fixture operator reported passing inspection, filtered scans, local SQL
 aggregation, and UC/local Delta joins on all four executables below. Each run used
 real Unity Catalog authorization and Azure Blob / ADLS access. DAR read Delta data
