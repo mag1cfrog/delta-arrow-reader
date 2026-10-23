@@ -304,7 +304,8 @@ parsing and allows a table name beginning with `-`.
 
 ```text
 dar inspect [--table-version N] [--storage-options-file PATH]
-            [--auth-source SOURCE] [--databricks-profile PROFILE] [--view full|summary]
+            [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
+            [--view full|summary]
             [--column NAME ... | --column-prefix PREFIX]
             [--include-metadata] [--max-output-bytes N] [--] TABLE
 ```
@@ -462,7 +463,7 @@ before table loading, including for `--limit 0`.
 
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
-         [--auth-source SOURCE] [--databricks-profile PROFILE]
+         [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
@@ -579,7 +580,8 @@ dar query uc://main.sales.orders --databricks-profile work \
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
-          [--auth-source SOURCE] [--databricks-profile PROFILE] [--format arrow|json]
+          [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
+          [--format arrow|json]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```

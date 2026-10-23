@@ -69,6 +69,7 @@ pub(super) fn document(service: AuthorizationGuide, detail: &str) -> Result<Valu
         );
         json!({
             "variables": variables,
+            "values": "Literal text: dollar signs and backticks do not expand or execute.",
             "grammar_command": [crate::command_name(), "capabilities", "--authorization", service, "--detail", "env-file-grammar"],
         })
     };
