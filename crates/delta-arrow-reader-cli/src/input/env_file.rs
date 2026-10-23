@@ -8,12 +8,12 @@ use std::collections::HashMap;
 
 use crate::Error;
 
-use super::{MAX_INPUT_BYTES, read_input_file_bytes};
+use super::{MAX_INPUT_BYTES, read_bounded_input_bytes};
 
 pub(crate) const MAX_ENV_FILE_RECORDS: usize = 1024;
 
 pub(crate) fn read_env_file(path: &str) -> Result<HashMap<String, String>, Error> {
-    parse_env_file(&read_input_file_bytes(path, "--env-file")?)
+    parse_env_file(&read_bounded_input_bytes(path, "--env-file")?)
 }
 
 fn parse_env_file(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
