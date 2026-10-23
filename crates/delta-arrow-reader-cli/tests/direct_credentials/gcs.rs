@@ -393,6 +393,8 @@ fn authorized_user_tokens_reach_all_reads_and_refresh_the_loaded_identity() -> T
             fs::write(&adc_path, "secret-file-was-replaced").unwrap();
         })?;
         fixture.configure_gcs_source(source, proxy.add_proxy_options(json!({})))?;
+        let mut oauth_request_count = 0;
+        let mut storage_request_count = 0;
         for operation in ["inspect", "scan", "preview", "query"] {
             fixture.write_adc(authorized_user_adc())?;
             let mut command = fixture.gcs_command(operation, source);
@@ -400,27 +402,44 @@ fn authorized_user_tokens_reach_all_reads_and_refresh_the_loaded_identity() -> T
             let output = run_with_timeout(&mut command)?;
             fixture.assert_no_gcs_credential_leaks(&output);
             assert_read_result(output, operation)?;
-        }
-        let tokens = fixture.storage_bearer_tokens();
-        assert!(!tokens.is_empty());
-        assert!(
-            tokens
-                .iter()
-                .all(|token| token.starts_with("secret-oauth-"))
-        );
-        let requests = proxy.requests()?;
-        assert!(
-            requests.len() > 3,
-            "tokens did not refresh within the commands"
-        );
-        for request in requests {
-            assert_eq!(
-                request,
-                json!({
-                    "grant_type":["refresh_token"], "client_id":["secret-client-id"],
-                    "client_secret":["secret-client-password"], "refresh_token":["secret-refresh-token"]
-                })
+            let requests = proxy.requests()?;
+            let current_requests = &requests[oauth_request_count..];
+            assert!(
+                current_requests.len() > 1,
+                "{source} {operation}: token was not refreshed"
             );
+            let tokens = fixture.storage_bearer_tokens();
+            let current_tokens: std::collections::HashSet<_> =
+                tokens[storage_request_count..].iter().collect();
+            assert!(
+                current_tokens.len() > 1,
+                "{source} {operation}: storage kept using one token"
+            );
+            let issued_tokens: std::collections::HashSet<_> = (oauth_request_count + 1
+                ..=requests.len())
+                .map(|index| format!("secret-oauth-{index}"))
+                .collect();
+            assert!(
+                current_tokens
+                    .iter()
+                    .all(|token| issued_tokens.contains(*token))
+            );
+            eprintln!(
+                "GCS refresh source={source} command={operation} oauth_requests={} distinct_storage_tokens={}",
+                current_requests.len(),
+                current_tokens.len()
+            );
+            for request in current_requests {
+                assert_eq!(
+                    *request,
+                    json!({
+                        "grant_type":["refresh_token"], "client_id":["secret-client-id"],
+                        "client_secret":["secret-client-password"], "refresh_token":["secret-refresh-token"]
+                    })
+                );
+            }
+            oauth_request_count = requests.len();
+            storage_request_count = tokens.len();
         }
     }
     Ok(())
