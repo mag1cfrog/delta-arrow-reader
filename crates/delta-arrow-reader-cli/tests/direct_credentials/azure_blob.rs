@@ -20,7 +20,7 @@ const ACCOUNT_KEY: &str = "c2VjcmV0LXNlbGVjdGVkLWtleQ==";
 const SAS: &str = "?sv=2025-01-05&sp=rl&sig=secret-sas%2Bsignature%2F%3D";
 const BEARER_TOKEN: &str = "secret-bearer-token";
 // JSON alias, advertised environment variable, and a synthetic credential.
-const CREDENTIALS: [(&str, &str, &str); 3] = [
+const STATIC_CREDENTIAL_CASES: [(&str, &str, &str); 3] = [
     ("ACCESS_KEY", "AZURE_STORAGE_ACCOUNT_KEY", ACCOUNT_KEY),
     ("sas_token", "AZURE_STORAGE_SAS_KEY", SAS),
     ("bearer_token", "AZURE_STORAGE_TOKEN", BEARER_TOKEN),
@@ -76,7 +76,7 @@ fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) -> T
 #[test]
 fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
     for source in ["json", "env", "env-file"] {
-        for (option, variable, value) in CREDENTIALS {
+        for (option, variable, value) in STATIC_CREDENTIAL_CASES {
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let mut options = json!({"account_name":"account"});
             if source == "json" {
@@ -318,7 +318,7 @@ fn environment_requires_exactly_one_family_and_rejects_json_credentials() -> Tes
 #[test]
 fn permission_denial_keeps_the_selected_identity_and_redacts_credentials() -> TestResult {
     for source in ["json", "env"] {
-        for (option, variable, value) in CREDENTIALS {
+        for (option, variable, value) in STATIC_CREDENTIAL_CASES {
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             fixture.server.deny_all_requests();
             let mut options = json!({"account_name":"account"});

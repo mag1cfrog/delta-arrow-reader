@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::{
     CloudStorageProtocol, DirectStorageFixture, TestResult, assert_authorization_input_error,
     assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
-    run_with_timeout, signed_session_generations,
+    run_with_timeout, verify_signed_session_generations,
 };
 use crate::direct_credentials::mock_credential_proxy::{CredentialService, MockCredentialProxy};
 
@@ -123,7 +123,7 @@ fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
             let output = run_with_timeout(&mut command)?;
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
             assert_read_result(output, operation)?;
-            let generations = signed_session_generations(&fixture, "sts")?;
+            let generations = verify_signed_session_generations(&fixture, "sts")?;
             assert_eq!(generations[0], 1);
             assert!(generations.iter().any(|generation| *generation > 1));
             let assertions = assert_sts_requests(
@@ -264,7 +264,7 @@ fn sts_and_storage_failures_never_use_ambient_credentials() -> TestResult {
                 .iter()
                 .all(|assertion| assertion == INITIAL_ASSERTION)
             );
-            let generations = signed_session_generations(&fixture, "sts")?;
+            let generations = verify_signed_session_generations(&fixture, "sts")?;
             match mode {
                 "reject" => {
                     assert_eq!(requests.len(), 1);
@@ -307,7 +307,7 @@ fn unreadable_assertions_at_startup_or_refresh_stop_the_read() -> TestResult {
                 assert_single_terminal_record(&output.stderr, "diagnostic");
             }
             let requests = proxy.requests()?;
-            let generations = signed_session_generations(&fixture, "sts")?;
+            let generations = verify_signed_session_generations(&fixture, "sts")?;
             if remove_after_first_read {
                 assert_eq!(
                     assert_sts_requests(

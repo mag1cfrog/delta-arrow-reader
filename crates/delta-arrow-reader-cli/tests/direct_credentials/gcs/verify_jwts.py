@@ -9,7 +9,7 @@ import tempfile
 import time
 
 
-def decode(part):
+def decode_base64url(part):
     return base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
 
 
@@ -26,14 +26,14 @@ def main():
         )
         for token in set(tokens):
             header, payload, encoded_signature = token.split(".")
-            assert json.loads(decode(header)) == {
+            assert json.loads(decode_base64url(header)) == {
                 "alg": "RS256", "typ": "JWT", "kid": "secret-key-id",
             }
-            claims = json.loads(decode(payload))
+            claims = json.loads(decode_base64url(payload))
             assert claims["iss"] == claims["sub"] == "secret-selected@example.test"
             assert claims["iat"] <= time.time() < claims["exp"]
             assert claims["exp"] - claims["iat"] == 3600
-            signature.write_bytes(decode(encoded_signature))
+            signature.write_bytes(decode_base64url(encoded_signature))
             subprocess.run(
                 ["openssl", "dgst", "-sha256", "-verify", str(public_key),
                  "-signature", str(signature)],

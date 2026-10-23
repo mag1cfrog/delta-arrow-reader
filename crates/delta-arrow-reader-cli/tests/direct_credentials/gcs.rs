@@ -16,11 +16,11 @@ use super::{
 };
 
 // Public test material generated for these fixtures; it must never grant real cloud access.
-const TEST_KEY: &str = include_str!("test-key.pem");
+const TEST_PRIVATE_KEY_PEM: &str = include_str!("test-key.pem");
 
 fn service_account_adc() -> Value {
     json!({
-        "type": "service_account", "private_key": TEST_KEY,
+        "type": "service_account", "private_key": TEST_PRIVATE_KEY_PEM,
         "private_key_id": "secret-key-id", "client_email": "secret-selected@example.test",
         // ADC must not interpret these legacy service-account options as anonymous access.
         "disable_oauth": true, "gcs_base_url": "http://secret-unused-endpoint"
@@ -88,7 +88,10 @@ impl DirectStorageFixture {
         for bytes in [&output.stdout, &output.stderr] {
             let text = String::from_utf8_lossy(bytes);
             assert!(!text.contains("secret"), "{text}");
-            assert!(!text.contains(TEST_KEY.lines().nth(1).unwrap()), "{text}");
+            assert!(
+                !text.contains(TEST_PRIVATE_KEY_PEM.lines().nth(1).unwrap()),
+                "{text}"
+            );
             for token in &tokens {
                 assert!(!text.contains(token), "{text}");
             }

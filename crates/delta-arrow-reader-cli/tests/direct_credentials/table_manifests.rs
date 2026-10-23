@@ -13,7 +13,7 @@ use super::{
     assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
     mock_credential_proxy::{CredentialService, MockCredentialProxy},
     run_with_timeout,
-    s3::signed_session_generations,
+    s3::verify_signed_session_generations,
 };
 use crate::{
     mock_cloud_storage::{
@@ -216,7 +216,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
     );
     assert_read_result(output, "query")?;
 
-    let credential_generations = signed_session_generations(&orders, "sts")?;
+    let credential_generations = verify_signed_session_generations(&orders, "sts")?;
     let storage_requests = orders.server.requests.lock().unwrap();
     let first_parquet_request_index = storage_requests
         .iter()
