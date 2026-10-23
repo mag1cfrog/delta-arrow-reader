@@ -38,7 +38,7 @@ same option. A handled failure produces:
 Core failures retain their typed phase, code, reason, and source category.
 `source_kind` is null when absent. Safe optional fields include `argument_kind`,
 `json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. No raw dependency
-errors, input values, paths, credentials, or captured child output are included.
+errors, arbitrary input values, paths, credentials, or captured child output are included.
 Diagnostic version 2 removes the fixed `message` from version 1. Use the
 classification fields for decisions.
 
@@ -127,6 +127,10 @@ starting a new command, after discarding any output from the failed invocation.
 Query byte and row exhaustion use `adjust_budget`, identifying
 `--max-output-bytes` or `--max-rows`. Explicitly increase the applicable budget
 and keep the same SQL, authorization, table bindings, and snapshot versions.
+For SQL planning or result errors after all snapshots load, the diagnostic includes `bindings`
+with the validated aliases and actual versions. Set each manifest entry's
+`table_version` from those bindings before retrying. For positional input, set
+`--table-version` from the `t` binding. Snapshot-loading failures and cancellation omit these fields. A retry without pinned versions can read newer commits.
 For JSON byte exhaustion, another option is Arrow with redirected stdout and an
 explicit byte budget. Adding SQL `LIMIT` changes the result and is not a repair
 for the same request.

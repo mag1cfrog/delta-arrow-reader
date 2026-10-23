@@ -145,6 +145,10 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
         assert!(output.stdout.is_empty());
         let diagnostic = assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(diagnostic["reason"], reason);
+        assert_eq!(
+            diagnostic["bindings"],
+            json!([{"alias": "t", "table_version": "0"}])
+        );
         assert_eq!(diagnostic["recovery"], "adjust_budget");
         assert_eq!(diagnostic["argument"], flag);
         if reason == "json_output_limit_exceeded" {

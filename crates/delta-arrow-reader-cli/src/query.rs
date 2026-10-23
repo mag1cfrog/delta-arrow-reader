@@ -144,7 +144,7 @@ impl QueryArgs {
                 }
             }
             .await;
-            let stdout_stats = match query_result {
+            let query_result = match query_result {
                 Err(mut error @ (Error::Reader { .. } | Error::Query { .. })) => {
                     for access in &authorized_access {
                         error = access.map_read_error(error).await;
@@ -152,10 +152,14 @@ impl QueryArgs {
                             break;
                         }
                     }
-                    return Err(error);
+                    Err(error)
                 }
-                result => result?,
+                result => result,
             };
+            let stdout_stats = query_result.map_err(|source| Error::QueryWithResolvedBindings {
+                source: Box::new(source),
+                bindings: bindings.clone(),
+            })?;
             let completion = match self.output_format {
                 QueryOutputFormat::Arrow => {
                     let mut completion = build_completion_record("query", None, stdout_stats, None);

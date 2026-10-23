@@ -14,7 +14,7 @@ use crate::{query, unity_catalog};
 
 const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
-pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. With --diagnostics=json, stderr completion.bindings reports each alias and its actual table_version (a decimal string) in declaration order. Snapshots do not form a cross-table transaction.";
+pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. With --diagnostics=json, stderr bindings reports each alias and its actual table_version (a decimal string) in declaration order on success or SQL/result failure. Pin these versions on retry. Snapshots do not form a cross-table transaction.";
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
 

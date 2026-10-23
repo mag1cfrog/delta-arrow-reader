@@ -187,6 +187,11 @@ enum Error {
     UnityCatalog { source: unity_catalog::Error },
     #[snafu(display("{source}"))]
     Query { source: query::QueryError },
+    #[snafu(display("{source}"))]
+    QueryWithResolvedBindings {
+        source: Box<Error>,
+        bindings: Vec<Value>,
+    },
     #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
     OutputLimit { reason: &'static str },
     #[snafu(display("Command exceeded its time budget."))]
@@ -222,7 +227,8 @@ impl fmt::Debug for Error {
 impl Error {
     fn classification(&self) -> ErrorClassification {
         match self {
-            Self::ManifestAuthorizationInput { source, .. } => source.classification(),
+            Self::ManifestAuthorizationInput { source, .. }
+            | Self::QueryWithResolvedBindings { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
                 code: source.code(),
@@ -331,6 +337,7 @@ impl Error {
 
     fn input_correction(&self) -> Option<InputCorrection> {
         let (input_kind, hint) = match self {
+            Self::QueryWithResolvedBindings { source, .. } => return source.input_correction(),
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. } => return Some(correction.clone()),
             Self::ManifestAuthorizationInput { source, field_path } => {
@@ -491,6 +498,9 @@ impl Error {
     }
 
     fn emit_tracing_diagnostic(&self) {
+        if let Self::QueryWithResolvedBindings { source, .. } = self {
+            return source.emit_tracing_diagnostic();
+        }
         let (source_error, manifest_field_path) = match self {
             Self::ManifestAuthorizationInput { source, field_path } => {
                 (source.as_ref(), Some(field_path.as_str()))
@@ -636,6 +646,10 @@ impl Error {
             "recovery": recovery,
         });
         match self {
+            Self::QueryWithResolvedBindings { source, bindings } => {
+                record = source.to_json_diagnostic();
+                record["bindings"] = bindings.clone().into();
+            }
             Self::ManifestAuthorizationInput { source, field_path } => {
                 record = source.to_json_diagnostic();
                 record["argument"] = "--tables-file".into();
@@ -684,7 +698,8 @@ impl Error {
 
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
-            Self::ManifestAuthorizationInput { source, .. } => return source.exit_code(),
+            Self::ManifestAuthorizationInput { source, .. }
+            | Self::QueryWithResolvedBindings { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput
             | Self::InputJson { .. }
@@ -1409,6 +1424,34 @@ mod tests {
                 assert!(!format!("{error:?}").contains("secret"));
             }
         }
+    }
+
+    #[test]
+    fn failed_query_bindings_fit_the_terminal_record_limit() {
+        let source = Error::OutputLimit {
+            reason: "json_output_limit_exceeded",
+        };
+        let expected = source.to_json_diagnostic();
+        let bindings: Vec<_> = (0..query::tables_manifest::MAX_TABLES)
+            .map(|index| {
+                json!({
+                    "alias": format!("table_{index:057}"),
+                    "table_version": u64::MAX.to_string(),
+                })
+            })
+            .collect();
+        let error = Error::QueryWithResolvedBindings {
+            source: Box::new(source),
+            bindings: bindings.clone(),
+        };
+        assert_eq!(error.exit_code(), ExitCode::from(1));
+        let mut record = error.to_json_diagnostic();
+        assert!(record.to_string().len() < 8192);
+        assert_eq!(
+            record.as_object_mut().unwrap().remove("bindings"),
+            Some(json!(bindings))
+        );
+        assert_eq!(record, expected);
     }
 
     #[test]

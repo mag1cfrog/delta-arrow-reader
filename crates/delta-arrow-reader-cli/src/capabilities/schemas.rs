@@ -91,7 +91,9 @@ impl DiscoverySchema {
                         "includes_root": true,
                     });
                 }
-            } else if matches!(self, Self::Rows | Self::Completion) && name == "bindings" {
+            } else if matches!(self, Self::Rows | Self::Completion | Self::Diagnostic)
+                && name == "bindings"
+            {
                 // Snapshot interpretation needs the shape; validators can follow full_command.
                 guide["definition"] = json!({
                     "type": "array",
