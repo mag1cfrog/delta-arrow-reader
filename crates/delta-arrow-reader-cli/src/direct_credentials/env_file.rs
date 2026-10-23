@@ -7,9 +7,7 @@
 use std::path::Path;
 
 use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
-use object_store::{
-    ObjectStoreScheme, aws::AmazonS3ConfigKey, azure::AzureConfigKey, gcp::GoogleConfigKey,
-};
+use object_store::{ObjectStoreScheme, azure::AzureConfigKey, gcp::GoogleConfigKey};
 use snafu::ensure;
 
 use super::{CredentialSource, azure_blob, gcs, normalize_storage_options, s3, storage_scheme};
@@ -71,33 +69,22 @@ pub(crate) fn configure_table_credentials(
 
 fn storage_option_key(name: &str, scheme: &ObjectStoreScheme) -> Option<String> {
     match scheme {
-        ObjectStoreScheme::AmazonS3 => {
-            let key = match name {
-                "AWS_ACCESS_KEY_ID" => AmazonS3ConfigKey::AccessKeyId,
-                "AWS_SECRET_ACCESS_KEY" => AmazonS3ConfigKey::SecretAccessKey,
-                "AWS_SESSION_TOKEN" => AmazonS3ConfigKey::Token,
-                "AWS_REGION" => AmazonS3ConfigKey::Region,
-                "AWS_DEFAULT_REGION" => AmazonS3ConfigKey::DefaultRegion,
-                _ => return None,
-            };
-            Some(key.as_ref().to_owned())
+        ObjectStoreScheme::AmazonS3 => s3::CREDENTIAL_ENVIRONMENT_VARIABLES
+            .iter()
+            .chain(s3::REGION_ENVIRONMENT_VARIABLES)
+            .find_map(|(variable, key)| (*variable == name).then(|| key.as_ref())),
+        ObjectStoreScheme::MicrosoftAzure
+            if name == azure_blob::ACCOUNT_NAME_ENVIRONMENT_VARIABLE =>
+        {
+            Some(AzureConfigKey::AccountName.as_ref())
         }
-        ObjectStoreScheme::MicrosoftAzure => {
-            let key = match name {
-                "AZURE_STORAGE_ACCOUNT_NAME" => AzureConfigKey::AccountName,
-                "AZURE_STORAGE_ACCOUNT_KEY" => AzureConfigKey::AccessKey,
-                "AZURE_STORAGE_SAS_KEY" => AzureConfigKey::SasKey,
-                "AZURE_STORAGE_TOKEN" => AzureConfigKey::Token,
-                "AZURE_CLIENT_ID" => AzureConfigKey::ClientId,
-                "AZURE_CLIENT_SECRET" => AzureConfigKey::ClientSecret,
-                "AZURE_TENANT_ID" => AzureConfigKey::AuthorityId,
-                _ => return None,
-            };
-            Some(key.as_ref().to_owned())
-        }
-        ObjectStoreScheme::GoogleCloudStorage if name == "GOOGLE_APPLICATION_CREDENTIALS" => {
-            Some(GoogleConfigKey::ApplicationCredentials.as_ref().to_owned())
+        ObjectStoreScheme::MicrosoftAzure => azure_blob::CREDENTIAL_ENVIRONMENT_VARIABLES
+            .iter()
+            .find_map(|(variable, key)| (*variable == name).then(|| key.as_ref())),
+        ObjectStoreScheme::GoogleCloudStorage if name == gcs::ADC_ENVIRONMENT_VARIABLE => {
+            Some(GoogleConfigKey::ApplicationCredentials.as_ref())
         }
         _ => None,
     }
+    .map(str::to_owned)
 }

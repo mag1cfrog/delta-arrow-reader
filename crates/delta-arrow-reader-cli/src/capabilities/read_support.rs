@@ -174,7 +174,7 @@ pub(super) fn authorization_sources() -> Value {
             "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", "NAME", "--detail", "env-file"],
             "imports_storage_options_from_environment": true,
             "option_names_case_sensitive": false,
-            "unknown_options": {"with_explicit_source": "rejected", "without_explicit_source": "ignored_by_backend"},
+            "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend", "with_env_file": "rejected"},
             "credential_option_aliases": {
                 "s3": {
                     "aws_access_key_id": ["access_key_id"],
@@ -340,6 +340,14 @@ mod tests {
         ] {
             let document = guide.full_document();
             let authorization = &document["authorization"];
+            assert_eq!(document["format_version"], 1);
+            for (selector, policy) in [
+                ("with_auth_source", "rejected"),
+                ("without_auth_source", "ignored_by_backend"),
+                ("with_env_file", "rejected"),
+            ] {
+                assert_eq!(authorization["unknown_options"][selector], policy);
+            }
             let aliases = authorization["credential_option_aliases"]
                 .as_object()
                 .unwrap();
