@@ -45,7 +45,7 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an example and available fields or types for one JSON format.
     #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
     schema: Option<DiscoverySchema>,
-    /// Select runtime from --command, a field/type from --schema, or env-file/env-file-grammar from --authorization.
+    /// Select runtime (or query resources) from --command, a field/type from --schema, or env-file/env-file-grammar from --authorization.
     #[arg(
         long,
         value_name = "NAME",
@@ -148,6 +148,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "stdout": "json",
             "completion_format_version": 2,
             "resource_defaults_format": "json",
+            "resource_details_command": [executable, "capabilities", "--command", "query", "--detail", "resources"],
             "sql": {
                 "argument": "--sql-file", "table": "t",
                 "example": "SELECT count(*) AS row_count FROM t",
@@ -157,7 +158,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file.",
                 "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
                 "Omit --format for Arrow IPC, which requires redirected stdout and defaults to a 1 GiB byte ceiling.",
-                "The deadline includes inputs, planning and output. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
+                "The deadline includes inputs, planning and output. Memory is limited to the DataFusion pool, not process RSS; spill defaults to disabled.",
                 read_support::QUERY_SNAPSHOT_SELECTION,
                 read_support::QUERY_ROW_ORDERING,
             ],
@@ -290,16 +291,26 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     Ok(guide)
 }
 
-fn build_command_runtime_guide(name: &str, detail: &str) -> Result<Value, Error> {
+fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
+    if name == "query" && detail == "resources" {
+        return Ok(json!({
+            "format_version": 1, "kind": "command_detail", "command": "query", "detail": "resources",
+            "memory": "--memory-limit-bytes BYTES: 268435456 by default. Bounds DataFusion execution-pool reservations; reader, metadata and output buffers are outside it. Use OS/container limits for process RSS.",
+            "spill": "Disabled by default. Enable with --spill-limit-bytes BYTES > 0 and --spill-dir PATH, an existing writable directory. DataFusion checks total spill file sizes after writes and can temporarily overshoot; it is not a filesystem hard cap.",
+            "privacy": "Spill contains table data. Query-specific storage is owner-only on Unix; on Windows choose a parent with a private inherited ACL.",
+            "cleanup": "Removes query temporary files on success, handled failure and cancellation; retains the parent. Cleanup errors fail the command. SIGKILL, crashes and OS-uninterruptible IO cannot guarantee cleanup.",
+            "retry": "Preserve SQL, table bindings and pinned snapshots when changing a budget.",
+        }));
+    }
     if detail != "runtime" {
         return Err(Error::Argument {
             kind: ErrorKind::InvalidValue,
             correction: Some(crate::InputCorrection {
                 argument: "--detail".into(),
                 field_path: None,
-                expected: "runtime for a command".into(),
+                expected: "runtime for a command, or resources for query".into(),
                 supplied: None,
-                hint: "Use --command NAME --detail runtime for deadlines and cancellation.",
+                hint: "Use --detail runtime for deadlines and cancellation, or --command query --detail resources for memory and spill.",
             }),
         });
     }
@@ -571,7 +582,7 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
     } else if let Some(name) = options.command {
         if let Some(detail) = options.detail.as_deref() {
             (
-                build_command_runtime_guide(&name, detail)?,
+                build_command_detail(&name, detail)?,
                 MAX_COMMAND_DETAIL_BYTES,
             )
         } else if options.full {
@@ -647,7 +658,7 @@ mod tests {
                 .map(|value| value.as_str().unwrap())
                 .collect();
             Cli::try_parse_from(runtime_request).unwrap();
-            let runtime = build_command_runtime_guide(command.get_name(), "runtime").unwrap();
+            let runtime = build_command_detail(command.get_name(), "runtime").unwrap();
             serialize_discovery_response(&runtime, MAX_COMMAND_DETAIL_BYTES).unwrap();
             assert!(runtime.get("options").is_none());
             assert!(runtime.get("schema").is_none());
@@ -827,7 +838,10 @@ mod tests {
         ] {
             assert!(Cli::try_parse_from(["dar", "capabilities"].into_iter().chain(valid)).is_ok());
         }
-        assert!(build_command_runtime_guide("scan", "rows").is_err());
+        assert!(build_command_detail("scan", "rows").is_err());
+        assert!(build_command_detail("scan", "resources").is_err());
+        let resources = build_command_detail("query", "resources").unwrap();
+        assert!(resources.to_string().len() < MAX_COMMAND_DETAIL_BYTES);
     }
 
     #[test]
@@ -990,6 +1004,7 @@ mod tests {
             ("--max-rows", query.max_rows),
             ("--max-output-bytes", query.max_output_bytes.get()),
             ("--memory-limit-bytes", query.memory_limit_bytes.get()),
+            ("--spill-limit-bytes", query.spill_limit_bytes as usize),
         ] {
             let argument = arguments
                 .iter()

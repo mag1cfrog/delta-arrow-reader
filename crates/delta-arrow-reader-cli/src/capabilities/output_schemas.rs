@@ -151,6 +151,7 @@ pub(super) fn diagnostic_schema() -> Value {
             "expected": {"type": "string"},
             "supplied": {"type": "string", "description": "Safe type description for a rejected predicate scalar; excludes literal values and timezone text."},
             "hint": {"type": "string"},
+            "resource_details_command": {"type": "array", "items": {"type": "string"}, "description": "Optional focused lookup for SQL memory and spill policy."},
             "field_path": {"type": "string", "description": "JSON Pointer; an empty string identifies the input root."},
             "json_kind": {"type": "string"},
             "line": {"type": "integer", "minimum": 0},

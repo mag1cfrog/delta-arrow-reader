@@ -233,8 +233,25 @@ context-efficiency acceptance also compares complete task outcomes and cost.
 Stdout limits include schema, framing, and the final newline, not just row
 values. Terminal records have their separate diagnostic budget; workflow tests
 count both streams. Stream Arrow queries; buffer only bounded JSON results.
-Query-pool memory is not total process RSS. Spill uses private per-invocation
-files, a total disk budget, and cleanup on handled exits.
+Query-pool memory bounds DataFusion execution reservations, not total process
+RSS; reader, metadata, and output buffers are outside it. Hard process limits
+require OS or container controls.
+
+Spill is opt-in with a positive `--spill-limit-bytes` and an existing writable
+`--spill-dir`. DataFusion checks total spill file sizes after writes, so usage can
+temporarily exceed the budget before the query fails. This is not a filesystem
+hard quota. Spill may contain table data: each invocation creates its own
+directory, with owner-only permissions on Unix. On Windows, the supplied parent
+must have a private inherited ACL. Handled exits remove query temporary files
+and retain the parent directory; cleanup failure prevents a success record.
+`capabilities --command query --detail resources`
+provides this policy without adding every spill option to the normal query guide.
+Budget diagnostics link to this focused lookup. When DataFusion identifies the
+exhausted resource, they name `--memory-limit-bytes` or `--spill-limit-bytes`.
+Increase only that setting and retain SQL, snapshot bindings, and the other limits. A full filesystem or
+filesystem quota requires available storage, not a larger CLI spill budget.
+If execution requires spill while it is disabled, the diagnostic gives both
+required options; increasing memory alone may not satisfy that execution path.
 
 Legacy full inspect/stdout scan keeps existing unbounded defaults; agent callers
 use summary inspection, bounded preview/query JSON, or saved results with a

@@ -3,6 +3,7 @@
 #[cfg(target_os = "linux")]
 mod completion;
 pub(super) mod json;
+mod resources;
 mod tables_manifest;
 
 use std::{

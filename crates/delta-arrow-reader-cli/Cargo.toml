@@ -32,6 +32,7 @@ serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
 serde_path_to_error = "0.1"
 snafu = "0.9"
 strum = { version = "0.27", features = ["derive"] }
+tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "io-util", "signal", "macros"] }
 url = "2"
 tracing = "0.1"
@@ -46,5 +47,4 @@ windows-sys = { version = "0.61", features = ["Wdk_Storage_FileSystem", "Win32_S
 [dev-dependencies]
 jsonschema = { version = "0.59", default-features = false }
 parquet = { version = "58.3.0", default-features = false, features = ["arrow"] }
-tempfile = "3"
 tokio = { version = "1", features = ["test-util"] }

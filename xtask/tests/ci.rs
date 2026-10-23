@@ -351,15 +351,22 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         .as_str()
         .unwrap()
         .replace("needs.changes.outputs.code", "\"$CODE\"")
-        .replace("needs.changes.outputs.tooling", "\"$TOOLING\"");
+        .replace("needs.changes.outputs.tooling", "\"$TOOLING\"")
+        .replace("needs.changes.outputs.cli", "\"$CLI\"");
     for code in ["true", "false"] {
         for tooling in ["true", "false"] {
-            let output = Command::new("bash")
-                .args(["-ec", &format!("[[ {condition} ]]")])
-                .env("CODE", code)
-                .env("TOOLING", tooling)
-                .output()?;
-            assert_eq!(output.status.success(), code == "true" || tooling == "true");
+            for cli in ["true", "false"] {
+                let output = Command::new("bash")
+                    .args(["-ec", &format!("[[ {condition} ]]")])
+                    .env("CODE", code)
+                    .env("TOOLING", tooling)
+                    .env("CLI", cli)
+                    .output()?;
+                assert_eq!(
+                    output.status.success(),
+                    code == "true" || tooling == "true" || cli == "true"
+                );
+            }
         }
     }
     let platform_steps = platform["steps"].as_array().unwrap();
@@ -368,6 +375,17 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         .find(|step| step["name"] == "Test core")
         .unwrap();
     assert_eq!(core_test["if"], "needs.changes.outputs.code == 'true'");
+    let query_resources = platform_steps
+        .iter()
+        .find(|step| step["name"] == "Test CLI query resource limits")
+        .unwrap();
+    assert_eq!(query_resources["if"], "needs.changes.outputs.cli == 'true'");
+    assert!(
+        query_resources["run"]
+            .as_str()
+            .unwrap()
+            .contains("-p delta-arrow-reader-cli --test cli query::resources")
+    );
     let platform_uc = platform_steps
         .iter()
         .find(|step| step["name"] == "Test offline Unity Catalog validation")
@@ -747,23 +765,26 @@ fn summary_requires_benchmarks_independently_of_core_checks() -> Result<()> {
 fn summary_requires_platform_and_tooling_checks_when_requested() -> Result<()> {
     for code in ["true", "false"] {
         for tooling in ["true", "false"] {
-            for job in ["tooling-checks.result", "platform-tests.result"] {
-                for result in ["success", "failure", "skipped", "cancelled", ""] {
-                    let output = check_ci_results(&[
-                        ("changes.outputs.code", code),
-                        ("changes.outputs.python", "false"),
-                        ("changes.outputs.tooling", tooling),
-                        ("changes.outputs.selective_read", "false"),
-                        ("changes.outputs.release_pr", "false"),
-                        (job, result),
-                    ])?;
-                    let required =
-                        tooling == "true" || job == "platform-tests.result" && code == "true";
-                    assert_eq!(
-                        output.status.success(),
-                        !required || result == "success",
-                        "code={code}, tooling={tooling}, {job}={result}: {output:?}"
-                    );
+            for cli in ["true", "false"] {
+                for job in ["tooling-checks.result", "platform-tests.result"] {
+                    for result in ["success", "failure", "skipped", "cancelled", ""] {
+                        let output = check_ci_results(&[
+                            ("changes.outputs.code", code),
+                            ("changes.outputs.python", "false"),
+                            ("changes.outputs.tooling", tooling),
+                            ("changes.outputs.cli", cli),
+                            ("changes.outputs.selective_read", "false"),
+                            ("changes.outputs.release_pr", "false"),
+                            (job, result),
+                        ])?;
+                        let required = tooling == "true"
+                            || job == "platform-tests.result" && (code == "true" || cli == "true");
+                        assert_eq!(
+                            output.status.success(),
+                            !required || result == "success",
+                            "code={code}, tooling={tooling}, cli={cli}, {job}={result}: {output:?}"
+                        );
+                    }
                 }
             }
         }

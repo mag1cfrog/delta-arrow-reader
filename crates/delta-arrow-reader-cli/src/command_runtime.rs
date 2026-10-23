@@ -76,13 +76,14 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
             result = async {
                 // This branch starts only after the signal listener has been polled.
                 std::thread::Builder::new().name("dar-command".into()).spawn(move || {
+                    let mut spill_directory = None;
                     let result = (|| {
                         diagnostics::init_tracing(diagnostic_format);
                         let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()
                             .context(RuntimeSnafu { reason: "runtime_build_failed" })?;
                         let result = runtime.block_on(async {
                             let result = Abortable::new(
-                                execute_table_command(command, &worker_report_uc_cancellation), registration,
+                                execute_table_command(command, &worker_report_uc_cancellation, &mut spill_directory), registration,
                             ).await;
                             // A read/output error can finish the command while a renewal is still pending.
                             let _ = tokio::time::timeout(CLEANUP_GRACE, crate::unity_catalog::cancel_pending_requests()).await;
@@ -91,6 +92,22 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
                         runtime.shutdown_background();
                         result.map_err(|_| Error::Cancelled { status: 1 })?
                     })();
+                    let result = if let Some(directory) = spill_directory {
+                        match crate::query::resources::remove_spill_files(directory) {
+                            Ok(()) => result,
+                            Err(source) => {
+                                let bindings = match result {
+                                    Ok(completion) => completion["bindings"].as_array().cloned(),
+                                    Err(Error::QueryWithResolvedBindings { bindings, .. }) => Some(bindings),
+                                    _ => None,
+                                };
+                                Err(match bindings {
+                                    Some(bindings) => Error::QueryWithResolvedBindings { source: Box::new(source), bindings },
+                                    None => source,
+                                })
+                            }
+                        }
+                    } else { result };
                     let _ = sender.send(result);
                 }).context(RuntimeSnafu { reason: spawn_failure })?;
                 let result = (&mut receiver).await;

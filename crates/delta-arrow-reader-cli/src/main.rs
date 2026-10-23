@@ -413,6 +413,56 @@ impl Error {
             Self::Configuration { source } => {
                 return input::execution_options_correction(source.reason());
             }
+            Self::Query {
+                source: query::QueryError::SpillDirectory { .. },
+            } => {
+                return Some(InputCorrection {
+                    argument: "--spill-dir".into(),
+                    expected: "an existing writable local directory".into(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Choose a writable directory for temporary table data; on Windows its inherited ACL must be private.",
+                });
+            }
+            Self::Query { source } => {
+                let classification = source.classification();
+                let (argument, expected, hint) = match classification.reason {
+                    "spill_disabled" => (
+                        "--spill-limit-bytes",
+                        "a positive byte budget together with --spill-dir PATH",
+                        "Discard stdout. Enable spill in an existing private writable directory; preserve SQL, snapshot bindings and other limits.",
+                    ),
+                    "memory_limit_exceeded" => (
+                        "--memory-limit-bytes",
+                        "a larger DataFusion pool budget in bytes",
+                        "Discard stdout. Increase only --memory-limit-bytes; preserve SQL, snapshot bindings and other limits.",
+                    ),
+                    "spill_limit_exceeded" => (
+                        "--spill-limit-bytes",
+                        "a larger spill budget in bytes",
+                        "Discard stdout. Increase only --spill-limit-bytes; preserve SQL, snapshot bindings and other limits.",
+                    ),
+                    _ if matches!(
+                        classification.source_kind,
+                        Some("storage_full" | "storage_quota_exceeded")
+                    ) =>
+                    {
+                        (
+                            "--spill-dir",
+                            "writable temporary storage with available space and filesystem quota",
+                            "Discard stdout. Free space or choose another private spill directory; preserve SQL, snapshot bindings and budgets.",
+                        )
+                    }
+                    _ => return None,
+                };
+                return Some(InputCorrection {
+                    argument: argument.into(),
+                    expected: expected.into(),
+                    hint,
+                    field_path: None,
+                    supplied: None,
+                });
+            }
             Self::Reader { source } => return InputCorrection::from_reader(source),
             Self::OutputLimit {
                 reason: "inspection_output_limit_exceeded",
@@ -642,6 +692,7 @@ impl Error {
                 ("change_request", Some(false))
             }
             Some("resource_exhausted") => ("adjust_budget", Some(false)),
+            Some("storage_full" | "storage_quota_exceeded") => ("fix_input", Some(false)),
             Some("unauthenticated") => ("authorize", Some(false)),
             Some("permission_denied") => ("request_access", Some(false)),
             Some("timeout" | "connection_reset" | "connection_aborted") => ("retry", Some(true)),
@@ -667,6 +718,16 @@ impl Error {
         });
         match self {
             Self::CredentialFileValidation { source, .. } => record = source.to_json_diagnostic(),
+            Self::Query { .. } if source_kind == Some("resource_exhausted") => {
+                record["resource_details_command"] = json!([
+                    command_name(),
+                    "capabilities",
+                    "--command",
+                    "query",
+                    "--detail",
+                    "resources"
+                ]);
+            }
             Self::QueryWithResolvedBindings { source, bindings } => {
                 record = source.to_json_diagnostic();
                 record["bindings"] = bindings.clone().into();
@@ -716,7 +777,10 @@ impl Error {
         }
         if let Some(correction) = self.input_correction() {
             record["argument"] = correction.argument.into();
-            record["expected"] = correction.expected.into();
+            // Budget names carry the units, and their hints already state the required change.
+            if !matches!(reason, "memory_limit_exceeded" | "spill_limit_exceeded") {
+                record["expected"] = correction.expected.into();
+            }
             record["hint"] = correction.hint.into();
             if let Some(supplied) = correction.supplied {
                 record["supplied"] = supplied.into_string().into();
@@ -847,6 +911,7 @@ fn build_json_read_completion(
 async fn execute_table_command(
     command: Command,
     report_uc_cancellation: &AtomicBool,
+    spill_directory: &mut Option<tempfile::TempDir>,
 ) -> Result<Value, Error> {
     let arrow_stdout = match &command {
         Command::Scan { .. } => true,
@@ -916,7 +981,7 @@ async fn execute_table_command(
     let command_output: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
-            let (query_uses_unity_catalog, execution) = args.prepare_execution()?;
+            let (query_uses_unity_catalog, execution) = args.prepare_execution(spill_directory)?;
             report_uc_cancellation.store(query_uses_unity_catalog, Ordering::Relaxed);
             execution
         }

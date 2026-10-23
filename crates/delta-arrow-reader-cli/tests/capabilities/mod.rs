@@ -299,6 +299,10 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
             vec!["--command", "query", "--detail", "runtime"],
             "command_detail",
         ),
+        (
+            vec!["--command", "query", "--detail", "resources"],
+            "command_detail",
+        ),
         (vec!["--schema", "predicate"], "schema_guide"),
         (vec!["--schema", "tables"], "schema_guide"),
         (
