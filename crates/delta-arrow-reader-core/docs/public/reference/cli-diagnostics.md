@@ -234,11 +234,11 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
 | `execution` | `json_output` | Typed JSON encoding failed |
 | `execution` | `unsupported_json_type` | The selected schema contains a type unsupported by typed JSON, even if the result is empty |
-| `execution` | `deadline_exceeded` | Preview exceeded its whole-command deadline |
+| `execution` | `deadline_exceeded` | A table command exceeded its whole-command deadline |
 | `configuration` | `invalid_sql_input` | SQL file is malformed, oversized, or contains a disallowed statement |
 | `datafusion` | `sql_initialization`, `sql_planning`, `sql_execution` | SQL runtime, planning, or execution failed |
 | `execution` | `output_limit` | A configured output ceiling was exceeded; includes a preview schema or first row that cannot fit |
-| `execution` | `command_cancelled` | A preview, SQL query, or capabilities command was interrupted |
+| `execution` | `command_cancelled` | A command was interrupted; prepared UC inspect/scan/query requests use `uc_cancelled` |
 | `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
 | `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
 | `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
@@ -276,9 +276,9 @@ failure. Status 3 is preserved even when stderr cannot be written.
 
 Direct-path commands run in one process. UC commands also start bounded
 Databricks CLI subprocesses. The CLI ignores `TOKIO_WORKER_THREADS`. Inspect,
-scan, and query drive their asynchronous runtime on the main thread. Preview
-uses a separate worker so synchronous credential reads cannot block its deadline
-or signal handling.
+scan, preview, and query run on a worker supervised by the main thread, so
+synchronous input and credential reads cannot block deadlines or signal handling.
+Help, version, and capabilities output also run on a supervised worker.
 
 Scan, preview, and query write results on a separate output thread. Arrow output
 flushes each batch before requesting another; typed JSON buffers the result
@@ -292,35 +292,36 @@ the process with status 1 and a synchronous diagnostic with code
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
 
-UC inspect, scan, and query handle SIGINT/SIGTERM during authorization, metadata
-loading, and execution, terminate any pending Databricks child, and exit 130/143. In text mode,
-cancellation emits an INFO `cli.cancelled` event with code `uc_cancelled`,
-visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
-that code, including with `RUST_LOG=off`. Cancellation remains responsive
-during stdout writes. On Windows, Ctrl+C exits 130.
+All commands handle Unix SIGINT/SIGTERM and exit 130/143, including at Linux PID 1.
+On Windows, Ctrl+C exits 130. Table commands remain cancellable from input loading
+through completion reporting, including synchronous credential reads and blocked
+output. Cancellation normally uses code `command_cancelled`; UC inspect, scan,
+and query retain `uc_cancelled` once their UC requests are prepared. In text mode,
+these are INFO `cli.cancelled` events, visible with `RUST_LOG=info`. Machine mode
+emits the terminal diagnostic even with `RUST_LOG=off`.
 
-Local SQL queries use the same signal handling during table loading and
-execution, with code `command_cancelled`. SQL file reading and parsing happen
-before the asynchronous signal handler starts.
+`--deadline-ms N` sets a positive whole-command budget in milliseconds, covering
+input files, authorization, snapshot loading, planning, execution, stdout, and
+completion reporting. Preview and summary inspection default to 30000 ms; query
+defaults to 300000 ms. Full inspection and stdout scan retain no default deadline.
+Set one explicitly for unattended use. Expiry exits 1 with `deadline_exceeded`.
+Help, version, and every capabilities view instead have a fixed 5000 ms deadline
+and use `discovery_deadline_exceeded`.
 
-Preview handles cancellation from input loading through completion reporting,
-including direct-storage and UC authorization, with code `command_cancelled`
-and status 130/143. Its deadline covers the same phases and returns status 1
-with code `deadline_exceeded`. Cleanup and failure reporting each have at most
-one additional second. Pending initial or renewal Databricks children are
-terminated and reaped during cleanup.
+Table commands allow at most one additional second for cleanup, then all commands
+allow at most one second for failure reporting. Pending initial or renewal
+Databricks children started by the CLI are terminated and reaped during cleanup.
+The CLI does not wait indefinitely for blocked worker threads during shutdown.
+For example, `dar --diagnostics=json scan ./table --table-version 0 --deadline-ms 1000`
+can leave partial stdout after expiry. Discard it; any permitted retry must keep
+the request, snapshot, authorization, and other limits, with a larger deadline
+chosen explicitly.
 
-On Unix, preview, UC scans, and SQL queries also detect a closed stdout pipe
-while waiting for credentials or storage. They terminate pending work and exit
-3 without a success completion. On other platforms, a closed pipe is detected
-at the next stdout write; preview's whole-command deadline still applies, and a
-pending credential command has its own 30-second timeout.
-
-For direct-path inspect and scan commands outside PID 1, Linux signals keep their normal
-termination behavior: a killed process is unsuccessful and need not emit an
-error event. This applies while loading,
-waiting for a batch, or writing to a blocked pipe. A parent that cancels the
-child must also wait for it to exit and reap it.
+On Unix, table commands detect a closed stdout pipe while waiting for credentials
+or storage and exit 3 without a success completion. Other platforms detect the
+failure at the next write; the selected total deadline still applies. A parent
+that cancels the CLI must also wait for it to exit and reap it. OS-uninterruptible
+IO and uncatchable termination cannot guarantee timely cleanup.
 
 Machine mode attempts one terminal record for handled errors and panics on
 the main or worker threads. Unhandled signals, aborts, SIGKILL, allocation failure, and

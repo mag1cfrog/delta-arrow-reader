@@ -7,7 +7,7 @@ pub(crate) mod arrow;
 pub(crate) mod field_descriptions;
 pub(crate) mod json;
 
-use std::io;
+use std::{future::Future, io};
 
 use snafu::ResultExt;
 
@@ -20,14 +20,27 @@ pub(crate) struct OutputLimits {
 }
 
 // A blocked pipe must leave the runtime and its blocking pool free to read files.
-async fn write_on_stdout_thread(
-    write: impl FnOnce() -> Result<StdoutStats, Error> + Send + 'static,
-) -> Result<StdoutStats, Error> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
+async fn write_on_stdout_thread<F>(
+    write: impl FnOnce() -> F + Send + 'static,
+) -> Result<StdoutStats, Error>
+where
+    F: Future<Output = Result<StdoutStats, Error>>,
+{
+    let runtime = tokio::runtime::Handle::current();
+    let (mut sender, receiver) = tokio::sync::oneshot::channel();
     std::thread::Builder::new()
         .name("dar-stdout".into())
         .spawn(move || {
-            let _ = sender.send(write());
+            let result = runtime.block_on(async {
+                tokio::select! {
+                    biased;
+                    () = sender.closed() => None,
+                    result = write() => Some(result),
+                }
+            });
+            if let Some(result) = result {
+                let _ = sender.send(result);
+            }
         })
         .context(RuntimeSnafu {
             reason: "output_thread_spawn_failed",

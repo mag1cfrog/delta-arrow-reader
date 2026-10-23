@@ -3,6 +3,8 @@
 #![allow(clippy::panic, clippy::unwrap_used)]
 
 mod capabilities;
+#[cfg(target_os = "linux")]
+mod command_runtime;
 mod diagnostics;
 #[cfg(unix)]
 mod direct_credentials;

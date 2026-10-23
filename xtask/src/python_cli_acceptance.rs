@@ -269,9 +269,8 @@ impl Arguments {
         }
         let status = wait_with_timeout(&mut process.child, TIMEOUT)?;
         #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            assert_eq!(status.signal(), signal);
+        if let Some(signal) = signal {
+            assert_eq!(status.code(), Some(128 + signal));
         }
         assert!(!status.success());
         stderr.rewind()?;

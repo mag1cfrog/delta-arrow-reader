@@ -1,19 +1,17 @@
-//! Whether stderr can accept a small terminal record without waiting for its reader.
+//! Whether an output can accept a small completion marker without waiting for its reader.
 //!
 //! A full pipe delays completion until the consumer drains it. Checking capacity
 //! lets the command handle cancellation during that wait without queuing a success
-//! record. A stderr pipe must have one command as its writer; terminal writes
-//! within that process are serialized by the diagnostics module.
+//! record. Each pipe must have one writer; terminal writes within the process
+//! are serialized by the diagnostics module.
 //! The caller limits each write to 512 bytes, the POSIX minimum atomic pipe write.
 
 use std::io;
 
 #[cfg(unix)]
-pub(super) fn can_write(_bytes: usize) -> io::Result<bool> {
-    use std::os::fd::AsRawFd;
-
+pub(crate) fn can_write(output: &impl std::os::fd::AsRawFd, _bytes: usize) -> io::Result<bool> {
     let mut descriptor = libc::pollfd {
-        fd: io::stderr().as_raw_fd(),
+        fd: output.as_raw_fd(),
         events: libc::POLLOUT,
         revents: 0,
     };
@@ -36,9 +34,10 @@ pub(super) fn can_write(_bytes: usize) -> io::Result<bool> {
 }
 
 #[cfg(windows)]
-pub(super) fn can_write(bytes: usize) -> io::Result<bool> {
-    use std::os::windows::io::AsRawHandle;
-
+pub(crate) fn can_write(
+    output: &impl std::os::windows::io::AsRawHandle,
+    bytes: usize,
+) -> io::Result<bool> {
     use windows_sys::{
         Wdk::Storage::FileSystem::{
             FILE_PIPE_CONNECTED_STATE, FILE_PIPE_LOCAL_INFORMATION, FilePipeLocalInformation,
@@ -51,8 +50,8 @@ pub(super) fn can_write(bytes: usize) -> io::Result<bool> {
         },
     };
 
-    let handle = io::stderr().as_raw_handle();
-    // SAFETY: stderr owns this live handle; the query does not change or close it.
+    let handle = output.as_raw_handle();
+    // SAFETY: output owns this live handle; the query does not change or close it.
     if unsafe { GetFileType(handle) } != FILE_TYPE_PIPE {
         return Ok(true);
     }

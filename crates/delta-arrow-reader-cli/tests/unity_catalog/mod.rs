@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+mod deadlines;
 mod preview;
 mod queries;
 mod scans;

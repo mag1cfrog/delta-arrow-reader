@@ -18,10 +18,10 @@ static REQUEST_CANCELLATION_SIGNAL: LazyLock<watch::Sender<bool>> =
     LazyLock::new(|| watch::channel(false).0);
 
 /// Requests cooperative cancellation of initial and renewed grants before the runtime exits.
-/// Returns whether a runner still owns a child or is about to spawn one.
-pub(crate) fn cancel_pending_requests() -> bool {
+/// Waits until runners have reaped their children and released their subscriptions.
+pub(crate) async fn cancel_pending_requests() {
     REQUEST_CANCELLATION_SIGNAL.send_replace(true);
-    REQUEST_CANCELLATION_SIGNAL.receiver_count() > 0
+    REQUEST_CANCELLATION_SIGNAL.closed().await;
 }
 
 /// Fetches metadata including the table-kind manifest used to check direct-read support.
@@ -86,11 +86,14 @@ async fn read_bounded_output(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, 
 }
 
 async fn run_databricks_cli(args: &[&str]) -> Result<Vec<u8>, Error> {
-    run_command_with_timeout(
-        Command::new("databricks").args(args),
-        DATABRICKS_COMMAND_TIMEOUT,
+    let mut command = Command::new("databricks");
+    command.args(args);
+    // Keep the child owner alive after a read future drops, until command cleanup reaps it.
+    tokio::spawn(
+        async move { run_command_with_timeout(&mut command, DATABRICKS_COMMAND_TIMEOUT).await },
     )
     .await
+    .map_err(|_| Error::DatabricksCommandFailed)?
 }
 
 /// Captures stdout, drains stderr, and stops the child on timeout or read failure.
@@ -102,7 +105,8 @@ async fn run_command_with_timeout(
 ) -> Result<Vec<u8>, Error> {
     let mut cancellation = REQUEST_CANCELLATION_SIGNAL.subscribe();
     if *cancellation.borrow() {
-        return Err(Error::Cancelled { status: 1 });
+        drop(cancellation);
+        return std::future::pending().await;
     }
     let mut child = command
         .stdin(Stdio::null())
@@ -145,12 +149,69 @@ async fn run_command_with_timeout(
     if result.is_err() {
         let _ = child.kill().await;
     }
+    if matches!(result, Err(Error::Cancelled { .. })) {
+        drop(cancellation);
+        // The supervisor owns cancellation reporting; do not turn cleanup into a Core read failure.
+        return std::future::pending().await;
+    }
     result
 }
 
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn dropping_the_request_waiter_keeps_the_child_owned_until_cleanup() {
+        use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
+
+        let Some(pid_file) = std::env::var_os("DAR_TEST_REQUEST_LIFETIME_PID") else {
+            // The process-global cancellation latch must not affect other unit tests.
+            let directory = tempfile::tempdir().unwrap();
+            let executable = directory.path().join("databricks");
+            fs::write(&executable, "#!/bin/sh\nprintf '%s' $$ > \"$DAR_TEST_REQUEST_LIFETIME_PID\"\nexec /bin/sleep 60\n").unwrap();
+            fs::set_permissions(executable, fs::Permissions::from_mode(0o755)).unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "unity_catalog::databricks_cli::tests::dropping_the_request_waiter_keeps_the_child_owned_until_cleanup", "--nocapture"])
+                .env("PATH", directory.path())
+                .env("DAR_TEST_REQUEST_LIFETIME_PID", directory.path().join("pid"))
+                .output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        };
+        tokio::time::timeout(Duration::from_secs(3), async {
+            let request = tokio::spawn(run_databricks_cli(&[]));
+            let pid_file = PathBuf::from(pid_file);
+            let pid = loop {
+                if let Some(pid) = fs::read_to_string(&pid_file)
+                    .ok()
+                    .and_then(|pid| pid.parse::<i32>().ok())
+                {
+                    break pid;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            };
+            request.abort();
+            assert!(request.await.unwrap_err().is_cancelled());
+            // Give an incorrect kill_on_drop owner time to deliver its kill signal.
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let child_alive = fs::read_to_string(format!("/proc/{pid}/stat"))
+                .is_ok_and(|stat| stat.split_whitespace().nth(2) != Some("Z"));
+            cancel_pending_requests().await;
+            assert!(child_alive, "dropping the waiter discarded its child owner");
+            assert!(
+                !PathBuf::from(format!("/proc/{pid}")).exists(),
+                "cleanup did not reap the child"
+            );
+        })
+        .await
+        .expect("child lifetime test exceeded its deadline");
+    }
 
     #[tokio::test]
     async fn subprocess_output_is_bounded_and_timeout_reaps_child() {

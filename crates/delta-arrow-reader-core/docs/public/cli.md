@@ -173,6 +173,13 @@ does not inspect the caller's credentials or check provider availability.
 The authorization guide's `full_command` returns complete metadata for the
 selected service, including credential option aliases.
 
+Each command guide links to `capabilities --command NAME --detail runtime` for
+deadline scope, cleanup allowances, platform signal behavior, and retry rules.
+Its `shutdown` summary gives the maximum cleanup and failure-reporting allowances
+beyond the selected deadline.
+For example, `dar capabilities --command query --detail runtime` describes query
+cancellation without returning SQL or schema metadata.
+
 `read_support` describes each command's scope and limits. For example, `query`
 registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest.
 UC SQL accepts a positional table with an explicit Databricks profile, or
@@ -240,14 +247,14 @@ and decode stdout: a matching completion record alone does not establish that
 the result was received intact.
 
 Discovery needs no table, input file, credentials, Databricks executable, or
-network access. The directory, schema guides, schema details, authorization
+network access. The directory, runtime details, schema guides, schema details, authorization
 guides, and authorization details are limited to 2 KiB each; command guides are
 limited to 4 KiB. Explicit full command and authorization metadata, full schemas,
 and the full inventory are limited to 1 MiB.
 Limits count UTF-8 bytes, including JSON framing and the final newline. An oversized
 response fails before writing stdout; discovery never truncates JSON.
-The command has a five-second deadline, including stdout, log setup, and
-completion reporting on stderr.
+Every discovery view, help, and version has a five-second deadline, including
+stdout, log setup, and completion reporting on stderr.
 A closed stdout pipe fails with status 3; an expired deadline fails with
 status 1. Failure reporting has at most one additional second before exit,
 including when stderr is blocked. Full command and authorization metadata and
@@ -294,11 +301,13 @@ to include nonempty metadata on selected columns and their nested fields.
 Summary stdout defaults to 4 KiB, including its final newline. If a selection
 cannot fit, the command exits 1 before writing stdout. Narrow the prefix, select
 fewer columns, omit metadata, or explicitly increase `--max-output-bytes N`.
-Names and types are never truncated. There is no total command deadline.
+Names and types are never truncated. Summary inspection has a 30000 ms total
+deadline, adjustable with `--deadline-ms N`.
 
 Omitting `--view`, or choosing `--view full`, preserves the complete Arrow schema
 for existing consumers. Full inspection has no output ceiling; redirect it to a
-file. Selection, metadata, and budget options require the summary view.
+file and set `--deadline-ms N` for unattended use. Full inspection has no default
+deadline. Selection, metadata, and byte-budget options require the summary view.
 
 The command accepts exactly one UTF-8 local path or URL. Relative paths use
 the process working directory. Quote paths and option values that contain
@@ -310,7 +319,7 @@ dar inspect [--table-version N] [--storage-options-file PATH]
             [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
             [--view full|summary]
             [--column NAME ... | --column-prefix PREFIX]
-            [--include-metadata] [--max-output-bytes N] [--] TABLE
+            [--include-metadata] [--max-output-bytes N] [--deadline-ms N] [--] TABLE
 ```
 
 <details markdown="1">
@@ -344,7 +353,7 @@ renewal behavior in the [Unity Catalog access reference](reference/unity-catalog
 ## Scan rows
 
 ```sh
-dar scan /data/orders > orders.arrow
+dar scan /data/orders --deadline-ms 30000 > orders.arrow
 dar scan --column customer_id --column total --limit 100 /data/orders > sample.arrow
 dar scan --no-columns /data/orders > row-counts.arrow
 dar scan --table-version 0 /data/orders > original.arrow
@@ -358,11 +367,14 @@ before table loading, including for `--limit 0`.
 dar scan [--table-version N] [--storage-options-file PATH]
          [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
-         [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
+         [--execution-options-file PATH] [--target-partitions N] [--limit N]
+         [--deadline-ms N] [--] TABLE
 ```
 
 Table paths, snapshot selection, and storage options follow the inspection
 rules. Each invocation reads one immutable snapshot.
+There is no default deadline; use a positive `--deadline-ms N` to bound the whole
+command, including input loading and output.
 
 CLI scans skip table warmup and S3 connection sampling, so partial-page reads
 stay off. File, row-group, and whole-page skipping remain available. For repeated
@@ -440,8 +452,8 @@ fails with `preview_schema_limit_exceeded` or `preview_row_too_large`. A later
 byte overflow returns only whole rows. If the required first row cannot fit,
 explicitly increase `--max-output-bytes` while keeping the projection, predicate,
 row limit, authorization, snapshot, and deadline. To save an Arrow sample
-instead, use `scan` with redirected stdout and the same read inputs; scan has
-no byte ceiling or total deadline.
+instead, use `scan` with redirected stdout, the same read inputs and an explicit
+`--deadline-ms N`; scan has no byte ceiling or default deadline.
 
 After a deadline or cancellation, cleanup has at most one additional second,
 and failure reporting has at most one more. A blocked consumer can leave partial
@@ -474,7 +486,7 @@ dar query [--table-version N] [--storage-options-file PATH]
           [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
           [--format arrow|json]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
-          [--memory-limit-bytes BYTES] [--] TABLE
+          [--memory-limit-bytes BYTES] [--deadline-ms N] [--] TABLE
 ```
 
 The SQL file must contain one read-only query in UTF-8, at most 64 KiB, with
@@ -497,12 +509,12 @@ snapshot selection and storage options as `inspect`. All queries skip table warm
 | `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
 | `--max-output-bytes` | Arrow: `1073741824` (1 GiB); JSON: `8192` (8 KiB) | Fail if the whole response, including schema, framing, and final newline for JSON, exceeds this many bytes |
 | `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
+| `--deadline-ms` | `300000` (5 minutes) | Limit total time, including input files, authorization, planning, execution, stdout, and completion |
 
 These options accept unsigned decimal digits in the platform's `usize` range.
-Byte and memory limits must be positive. The memory pool does not cap total
+Byte, memory, and time limits must be positive. The memory pool does not cap total
 process RSS: Core read buffers, SQL planning, and output encoding allocate outside
-it. Sorting and grouping can require memory before producing output. There is
-currently no total-command deadline.
+it. Sorting and grouping can require memory before producing output.
 
 Exceeding a ceiling fails with status 1. JSON stays buffered until the full result
 fits; resource and execution failures leave stdout empty. Arrow may leave partial
@@ -1526,7 +1538,7 @@ Use the exact status when a script needs to distinguish failures:
 | 3 | Result or machine-completion output failure, including a broken pipe |
 | 130 / 143 | Handled cancellation by Ctrl-C / Unix SIGTERM |
 
-Capabilities, preview, query, and UC-backed inspect/scan handle cancellation.
+All commands handle cancellation, including during input loading and blocked output.
 For command-specific signal behavior, target filters, or diagnostic fields,
 see the [CLI diagnostics reference](reference/cli-diagnostics.md).
 
@@ -1620,8 +1632,9 @@ verification enabled and provide a readable custom trust bundle when required
 by your storage endpoint. See [HTTPS configuration](installation.md#https-and-build-prerequisites).
 
 When `dar` is the container's PID 1, SIGINT and SIGTERM stop it with exit status
-130 and 143, respectively. The CLI does not flush buffered output or finish an
-IPC stream after either signal. Treat that result as an interrupted scan.
+130 and 143, respectively. Once cancellation is handled, the CLI does not write
+an IPC end marker. An output write already in progress can still leave bytes on
+stdout. Discard that output when the command exits unsuccessfully.
 
 A Go service can invoke the binary with `exec.CommandContext` and decode stdout
 with the official Arrow Go streaming IPC reader. Pass each CLI argument
@@ -1661,7 +1674,8 @@ dar inspect --help
 The CLI package is built from source and is not published to crates.io. It
 shares the workspace version, and `dar --version` prints `dar <version>` plus
 a newline. Help and version work outside the checkout without opening files,
-loading a table, starting a runtime, or contacting storage.
+loading a table or contacting storage. Their output remains subject to the
+five-second discovery deadline.
 
 If the executable is named `delta-arrow-reader` (`delta-arrow-reader.exe` on
 Windows), help and version display `delta-arrow-reader`. Both names accept the

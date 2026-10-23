@@ -46,7 +46,8 @@ impl ProcessFixture<'_> {
         let mut command = self.command();
         command
             .env("LD_PRELOAD", self.fault_library)
-            .env("DAR_TEST_REJECT_THREADS", "1");
+            // Input reads run on the supervised command thread; Core must not start yet.
+            .env("DAR_TEST_THREAD_LIMIT", "1");
         command
     }
 

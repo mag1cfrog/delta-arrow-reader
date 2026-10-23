@@ -51,10 +51,8 @@ pub(crate) async fn write_preview_to_stdout(
     table_version: u64,
     limits: OutputLimits,
 ) -> Result<StdoutStats, Error> {
-    let runtime = tokio::runtime::Handle::current();
-    write_on_stdout_thread(move || {
-        let (bytes, stats) =
-            runtime.block_on(encode_preview(schema, stream, table_version, limits))?;
+    write_on_stdout_thread(move || async move {
+        let (bytes, stats) = encode_preview(schema, stream, table_version, limits).await?;
         write_stdout(&bytes)?;
         Ok(stats)
     })
