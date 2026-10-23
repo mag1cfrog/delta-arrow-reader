@@ -57,7 +57,7 @@ exceptions; catch those around iteration or `read_all()` as well.
 "#
 );
 
-fn core_error<T: PyTypeInfo>(
+fn core_error_to_python_exception<T: PyTypeInfo>(
     py: Python<'_>,
     error: &::delta_arrow_reader::DeltaReaderError,
 ) -> PyErr {
@@ -74,7 +74,7 @@ fn core_error<T: PyTypeInfo>(
     exception
 }
 
-fn binding_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
+fn new_binding_exception(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
     let exception = DeltaReaderError::new_err(message);
     let value = exception.value(py);
     if let Err(error) = value
@@ -91,7 +91,7 @@ fn binding_error(py: Python<'_>, message: String, phase: &str, code: &str) -> Py
 fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
     let export_error = |reason: &'static str, source: Option<&ArrowError>| {
         diagnostics::log_failure(
-            binding_error(
+            new_binding_exception(
                 py,
                 "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
                     .to_owned(),
@@ -250,7 +250,7 @@ impl DeltaTable {
         let runtime = Arc::new(Runtime::for_python("reader")?);
         let table = runtime
             .wait_logged(py, builder.load_table())?
-            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
+            .map_err(|error| core_error_to_python_exception::<DeltaReaderError>(py, &error))?;
         Ok(Self { table, runtime })
     }
 
@@ -275,7 +275,7 @@ impl DeltaTable {
         let table = self
             .runtime
             .wait_logged(py, self.table.refresh())?
-            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
+            .map_err(|error| core_error_to_python_exception::<DeltaReaderError>(py, &error))?;
         Ok(Self {
             table,
             runtime: Arc::clone(&self.runtime),
@@ -384,14 +384,14 @@ impl DeltaTable {
                     diagnostics::validation_error(
                         &error,
                         "target_partitions",
-                        core_error::<DeltaReaderError>(py, &error),
+                        core_error_to_python_exception::<DeltaReaderError>(py, &error),
                     )
                 })?;
         }
         let scan = self
             .runtime
             .wait_logged(py, builder.build())?
-            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
+            .map_err(|error| core_error_to_python_exception::<DeltaReaderError>(py, &error))?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
         Ok(RecordBatchStream::new(

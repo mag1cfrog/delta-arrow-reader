@@ -10,8 +10,9 @@ use delta_arrow_reader::{
 use pyo3::prelude::*;
 
 use crate::{
-    DeltaReaderError, DeltaTable, binding_error, core_error, export_schema,
-    options::ScanExecutionOptions, runtime::Runtime, stream::RecordBatchStream,
+    DeltaReaderError, DeltaTable, core_error_to_python_exception, export_schema,
+    new_binding_exception, options::ScanExecutionOptions, runtime::Runtime,
+    stream::RecordBatchStream,
 };
 
 /// Query Delta tables with SQL and read the results as PyArrow batches.
@@ -119,8 +120,10 @@ impl Session {
             Ok(register_table(&self.state.context, name, table, options)
                 .map(|_| runtimes.push(runtime)))
         })?;
-        let registration_result = lock_result.map_err(|()| sql_error(py, "sql_registration"))?;
-        registration_result.map_err(|error| core_error::<DeltaReaderError>(py, &error))
+        let registration_result =
+            lock_result.map_err(|()| new_sql_exception(py, "sql_registration"))?;
+        registration_result
+            .map_err(|error| core_error_to_python_exception::<DeltaReaderError>(py, &error))
     }
 
     /// Run a read-only SQL query over registered tables.
@@ -175,14 +178,14 @@ impl Session {
                         error_reason = "sql_planning_failed", error_source_kind = error_source_kind(error));
                 })
             })?
-            .map_err(|_| sql_error(py, "sql_planning"))?;
+            .map_err(|_| new_sql_exception(py, "sql_planning"))?;
         export_schema(py, frame.schema().as_arrow())?;
         RecordBatchStream::from_sql(frame, Arc::clone(&self.state)).into_reader(py)
     }
 }
 
-fn sql_error(py: Python<'_>, code: &'static str) -> PyErr {
-    binding_error(
+fn new_sql_exception(py: Python<'_>, code: &'static str) -> PyErr {
+    new_binding_exception(
         py,
         format!("delta reader error: phase=datafusion code={code}"),
         "datafusion",

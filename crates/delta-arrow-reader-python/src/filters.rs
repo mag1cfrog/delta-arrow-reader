@@ -11,7 +11,7 @@ use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple},
 };
 
-use crate::{DeltaReaderError, core_error};
+use crate::{DeltaReaderError, core_error_to_python_exception};
 
 const FILTER_SHAPE_ERROR: &str =
     "filters must be a list of (column, operator, value) tuples or a list of lists of these tuples";
@@ -71,7 +71,7 @@ fn parse_condition(table: &DeltaTable, condition: &Bound<'_, PyAny>) -> PyResult
         crate::diagnostics::validation_error(
             &error,
             "filters",
-            core_error::<DeltaReaderError>(condition.py(), &error),
+            core_error_to_python_exception::<DeltaReaderError>(condition.py(), &error),
         )
     })?;
     if matches!(operator.as_str(), "is" | "is not") {

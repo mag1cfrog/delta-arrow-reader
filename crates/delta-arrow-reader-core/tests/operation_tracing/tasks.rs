@@ -462,6 +462,59 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
 
 #[cfg(feature = "datafusion")]
 #[test]
+fn task_context_subscribers_are_released_at_the_terminal_poll() -> TestResult {
+    use futures_util::{FutureExt, StreamExt};
+
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        for missing_file in [false, true] {
+            let runtime = runtime()?;
+            let fixture = LogTable::new()?;
+            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            let (session, plan, _) =
+                runtime.block_on(super::datafusion_execution::plan(&fixture, backend, 1))?;
+            if missing_file {
+                fs::remove_file(fixture.0.join("secret-data.parquet"))?;
+            }
+            let owner = Collector::new(Level::TRACE);
+            let config = session
+                .task_ctx()
+                .session_config()
+                .clone()
+                .with_extension(Arc::new(tracing::Dispatch::new(owner.clone())));
+            let task = Arc::new(
+                datafusion::execution::TaskContext::from(&session.state())
+                    .with_session_config(config),
+            );
+            let mut stream = plan.execute(0, task)?;
+            if missing_file {
+                assert!(runtime.block_on(stream.next()).unwrap().is_err());
+            } else {
+                let mut rows = 0;
+                while let Some(batch) = runtime.block_on(stream.next()) {
+                    rows += batch?.num_rows();
+                }
+                assert_eq!(rows, 2);
+            }
+            // Wait for workers, but retain the terminal stream without polling again.
+            drop(runtime);
+            owner.assert_balanced();
+            let lifetime = owner.lifetime();
+            drop(owner);
+            assert_subscriber_released(
+                &lifetime,
+                "terminal stream retained its TaskContext subscriber",
+            );
+            assert!(matches!(stream.next().now_or_never(), Some(None)));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "datafusion")]
+#[test]
 fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
     use datafusion::{datasource::TableProvider, prelude::SessionContext};
     use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions};

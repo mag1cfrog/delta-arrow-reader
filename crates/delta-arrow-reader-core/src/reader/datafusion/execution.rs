@@ -764,9 +764,17 @@ impl ExecutionPlan for DeltaScanExec {
         let Some(poll_dispatch) = dispatch.clone() else {
             return Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)));
         };
-        let mut stream = Box::pin(stream);
+        let mut active_stream = Some((Box::pin(stream), poll_dispatch));
         let stream = stream::poll_fn(move |cx| {
-            tracing::dispatcher::with_default(&poll_dispatch, || stream.poll_next_unpin(cx))
+            let Some((stream, poll_dispatch)) = active_stream.as_mut() else {
+                return std::task::Poll::Ready(None);
+            };
+            let result =
+                tracing::dispatcher::with_default(poll_dispatch, || stream.poll_next_unpin(cx));
+            if matches!(result, std::task::Poll::Ready(None | Some(Err(_)))) {
+                active_stream = None;
+            }
+            result
         });
         Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)))
     }

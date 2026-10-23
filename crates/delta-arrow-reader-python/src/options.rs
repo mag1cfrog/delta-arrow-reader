@@ -64,12 +64,12 @@ fn parquet_full_file_read_threshold(value: &Bound<'_, PyAny>) -> PyResult<Option
     optional_positive_usize(value, "parquet_full_file_read_threshold_bytes")
 }
 
-fn option_error(error: DeltaReaderError) -> PyErr {
+fn log_option_validation_error(error: DeltaReaderError) -> PyErr {
     Python::attach(|py| {
         crate::diagnostics::validation_error(
             &error,
             "execution_options",
-            crate::core_error::<PyValueError>(py, &error),
+            crate::core_error_to_python_exception::<PyValueError>(py, &error),
         )
     })
 }
@@ -175,18 +175,18 @@ impl ScanExecutionOptions {
             options: DeltaScanExecutionOptions::new()
                 .with_parquet_backend(backend)
                 .with_max_concurrent_file_reads_per_scan(max_concurrent_file_reads_per_scan)
-                .map_err(option_error)?
+                .map_err(log_option_validation_error)?
                 .with_max_concurrent_file_reads_per_partition(
                     max_concurrent_file_reads_per_partition,
                 )
-                .map_err(option_error)?
+                .map_err(log_option_validation_error)?
                 .with_output_buffer_batches_per_partition(output_buffer_batches_per_partition)
-                .map_err(option_error)?
+                .map_err(log_option_validation_error)?
                 .with_prefetch_files_per_partition(prefetch_files_per_partition)
                 .with_parquet_metadata_size_hint_bytes(parquet_metadata_size_hint_bytes)
-                .map_err(option_error)?
+                .map_err(log_option_validation_error)?
                 .with_parquet_full_file_read_threshold_bytes(parquet_full_file_read_threshold_bytes)
-                .map_err(option_error)?,
+                .map_err(log_option_validation_error)?,
         })
     }
 
