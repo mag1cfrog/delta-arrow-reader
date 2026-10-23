@@ -7,6 +7,7 @@
 //! or a validation schema. All views work without opening a table or resolving
 //! authorization.
 
+mod env_file_guides;
 mod output_schemas;
 mod read_support;
 mod schemas;
@@ -35,6 +36,7 @@ const DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
 #[command(group(ArgGroup::new("full_definition_target").args(["command", "schema", "authorization"])))]
+#[command(group(ArgGroup::new("detail_target").args(["schema", "authorization"])))]
 pub(crate) struct CapabilitiesArgs {
     /// Show usage and limits for one command.
     #[arg(long, value_name = "NAME", value_parser = parse_command_name, conflicts_with_all = ["schema", "authorization", "all"])]
@@ -42,17 +44,17 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an example and available fields or types for one JSON format.
     #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
     schema: Option<DiscoverySchema>,
-    /// Describe one field, predicate operator, or scalar type listed by --schema.
+    /// Describe a field/type from --schema, or env-file/env-file-grammar from --authorization.
     #[arg(
         long,
         value_name = "NAME",
-        requires = "schema",
-        conflicts_with_all = ["command", "authorization", "all", "full"]
+        requires = "detail_target",
+        conflicts_with_all = ["command", "all", "full"]
     )]
     detail: Option<String>,
     /// Show an authorization guide for a storage or catalog service.
     #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
-    authorization: Option<read_support::AuthorizationGuide>,
+    authorization: Option<read_support::AuthorizationService>,
     /// Export a full JSON Schema for validators, or command/authorization metadata for tooling.
     #[arg(long, requires = "full_definition_target", conflicts_with = "detail")]
     full: bool,
@@ -237,6 +239,15 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "guides": authorization_guides,
             "details_command": [executable, "capabilities", "--authorization", "NAME"],
         });
+        let mut conflicts = vec!["--auth-source", "--databricks-profile"];
+        if name == "query" {
+            conflicts.push("--tables-file");
+        }
+        guide["authorization"]["env_file"] = json!({
+            "arguments": ["--env-file", "PATH"],
+            "conflicts_with": conflicts,
+            "usage": "For a direct cloud TABLE, pass a provisioned credential file without reading or expanding its values. Selected-file failures never fall back to another identity.",
+        });
     }
     let mut output_schemas = vec![DiscoverySchema::Diagnostic];
     if name != "help" {
@@ -301,7 +312,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
     if selected_command.is_none() || matches!(selected_command, Some("query" | "preview")) {
         output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
     }
-    let mut authorization = read_support::authorization_sources();
+    let mut authorization = read_support::build_authorization_capabilities();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
         "capabilities": {"format": "json", "format_version": 1},
@@ -500,11 +511,22 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
         } else {
             (build_command_guide(&name)?, MAX_COMMAND_GUIDE_BYTES)
         }
-    } else if let Some(guide) = options.authorization {
+    } else if let Some(service) = options.authorization {
         if options.full {
-            (guide.full_document(), MAX_FULL_RESPONSE_BYTES)
+            (
+                service.build_full_authorization_guide(),
+                MAX_FULL_RESPONSE_BYTES,
+            )
+        } else if let Some(detail) = options.detail.as_deref() {
+            (
+                env_file_guides::build_env_file_guide(service, detail)?,
+                MAX_AUTHORIZATION_GUIDE_BYTES,
+            )
         } else {
-            (guide.guide_document(), MAX_AUTHORIZATION_GUIDE_BYTES)
+            (
+                service.build_authorization_guide(),
+                MAX_AUTHORIZATION_GUIDE_BYTES,
+            )
         }
     } else if options.all {
         (build_capability_details(None)?, MAX_FULL_RESPONSE_BYTES)
@@ -577,6 +599,36 @@ mod tests {
                 "cli_version",
             ] {
                 assert!(guide.get(omitted).is_none(), "{omitted}");
+            }
+            if let Some(conflicts) = guide["authorization"]["env_file"]["conflicts_with"].as_array()
+            {
+                let mut args = vec![
+                    "dar",
+                    command.get_name(),
+                    "s3://bucket/table",
+                    "--env-file",
+                    "credentials.env",
+                ];
+                if command.get_name() == "query" {
+                    args.extend(["--sql-file", "query.sql"]);
+                }
+                assert!(Cli::try_parse_from(&args).is_ok());
+                for conflict in conflicts {
+                    let mut conflicting_args = args.clone();
+                    let option = conflict.as_str().unwrap();
+                    conflicting_args.extend([
+                        option,
+                        if option == "--auth-source" {
+                            "env"
+                        } else {
+                            "reference"
+                        },
+                    ]);
+                    assert_eq!(
+                        Cli::try_parse_from(conflicting_args).err().unwrap().kind(),
+                        ErrorKind::ArgumentConflict
+                    );
+                }
             }
         }
         let guide = build_command_guide("query").unwrap();
@@ -661,7 +713,7 @@ mod tests {
             vec!["--all", "--full"],
             vec!["--detail", "rows"],
             vec!["--command", "scan", "--detail", "rows"],
-            vec!["--authorization", "s3", "--detail", "rows"],
+            vec!["--authorization", "s3", "--detail", "env-file", "--full"],
             vec!["--all", "--detail", "rows"],
             vec!["--schema", "predicate", "--detail", "int64", "--full"],
         ] {
@@ -680,6 +732,8 @@ mod tests {
             vec!["--command", "query", "--full"],
             vec!["--full", "--schema", "predicate"],
             vec!["--detail", "rows", "--schema", "completion"],
+            vec!["--authorization", "s3", "--detail", "env-file"],
+            vec!["--detail", "env-file-grammar", "--authorization", "gcs"],
         ] {
             assert!(Cli::try_parse_from(["dar", "capabilities"].into_iter().chain(valid)).is_ok());
         }

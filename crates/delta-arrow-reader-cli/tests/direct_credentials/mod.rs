@@ -1,6 +1,7 @@
 //! Explicit cloud credential sources exercised through real CLI reads.
 
 mod azure_blob;
+mod env_file;
 mod gcs;
 mod mock_credential_proxy;
 mod s3;

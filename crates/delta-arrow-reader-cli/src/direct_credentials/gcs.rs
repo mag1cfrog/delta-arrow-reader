@@ -11,6 +11,8 @@ use super::{
 };
 use crate::{Error, StorageAuthorizationSnafu};
 
+pub(super) const ADC_ENVIRONMENT_VARIABLE: &str = "GOOGLE_APPLICATION_CREDENTIALS";
+
 pub(super) fn configure_table_credentials(
     builder: DeltaTableBuilder,
     location: &str,
@@ -22,7 +24,7 @@ pub(super) fn configure_table_credentials(
     })?;
     let credentials_path = match source {
         CredentialSource::Json => options.remove("google_application_credentials"),
-        CredentialSource::Env => read_environment_value("GOOGLE_APPLICATION_CREDENTIALS")?,
+        CredentialSource::Env => read_environment_value(ADC_ENVIRONMENT_VARIABLE)?,
         CredentialSource::AwsWebIdentity
         | CredentialSource::AwsContainer
         | CredentialSource::AzureWorkloadIdentity
@@ -62,7 +64,7 @@ pub(super) fn configure_table_credentials(
         ))))
 }
 
-fn validate_storage_option(
+pub(super) fn validate_storage_option(
     key: &GoogleConfigKey,
     value: &str,
     source: CredentialSource,

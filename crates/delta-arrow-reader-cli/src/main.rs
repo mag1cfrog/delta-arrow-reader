@@ -148,6 +148,12 @@ enum Error {
         reason: &'static str,
         correction: InputCorrection,
     },
+    #[snafu(display("Invalid env file (reason={reason})."))]
+    EnvFileInput {
+        reason: &'static str,
+        line: Option<usize>,
+        expected: &'static str,
+    },
     #[snafu(display("Could not read the input file."))]
     InputIo {
         source: io::Error,
@@ -155,6 +161,11 @@ enum Error {
     },
     #[snafu(display("Invalid storage authorization (reason={reason})."))]
     StorageAuthorization { reason: &'static str },
+    #[snafu(display("{source}"))]
+    ManifestAuthorizationInput {
+        source: Box<Error>,
+        field_path: String,
+    },
     #[snafu(display("The reader runtime failed."))]
     Runtime {
         source: io::Error,
@@ -211,6 +222,7 @@ impl fmt::Debug for Error {
 impl Error {
     fn classification(&self) -> ErrorClassification {
         match self {
+            Self::ManifestAuthorizationInput { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
                 code: source.code(),
@@ -238,6 +250,12 @@ impl Error {
             Self::InputValidation { reason, .. } => ErrorClassification {
                 phase: "configuration",
                 code: "invalid_input_json",
+                reason,
+                source_kind: None,
+            },
+            Self::EnvFileInput { reason, .. } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_input_env",
                 reason,
                 source_kind: None,
             },
@@ -315,6 +333,25 @@ impl Error {
         let (input_kind, hint) = match self {
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. } => return Some(correction.clone()),
+            Self::ManifestAuthorizationInput { source, field_path } => {
+                let mut correction = source.input_correction()?;
+                correction.field_path = Some(field_path.clone());
+                correction.argument = "--tables-file".into();
+                if matches!(source.as_ref(), Self::InputIo { source, .. } if source.kind() == io::ErrorKind::NotFound)
+                {
+                    correction.hint = "Provide an existing input file; relative references use the manifest directory.";
+                }
+                return Some(correction);
+            }
+            Self::EnvFileInput { expected, .. } => {
+                return Some(InputCorrection {
+                    argument: "--env-file".into(),
+                    field_path: None,
+                    expected: (*expected).into(),
+                    supplied: None,
+                    hint: "Use one NAME=VALUE record per line; quotes must enclose the whole value.",
+                });
+            }
             Self::InputJson {
                 correction: Some(correction),
                 ..
@@ -454,7 +491,13 @@ impl Error {
     }
 
     fn log_failure(&self) {
-        if let Self::Cancelled { status } = self {
+        let (source_error, manifest_field_path) = match self {
+            Self::ManifestAuthorizationInput { source, field_path } => {
+                (source.as_ref(), Some(field_path.as_str()))
+            }
+            _ => (self, None),
+        };
+        if let Self::Cancelled { status } = source_error {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
                 error_phase = "execution", error_code = "command_cancelled", exit_status = status,
@@ -464,7 +507,7 @@ impl Error {
         }
         if let Self::UnityCatalog {
             source: unity_catalog::Error::Cancelled { status },
-        } = self
+        } = source_error
         {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
@@ -474,15 +517,19 @@ impl Error {
             return;
         }
         let correction = self.input_correction();
-        let argument = correction.as_ref().map(|value| value.argument.as_str());
+        let argument = manifest_field_path
+            .map(|_| "--tables-file")
+            .or_else(|| correction.as_ref().map(|value| value.argument.as_str()));
         let expected = correction.as_ref().map(|value| value.expected.as_str());
         let supplied = correction
             .as_ref()
             .and_then(|value| value.supplied.as_deref());
-        let field_path = correction
-            .as_ref()
-            .and_then(|value| value.field_path.as_deref());
-        let hint = match self {
+        let field_path = manifest_field_path.or_else(|| {
+            correction
+                .as_ref()
+                .and_then(|value| value.field_path.as_deref())
+        });
+        let hint = match source_error {
             Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
             _ => correction.as_ref().map(|value| value.hint),
         };
@@ -493,7 +540,7 @@ impl Error {
             source_kind,
         } = self.classification();
         // Core owns the terminal failure; CLI guidance supplements that event.
-        if matches!(self, Self::Reader { .. }) {
+        if matches!(source_error, Self::Reader { .. }) {
             if correction.is_some() {
                 tracing::error!(target: "delta_arrow_reader_cli",
                     event = "cli.input_correction", error_phase = phase, error_code = code,
@@ -503,11 +550,11 @@ impl Error {
             }
             return;
         }
-        let argument_kind = match self {
+        let argument_kind = match source_error {
             Self::Argument { kind, .. } => Some(tracing::field::debug(kind)),
             _ => None,
         };
-        let (json_kind, json_line, json_column) = match self {
+        let (json_kind, json_line, json_column) = match source_error {
             Self::InputJson { source, .. } => (
                 Some(tracing::field::debug(source.classify())),
                 Some(source.line()),
@@ -515,7 +562,7 @@ impl Error {
             ),
             _ => (None, None, None),
         };
-        let (io_kind, os_error) = match self {
+        let (io_kind, os_error) = match source_error {
             Self::InputIo { source, .. }
             | Self::Runtime { source, .. }
             | Self::Output { source } => (
@@ -524,17 +571,21 @@ impl Error {
             ),
             _ => (None, None),
         };
-        let message: &dyn fmt::Display = match self {
+        let env_file_line = match source_error {
+            Self::EnvFileInput { line, .. } => *line,
+            _ => None,
+        };
+        let message: &dyn fmt::Display = match source_error {
             Self::UnityCatalog { source } => source,
             Self::Query { source } => source,
-            Self::StorageAuthorization { .. } => self,
+            Self::StorageAuthorization { .. } => source_error,
             _ => &"CLI command failed",
         };
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
             error_source_kind = source_kind, argument_kind, argument, expected, supplied, hint, field_path,
-            json_kind, json_line, json_column, io_kind, os_error,
+            json_kind, json_line, json_column, env_file_line, io_kind, os_error,
             "{message}"
         );
     }
@@ -582,6 +633,11 @@ impl Error {
             "recovery": recovery,
         });
         match self {
+            Self::ManifestAuthorizationInput { source, field_path } => {
+                record = source.to_json_diagnostic();
+                record["argument"] = "--tables-file".into();
+                record["field_path"] = field_path.clone().into();
+            }
             Self::UnityCatalog {
                 source: source @ unity_catalog::Error::DatabricksCliNotFound,
             } => {
@@ -595,6 +651,11 @@ impl Error {
                 record["json_kind"] = format!("{:?}", source.classify()).into();
                 record["line"] = source.line().into();
                 record["column"] = source.column().into();
+            }
+            Self::EnvFileInput {
+                line: Some(line), ..
+            } => {
+                record["line"] = (*line).into();
             }
             Self::InputIo { source, .. }
             | Self::Runtime { source, .. }
@@ -620,10 +681,12 @@ impl Error {
 
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
+            Self::ManifestAuthorizationInput { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput
             | Self::InputJson { .. }
             | Self::InputValidation { .. }
+            | Self::EnvFileInput { .. }
             | Self::InputIo { .. }
             | Self::StorageAuthorization { .. }
             | Self::Configuration { .. } => 2,
@@ -1202,6 +1265,36 @@ mod tests {
             assert!(text.contains("error_phase=\"execution\""));
             assert!(!text.contains("secret"));
             assert_eq!(format!("{error:?}"), error.to_string());
+        }
+    }
+
+    #[test]
+    fn manifest_authorization_preserves_file_access_recovery() {
+        let error = Error::ManifestAuthorizationInput {
+            source: Box::new(Error::InputIo {
+                source: io::Error::new(io::ErrorKind::PermissionDenied, "secret path"),
+                argument: "--env-file",
+            }),
+            field_path: "/tables/1/authorization/env_file".into(),
+        };
+        assert_eq!(error.exit_code(), ExitCode::from(2));
+        let record = error.to_json_diagnostic();
+        assert_eq!(record["code"], "input_file_io");
+        assert_eq!(record["source_kind"], "permission_denied");
+        assert_eq!(record["recovery"], "request_access");
+        assert_eq!(record["io_kind"], "PermissionDenied");
+        assert_eq!(record["argument"], "--tables-file");
+        assert_eq!(record["field_path"], "/tables/1/authorization/env_file");
+        assert_eq!(record["hint"], "Request read access to the input file.");
+        let text = diagnostics::capture("warn", || error.log_failure());
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert!(text.contains("io_kind=PermissionDenied"), "{text}");
+        assert!(
+            text.contains("Request read access to the input file."),
+            "{text}"
+        );
+        for rendered in [record.to_string(), text, format!("{error:?}")] {
+            assert!(!rendered.contains("secret"), "{rendered}");
         }
     }
 

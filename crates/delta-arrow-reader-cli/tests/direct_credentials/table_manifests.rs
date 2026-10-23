@@ -47,7 +47,6 @@ fn manifest_command(
             "manifests/tables.json",
             "--sql-file",
             "query.sql",
-            "--diagnostics=json",
         ]);
     Ok(command)
 }
@@ -55,23 +54,50 @@ fn manifest_command(
 #[test]
 fn each_manifest_table_uses_its_selected_identity_even_after_reference_files_change() -> TestResult
 {
-    for customers_source in ["json", "env"] {
+    for (orders_source, customers_source) in [
+        ("json", "json"),
+        ("json", "env"),
+        ("json", "env-file"),
+        ("env-file", "env-file"),
+    ] {
         let directory = tempfile::tempdir()?;
         fs::create_dir(directory.path().join("authorization"))?;
         let orders_options = directory.path().join("authorization/orders.json");
         let customers_options = directory.path().join("authorization/customers.json");
+        let orders_env_file = directory.path().join("authorization/orders.env");
+        let customers_env_file = directory.path().join("authorization/customers.env");
+        for (path, identity) in [
+            (&orders_env_file, "orders"),
+            (&customers_env_file, "customers"),
+        ] {
+            fs::write(
+                path,
+                format!(
+                    "AWS_ACCESS_KEY_ID=secret-{identity}-key\nAWS_SECRET_ACCESS_KEY=secret-{identity}-password\nAWS_SESSION_TOKEN=secret-{identity}-session"
+                ),
+            )?;
+        }
         let mut orders = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
         let customers = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
-        let replaced_files = [orders_options.clone(), customers_options.clone()];
+        let replaced_files = [
+            orders_options.clone(),
+            customers_options.clone(),
+            orders_env_file,
+            customers_env_file,
+        ];
         orders.restart_storage_with_request_hook(move |_| {
             for path in &replaced_files {
                 fs::write(path, "secret-replaced-options").unwrap();
             }
         })?;
-        orders.write_options(json!({
-            "access_key_id":"secret-orders-key", "secret_access_key":"secret-orders-password",
-            "session_token":"secret-orders-session", "region":"eu-west-1"
-        }))?;
+        orders.write_options(if orders_source == "json" {
+            json!({
+                "access_key_id":"secret-orders-key", "secret_access_key":"secret-orders-password",
+                "session_token":"secret-orders-session", "region":"eu-west-1"
+            })
+        } else {
+            json!({"region":"eu-west-1"})
+        })?;
         customers.write_options(if customers_source == "json" { json!({
             "access_key_id":"secret-customers-key", "secret_access_key":"secret-customers-password",
             "session_token":"secret-customers-session", "region":"eu-west-1"
@@ -84,15 +110,39 @@ fn each_manifest_table_uses_its_selected_identity_even_after_reference_files_cha
             customers.directory.path().join("options.json"),
             &customers_options,
         )?;
-        let tables = json!([
-            {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":"../authorization/orders.json"}},
+        let mut tables = json!([
+            {"alias":"orders","location":"s3://bucket/table","authorization":{"source":orders_source,"storage_options_file":"../authorization/orders.json"}},
             {"alias":"customers","location":"s3://bucket/table","authorization":{"source":customers_source,"storage_options_file":"../authorization/customers.json"}}
         ]);
+        for (index, source, alias) in [
+            (0, orders_source, "orders"),
+            (1, customers_source, "customers"),
+        ] {
+            if source == "env-file" {
+                tables[index]["authorization"]["env_file"] =
+                    json!(format!("../authorization/{alias}.env"));
+            }
+        }
+        let inherited_identity = if customers_source == "env" {
+            "customers"
+        } else {
+            "unused"
+        };
         let output = run_with_timeout(
             manifest_command(directory.path(), tables)?
-                .env("AWS_ACCESS_KEY_ID", "secret-customers-key")
-                .env("AWS_SECRET_ACCESS_KEY", "secret-customers-password")
-                .env("AWS_SESSION_TOKEN", "secret-customers-session"),
+                .arg("--diagnostics=json")
+                .env(
+                    "AWS_ACCESS_KEY_ID",
+                    format!("secret-{inherited_identity}-key"),
+                )
+                .env(
+                    "AWS_SECRET_ACCESS_KEY",
+                    format!("secret-{inherited_identity}-password"),
+                )
+                .env(
+                    "AWS_SESSION_TOKEN",
+                    format!("secret-{inherited_identity}-session"),
+                ),
         )?;
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
         assert_eq!(
@@ -155,6 +205,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
         {"alias":"customers","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":customers.directory.path().join("options.json")}}
     ]);
     let mut command = manifest_command(query_directory.path(), tables)?;
+    command.arg("--diagnostics=json");
     let output = run_with_timeout(&mut command)?;
     assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     assert_eq!(
@@ -227,43 +278,149 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
     fs::write(directory.path().join("duplicate.json"), json!({
         "access_key_id":"secret-one", "AWS_ACCESS_KEY_ID":"secret-two", "secret_access_key":"secret-password"
     }).to_string())?;
-    for (authorization, code, reason) in [
+    fs::write(
+        directory.path().join("incomplete.env"),
+        "AWS_ACCESS_KEY_ID=secret-key",
+    )?;
+    fs::write(
+        directory.path().join("malformed.env"),
+        "# comment\nAWS_ACCESS_KEY_ID='secret-key' trailing",
+    )?;
+    fs::write(
+        directory.path().join("malformed.json"),
+        "{\n\"secret-key\":",
+    )?;
+    for (authorization, code, reason, field_path) in [
         (
             json!({"source":"json"}),
             "invalid_storage_authorization",
             "auth_source_requires_storage_options_file",
+            "/tables/1/authorization",
         ),
         (
             json!({"source":"json","storage_options_file":"../secret-missing.json"}),
             "input_file_io",
             "input_file_read_failed",
+            "/tables/1/authorization/storage_options_file",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../incomplete.env","storage_options_file":"../malformed.json"}),
+            "invalid_input_json",
+            "input_json_decode_failed",
+            "/tables/1/authorization/storage_options_file",
         ),
         (
             json!({"source":"json","storage_options_file":"../incomplete.json"}),
             "invalid_storage_authorization",
             "auth_source_incomplete_credentials",
+            "/tables/1/authorization",
         ),
         (
             json!({"source":"json","storage_options_file":"../duplicate.json"}),
             "invalid_storage_authorization",
             "auth_source_duplicate_option",
+            "/tables/1/authorization",
         ),
         (
             json!({"source":"env"}),
             "invalid_storage_authorization",
             "auth_source_incomplete_credentials",
+            "/tables/1/authorization",
+        ),
+        (
+            json!({"source":"env-file"}),
+            "invalid_input_json",
+            "missing_env_file",
+            "/tables/1/authorization/env_file",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../secret-missing.env"}),
+            "input_file_io",
+            "input_file_read_failed",
+            "/tables/1/authorization/env_file",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../incomplete.env"}),
+            "invalid_storage_authorization",
+            "auth_source_incomplete_credentials",
+            "/tables/1/authorization",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../malformed.env"}),
+            "invalid_input_env",
+            "env_file_invalid_record",
+            "/tables/1/authorization/env_file",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../incomplete.env", "storage_options_file":orders.directory.path().join("options.json")}),
+            "invalid_storage_authorization",
+            "auth_source_conflicting_credentials",
+            "/tables/1/authorization",
         ),
     ] {
         let tables = json!([
             {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":orders.directory.path().join("options.json")}},
             {"alias":"customers","location":"s3://bucket/table","authorization":authorization}
         ]);
-        let output = run_with_timeout(&mut manifest_command(directory.path(), tables)?)?;
-        assert_failure_without_stdout(&output, 2);
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], code);
-        assert_eq!(record["reason"], reason);
-        assert!(orders.server.requests.lock().unwrap().is_empty());
+        for machine in [false, true] {
+            let mut command = manifest_command(directory.path(), tables.clone())?;
+            if machine {
+                command.arg("--diagnostics=json");
+            }
+            let output = run_with_timeout(&mut command)?;
+            assert_failure_without_stdout(&output, 2);
+            let text = String::from_utf8_lossy(&output.stderr);
+            if machine {
+                let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+                assert_eq!(record["code"], code);
+                assert_eq!(record["reason"], reason);
+                assert_eq!(record["argument"], "--tables-file");
+                assert_eq!(record["field_path"], field_path);
+                if code == "invalid_storage_authorization" {
+                    assert!(record.get("expected").is_none());
+                    assert!(record.get("hint").is_none());
+                }
+                if matches!(
+                    reason,
+                    "env_file_invalid_record" | "input_json_decode_failed"
+                ) {
+                    assert_eq!(record["line"], 2);
+                }
+                if code == "input_file_io" {
+                    assert_eq!(record["io_kind"], "NotFound");
+                    assert_eq!(record["source_kind"], "not_found");
+                }
+                if reason == "input_json_decode_failed" {
+                    assert_eq!(record["json_kind"], "Eof");
+                    assert_eq!(record["column"], 13);
+                }
+            } else {
+                assert!(text.contains(&format!("error_code=\"{code}\"")), "{text}");
+                assert!(
+                    text.contains(&format!("error_reason=\"{reason}\"")),
+                    "{text}"
+                );
+                assert!(text.contains("argument=\"--tables-file\""), "{text}");
+                assert!(
+                    text.contains(&format!("field_path=\"{field_path}\"")),
+                    "{text}"
+                );
+                if reason == "env_file_invalid_record" {
+                    assert!(text.contains("env_file_line=2"), "{text}");
+                }
+                if reason == "input_json_decode_failed" {
+                    assert!(text.contains("json_line=2"), "{text}");
+                }
+                if code == "input_file_io" {
+                    assert!(text.contains("io_kind=NotFound"), "{text}");
+                }
+            }
+            if code == "input_file_io" {
+                assert!(text.contains("manifest directory"), "{text}");
+                assert!(!text.contains("working directory"), "{text}");
+            }
+            assert!(orders.server.requests.lock().unwrap().is_empty());
+        }
     }
     Ok(())
 }

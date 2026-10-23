@@ -16,6 +16,16 @@ use super::{
 };
 use crate::{Error, StorageAuthorizationSnafu};
 
+pub(super) const CREDENTIAL_ENVIRONMENT_VARIABLES: &[(&str, AmazonS3ConfigKey)] = &[
+    ("AWS_ACCESS_KEY_ID", AmazonS3ConfigKey::AccessKeyId),
+    ("AWS_SECRET_ACCESS_KEY", AmazonS3ConfigKey::SecretAccessKey),
+    ("AWS_SESSION_TOKEN", AmazonS3ConfigKey::Token),
+];
+pub(super) const REGION_ENVIRONMENT_VARIABLES: &[(&str, AmazonS3ConfigKey)] = &[
+    ("AWS_REGION", AmazonS3ConfigKey::Region),
+    ("AWS_DEFAULT_REGION", AmazonS3ConfigKey::DefaultRegion),
+];
+
 pub(super) fn configure_table_credentials(
     builder: DeltaTableBuilder,
     location: &str,
@@ -27,13 +37,9 @@ pub(super) fn configure_table_credentials(
     })?;
     if matches!(source, CredentialSource::Env) {
         // Read only the advertised variables. Provider and profile variables are not selected.
-        for name in [
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_SESSION_TOKEN",
-        ] {
+        for (name, key) in CREDENTIAL_ENVIRONMENT_VARIABLES {
             if let Some(value) = read_environment_value(name)? {
-                options.insert(name.to_ascii_lowercase(), value);
+                options.insert(key.as_ref().to_owned(), value);
             }
         }
     } else if matches!(source, CredentialSource::AwsWebIdentity) {
@@ -57,9 +63,9 @@ pub(super) fn configure_table_credentials(
         && !options.contains_key("aws_region")
         && !options.contains_key("aws_default_region")
     {
-        for name in ["AWS_REGION", "AWS_DEFAULT_REGION"] {
+        for (name, key) in REGION_ENVIRONMENT_VARIABLES {
             if let Some(value) = read_environment_value(name)? {
-                options.insert(name.to_ascii_lowercase(), value);
+                options.insert(key.as_ref().to_owned(), value);
             }
         }
     }
@@ -129,7 +135,7 @@ fn configure_native_credentials(
         ))))
 }
 
-fn validate_storage_option(
+pub(super) fn validate_storage_option(
     key: &AmazonS3ConfigKey,
     value: &str,
     source: CredentialSource,

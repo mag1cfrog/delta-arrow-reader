@@ -20,19 +20,19 @@ pub(super) const QUERY_ROW_ORDERING: &str =
 
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub(super) enum AuthorizationGuide {
+pub(super) enum AuthorizationService {
     S3,
     AzureBlob,
     Gcs,
     UnityCatalog,
 }
 
-impl AuthorizationGuide {
-    pub(super) fn guide_document(self) -> Value {
-        let sources = authorization_sources();
+impl AuthorizationService {
+    pub(super) fn build_authorization_guide(self) -> Value {
+        let capabilities = build_authorization_capabilities();
         let mut authorization = match self {
             Self::UnityCatalog => {
-                let catalog = &sources["unity_catalog"];
+                let catalog = &capabilities["unity_catalog"];
                 json!({
                     "commands": catalog["commands"],
                     "target": catalog["target"],
@@ -46,7 +46,7 @@ impl AuthorizationGuide {
                 })
             }
             _ => {
-                let storage = &sources["direct_storage"];
+                let storage = &capabilities["direct_storage"];
                 let keys: Vec<_> = storage["credential_option_aliases"][self.name()]
                     .as_object()
                     .into_iter()
@@ -59,6 +59,7 @@ impl AuthorizationGuide {
                     "commands": storage["commands"],
                     "source_argument": storage["source_argument"],
                     "sources": storage["sources"][self.name()],
+                    "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "env-file"],
                     "storage_options_argument": storage["storage_options_argument"],
                     "credential_keys": keys,
                     "notes": storage["backend_notes"][self.name()],
@@ -66,7 +67,7 @@ impl AuthorizationGuide {
                 })
             }
         };
-        authorization["credential_handling"] = json!(self.credential_handling());
+        authorization["credential_handling"] = json!(self.credential_handling_guidance());
         json!({
             "format_version": 1,
             "kind": "authorization_guide",
@@ -85,24 +86,32 @@ impl AuthorizationGuide {
         }
     }
 
-    fn credential_handling(self) -> &'static str {
+    fn credential_handling_guidance(self) -> &'static str {
         match self {
             Self::UnityCatalog => {
                 "Pass an existing Databricks profile name; never put credential values in arguments."
             }
             _ => {
-                "Use json with an existing storage-options file path, or env with provisioned variables and no credential keys in that file. Explicit sources never fall back to another identity; never put credential values in arguments."
+                "Use json with a storage-options file path, env with provisioned variables, or --env-file with a credential file path. env and --env-file reject credentials in storage-options. Explicit sources never fall back to another identity; never put credential values in arguments."
             }
         }
     }
 
-    pub(super) fn full_document(self) -> Value {
-        let sources = authorization_sources();
+    pub(super) fn build_full_authorization_guide(self) -> Value {
+        let capabilities = build_authorization_capabilities();
         let mut authorization = if matches!(self, Self::UnityCatalog) {
-            sources["unity_catalog"].clone()
+            capabilities["unity_catalog"].clone()
         } else {
             let name = self.name();
-            let mut storage = sources["direct_storage"].clone();
+            let mut storage = capabilities["direct_storage"].clone();
+            storage["env_file_details_command"] = json!([
+                crate::command_name(),
+                "capabilities",
+                "--authorization",
+                self,
+                "--detail",
+                "env-file"
+            ]);
             storage["sources"] = storage["sources"][name].clone();
             storage["schema_command"] = json!([
                 crate::command_name(),
@@ -129,7 +138,7 @@ impl AuthorizationGuide {
             }
             storage
         };
-        authorization["credential_handling"] = json!(self.credential_handling());
+        authorization["credential_handling"] = json!(self.credential_handling_guidance());
         json!({
             "format_version": 1,
             "kind": "authorization_capabilities",
@@ -141,7 +150,7 @@ impl AuthorizationGuide {
     }
 }
 
-pub(super) fn authorization_sources() -> Value {
+pub(super) fn build_authorization_capabilities() -> Value {
     json!({
         "local": {
             "commands": ["inspect", "scan", "preview", "query"],
@@ -160,10 +169,12 @@ pub(super) fn authorization_sources() -> Value {
                 "azure-blob": ["json", "env", "azure-workload-identity", "azure-managed-identity"],
                 "gcs": ["json", "env"],
             },
-            "env_file_input": false,
+            "env_file_input": true,
+            "env_file_argument": "--env-file",
+            "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", "NAME", "--detail", "env-file"],
             "imports_storage_options_from_environment": true,
             "option_names_case_sensitive": false,
-            "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend"},
+            "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend", "with_env_file": "rejected"},
             "credential_option_aliases": {
                 "s3": {
                     "aws_access_key_id": ["access_key_id"],
@@ -185,21 +196,21 @@ pub(super) fn authorization_sources() -> Value {
                 },
             },
             "notes": [
-                "Explicit sources reject duplicate aliases and conflicting credential families. Local and Unity Catalog targets reject --auth-source.",
-                "Without --auth-source, native backend precedence and credential defaults apply; environment options are not imported.",
+                "Explicit sources reject duplicate aliases and conflicting credential families. Local and Unity Catalog targets reject --auth-source and --env-file. These selectors cannot be combined.",
+                "Without --auth-source or --env-file, native backend precedence and credential defaults apply; environment options are not imported.",
             ],
             "backend_notes": {
                 "s3": [
                     "json/env require an access key and secret key; a session token is optional. env uses AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN, AWS_REGION and AWS_DEFAULT_REGION.",
-                    "Workload sources use provisioned role/token-file or container endpoint references. AWS profiles/SSO are unsupported. Omitting --auth-source uses backend defaults.",
+                    "Workload sources use provisioned role/token-file or container endpoint references. AWS profiles/SSO are unsupported. Omitting both source selectors uses backend defaults.",
                 ],
                 "azure-blob": [
                     "json/env require exactly one complete credential family. env accepts AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_SAS_KEY or AZURE_STORAGE_TOKEN, or AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID. If the URL omits the account, supply azure_storage_account_name in JSON or AZURE_STORAGE_ACCOUNT_NAME with env.",
-                    "Workload identity requires a client ID, tenant ID and token file; managed identity requires one client, object or resource ID. Omitting --auth-source uses backend defaults.",
+                    "Workload identity requires a client ID, tenant ID and token file; managed identity requires one client, object or resource ID. Omitting both source selectors uses backend defaults.",
                 ],
                 "gcs": [
                     "env reads GOOGLE_APPLICATION_CREDENTIALS. json/env select an explicit service-account or authorized-user ADC file without home-directory or metadata fallback.",
-                    "Service-account path/key aliases apply only without --auth-source, which uses backend defaults.",
+                    "Service-account path/key aliases apply only without an explicit source selector, which uses backend defaults.",
                 ],
             },
         },
@@ -322,18 +333,26 @@ mod tests {
             "azure_storage_account_key",
             "google_application_credentials",
         ];
-        for (guide, expected_key) in [
-            (AuthorizationGuide::S3, credential_keys[0]),
-            (AuthorizationGuide::AzureBlob, credential_keys[1]),
-            (AuthorizationGuide::Gcs, credential_keys[2]),
+        for (service, expected_key) in [
+            (AuthorizationService::S3, credential_keys[0]),
+            (AuthorizationService::AzureBlob, credential_keys[1]),
+            (AuthorizationService::Gcs, credential_keys[2]),
         ] {
-            let document = guide.full_document();
+            let document = service.build_full_authorization_guide();
             let authorization = &document["authorization"];
+            assert_eq!(document["format_version"], 1);
+            for (selector, policy) in [
+                ("with_auth_source", "rejected"),
+                ("without_auth_source", "ignored_by_backend"),
+                ("with_env_file", "rejected"),
+            ] {
+                assert_eq!(authorization["unknown_options"][selector], policy);
+            }
             let aliases = authorization["credential_option_aliases"]
                 .as_object()
                 .unwrap();
             assert!(aliases.contains_key(expected_key));
-            let concise = guide.guide_document();
+            let concise = service.build_authorization_guide();
             let selected = &concise["authorization"];
             assert_eq!(
                 selected["credential_handling"],
@@ -343,7 +362,7 @@ mod tests {
             assert!(handling.contains("storage-options file path"));
             assert!(!handling.contains("profile"));
             assert!(handling.contains("never put credential values in arguments"));
-            assert!(handling.contains("no credential keys in that file"));
+            assert!(handling.contains("env and --env-file reject credentials in storage-options"));
             assert!(handling.contains("never fall back to another identity"));
             assert!(
                 selected["credential_keys"]
@@ -354,7 +373,8 @@ mod tests {
             assert!(selected.get("credential_option_aliases").is_none());
             assert_eq!(
                 selected["notes"],
-                authorization_sources()["direct_storage"]["backend_notes"][guide.name()]
+                build_authorization_capabilities()["direct_storage"]["backend_notes"]
+                    [service.name()]
             );
             assert_eq!(
                 concise["full_command"],
@@ -362,7 +382,7 @@ mod tests {
                     crate::command_name(),
                     "capabilities",
                     "--authorization",
-                    guide,
+                    service,
                     "--full"
                 ])
             );
@@ -382,10 +402,21 @@ mod tests {
             assert!(authorization.get("profile_argument").is_none());
             assert_eq!(authorization["storage_options_schema"], "storage-options");
             assert_eq!(selected["source_argument"], "--auth-source");
+            assert_eq!(
+                selected["env_file_details_command"],
+                json!([
+                    crate::command_name(),
+                    "capabilities",
+                    "--authorization",
+                    service,
+                    "--detail",
+                    "env-file"
+                ])
+            );
             assert_eq!(selected["sources"], authorization["sources"]);
         }
-        let document = AuthorizationGuide::UnityCatalog.full_document();
-        let concise = AuthorizationGuide::UnityCatalog.guide_document();
+        let document = AuthorizationService::UnityCatalog.build_full_authorization_guide();
+        let concise = AuthorizationService::UnityCatalog.build_authorization_guide();
         assert_eq!(
             concise["authorization"]["credential_handling"],
             document["authorization"]["credential_handling"]
@@ -409,7 +440,7 @@ mod tests {
 
     #[test]
     fn advertised_credential_aliases_resolve_to_the_same_backend_option() {
-        let authorization = authorization_sources();
+        let authorization = build_authorization_capabilities();
         let backends = authorization["direct_storage"]["credential_option_aliases"]
             .as_object()
             .unwrap();
@@ -439,7 +470,7 @@ mod tests {
 
     #[test]
     fn authorization_command_lists_match_clap_and_table_target_validation() {
-        let authorization = authorization_sources();
+        let authorization = build_authorization_capabilities();
         let support = command_read_support();
         assert_eq!(
             support
@@ -508,12 +539,12 @@ mod tests {
 
     #[test]
     fn advertised_sources_match_clap_and_unsupported_options_stay_rejected() {
-        let authorization = authorization_sources();
+        let authorization = build_authorization_capabilities();
         assert_eq!(
             authorization["direct_storage"]["explicit_source_selection"],
             true
         );
-        assert_eq!(authorization["direct_storage"]["env_file_input"], false);
+        assert_eq!(authorization["direct_storage"]["env_file_input"], true);
         let advertised_sources: std::collections::BTreeSet<_> =
             authorization["direct_storage"]["sources"]
                 .as_object()
@@ -545,8 +576,20 @@ mod tests {
                 }
                 assert!(Cli::try_parse_from(args).is_ok());
             }
+            let mut args = vec![
+                "dar",
+                name,
+                "s3://bucket/table",
+                authorization["direct_storage"]["env_file_argument"]
+                    .as_str()
+                    .unwrap(),
+                "credentials.env",
+            ];
+            if name == "query" {
+                args.extend(["--sql-file", "query.sql"]);
+            }
+            assert!(Cli::try_parse_from(args).is_ok());
             for (option, value) in [
-                ("--env-file", "credentials.env"),
                 ("--output", "result.arrow"),
                 ("--format", "json"),
                 ("--deadline-ms", "1000"),

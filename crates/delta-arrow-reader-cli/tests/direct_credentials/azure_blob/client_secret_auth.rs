@@ -29,7 +29,7 @@ fn client_secret_json_fields() -> Value {
         .collect()
 }
 
-fn write_client_secret_options(
+fn write_client_secret_files(
     fixture: &DirectStorageFixture,
     authority: &MockAzureTokenServer,
     source: &str,
@@ -41,13 +41,26 @@ fn write_client_secret_options(
     };
     options["account_name"] = json!("account");
     options["authority_host"] = json!(authority.endpoint);
+    if source == "env-file" {
+        let records = CLIENT_SECRET_FIELDS
+            .iter()
+            .map(|(_, name, value)| format!("{name}={value}\n"))
+            .collect::<String>();
+        fs::write(fixture.directory.path().join("selected.env"), records)?;
+    }
     fixture.write_options(options)
 }
 
 fn client_secret_command(fixture: &DirectStorageFixture, source: &str, operation: &str) -> Command {
     let mut command = fixture.command(operation);
+    if source == "env-file" {
+        command
+            .arg("--env-file")
+            .arg(fixture.directory.path().join("selected.env"));
+    } else {
+        command.args(["--auth-source", source]);
+    }
     command
-        .args(["--auth-source", source])
         .env("AZURE_USE_AZURE_CLI", "true")
         .env("AZURE_FEDERATED_TOKEN_FILE", "secret-unused-file")
         .env("AZURE_AUTHORITY_HOST", "http://secret-unused-authority")
@@ -65,7 +78,7 @@ fn client_secret_command(fixture: &DirectStorageFixture, source: &str, operation
             },
         );
     }
-    if source == "json" {
+    if source != "env" {
         command.env("AZURE_STORAGE_TOKEN", BEARER_TOKEN);
     }
     command
@@ -96,16 +109,20 @@ fn assert_client_secret_requests(requests: &[String]) {
 
 #[test]
 fn tokens_authorize_all_reads_and_refresh_the_loaded_identity() -> TestResult {
-    for source in ["json", "env"] {
+    for source in ["json", "env", "env-file"] {
         for operation in ["inspect", "scan", "preview", "query"] {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
-            let options_path = fixture.directory.path().join("options.json");
+            let source_path = fixture.directory.path().join(if source == "env-file" {
+                "selected.env"
+            } else {
+                "options.json"
+            });
             fixture.restart_storage_with_request_hook(move |_| {
                 // Refresh must use the loaded identity, even if its source file changes.
-                fs::write(&options_path, "secret-replaced-options").unwrap();
+                fs::write(&source_path, "secret-replaced-input").unwrap();
             })?;
-            write_client_secret_options(&fixture, &authority, source)?;
+            write_client_secret_files(&fixture, &authority, source)?;
             let output = run_with_timeout(
                 client_secret_command(&fixture, source, operation).arg("--diagnostics=json"),
             )?;
@@ -128,13 +145,13 @@ fn tokens_authorize_all_reads_and_refresh_the_loaded_identity() -> TestResult {
 
 #[test]
 fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> TestResult {
-    for source in ["json", "env"] {
+    for source in ["json", "env", "env-file"] {
         // Zero or one token exercises acquisition or refresh failure; unlimited tests storage denial.
         for successful_tokens in [0, 1, usize::MAX] {
             for machine in [false, true] {
                 let authority = MockAzureTokenServer::new(successful_tokens)?;
                 let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
-                write_client_secret_options(&fixture, &authority, source)?;
+                write_client_secret_files(&fixture, &authority, source)?;
                 if successful_tokens == usize::MAX {
                     fixture.server.deny_all_requests();
                 }

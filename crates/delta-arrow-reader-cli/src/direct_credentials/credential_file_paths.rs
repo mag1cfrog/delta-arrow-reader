@@ -1,4 +1,4 @@
-//! Relative credential files in manifest-referenced storage options belong to that options file.
+//! Credential references in env files and manifest-selected JSON use their containing directory.
 
 use std::path::Path;
 

@@ -123,12 +123,12 @@ impl DiscoverySchema {
                 } else if name == "tables[].authorization" {
                     guide["definition"] = json!({
                         "type": "object", "required": ["source"],
-                        "description": "References only; no inline credentials or env_file. Omit for direct-storage defaults. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
+                        "description": "References only; no inline credentials. Omit for direct-storage defaults. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
                     });
                     guide["example"] = json!({
                         "source": "json", "storage_options_file": "credentials.json",
                     });
-                    guide["other_fields"] = json!(["databricks_profile"]);
+                    guide["other_fields"] = json!(["env_file", "databricks_profile"]);
                     guide["detail_syntax"] = json!(
                         "Use tables[].authorization.FIELD for any example or other_fields key."
                     );
@@ -275,7 +275,9 @@ impl DiscoverySchema {
         {
             guide["authorization_command"] =
                 json!([executable, "capabilities", "--authorization", "NAME"]);
-            guide["authorization_guides"] = if matches!(self, Self::Tables) {
+            guide["authorization_guides"] = if matches!(self, Self::Tables)
+                && detail != Some("tables[].authorization.env_file")
+            {
                 json!(["s3", "azure-blob", "gcs", "unity-catalog"])
             } else {
                 json!(["s3", "azure-blob", "gcs"])
@@ -605,7 +607,7 @@ mod tests {
             assert!(guide["definition"].get(omitted).is_none());
         }
         let description = guide["definition"]["description"].as_str().unwrap();
-        assert!(description.contains("no inline credentials or env_file"));
+        assert!(description.contains("no inline credentials"));
         assert!(description.contains("relative to the manifest"));
 
         let document = DiscoverySchema::Tables.schema_document();
@@ -630,9 +632,21 @@ mod tests {
                 .guide_document(Some(&format!("tables[].authorization.{field}")))
                 .unwrap();
             assert_eq!(detail["definition"], schema["properties"][&field]);
+            if field == "env_file" {
+                assert_eq!(
+                    detail["authorization_guides"],
+                    json!(["s3", "azure-blob", "gcs"])
+                );
+            }
         }
         for (authorization, valid) in [
             (json!({"source":"json"}), false),
+            (
+                json!({"source":"env-file", "env_file":"credentials.env"}),
+                true,
+            ),
+            (json!({"source":"env-file"}), false),
+            (json!({"source":"env", "env_file":"credentials.env"}), false),
             (
                 json!({"source":"databricks", "databricks_profile":"analytics"}),
                 true,

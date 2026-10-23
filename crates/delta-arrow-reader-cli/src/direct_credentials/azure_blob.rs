@@ -11,6 +11,16 @@ use super::{
 };
 use crate::{Error, StorageAuthorizationSnafu, azure_sas};
 
+pub(super) const CREDENTIAL_ENVIRONMENT_VARIABLES: &[(&str, AzureConfigKey)] = &[
+    ("AZURE_STORAGE_ACCOUNT_KEY", AzureConfigKey::AccessKey),
+    ("AZURE_STORAGE_SAS_KEY", AzureConfigKey::SasKey),
+    ("AZURE_STORAGE_TOKEN", AzureConfigKey::Token),
+    ("AZURE_CLIENT_ID", AzureConfigKey::ClientId),
+    ("AZURE_CLIENT_SECRET", AzureConfigKey::ClientSecret),
+    ("AZURE_TENANT_ID", AzureConfigKey::AuthorityId),
+];
+pub(super) const ACCOUNT_NAME_ENVIRONMENT_VARIABLE: &str = "AZURE_STORAGE_ACCOUNT_NAME";
+
 const MANAGED_IDENTITY_KEYS: [AzureConfigKey; 3] = [
     AzureConfigKey::ClientId,
     AzureConfigKey::ObjectId,
@@ -100,21 +110,14 @@ fn load_environment_options(
             }
         }
     } else {
-        for (name, key) in [
-            ("AZURE_STORAGE_ACCOUNT_KEY", AzureConfigKey::AccessKey),
-            ("AZURE_STORAGE_SAS_KEY", AzureConfigKey::SasKey),
-            ("AZURE_STORAGE_TOKEN", AzureConfigKey::Token),
-            ("AZURE_CLIENT_ID", AzureConfigKey::ClientId),
-            ("AZURE_CLIENT_SECRET", AzureConfigKey::ClientSecret),
-            ("AZURE_TENANT_ID", AzureConfigKey::AuthorityId),
-        ] {
+        for (name, key) in CREDENTIAL_ENVIRONMENT_VARIABLES {
             if let Some(value) = read_environment_value(name)? {
                 options.insert(key.as_ref().to_owned(), value);
             }
         }
     }
     if !options.contains_key("azure_storage_account_name")
-        && let Some(account) = read_environment_value("AZURE_STORAGE_ACCOUNT_NAME")?
+        && let Some(account) = read_environment_value(ACCOUNT_NAME_ENVIRONMENT_VARIABLE)?
     {
         options.insert("azure_storage_account_name".into(), account);
     }
@@ -230,7 +233,7 @@ fn validate_credential_family(
     Ok(())
 }
 
-fn validate_storage_option(
+pub(super) fn validate_storage_option(
     key: &AzureConfigKey,
     value: &str,
     source: CredentialSource,

@@ -9,7 +9,7 @@
 use delta_arrow_reader::{DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde_json::{Value, json};
 
-use super::{JsonInputKind, MAX_JSON_BYTES, predicate};
+use super::{JsonInputKind, MAX_INPUT_BYTES, predicate};
 
 impl JsonInputKind {
     pub(crate) fn schema_document(self) -> Value {
@@ -27,7 +27,7 @@ impl JsonInputKind {
         };
         schema["$schema"] = json!("https://json-schema.org/draft/2020-12/schema");
         let mut parser_constraints = json!({
-            "max_file_bytes": MAX_JSON_BYTES,
+            "max_file_bytes": MAX_INPUT_BYTES,
             "duplicate_object_keys": "rejected",
             "integer_notation": "Fields with schema type integer require JSON integer notation: no fraction, exponent, or negative zero.",
         });
@@ -340,7 +340,7 @@ mod tests {
             let document = kind.schema_document();
             assert_eq!(
                 document["parser_constraints"]["max_file_bytes"],
-                MAX_JSON_BYTES
+                MAX_INPUT_BYTES
             );
             assert_eq!(
                 document["parser_constraints"]["duplicate_object_keys"],
