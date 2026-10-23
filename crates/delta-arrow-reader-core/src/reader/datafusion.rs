@@ -192,7 +192,7 @@ impl DeltaTableProvider {
         })
     }
 
-    fn plan(
+    fn prepare_scan(
         &self,
         session_target_partitions: usize,
         projection: Option<&[usize]>,
@@ -437,7 +437,7 @@ impl TableProvider for DeltaTableProvider {
             let result = tokio::task::spawn_blocking(move || {
                 tracing::dispatcher::with_default(&dispatch, || {
                     span.in_scope(|| {
-                        provider.plan(
+                        provider.prepare_scan(
                             session_target_partitions,
                             projection.as_deref(),
                             &filters,

@@ -22,7 +22,7 @@ pub(crate) enum OperationKind {
     LoadSnapshot,
     IntoTable,
     Refresh,
-    Planning,
+    ScanPlanning,
     #[cfg(feature = "datafusion")]
     ProviderCreation,
     #[cfg(feature = "datafusion")]
@@ -44,7 +44,7 @@ impl OperationKind {
             Self::LoadSnapshot => "load_snapshot",
             Self::IntoTable => "into_table",
             Self::Refresh => "refresh",
-            Self::Planning => "scan_planning",
+            Self::ScanPlanning => "scan_planning",
             #[cfg(feature = "datafusion")]
             Self::ProviderCreation => "provider_creation",
             #[cfg(feature = "datafusion")]
@@ -78,10 +78,10 @@ impl OperationKind {
             (Self::Refresh, LifecycleEventKind::Completed) => "table_refresh.completed",
             (Self::Refresh, LifecycleEventKind::Failed) => "table_refresh.failed",
             (Self::Refresh, LifecycleEventKind::Abandoned) => "table_refresh.abandoned",
-            (Self::Planning, LifecycleEventKind::Started) => "scan_planning.started",
-            (Self::Planning, LifecycleEventKind::Completed) => "scan_planning.completed",
-            (Self::Planning, LifecycleEventKind::Failed) => "scan_planning.failed",
-            (Self::Planning, LifecycleEventKind::Abandoned) => "scan_planning.abandoned",
+            (Self::ScanPlanning, LifecycleEventKind::Started) => "scan_planning.started",
+            (Self::ScanPlanning, LifecycleEventKind::Completed) => "scan_planning.completed",
+            (Self::ScanPlanning, LifecycleEventKind::Failed) => "scan_planning.failed",
+            (Self::ScanPlanning, LifecycleEventKind::Abandoned) => "scan_planning.abandoned",
             #[cfg(feature = "datafusion")]
             (Self::ProviderCreation, LifecycleEventKind::Started) => "provider_creation.started",
             #[cfg(feature = "datafusion")]
@@ -252,7 +252,7 @@ impl OperationTrace {
     pub(crate) fn start(kind: OperationKind, mut fields: OperationFields) -> Self {
         let id = NEXT_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         match kind {
-            OperationKind::Planning => fields.plan_id = Some(id),
+            OperationKind::ScanPlanning => fields.plan_id = Some(id),
             #[cfg(feature = "datafusion")]
             OperationKind::ProviderScan => fields.plan_id = Some(id),
             _ => {}

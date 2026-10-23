@@ -491,8 +491,9 @@ fn task_context_subscribers_are_released_at_the_terminal_poll() -> TestResult {
                 1,
                 &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
             )?;
-            let (session, plan, _) =
-                runtime.block_on(super::datafusion_execution::plan(&fixture, backend, 1))?;
+            let (session, plan, _) = runtime.block_on(
+                super::datafusion_execution::build_test_scan_plan(&fixture, backend, 1),
+            )?;
             if missing_file {
                 fs::remove_file(fixture.0.join("secret-data.parquet"))?;
             }

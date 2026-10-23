@@ -38,7 +38,7 @@ pub struct TraceCollector {
     spans: Arc<Mutex<SpanRegistry>>,
     lifetime: Arc<()>,
     // Keep untraced threads from caching disabled callsites for a scoped collector.
-    _untraced: tracing::Dispatch,
+    _untraced_dispatch: tracing::Dispatch,
     pub on_capture: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
@@ -49,7 +49,7 @@ impl TraceCollector {
             records: Arc::default(),
             spans: Arc::default(),
             lifetime: Arc::new(()),
-            _untraced: tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
+            _untraced_dispatch: tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
             on_capture: None,
         }
     }

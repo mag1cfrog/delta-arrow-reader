@@ -382,7 +382,7 @@ impl DeltaScanExec {
         }
     }
 
-    fn start_plan_operation(&self, kind: OperationKind) -> OperationTrace {
+    fn start_plan_trace(&self, kind: OperationKind) -> OperationTrace {
         OperationTrace::start(
             kind,
             OperationFields {
@@ -463,7 +463,7 @@ fn repartition_file_tasks(
     policy: IntraFileRepartitioning,
 ) -> Result<Option<Vec<DeltaScanPartition>>, DeltaReaderError> {
     if target_partitions == 0 {
-        return Err(adapter_error("scan_partition_target_must_be_positive"));
+        return Err(new_adapter_error("scan_partition_target_must_be_positive"));
     }
     // Whole-file planning already balances up to the requested partition count.
     // The default avoids extra ranged reads unless the scan lacks parallelism.
@@ -513,12 +513,13 @@ fn partitioned_file_from_task(
     let mut file = PartitionedFile::new(&task.path, file_size);
     if let Some(range) = &task.parquet_byte_range {
         if range.start >= range.end || range.end > file_size {
-            return Err(adapter_error("scan_file_range_invalid"));
+            return Err(new_adapter_error("scan_file_range_invalid"));
         }
         file.range = Some(FileRange {
             start: i64::try_from(range.start)
-                .map_err(|_| adapter_error("scan_file_range_invalid"))?,
-            end: i64::try_from(range.end).map_err(|_| adapter_error("scan_file_range_invalid"))?,
+                .map_err(|_| new_adapter_error("scan_file_range_invalid"))?,
+            end: i64::try_from(range.end)
+                .map_err(|_| new_adapter_error("scan_file_range_invalid"))?,
         });
     }
     // DataFusion copies extensions to every output range. Carry the Delta task
@@ -547,17 +548,18 @@ fn task_from_partitioned_file(
     let mut task = file
         .extension::<DeltaScanFileTask>()
         .cloned()
-        .ok_or_else(|| adapter_error("scan_file_task_extension_missing"))?;
+        .ok_or_else(|| new_adapter_error("scan_file_task_extension_missing"))?;
     let range = file
         .range
-        .ok_or_else(|| adapter_error("scan_file_range_missing"))?;
-    let start = u64::try_from(range.start).map_err(|_| adapter_error("scan_file_range_invalid"))?;
-    let end = u64::try_from(range.end).map_err(|_| adapter_error("scan_file_range_invalid"))?;
+        .ok_or_else(|| new_adapter_error("scan_file_range_missing"))?;
+    let start =
+        u64::try_from(range.start).map_err(|_| new_adapter_error("scan_file_range_invalid"))?;
+    let end = u64::try_from(range.end).map_err(|_| new_adapter_error("scan_file_range_invalid"))?;
     let file_size = task
         .file_size
-        .ok_or_else(|| adapter_error("scan_file_size_missing"))?;
+        .ok_or_else(|| new_adapter_error("scan_file_size_missing"))?;
     if start >= end || end > file_size {
-        return Err(adapter_error("scan_file_range_invalid"));
+        return Err(new_adapter_error("scan_file_range_invalid"));
     }
     task.parquet_byte_range = (start != 0 || end != file_size).then_some(start..end);
     Ok(task)
@@ -612,7 +614,7 @@ impl ExecutionPlan for DeltaScanExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
-        let operation = self.start_plan_operation(OperationKind::DataFusionReplaceChildren);
+        let operation = self.start_plan_trace(OperationKind::DataFusionReplaceChildren);
         let result: Result<Arc<dyn ExecutionPlan>, _> = if children.is_empty() {
             Ok(self)
         } else {
@@ -626,7 +628,7 @@ impl ExecutionPlan for DeltaScanExec {
         // Keep this callback's native DataFusion error after recording core diagnostics.
         operation.finish(result).map_err(|error| match error {
             DeltaReaderError::DataFusionAdapter { source, .. } => *source,
-            error => datafusion_error(error),
+            error => reader_error_to_datafusion_error(error),
         })
     }
 
@@ -635,7 +637,7 @@ impl ExecutionPlan for DeltaScanExec {
         _datafusion_target_partitions: usize,
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
-        let operation = self.start_plan_operation(OperationKind::DataFusionRepartition);
+        let operation = self.start_plan_trace(OperationKind::DataFusionRepartition);
         let result = (|| {
             if self.file_tasks_repartitioned
                 || self.reader_plan.execution_options.parquet_backend()
@@ -662,7 +664,9 @@ impl ExecutionPlan for DeltaScanExec {
                 .record_partition_count(partitions.len().max(1));
             Ok(Some(self.with_repartitioned_partitions(partitions)))
         })();
-        operation.finish(result).map_err(datafusion_error)
+        operation
+            .finish(result)
+            .map_err(reader_error_to_datafusion_error)
     }
 
     fn execute(
@@ -684,7 +688,7 @@ impl ExecutionPlan for DeltaScanExec {
         );
         let setup_result = (|| {
             if partition >= self.properties.output_partitioning().partition_count() {
-                return Err(adapter_error("scan_partition_index_out_of_range"));
+                return Err(new_adapter_error("scan_partition_index_out_of_range"));
             }
             if self.reader_plan.partitions.is_empty() {
                 return Ok(None);
@@ -720,7 +724,7 @@ impl ExecutionPlan for DeltaScanExec {
             Ok(partition_stream) => partition_stream,
             Err(error) => {
                 operation.finish(StreamOutcome::Failed(&error), None);
-                return Err(datafusion_error(error));
+                return Err(reader_error_to_datafusion_error(error));
             }
         };
         let schema = Arc::clone(&self.schema);
@@ -743,7 +747,7 @@ impl ExecutionPlan for DeltaScanExec {
                     operation.finish(outcome, None);
                     return None;
                 };
-                match finalize_output_batch(result, projection.as_deref()) {
+                match project_output_batch(result, projection.as_deref()) {
                     Ok(batch) => {
                         operation.record_output();
                         Some((Ok(batch), Some((partition_stream, projection, operation))))
@@ -757,7 +761,7 @@ impl ExecutionPlan for DeltaScanExec {
                             _ => StreamOutcome::Failed(&error),
                         };
                         operation.finish(outcome, None);
-                        Some((Err(datafusion_error(error)), None))
+                        Some((Err(reader_error_to_datafusion_error(error)), None))
                     }
                 }
             },
@@ -891,31 +895,28 @@ fn is_unevaluable_filter(reason: DynamicPartitionKeepReason) -> bool {
 }
 
 fn project_output_batch(
-    batch: RecordBatch,
-    projection: Option<&[usize]>,
-) -> Result<RecordBatch, arrow::error::ArrowError> {
-    match projection {
-        Some(projection) => batch.project(projection),
-        None => Ok(batch),
-    }
-}
-
-fn finalize_output_batch(
     result: Result<RecordBatch, DeltaReaderError>,
     projection: Option<&[usize]>,
 ) -> Result<RecordBatch, DeltaReaderError> {
     let batch = result?;
-    project_output_batch(batch, projection).map_err(|source| DeltaReaderError::DataFusionAdapter {
-        reason: "scan_output_projection_failed",
-        source: Box::new(DataFusionError::from(source)),
-    })
+    match projection {
+        Some(projection) => {
+            batch
+                .project(projection)
+                .map_err(|source| DeltaReaderError::DataFusionAdapter {
+                    reason: "scan_output_projection_failed",
+                    source: Box::new(DataFusionError::from(source)),
+                })
+        }
+        None => Ok(batch),
+    }
 }
 
-fn datafusion_error(error: DeltaReaderError) -> DataFusionError {
+fn reader_error_to_datafusion_error(error: DeltaReaderError) -> DataFusionError {
     DataFusionError::External(Box::new(error))
 }
 
-fn adapter_error(reason: &'static str) -> DeltaReaderError {
+fn new_adapter_error(reason: &'static str) -> DeltaReaderError {
     DeltaReaderError::DataFusionAdapter {
         reason,
         source: Box::new(DataFusionError::Execution(reason.to_owned())),

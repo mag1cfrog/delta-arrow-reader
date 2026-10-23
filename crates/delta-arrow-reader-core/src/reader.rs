@@ -709,7 +709,7 @@ impl<'table> DeltaScanBuilder<'table> {
             DELTA_LOG_SCAN_METADATA_SOURCE
         };
         let operation = OperationTrace::start(
-            OperationKind::Planning,
+            OperationKind::ScanPlanning,
             OperationFields {
                 snapshot_version: Some(snapshot_version),
                 backend: Some(backend),

@@ -1,6 +1,6 @@
 //! Physical-plan callbacks report only the operation they own.
 
-use super::{datafusion_execution::plan, *};
+use super::{datafusion_execution::build_test_scan_plan, *};
 use ::datafusion::{
     common::{DataFusionError, config::ConfigOptions},
     physical_plan::collect,
@@ -18,7 +18,8 @@ fn rejected_children_preserve_native_errors_and_the_original_plan() -> TestResul
             1,
             &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
         )?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
         let mut identities = std::collections::HashSet::new();
         for level in [Level::WARN, Level::ERROR, Level::DEBUG] {
             let collector = TraceCollector::new(level);
@@ -82,7 +83,8 @@ fn callback_milestones_keep_plan_identity_and_capability_results() -> TestResult
                 fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 4))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 4))?;
         let mut config = ConfigOptions::default();
         config.optimizer.repartition_file_min_size = 0;
         let collector = TraceCollector::new(Level::INFO);
@@ -165,7 +167,11 @@ fn callback_milestones_keep_plan_identity_and_capability_results() -> TestResult
 fn inherited_statistics_failures_remain_owned_by_datafusion() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    let (_, plan, _) = runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
+    let (_, plan, _) = runtime.block_on(build_test_scan_plan(
+        &fixture,
+        ParquetReaderBackend::Direct,
+        1,
+    ))?;
     let collector = TraceCollector::new(Level::DEBUG);
     with_default(collector.clone(), || -> TestResult {
         assert!(plan.partition_statistics(None).is_ok());

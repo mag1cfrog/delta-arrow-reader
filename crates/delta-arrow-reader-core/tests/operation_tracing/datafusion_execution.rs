@@ -1,7 +1,7 @@
 //! Each requested DataFusion partition execution owns its stream outcome.
 
 use super::{
-    datafusion_provider::{options, reader_error},
+    datafusion_provider::{expect_reader_error, scan_options},
     *,
 };
 use ::datafusion::{
@@ -14,7 +14,7 @@ use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions, collect_sc
 use futures_util::{FutureExt, StreamExt};
 use tracing::instrument::WithSubscriber;
 
-const EXECUTION: &str = "datafusion_partition_execution";
+const PARTITION_EXECUTION_OPERATION: &str = "datafusion_partition_execution";
 
 #[test]
 fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks() -> TestResult {
@@ -31,7 +31,8 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
                 fixture.write_parquet_and_build_add_action("secret-b.parquet", &[3, 4])?,
             ],
         )?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 2))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 2))?;
         let first = TraceCollector::new(Level::DEBUG);
         let second = TraceCollector::new(Level::DEBUG);
         let unrelated = TraceCollector::new(Level::DEBUG);
@@ -62,13 +63,15 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
             let started: Vec<_> = events
                 .iter()
                 .filter(|event| {
-                    event.fields.get("event") == Some(&json!(format!("{EXECUTION}.started")))
+                    event.fields.get("event")
+                        == Some(&json!(format!("{PARTITION_EXECUTION_OPERATION}.started")))
                 })
                 .collect();
             let completed: Vec<_> = events
                 .iter()
                 .filter(|event| {
-                    event.fields.get("event") == Some(&json!(format!("{EXECUTION}.completed")))
+                    event.fields.get("event")
+                        == Some(&json!(format!("{PARTITION_EXECUTION_OPERATION}.completed")))
                 })
                 .collect();
             assert_eq!(started.len(), 2, "{events:?}");
@@ -99,17 +102,17 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
     Ok(())
 }
 
-pub(super) async fn plan(
+pub(super) async fn build_test_scan_plan(
     fixture: &LogTable,
     backend: ParquetReaderBackend,
-    partitions: usize,
+    target_partitions: usize,
 ) -> TestResult<(SessionContext, Arc<dyn ExecutionPlan>, u64)> {
     let table = fixture.builder(backend).load_table().await?;
     let provider = DeltaTableProvider::try_new(
         table,
         ScanOptions {
-            target_partitions: Some(partitions),
-            ..options(backend)
+            target_partitions: Some(target_partitions),
+            ..scan_options(backend)
         },
     )?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_batch_size(2));
@@ -128,13 +131,21 @@ pub(super) async fn plan(
     Ok((context, plan, plan_id))
 }
 
-fn lifecycle(collector: &TraceCollector, plan_id: u64, outcome: &str, output: bool) {
+fn assert_execution_lifecycle(
+    collector: &TraceCollector,
+    plan_id: u64,
+    outcome: &str,
+    output_started: bool,
+) {
     let events = collector.events();
     assert_eq!(events.len(), 2, "{events:?}");
     for (event, outcome) in events.iter().zip(["started", outcome]) {
         assert_eq!(event.level, Level::INFO);
-        assert_eq!(event.fields["event"], format!("{EXECUTION}.{outcome}"));
-        assert_eq!(event.fields["operation"], EXECUTION);
+        assert_eq!(
+            event.fields["event"],
+            format!("{PARTITION_EXECUTION_OPERATION}.{outcome}")
+        );
+        assert_eq!(event.fields["operation"], PARTITION_EXECUTION_OPERATION);
         assert_eq!(event.fields["outcome"], outcome);
         assert_eq!(event.fields["plan_id"], plan_id);
         assert_ne!(event.fields["operation_id"], plan_id);
@@ -146,7 +157,7 @@ fn lifecycle(collector: &TraceCollector, plan_id: u64, outcome: &str, output: bo
         events[1].fields["operation_id"]
     );
     assert_eq!(events[0].fields["output_started"], false);
-    assert_eq!(events[1].fields["output_started"], output);
+    assert_eq!(events[1].fields["output_started"], output_started);
     if outcome == "completed" {
         assert_eq!(events[1].fields["completion_reason"], "eof");
     } else {
@@ -175,7 +186,8 @@ fn empty_eof_and_drop_have_distinct_partition_outcomes() -> TestResult {
                             .write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
                     )?;
                 }
-                let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
+                let (context, plan, plan_id) =
+                    runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
                 let collector = TraceCollector::new(Level::INFO);
                 let mut stream =
                     with_default(collector.clone(), || plan.execute(0, context.task_ctx()))?;
@@ -193,7 +205,7 @@ fn empty_eof_and_drop_have_distinct_partition_outcomes() -> TestResult {
                 }
                 // Terminal records belong to execute's caller, including out-of-scope drop.
                 drop(stream);
-                lifecycle(
+                assert_execution_lifecycle(
                     &collector,
                     plan_id,
                     if consume == "eof" {
@@ -230,7 +242,8 @@ fn upstream_limit_drops_the_partition_without_claiming_eof() -> TestResult {
             1,
             &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2, 3, 4])?],
         )?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
         let limited: Arc<dyn ExecutionPlan> = Arc::new(GlobalLimitExec::new(plan, 0, Some(1)));
         let collector = TraceCollector::new(Level::INFO);
         let batches = runtime
@@ -239,7 +252,7 @@ fn upstream_limit_drops_the_partition_without_claiming_eof() -> TestResult {
             batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
             1
         );
-        lifecycle(&collector, plan_id, "dropped", true);
+        assert_execution_lifecycle(&collector, plan_id, "dropped", true);
     }
     Ok(())
 }
@@ -252,8 +265,11 @@ fn dropping_a_pending_partition_cannot_become_late_success() -> TestResult {
         1,
         &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
     )?;
-    let (context, plan, plan_id) =
-        runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
+    let (context, plan, plan_id) = runtime.block_on(build_test_scan_plan(
+        &fixture,
+        ParquetReaderBackend::Direct,
+        1,
+    ))?;
     let owner = TraceCollector::new(Level::INFO);
     let mut stream = with_default(owner.clone(), || plan.execute(0, context.task_ctx()))?;
     let mut worker = TraceCollector::new(Level::DEBUG);
@@ -289,10 +305,10 @@ fn dropping_a_pending_partition_cannot_become_late_success() -> TestResult {
         "dropping a borrowed next future keeps execution alive"
     );
     drop(stream);
-    lifecycle(&owner, plan_id, "dropped", false);
+    assert_execution_lifecycle(&owner, plan_id, "dropped", false);
     release.send(())?;
     drop(runtime);
-    lifecycle(&owner, plan_id, "dropped", false);
+    assert_execution_lifecycle(&owner, plan_id, "dropped", false);
     Ok(())
 }
 
@@ -322,7 +338,8 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
                     });
                 }
                 fixture.write_commit(1, &[first, second])?;
-                let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
+                let (context, plan, plan_id) =
+                    runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
                 let path = fixture.0.join("secret-second.parquet");
                 if cause == "missing" {
                     fs::remove_file(&path)?;
@@ -335,7 +352,7 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
                     with_default(collector.clone(), || plan.execute(0, context.task_ctx()))?;
                 assert_eq!(runtime.block_on(stream.next()).unwrap()?.num_rows(), 2);
                 let error = runtime.block_on(stream.next()).unwrap().unwrap_err();
-                let error = reader_error(&error);
+                let error = expect_reader_error(&error);
                 assert!(error.source().is_some());
                 assert_eq!(
                     error.source_kind(),
@@ -351,8 +368,12 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
                 assert!(runtime.block_on(stream.next()).is_none());
                 assert!(runtime.block_on(stream.next()).is_none());
                 drop(stream);
-                let event = assert_and_take_failure_event(&collector, EXECUTION, error);
-                assert_eq!(event.fields["event"], format!("{EXECUTION}.failed"));
+                let event =
+                    assert_and_take_failure_event(&collector, PARTITION_EXECUTION_OPERATION, error);
+                assert_eq!(
+                    event.fields["event"],
+                    format!("{PARTITION_EXECUTION_OPERATION}.failed")
+                );
                 assert_eq!(event.fields["plan_id"], plan_id);
                 assert_eq!(event.fields["snapshot_version"], 1);
                 assert_eq!(event.fields["backend"], format!("{backend:?}"));
@@ -386,7 +407,8 @@ fn repeated_and_concurrent_executions_report_independent_failures() -> TestResul
                 fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 2))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 2))?;
         fs::remove_file(fixture.0.join("secret-first.parquet"))?;
         fs::remove_file(fixture.0.join("secret-second.parquet"))?;
         let mut identities = std::collections::HashSet::new();
@@ -412,9 +434,10 @@ fn repeated_and_concurrent_executions_report_independent_failures() -> TestResul
                 .zip(partitions)
             {
                 let error = result.unwrap().unwrap_err();
-                let error = reader_error(&error);
+                let error = expect_reader_error(&error);
                 assert_eq!(error.source_kind(), Some("not_found"));
-                let event = assert_and_take_failure_event(collector, EXECUTION, error);
+                let event =
+                    assert_and_take_failure_event(collector, PARTITION_EXECUTION_OPERATION, error);
                 assert_eq!(event.fields["plan_id"], plan_id);
                 assert_eq!(event.fields["partition"], partition);
                 assert_eq!(event.fields["partition_count"], 2);
@@ -443,14 +466,15 @@ fn invalid_partition_reports_setup_failure_without_reading() -> TestResult {
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
+        let (context, plan, plan_id) =
+            runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
         let collector = TraceCollector::new(Level::ERROR);
         let error = with_default(collector.clone(), || plan.execute(1, context.task_ctx()))
             .err()
             .unwrap();
-        let error = reader_error(&error);
+        let error = expect_reader_error(&error);
         assert_eq!(error.reason(), "scan_partition_index_out_of_range");
-        let event = assert_and_take_failure_event(&collector, EXECUTION, error);
+        let event = assert_and_take_failure_event(&collector, PARTITION_EXECUTION_OPERATION, error);
         assert_eq!(event.fields["plan_id"], plan_id);
         assert_eq!(event.fields["partition"], 1);
         assert_eq!(event.fields["partition_count"], 1);
@@ -474,8 +498,11 @@ fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
         1,
         &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
     )?;
-    let (context, plan, plan_id) =
-        runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
+    let (context, plan, plan_id) = runtime.block_on(build_test_scan_plan(
+        &fixture,
+        ParquetReaderBackend::Direct,
+        1,
+    ))?;
     let owner = TraceCollector::new(Level::ERROR);
     let mut stream = with_default(owner.clone(), || plan.execute(0, context.task_ctx()))?;
     let mut injector = TraceCollector::new(Level::DEBUG);
@@ -492,7 +519,7 @@ fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
         .block_on(stream.next().with_subscriber(injector.clone()))
         .unwrap()
         .unwrap_err();
-    let error = reader_error(&error);
+    let error = expect_reader_error(&error);
     assert_eq!(error.reason(), "partition_scheduler_task_failed");
     assert!(
         error
@@ -502,7 +529,7 @@ fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
     );
     assert!(runtime.block_on(stream.next()).is_none());
     drop(stream);
-    let event = assert_and_take_failure_event(&owner, EXECUTION, error);
+    let event = assert_and_take_failure_event(&owner, PARTITION_EXECUTION_OPERATION, error);
     assert_eq!(event.fields["error_source_kind"], "worker_panicked");
     assert_eq!(event.fields["plan_id"], plan_id);
     assert_eq!(event.fields["output_started"], false);
@@ -528,8 +555,11 @@ fn repartitioned_and_cloned_plans_keep_plan_identity_but_start_new_executions() 
             fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
         ],
     )?;
-    let (context, plan, plan_id) =
-        runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 4))?;
+    let (context, plan, plan_id) = runtime.block_on(build_test_scan_plan(
+        &fixture,
+        ParquetReaderBackend::Direct,
+        4,
+    ))?;
     let mut config = ConfigOptions::default();
     config.optimizer.repartition_file_min_size = 0;
     let repartitioned = plan
@@ -559,8 +589,14 @@ fn repartitioned_and_cloned_plans_keep_plan_identity_but_start_new_executions() 
             drop(stream);
             let events = collector.events();
             assert_eq!(events.len(), 2);
-            assert_eq!(events[0].fields["event"], format!("{EXECUTION}.started"));
-            assert_eq!(events[1].fields["event"], format!("{EXECUTION}.completed"));
+            assert_eq!(
+                events[0].fields["event"],
+                format!("{PARTITION_EXECUTION_OPERATION}.started")
+            );
+            assert_eq!(
+                events[1].fields["event"],
+                format!("{PARTITION_EXECUTION_OPERATION}.completed")
+            );
             assert_eq!(
                 events[0].fields["operation_id"],
                 events[1].fields["operation_id"]
@@ -597,7 +633,8 @@ fn disabled_and_warn_datafusion_tracing_preserve_rows_and_read_metrics() -> Test
             tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
             tracing::Dispatch::new(collector.clone()),
         ] {
-            let (context, plan, _) = runtime.block_on(plan(&fixture, backend, 1))?;
+            let (context, plan, _) =
+                runtime.block_on(build_test_scan_plan(&fixture, backend, 1))?;
             let metrics = collect_scan_metrics(plan.as_ref())[0].clone();
             let batches =
                 runtime.block_on(collect(plan, context.task_ctx()).with_subscriber(dispatch))?;
