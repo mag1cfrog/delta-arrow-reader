@@ -162,6 +162,11 @@ enum Error {
     #[snafu(display("Invalid storage authorization (reason={reason})."))]
     StorageAuthorization { reason: &'static str },
     #[snafu(display("{source}"))]
+    CredentialFileValidation {
+        source: Box<Error>,
+        correction: InputCorrection,
+    },
+    #[snafu(display("{source}"))]
     ManifestAuthorizationInput {
         source: Box<Error>,
         field_path: String,
@@ -228,6 +233,7 @@ impl Error {
     fn classification(&self) -> ErrorClassification {
         match self {
             Self::ManifestAuthorizationInput { source, .. }
+            | Self::CredentialFileValidation { source, .. }
             | Self::QueryWithResolvedBindings { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
@@ -339,7 +345,8 @@ impl Error {
         let (input_kind, hint) = match self {
             Self::QueryWithResolvedBindings { source, .. } => return source.input_correction(),
             Self::Argument { correction, .. } => return correction.clone(),
-            Self::InputValidation { correction, .. } => return Some(correction.clone()),
+            Self::InputValidation { correction, .. }
+            | Self::CredentialFileValidation { correction, .. } => return Some(correction.clone()),
             Self::ManifestAuthorizationInput { source, field_path } => {
                 let mut correction = source.input_correction()?;
                 correction.field_path = Some(field_path.clone());
@@ -498,15 +505,19 @@ impl Error {
     }
 
     fn emit_tracing_diagnostic(&self) {
-        if let Self::QueryWithResolvedBindings { source, .. } = self {
-            return source.emit_tracing_diagnostic();
-        }
-        let (source_error, manifest_field_path) = match self {
-            Self::ManifestAuthorizationInput { source, field_path } => {
-                (source.as_ref(), Some(field_path.as_str()))
+        let mut source_error = self;
+        let mut manifest_field_path = None;
+        loop {
+            match source_error {
+                Self::ManifestAuthorizationInput { source, field_path } => {
+                    source_error = source;
+                    manifest_field_path = Some(field_path.as_str());
+                }
+                Self::QueryWithResolvedBindings { source, .. }
+                | Self::CredentialFileValidation { source, .. } => source_error = source,
+                _ => break,
             }
-            _ => (self, None),
-        };
+        }
         if let Self::Cancelled { status } = source_error {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
@@ -646,6 +657,7 @@ impl Error {
             "recovery": recovery,
         });
         match self {
+            Self::CredentialFileValidation { source, .. } => record = source.to_json_diagnostic(),
             Self::QueryWithResolvedBindings { source, bindings } => {
                 record = source.to_json_diagnostic();
                 record["bindings"] = bindings.clone().into();
@@ -699,6 +711,7 @@ impl Error {
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
             Self::ManifestAuthorizationInput { source, .. }
+            | Self::CredentialFileValidation { source, .. }
             | Self::QueryWithResolvedBindings { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput

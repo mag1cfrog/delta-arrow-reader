@@ -131,6 +131,18 @@ fn malformed_and_incomplete_files_never_use_ambient_credentials() -> TestResult 
                     assert_eq!(record["line"], 2);
                     assert_eq!(record["argument"], "--env-file");
                 }
+                if matches!(
+                    reason,
+                    "env_file_unsupported_variable" | "auth_source_incomplete_credentials"
+                ) {
+                    assert_eq!(record["argument"], "--env-file");
+                    assert!(
+                        record["hint"]
+                            .as_str()
+                            .unwrap()
+                            .contains("capabilities --authorization s3 --detail env-file")
+                    );
+                }
             }
         }
     }
@@ -147,6 +159,50 @@ fn malformed_and_incomplete_files_never_use_ambient_credentials() -> TestResult 
     assert_eq!(diagnostic["reason"], "input_file_read_failed");
     assert_eq!(diagnostic["argument"], "--env-file");
     assert!(fixture.server.requests.lock().unwrap().is_empty());
+    Ok(())
+}
+
+#[test]
+fn unknown_env_file_variables_offer_only_the_selected_service_guide() -> TestResult {
+    for (protocol, service) in [
+        (CloudStorageProtocol::S3, "s3"),
+        (CloudStorageProtocol::AzureBlob, "azure-blob"),
+        (CloudStorageProtocol::Gcs, "gcs"),
+    ] {
+        let fixture = DirectStorageFixture::new(protocol)?;
+        fixture.write_options(json!({}))?;
+        let path = fixture.directory.path().join("secret-credentials.env");
+        fs::write(&path, "SECRET_UNKNOWN_NAME=secret-value")?;
+        let output = run_with_timeout(
+            fixture
+                .command("inspect")
+                .arg("--env-file")
+                .arg(path)
+                .arg("--diagnostics=json"),
+        )?;
+        assert_failure_without_stdout(&output, 2);
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["argument"], "--env-file");
+        let hint = record["hint"].as_str().unwrap();
+        assert!(hint.contains(&format!(
+            "capabilities --authorization {service} --detail env-file"
+        )));
+        assert!(!hint.contains("--full"));
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("SECRET_UNKNOWN_NAME"));
+        assert!(fixture.server.requests.lock().unwrap().is_empty());
+        let guide = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+            "capabilities",
+            "--authorization",
+            service,
+            "--detail",
+            "env-file",
+        ]))?;
+        assert!(guide.status.success());
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&guide.stdout)?["name"],
+            service
+        );
+    }
     Ok(())
 }
 
@@ -172,6 +228,14 @@ fn env_file_rejects_json_credentials_and_other_explicit_sources() -> TestResult 
                 .arg("--diagnostics=json"),
         )?;
         assert_authorization_input_error(&output, "auth_source_conflicting_credentials");
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["argument"], "--storage-options-file");
+        assert!(
+            record["expected"]
+                .as_str()
+                .unwrap()
+                .contains("without credentials")
+        );
     }
     for args in [
         vec!["inspect", "s3://bucket/table", "--auth-source", "env"],
@@ -268,7 +332,7 @@ fn selected_file_is_captured_once_and_permission_failures_keep_the_same_identity
 }
 
 #[test]
-fn azure_env_file_uses_the_selected_bearer_token_and_rejects_mixed_families() -> TestResult {
+fn azure_env_file_keeps_the_selected_token_and_locates_conflicting_files() -> TestResult {
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     fixture.write_options(json!({"azure_storage_account_name":"account"}))?;
     let path = fixture.directory.path().join("selected.env");
@@ -293,17 +357,70 @@ fn azure_env_file_uses_the_selected_bearer_token_and_rejects_mixed_families() ->
     );
     fixture.server.requests.lock().unwrap().clear();
     fs::write(
-        &path,
-        "AZURE_STORAGE_TOKEN=secret-file-token\nAZURE_CLIENT_ID=secret-partial-family",
+        fixture.directory.path().join("query.sql"),
+        "SELECT id FROM orders",
     )?;
-    let output = run_with_timeout(
-        fixture
-            .command("inspect")
-            .arg("--env-file")
-            .arg(&path)
-            .arg("--diagnostics=json"),
-    )?;
-    assert_authorization_input_error(&output, "auth_source_conflicting_credentials");
-    assert!(fixture.server.requests.lock().unwrap().is_empty());
+    for (options, env_contents, argument, hint) in [
+        (
+            json!({"azure_storage_account_name":"account", "client_id":"secret-json-client"}),
+            "AZURE_STORAGE_TOKEN=secret-file-token",
+            "--storage-options-file",
+            "Remove credential fields from --storage-options-file",
+        ),
+        (
+            json!({"azure_storage_account_name":"account"}),
+            "AZURE_STORAGE_TOKEN=secret-file-token\nAZURE_CLIENT_ID=secret-partial-family",
+            "--env-file",
+            "capabilities --authorization azure-blob --detail env-file",
+        ),
+    ] {
+        fixture.write_options(options)?;
+        fs::write(&path, env_contents)?;
+        for manifest in [false, true] {
+            let mut command = if manifest {
+                let tables_path = fixture.directory.path().join("tables.json");
+                fs::write(&tables_path, json!({
+                    "format_version": 1,
+                    "tables": [{"alias":"orders", "location":"az://container/table", "authorization": {
+                        "source":"env-file", "env_file":path,
+                        "storage_options_file":fixture.directory.path().join("options.json")
+                    }}]
+                }).to_string())?;
+                let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+                command
+                    .env_clear()
+                    .env("RUST_LOG", "trace")
+                    .arg("query")
+                    .arg("--tables-file")
+                    .arg(tables_path)
+                    .arg("--sql-file")
+                    .arg(fixture.directory.path().join("query.sql"));
+                command
+            } else {
+                let mut command = fixture.command("inspect");
+                command.arg("--env-file").arg(&path);
+                command
+            };
+            let output = run_with_timeout(command.arg("--diagnostics=json"))?;
+            assert_authorization_input_error(&output, "auth_source_conflicting_credentials");
+            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert!(record["hint"].as_str().unwrap().contains(hint));
+            if manifest {
+                assert_eq!(record["argument"], "--tables-file");
+                let field = if argument == "--env-file" {
+                    "env_file"
+                } else {
+                    "storage_options_file"
+                };
+                assert_eq!(
+                    record["field_path"],
+                    format!("/tables/0/authorization/{field}")
+                );
+            } else {
+                assert_eq!(record["argument"], argument);
+            }
+            assert!(fixture.server.requests.lock().unwrap().is_empty());
+        }
+    }
     Ok(())
 }

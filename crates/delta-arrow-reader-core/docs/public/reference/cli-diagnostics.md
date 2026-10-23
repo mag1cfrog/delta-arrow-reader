@@ -76,6 +76,13 @@ the document root. A missing field's path identifies where to add it. Unknown
 keys and supplied values never appear in these paths or hints. When the document
 cannot be analyzed safely, diagnostics keep the input's general guidance.
 
+With `--env-file`, credential validation identifies the supplying file when its
+origin is known. Credentials in the optional JSON configuration point to
+`--storage-options-file`; an incomplete or conflicting file identity points to
+`--env-file`, with a lookup for that storage service's supported variables.
+Manifest calls identify the corresponding authorization reference in `field_path`.
+Neither form includes credential contents.
+
 Execution settings rejected by a native range check also include `field_path`,
 a JSON Pointer made from known schema fields. For example, an execution file
 containing `{"max_concurrent_file_reads_per_partition":0}` produces

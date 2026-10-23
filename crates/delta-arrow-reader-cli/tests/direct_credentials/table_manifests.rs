@@ -343,7 +343,7 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
             json!({"source":"env-file","env_file":"../incomplete.env"}),
             "invalid_storage_authorization",
             "auth_source_incomplete_credentials",
-            "/tables/1/authorization",
+            "/tables/1/authorization/env_file",
         ),
         (
             json!({"source":"env-file","env_file":"../malformed.env"}),
@@ -355,9 +355,10 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
             json!({"source":"env-file","env_file":"../incomplete.env", "storage_options_file":orders.directory.path().join("options.json")}),
             "invalid_storage_authorization",
             "auth_source_conflicting_credentials",
-            "/tables/1/authorization",
+            "/tables/1/authorization/storage_options_file",
         ),
     ] {
+        let uses_env_file = authorization["source"] == "env-file";
         let tables = json!([
             {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":orders.directory.path().join("options.json")}},
             {"alias":"customers","location":"s3://bucket/table","authorization":authorization}
@@ -378,8 +379,24 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
                 assert_eq!(record["argument"], "--tables-file");
                 assert_eq!(record["field_path"], field_path);
                 if code == "invalid_storage_authorization" {
-                    assert!(record.get("expected").is_none());
-                    assert!(record.get("hint").is_none());
+                    if uses_env_file {
+                        assert!(record["expected"].is_string());
+                        let hint = record["hint"].as_str().unwrap();
+                        if reason == "auth_source_incomplete_credentials" {
+                            assert!(
+                                hint.contains("capabilities --authorization s3 --detail env-file")
+                            );
+                        } else {
+                            assert!(
+                                hint.contains(
+                                    "Remove credential fields from --storage-options-file"
+                                )
+                            );
+                        }
+                    } else {
+                        assert!(record.get("expected").is_none());
+                        assert!(record.get("hint").is_none());
+                    }
                 }
                 if matches!(
                     reason,

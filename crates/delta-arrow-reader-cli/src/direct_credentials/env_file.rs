@@ -8,13 +8,12 @@ use std::path::Path;
 
 use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
 use object_store::{ObjectStoreScheme, azure::AzureConfigKey, gcp::GoogleConfigKey};
-use snafu::ensure;
 
 use super::{
     CredentialSource, azure_blob, gcs, normalize_storage_options, parse_supported_storage_scheme,
     s3,
 };
-use crate::{Error, StorageAuthorizationSnafu, input};
+use crate::{Error, diagnostics::InputCorrection, input};
 
 pub(crate) fn configure_credentials_from_env_file(
     builder: DeltaTableBuilder,
@@ -39,19 +38,62 @@ pub(crate) fn configure_credentials_from_env_file(
             })
         }
         _ => unreachable!("parse_supported_storage_scheme accepts only supported cloud backends"),
-    }?;
+    }
+    .map_err(|source| {
+        let hint = if matches!(source, Error::StorageAuthorization { reason: "auth_source_conflicting_credentials" }) {
+            "Remove credential fields from --storage-options-file; --env-file supplies the complete identity."
+        } else {
+            match scheme {
+                ObjectStoreScheme::AmazonS3 => "Check connection settings with capabilities --authorization s3 --full; keep credentials only in --env-file.",
+                ObjectStoreScheme::MicrosoftAzure => "Check connection settings with capabilities --authorization azure-blob --full; keep credentials only in --env-file.",
+                ObjectStoreScheme::GoogleCloudStorage => "Check connection settings with capabilities --authorization gcs --full; keep credentials only in --env-file.",
+                _ => unreachable!("validated cloud backend"),
+            }
+        };
+        Error::CredentialFileValidation {
+            source: Box::new(source),
+            correction: InputCorrection {
+                argument: "--storage-options-file".into(),
+                field_path: None,
+                expected: "supported connection settings without credentials".into(),
+                supplied: None,
+                hint,
+            },
+        }
+    })?;
+    let env_file_validation_error = |source| Error::CredentialFileValidation {
+        source: Box::new(source),
+        correction: InputCorrection {
+            argument: "--env-file".into(),
+            field_path: None,
+            expected: "supported variables for one complete credential family".into(),
+            supplied: None,
+            hint: match scheme {
+                ObjectStoreScheme::AmazonS3 => {
+                    "Check variables with capabilities --authorization s3 --detail env-file; keep the identity in the selected file."
+                }
+                ObjectStoreScheme::MicrosoftAzure => {
+                    "Check variables with capabilities --authorization azure-blob --detail env-file; keep the identity in the selected file."
+                }
+                ObjectStoreScheme::GoogleCloudStorage => {
+                    "Check variables with capabilities --authorization gcs --detail env-file; keep the identity in the selected file."
+                }
+                _ => unreachable!("validated cloud backend"),
+            },
+        },
+    };
     let mut options = DeltaStorageOptions::new();
     for (name, value) in input::read_env_file(path)? {
-        let key =
-            storage_key_for_env_variable(&name, &scheme).ok_or(Error::StorageAuthorization {
+        let key = storage_key_for_env_variable(&name, &scheme).ok_or_else(|| {
+            env_file_validation_error(Error::StorageAuthorization {
                 reason: "env_file_unsupported_variable",
-            })?;
-        ensure!(
-            options.insert(key, value).is_none(),
-            StorageAuthorizationSnafu {
-                reason: "auth_source_duplicate_option"
-            }
-        );
+            })
+        })?;
+        if options.insert(key, value).is_some() {
+            return Err(env_file_validation_error(Error::StorageAuthorization {
+                reason: "auth_source_duplicate_option",
+            }));
+        }
     }
     // A JSON region setting replaces both env-file spellings of the same setting.
     if matches!(scheme, ObjectStoreScheme::AmazonS3)
@@ -68,7 +110,10 @@ pub(crate) fn configure_credentials_from_env_file(
         location,
         options,
         Some(Path::new(path).parent().unwrap_or(Path::new("."))),
-    )
+    ).map_err(|source| match source {
+        Error::StorageAuthorization { reason: "auth_source_incomplete_credentials" | "auth_source_conflicting_credentials" } => env_file_validation_error(source),
+        _ => source,
+    })
 }
 
 fn storage_key_for_env_variable(variable_name: &str, scheme: &ObjectStoreScheme) -> Option<String> {
