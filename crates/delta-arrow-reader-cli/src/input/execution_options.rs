@@ -28,7 +28,7 @@ use crate::{
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct ExecutionOptionsInput {
-    #[serde(deserialize_with = "deserialize_backend")]
+    #[serde(deserialize_with = "deserialize_parquet_backend")]
     parquet_backend: Option<ParquetReaderBackend>,
     #[serde(deserialize_with = "deserialize_present_field")]
     max_concurrent_file_reads_per_scan: Option<Option<usize>>,
@@ -121,20 +121,21 @@ pub(super) fn describe_integer_requirement(field: &str) -> Option<String> {
     ))
 }
 
-fn deserialize_backend<'de, D: Deserializer<'de>>(
+fn deserialize_parquet_backend<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<ParquetReaderBackend>, D::Error> {
     #[derive(Deserialize)]
     #[serde(rename_all = "snake_case")]
-    enum BackendInput {
+    enum ParquetBackendName {
         Direct,
         DeltaKernel,
     }
 
     let name = String::deserialize(deserializer)?;
-    let backend = match BackendInput::deserialize(StringDeserializer::<D::Error>::new(name))? {
-        BackendInput::Direct => ParquetReaderBackend::Direct,
-        BackendInput::DeltaKernel => ParquetReaderBackend::DeltaKernel,
+    let backend = match ParquetBackendName::deserialize(StringDeserializer::<D::Error>::new(name))?
+    {
+        ParquetBackendName::Direct => ParquetReaderBackend::Direct,
+        ParquetBackendName::DeltaKernel => ParquetReaderBackend::DeltaKernel,
     };
     Ok(Some(backend))
 }

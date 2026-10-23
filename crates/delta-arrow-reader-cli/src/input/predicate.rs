@@ -224,7 +224,9 @@ impl PredicateNode {
                     .map(|(index, arg)| {
                         arg.0
                             .into_predicate(depth + 1, node_count)
-                            .map_err(|error| prepend_field_path(error, &format!("/args/{index}")))
+                            .map_err(|error| {
+                                prepend_validation_path(error, &format!("/args/{index}"))
+                            })
                     })
                     .collect::<Result<_, _>>()?,
             ),
@@ -234,14 +236,16 @@ impl PredicateNode {
                     .map(|(index, arg)| {
                         arg.0
                             .into_predicate(depth + 1, node_count)
-                            .map_err(|error| prepend_field_path(error, &format!("/args/{index}")))
+                            .map_err(|error| {
+                                prepend_validation_path(error, &format!("/args/{index}"))
+                            })
                     })
                     .collect::<Result<_, _>>()?,
             ),
             Self::Not(NegationFields { arg }) => DeltaPredicate::Not(Box::new(
                 arg.0
                     .into_predicate(depth + 1, node_count)
-                    .map_err(|error| prepend_field_path(error, "/arg"))?,
+                    .map_err(|error| prepend_validation_path(error, "/arg"))?,
             )),
         })
     }
@@ -258,7 +262,7 @@ fn convert_comparison(
         value: value
             .0
             .into_scalar()
-            .map_err(|error| prepend_field_path(error, "/value"))?,
+            .map_err(|error| prepend_validation_path(error, "/value"))?,
     })
 }
 
@@ -430,7 +434,7 @@ fn predicate_type_description(data_type: &DataType) -> Option<String> {
     })
 }
 
-fn prepend_field_path(mut error: Error, prefix: &str) -> Error {
+fn prepend_validation_path(mut error: Error, prefix: &str) -> Error {
     if let Error::InputValidation { correction, .. } = &mut error
         && let Some(path) = &mut correction.field_path
     {

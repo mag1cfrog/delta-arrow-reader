@@ -147,9 +147,9 @@ pub(crate) struct JsonObject<T>(pub(crate) T);
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for JsonObject<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ObjectVisitor<T>(PhantomData<T>);
+        struct JsonObjectVisitor<T>(PhantomData<T>);
 
-        impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for JsonObjectVisitor<T> {
             type Value = JsonObject<T>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -161,7 +161,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for JsonObject<T> {
             }
         }
 
-        deserializer.deserialize_map(ObjectVisitor(PhantomData))
+        deserializer.deserialize_map(JsonObjectVisitor(PhantomData))
     }
 }
 
