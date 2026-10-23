@@ -427,6 +427,83 @@ fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
 #[test]
 fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
     let directory = create_manifest_query_directory()?;
+    for (input, field_path) in [
+        (
+            r#"{"format_version":1,"format_version":1,"tables":[]}"#,
+            "/format_version",
+        ),
+        (
+            r#"{"format_version":1,"tables":[{"alias":"orders","alias":"customers","location":"secret-table"}]}"#,
+            "/tables/0/alias",
+        ),
+        (
+            r#"{"format_version":1,"tables":[{"alias":"orders","location":"secret-table","authorization":{"source":"env","source":"json"}}]}"#,
+            "/tables/0/authorization/source",
+        ),
+    ] {
+        let record = assert_manifest_rejected(directory.path(), input)?;
+        assert_eq!(record["field_path"], field_path);
+        assert_eq!(record["expected"], "one occurrence of this field");
+    }
+    for (table, field_path, expected) in [
+        (
+            json!({"alias": 0, "location": "secret-table"}),
+            "/tables/0/alias",
+            "a string",
+        ),
+        (
+            json!({"alias": "orders", "location": null}),
+            "/tables/0/location",
+            "a string",
+        ),
+        (
+            json!({"location": "secret-table"}),
+            "/tables/0/alias",
+            "a required field",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": []}),
+            "/tables/0/authorization",
+            "a JSON object",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": {}}),
+            "/tables/0/authorization/source",
+            "a required field",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "secret/key": "secret-value"}),
+            "/tables/0",
+            "object fields: alias, location, table_version, authorization",
+        ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": {"source": "env", "secret/key": "secret-value"}}),
+            "/tables/0/authorization",
+            "object fields: source, storage_options_file, env_file, databricks_profile",
+        ),
+    ] {
+        let record = assert_manifest_rejected(
+            directory.path(),
+            json!({"format_version": 1, "tables": [table]}).to_string(),
+        )?;
+        assert_eq!(record["field_path"], field_path);
+        assert_eq!(record["expected"], expected);
+    }
+    for field in [
+        "source",
+        "storage_options_file",
+        "env_file",
+        "databricks_profile",
+    ] {
+        let record = assert_manifest_rejected(directory.path(), json!({"format_version": 1, "tables": [
+            {"alias": "orders", "location": "secret-table", "authorization": {"source": "env", field: false}}
+        ]}).to_string())?;
+        assert_eq!(
+            record["field_path"],
+            format!("/tables/0/authorization/{field}")
+        );
+        assert_eq!(record["expected"], "a string");
+    }
     for input in [
         r#"[1,[]]"#,
         r#"{"format_version":1,"tables":[]}"#,
@@ -448,13 +525,22 @@ fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
         json!("-0"),
         json!("18446744073709551616"),
     ] {
-        assert_manifest_rejected(
+        let record = assert_manifest_rejected(
             directory.path(),
             json!({"format_version":1,"tables":[
                 {"alias":"orders","location":"secret-table","table_version":version}
             ]})
             .to_string(),
         )?;
+        assert_eq!(record["field_path"], "/tables/0/table_version");
+        assert_eq!(
+            record["expected"],
+            "canonical decimal integer string from 0 to 18446744073709551615"
+        );
+        assert_eq!(
+            record["hint"],
+            "Use a decimal string within the stated range, with no '+', leading zeros, or negative zero."
+        );
     }
     let record = assert_manifest_rejected(directory.path(), vec![b' '; 1024 * 1024 + 1])?;
     assert_eq!(record["reason"], "input_file_too_large");

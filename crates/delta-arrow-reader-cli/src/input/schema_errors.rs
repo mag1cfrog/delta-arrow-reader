@@ -51,9 +51,38 @@ pub(super) fn diagnose_schema_error(
             diagnose_object_schema::<execution_options::ExecutionOptionsInput>(raw, &location)
         }
         JsonInputKind::Predicate => predicate::diagnose_schema_error(raw, &location),
-        // Manifest semantic errors carry field paths; malformed shapes use the static schema hint.
-        JsonInputKind::Tables => None,
+        JsonInputKind::Tables => diagnose_manifest_schema_error(raw, &location),
     }
+}
+
+fn diagnose_manifest_schema_error(
+    raw: &RawValue,
+    location: &InputFieldLocation,
+) -> Option<InputCorrection> {
+    use crate::query::tables_manifest::{ManifestAuthorization, ManifestTable, TablesManifest};
+
+    if let Some(correction) = diagnose_object_schema::<TablesManifest>(raw, location) {
+        return Some(correction);
+    }
+    // Nested Value maps discard duplicate keys; recheck each object from the raw input.
+    let fields: ObjectFields<&RawValue> = serde_json::from_str(raw.get()).ok()?;
+    let tables: Vec<&RawValue> = serde_json::from_str(fields.field_value("tables")?.get()).ok()?;
+    for (index, table) in tables.into_iter().enumerate() {
+        let table_location = location.child_field("tables").array_element(index);
+        if let Some(correction) = diagnose_object_schema::<ManifestTable>(table, &table_location) {
+            return Some(correction);
+        }
+        let fields: ObjectFields<&RawValue> = serde_json::from_str(table.get()).ok()?;
+        if let Some(authorization) = fields.field_value("authorization")
+            && let Some(correction) = diagnose_object_schema::<ManifestAuthorization>(
+                authorization,
+                &table_location.child_field("authorization"),
+            )
+        {
+            return Some(correction);
+        }
+    }
+    None
 }
 
 fn diagnose_object_schema<T: DeserializeOwned>(
@@ -88,6 +117,12 @@ fn correction_from_serde_error(
         return storage_options_correction(error.inner(), location);
     }
 
+    let nested_location = if matches!(location.input_kind, JsonInputKind::Tables) {
+        location.with_relative_serde_path(error.path())
+    } else {
+        None
+    };
+    let field_container = nested_location.as_ref().unwrap_or(location);
     match error.inner() {
         DeserializerError::UnknownField(_, fields) => {
             let mut allowed_fields = Vec::new();
@@ -95,16 +130,18 @@ fn correction_from_serde_error(
                 allowed_fields.push(tag_field);
             }
             allowed_fields.extend_from_slice(fields);
-            location.build_correction(
+            field_container.build_correction(
                 format!("object fields: {}", allowed_fields.join(", ")),
                 "Remove unsupported fields; use only the listed fields.",
             )
         }
-        DeserializerError::DuplicateField(name) => location.child_field(name).build_correction(
-            "one occurrence of this field",
-            "Remove the duplicate field.",
-        ),
-        DeserializerError::MissingField(name) => location
+        DeserializerError::DuplicateField(name) => {
+            field_container.child_field(name).build_correction(
+                "one occurrence of this field",
+                "Remove the duplicate field.",
+            )
+        }
+        DeserializerError::MissingField(name) => field_container
             .child_field(name)
             .build_correction("a required field", "Supply the missing field."),
         _ => correction_at_error_path(&error, location),
@@ -167,7 +204,11 @@ fn invalid_value_correction(
         }
         .to_owned()
     };
-    let hint = if serde_expected.starts_with(predicate::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
+    let hint = if serde_expected.starts_with(super::CANONICAL_INTEGER_EXPECTATION_PREFIX)
+        && matches!(location.input_kind, JsonInputKind::Tables)
+    {
+        "Use a decimal string within the stated range, with no '+', leading zeros, or negative zero."
+    } else if serde_expected.starts_with(super::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
         "Match the literal type to the inspected column (e.g. Int32 uses int32); encode the value as a decimal string within that type's range, with no '+', leading zeros, or negative zero."
     } else if serde_expected == predicate::TIMEZONE_EXPECTATION {
         "Supply null or a nonempty timezone string matching the column's timezone."
@@ -203,7 +244,27 @@ impl InputFieldLocation {
         let mut json_pointer = self.json_pointer.clone();
         for segment in relative_path {
             match segment {
-                Segment::Map { key } => json_pointer.push_str(&format!("/{key}")),
+                Segment::Map { key } => {
+                    if matches!(self.input_kind, JsonInputKind::Tables)
+                        && !matches!(
+                            key.as_str(),
+                            "format_version"
+                                | "tables"
+                                | "alias"
+                                | "location"
+                                | "table_version"
+                                | "authorization"
+                                | "source"
+                                | "storage_options_file"
+                                | "env_file"
+                                | "databricks_profile"
+                        )
+                    {
+                        // Unknown keys identify their containing object, never the key itself.
+                        break;
+                    }
+                    json_pointer.push_str(&format!("/{key}"));
+                }
                 Segment::Seq { index } => json_pointer.push_str(&format!("/{index}")),
                 _ => return None,
             }

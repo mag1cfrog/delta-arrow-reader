@@ -35,7 +35,7 @@ pub(in crate::input) struct ObjectFields<T> {
 }
 
 impl<'de> ObjectFields<&'de RawValue> {
-    fn field_value(&self, name: &str) -> Option<&'de RawValue> {
+    pub(super) fn field_value(&self, name: &str) -> Option<&'de RawValue> {
         for (field, value) in &self.entries {
             if field == name {
                 return Some(*value);

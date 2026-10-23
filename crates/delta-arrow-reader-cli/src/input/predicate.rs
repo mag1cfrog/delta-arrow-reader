@@ -18,7 +18,7 @@
 //! Pass the file to `--predicate-file`. Integer literals use decimal strings;
 //! the `type` field determines their width.
 
-use std::{fmt, marker::PhantomData, str::FromStr};
+use std::{fmt, str::FromStr};
 
 use arrow_schema::{DataType, TimeUnit};
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaPredicatePathStep, DeltaScalar};
@@ -29,7 +29,7 @@ use snafu::ensure;
 use crate::{
     Error, InputValidationSnafu,
     diagnostics::InputCorrection,
-    input::{JsonInputKind, JsonObject},
+    input::{JsonInputKind, JsonObject, deserialize_integer_string},
 };
 
 mod json_schema;
@@ -41,8 +41,7 @@ pub(super) use schema_errors::diagnose_schema_error;
 pub(super) const MAX_PREDICATE_NODES: usize = 1024;
 pub(super) const MAX_PREDICATE_DEPTH: usize = 32;
 
-// Schema diagnostics match these custom Serde expectations to select correction hints.
-pub(super) const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
+// Schema diagnostics match this custom Serde expectation to select a correction hint.
 pub(super) const TIMEZONE_EXPECTATION: &str = "null or a nonempty JSON string";
 
 #[derive(Deserialize)]
@@ -441,44 +440,6 @@ fn prepend_validation_path(mut error: Error, prefix: &str) -> Error {
         path.insert_str(0, prefix);
     }
     error
-}
-
-fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr + Bounded + fmt::Display,
-{
-    struct CanonicalIntegerStringVisitor<T>(PhantomData<T>);
-
-    impl<'de, T: FromStr + Bounded + fmt::Display> de::Visitor<'de>
-        for CanonicalIntegerStringVisitor<T>
-    {
-        type Value = T;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                formatter,
-                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
-                T::min_value(),
-                T::max_value()
-            )
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<T, E> {
-            let digits = value.strip_prefix('-').unwrap_or(value).as_bytes();
-            if value != "0"
-                && !(matches!(digits.first(), Some(b'1'..=b'9'))
-                    && digits.iter().all(u8::is_ascii_digit))
-            {
-                return Err(E::invalid_value(de::Unexpected::Str(value), &self));
-            }
-            value
-                .parse()
-                .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self))
-        }
-    }
-
-    deserializer.deserialize_str(CanonicalIntegerStringVisitor(PhantomData))
 }
 
 fn deserialize_timezone<'de, D: Deserializer<'de>>(

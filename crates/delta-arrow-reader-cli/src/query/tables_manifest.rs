@@ -9,7 +9,7 @@ use std::{collections::HashSet, path::Path};
 use clap::ValueEnum;
 use datafusion::sql::sqlparser::keywords::ALL_KEYWORDS;
 use object_store::ObjectStoreScheme;
-use serde::{Deserialize, Deserializer, de};
+use serde::{Deserialize, Deserializer};
 use snafu::ResultExt;
 use url::Url;
 
@@ -28,7 +28,7 @@ pub(crate) const MAX_TABLES: usize = 64;
 /// On-disk declarations, never credentials or already loaded snapshots.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct TablesManifest {
+pub(crate) struct TablesManifest {
     format_version: u8,
     tables: Vec<JsonObject<ManifestTable>>,
 }
@@ -36,7 +36,7 @@ struct TablesManifest {
 /// One SQL alias and its requested snapshot; relative locations belong to the manifest directory.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ManifestTable {
+pub(crate) struct ManifestTable {
     alias: String,
     location: String,
     #[serde(default, deserialize_with = "deserialize_table_version")]
@@ -48,7 +48,7 @@ struct ManifestTable {
 /// Selects the existing credential provider using references, never credential values in the manifest.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ManifestAuthorization {
+pub(crate) struct ManifestAuthorization {
     source: String,
     #[serde(default, deserialize_with = "input::deserialize_present_field")]
     storage_options_file: Option<String>,
@@ -295,17 +295,8 @@ fn resolve_location(location: &str, directory: &Path, index: usize) -> Result<St
 fn deserialize_table_version<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<u64>, D::Error> {
-    let text = String::deserialize(deserializer)?;
-    // Strings preserve all u64 values across JSON clients; null must not silently select latest.
-    text.parse::<u64>()
-        .ok()
-        .filter(|version| version.to_string() == text)
-        .map(Some)
-        .ok_or_else(|| {
-            de::Error::custom(
-                "table_version must be a canonical unsigned decimal string fitting u64",
-            )
-        })
+    // Explicit null must not silently select the latest snapshot.
+    input::deserialize_integer_string(deserializer).map(Some)
 }
 
 fn manifest_error(field_path: &str, reason: &'static str, expected: &'static str) -> Error {

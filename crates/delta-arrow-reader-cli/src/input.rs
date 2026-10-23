@@ -1,4 +1,4 @@
-//! File inputs for storage options, credential variables, row filters, and scan settings.
+//! File inputs for table declarations, storage settings, credentials, and row filters.
 //!
 //! Each file is associated with a CLI option and has its own accepted structure
 //! and value types. This module loads the files and associates read and format
@@ -14,12 +14,13 @@
 //!
 //! Each diagnostic identifies `--execution-options-file` as the input to correct.
 
-use std::{fmt, fs::File, io::Read, marker::PhantomData};
+use std::{fmt, fs::File, io::Read, marker::PhantomData, str::FromStr};
 
 use delta_arrow_reader::DeltaStorageOptions;
+use num_traits::Bounded;
 use serde::{
     Deserialize, Deserializer,
-    de::{DeserializeOwned, MapAccess, Visitor, value::MapAccessDeserializer},
+    de::{self, DeserializeOwned, MapAccess, Visitor, value::MapAccessDeserializer},
 };
 use snafu::{ResultExt, ensure};
 
@@ -36,6 +37,8 @@ pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_corr
 pub(crate) use predicate::{PredicateInput, predicate_type_mismatch_correction};
 
 pub(crate) const MAX_INPUT_BYTES: u64 = 1024 * 1024;
+
+const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -131,6 +134,44 @@ pub(crate) fn parse_json<T: DeserializeOwned>(
             correction,
         }
     })
+}
+
+pub(crate) fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr + Bounded + fmt::Display,
+{
+    struct CanonicalIntegerStringVisitor<T>(PhantomData<T>);
+
+    impl<'de, T: FromStr + Bounded + fmt::Display> de::Visitor<'de>
+        for CanonicalIntegerStringVisitor<T>
+    {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+                formatter,
+                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
+                T::min_value(),
+                T::max_value()
+            )
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<T, E> {
+            let digits = value.strip_prefix('-').unwrap_or(value).as_bytes();
+            if value != "0"
+                && !(matches!(digits.first(), Some(b'1'..=b'9'))
+                    && digits.iter().all(u8::is_ascii_digit))
+            {
+                return Err(E::invalid_value(de::Unexpected::Str(value), &self));
+            }
+            value
+                .parse()
+                .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self))
+        }
+    }
+
+    deserializer.deserialize_str(CanonicalIntegerStringVisitor(PhantomData))
 }
 
 // The outer Option records presence, keeping omission separate from explicit null.
