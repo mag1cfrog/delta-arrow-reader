@@ -347,7 +347,10 @@ impl Body for LeasedBody {
 }
 
 fn unsupported(reason: &'static str) -> HttpError {
-    HttpError::new(HttpErrorKind::Unknown, io::Error::other(reason))
+    HttpError::new(
+        HttpErrorKind::Unknown,
+        io::Error::new(io::ErrorKind::Unsupported, reason),
+    )
 }
 
 #[cfg(test)]
@@ -753,13 +756,9 @@ mod tests {
                 proxies,
             )
             .unwrap();
-            assert_eq!(
-                request(&client, &server.origin, "/data")
-                    .await
-                    .unwrap_err()
-                    .kind(),
-                HttpErrorKind::Unknown
-            );
+            let error = request(&client, &server.origin, "/data").await.unwrap_err();
+            assert_eq!(error.kind(), HttpErrorKind::Unknown);
+            assert_eq!(crate::error::source_kind(&error), "unsupported");
         }
         assert!(server.seen.try_recv().is_err());
         assert_eq!(server.active.load(Ordering::SeqCst), 0);

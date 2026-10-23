@@ -288,6 +288,7 @@ async fn cloud_table_locations_with_explicit_namespaces() -> TestResult {
                         matches!(error, DeltaReaderError::DeletionVectorRead { .. }),
                         "{table_url}, {backend:?}, {kind}: {error:?}"
                     );
+                    assert_eq!(error.source_kind(), Some("unsupported"));
                     let source = error.source().ok_or_else(|| {
                         format!(
                             "missing DV error source: {table_url}, {backend:?}, {kind}: {error:?}"
@@ -456,6 +457,7 @@ async fn azure_tables_with_container_options() -> TestResult {
                             matches!(error, DeltaReaderError::DeletionVectorRead { .. }),
                             "{case}: {error:?}"
                         );
+                        assert_eq!(error.source_kind(), Some("unsupported"));
                         let source = error
                             .source()
                             .ok_or_else(|| format!("{case}: missing DV error source: {error:?}"))?;

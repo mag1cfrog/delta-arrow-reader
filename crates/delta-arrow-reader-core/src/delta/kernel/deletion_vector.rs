@@ -32,7 +32,7 @@ impl KernelDeletionVectorHandle {
             return Ok(self.0.clone());
         };
         if !same_store(table_url, &public_dv_url) {
-            return Err(Error::generic(
+            return Err(Error::unsupported(
                 "deletion vector URL does not identify the configured table store",
             ));
         }
