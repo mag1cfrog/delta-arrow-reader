@@ -10,7 +10,7 @@ use crate::Error;
 
 use super::{MAX_INPUT_BYTES, read_input_bytes};
 
-const MAX_RECORDS: usize = 1024;
+pub(crate) const MAX_ENV_FILE_RECORDS: usize = 1024;
 
 pub(crate) fn read_env_file(path: &str) -> Result<HashMap<String, String>, Error> {
     parse(&read_input_bytes(path, "--env-file")?)
@@ -39,7 +39,7 @@ fn parse(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if variables.len() == MAX_RECORDS {
+        if variables.len() == MAX_ENV_FILE_RECORDS {
             return Err(error(
                 "env_file_too_many_records",
                 "at most 1024 variable records",
@@ -186,10 +186,13 @@ mod tests {
                 ..
             })
         ));
-        let records = (0..MAX_RECORDS)
+        let records = (0..MAX_ENV_FILE_RECORDS)
             .map(|n| format!("KEY_{n}=value\n"))
             .collect::<String>();
-        assert_eq!(parse(records.as_bytes()).unwrap().len(), MAX_RECORDS);
+        assert_eq!(
+            parse(records.as_bytes()).unwrap().len(),
+            MAX_ENV_FILE_RECORDS
+        );
         assert!(matches!(
             parse(format!("{records}EXTRA=value").as_bytes()),
             Err(Error::EnvFileInput {

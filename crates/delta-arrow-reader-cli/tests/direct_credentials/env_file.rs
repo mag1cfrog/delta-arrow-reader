@@ -34,10 +34,27 @@ fn s3_env_file_reaches_every_read_with_literal_values_and_json_configuration_pre
         ("query", "aws_default_region"),
     ] {
         fixture.write_options(json!({region_option: "eu-west-1"}))?;
+        let discovery =
+            run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).env_clear().args([
+                "capabilities",
+                "--command",
+                operation,
+            ]))?;
+        assert!(discovery.status.success());
+        let guide: serde_json::Value = serde_json::from_slice(&discovery.stdout)?;
+        assert!(!String::from_utf8_lossy(&discovery.stdout).contains("AWS_ACCESS_KEY_ID"));
+        let file_arguments = guide["authorization"]["env_file"]["arguments"]
+            .as_array()
+            .unwrap();
         let mut command = fixture.command(operation);
+        for argument in file_arguments {
+            if argument == "PATH" {
+                command.arg(&path);
+            } else {
+                command.arg(argument.as_str().unwrap());
+            }
+        }
         command
-            .arg("--env-file")
-            .arg(&path)
             .arg("--diagnostics=json")
             .env("AWS_ACCESS_KEY_ID", "secret-unused-key")
             .env("AWS_SECRET_ACCESS_KEY", "secret-unused-password")

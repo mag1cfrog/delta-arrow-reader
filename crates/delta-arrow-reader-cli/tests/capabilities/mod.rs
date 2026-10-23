@@ -233,6 +233,26 @@ fn unknown_discovery_names_are_argument_errors_without_reading_or_echoing_them()
         assert_eq!(record["recovery"], "fix_input");
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
+    for (service, detail) in [
+        ("s3", "secret-missing-input.json"),
+        ("unity-catalog", "env-file"),
+        ("unity-catalog", "env-file-grammar"),
+    ] {
+        let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).env_clear().args([
+            "capabilities",
+            "--authorization",
+            service,
+            "--detail",
+            detail,
+            "--diagnostics=json",
+        ]))?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["argument"], "--detail");
+        assert_eq!(record["recovery"], "fix_input");
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    }
     Ok(())
 }
 
@@ -260,6 +280,22 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
             "schema_detail",
         ),
         (vec!["--authorization", "s3"], "authorization_guide"),
+        (
+            vec!["--authorization", "s3", "--detail", "env-file"],
+            "authorization_detail",
+        ),
+        (
+            vec!["--authorization", "s3", "--detail", "env-file-grammar"],
+            "authorization_detail",
+        ),
+        (
+            vec!["--authorization", "azure-blob", "--detail", "env-file"],
+            "authorization_detail",
+        ),
+        (
+            vec!["--authorization", "gcs", "--detail", "env-file"],
+            "authorization_detail",
+        ),
         (
             vec!["--authorization", "s3", "--full"],
             "authorization_capabilities",
@@ -289,7 +325,11 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
         let inventory: Value = serde_json::from_slice(&baseline.stdout)?;
         assert_eq!(inventory["kind"], kind);
         let limit = match kind {
-            "capability_index" | "schema_guide" | "schema_detail" | "authorization_guide" => 2048,
+            "capability_index"
+            | "schema_guide"
+            | "schema_detail"
+            | "authorization_guide"
+            | "authorization_detail" => 2048,
             "command_guide" => 4096,
             _ => 1024 * 1024,
         };
@@ -375,7 +415,10 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             let document: Value = serde_json::from_slice(&output.stdout)?;
             let limit = match document["kind"].as_str().unwrap() {
                 "command_guide" => 4096,
-                "schema_guide" | "schema_detail" | "authorization_guide" => 2048,
+                "schema_guide"
+                | "schema_detail"
+                | "authorization_guide"
+                | "authorization_detail" => 2048,
                 _ => 1024 * 1024,
             };
             assert!(
@@ -448,6 +491,18 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 let expanded = run_advertised(&authorization["full_command"])?;
                 assert_eq!(expanded["kind"], "authorization_capabilities");
                 assert_eq!(&expanded["name"], guide_name);
+                if guide_name != "unity-catalog" {
+                    let variables = run_advertised(
+                        &authorization["authorization"]["env_file_details_command"],
+                    )?;
+                    assert_eq!(variables["kind"], "authorization_detail");
+                    assert_eq!(&variables["name"], guide_name);
+                    assert!(variables.get("syntax").is_none());
+                    let grammar = run_advertised(&variables["grammar_command"])?;
+                    assert_eq!(grammar["detail"], "env-file-grammar");
+                    assert!(grammar.get("variables").is_none());
+                    assert_eq!(run_advertised(&grammar["variables_command"])?, variables);
+                }
                 assert!(
                     authorization["authorization"]["commands"]
                         .as_array()

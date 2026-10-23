@@ -31,11 +31,11 @@ mod predicate;
 mod schema_errors;
 mod schemas;
 
-pub(crate) use env_file::read_env_file;
+pub(crate) use env_file::{MAX_ENV_FILE_RECORDS, read_env_file};
 pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_correction};
 pub(crate) use predicate::{PredicateInput, predicate_type_mismatch_correction};
 
-const MAX_INPUT_BYTES: u64 = 1024 * 1024;
+pub(crate) const MAX_INPUT_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]

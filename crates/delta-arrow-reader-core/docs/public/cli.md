@@ -13,6 +13,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Join named table snapshots | [Tables manifest](#join-table-snapshots) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
+| Pass a provisioned credential env file | [Credential env files](#credential-env-files) |
 | Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
 | Select Azure credentials from a file or environment | [Azure credential sources](#azure-credential-sources) |
 | Select a GCS credentials file | [GCS credential sources](#gcs-credential-sources) |
@@ -33,6 +34,8 @@ dar capabilities --schema predicate
 dar capabilities --schema predicate --detail timestamp_us
 dar capabilities --schema completion
 dar capabilities --authorization s3
+dar capabilities --authorization s3 --detail env-file
+dar capabilities --authorization s3 --detail env-file-grammar
 dar capabilities --authorization s3 --full
 dar capabilities --schema completion --full > completion-schema.json
 dar capabilities --all --diagnostics=json > capabilities.json
@@ -51,6 +54,8 @@ command-line arguments, starting with the installed executable's name.
 | `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
 | `dar capabilities --command query` | `command_guide` | A usable example, essential options and limits, output format, and related lookups. |
 | `dar capabilities --authorization s3` | `authorization_guide` | Canonical credential keys and necessary access rules for one service. |
+| `dar capabilities --authorization s3 --detail env-file` | `authorization_detail` | Accepted env-file variables for one storage service. |
+| `dar capabilities --authorization s3 --detail env-file-grammar` | `authorization_detail` | Shared env-file syntax and limits. |
 | `dar capabilities --schema NAME` | `schema_guide` | One example, format notes, file size limit, and available fields or types. |
 | `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
 | `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
@@ -61,9 +66,9 @@ command-line arguments, starting with the installed executable's name.
 All responses have `format_version: 1`. The directory and full definitions also
 include `cli_version`. `--command`, `--schema`, `--authorization`, and `--all`
 are mutually exclusive. `--full` requires `--command`, `--schema`, or
-`--authorization`. `--detail` requires `--schema` and conflicts with
-`--full`. Command names must match an installed top-level command. Unsupported
-names or conflicting selectors fail with status 2.
+`--authorization`. `--detail` requires `--schema` or `--authorization` and
+conflicts with `--full`. Command names must match an installed top-level command.
+Unsupported names or conflicting selectors fail with status 2.
 For text help, use `dar query --help` or the corresponding command's help.
 
 For output and execution-option schemas, `--detail` accepts the example's
@@ -103,9 +108,18 @@ names in `authorization.guides`; the storage-options guide lists
 `authorization_guides`. Each authorization response identifies its guide in
 `name`. For example, use `dar capabilities --authorization azure-blob`
 for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
-The default guide lists canonical credential keys. Its `full_command` supplies
-alternate spellings and complete service metadata when needed. Neither response
-contains credential values or checks the caller's access.
+The default guide lists canonical JSON credential keys. Its `full_command`
+supplies alternate spellings and complete service metadata when needed.
+These responses contain no credential values and do not check the caller's access.
+
+For a provisioned credential env file, a read command's guide gives the
+`--env-file PATH` arguments and conflicts in `authorization.env_file`. Pass
+the path directly; reading or expanding its values is unnecessary. To prepare
+or correct the contents, follow the service guide's `env_file_details_command`.
+This selects `--detail env-file`, with the service's accepted variable names
+and credential combinations. Its `grammar_command` selects
+`--detail env-file-grammar` for syntax and limits. These two details apply to
+`s3`, `azure-blob`, and `gcs`; Unity Catalog uses a Databricks profile.
 
 An input schema guide's `example` can be used as the file contents, subject to the
 listed constraints. For predicates, the example's column and literal type must
@@ -224,10 +238,10 @@ and decode stdout: a matching completion record alone does not establish that
 the result was received intact.
 
 Discovery needs no table, input file, credentials, Databricks executable, or
-network access. The directory, schema guides, schema details, and authorization
-guides are limited to 2 KiB each; command guides are limited to 4 KiB. Explicit
-full command and authorization metadata, full schemas, and the full inventory
-are limited to 1 MiB.
+network access. The directory, schema guides, schema details, authorization
+guides, and authorization details are limited to 2 KiB each; command guides are
+limited to 4 KiB. Explicit full command and authorization metadata, full schemas,
+and the full inventory are limited to 1 MiB.
 Limits count UTF-8 bytes, including JSON framing and the final newline. An oversized
 response fails before writing stdout; discovery never truncates JSON.
 The command has a five-second deadline, including stdout, log setup, and
@@ -915,8 +929,8 @@ Use the same option with `dar scan`, `dar preview`, or `dar query`. The
 including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
 
-Without `--auth-source`, the CLI forwards keys and values unchanged, including
-case, spaces, and commas. The core reader interprets provider options. Omitting
+Without `--auth-source` or `--env-file`, the CLI forwards keys and values unchanged,
+including case, spaces, and commas. The core reader interprets provider options. Omitting
 the file supplies an empty map; an empty object is also valid. This path does
 not automatically read AWS access keys from the environment. Use
 `--auth-source env` to select them.
@@ -937,9 +951,11 @@ read standard input.
 
 ## Explicit credential sources
 
-`--auth-source` selects authorization for direct cloud reads. The same sources
-are available to `inspect`, `scan`, `preview`, and `query`. Help lists the installed
-selectors without reading input files or resolving credentials.
+`--auth-source` selects authorization for direct cloud reads.
+`--env-file PATH` instead selects a [credential env file](#credential-env-files).
+Both options are available to `inspect`, `scan`, `preview`, and `query`.
+Help lists the installed selectors without reading input files or resolving
+credentials.
 
 | Backend | Source | Credentials | Renewal |
 | --- | --- | --- | --- |
@@ -952,9 +968,9 @@ selectors without reading input files or resolving credentials.
 | Azure Blob | [`azure-managed-identity`](#azure-managed-identity) | One explicit client, object, or resource ID | Refreshes access tokens for that identity |
 | GCS | [`json` or `env`](#gcs-credential-sources) | Explicit service-account or authorized-user ADC file | Renews using the identity loaded from the file |
 
-Local paths do not accept `--auth-source`. Unity Catalog uses
-`--databricks-profile` and rejects it. Omitting `--auth-source` preserves the
-existing storage-options behavior, including any native provider defaults.
+Local paths and Unity Catalog do not accept `--auth-source` or `--env-file`.
+Unity Catalog uses `--databricks-profile`. Omitting both options preserves the
+storage-options behavior, including any native provider defaults.
 The explicit sources above do not fall back to other credential sources after
 configuration, acquisition, renewal, or permission failures.
 
@@ -976,6 +992,70 @@ These candidate selectors are not accepted by `--auth-source`:
 Explicit GCS ADC files already use `json` or `env`; there is no separate
 `gcp-adc` selector. The sections below list accepted keys, aliases, environment
 variables, precedence, and limits for each supported source.
+
+## Credential env files
+
+Pass the path to a provisioned file containing credentials for the selected
+storage service:
+
+```sh
+dar preview s3://example-bucket/orders --env-file /run/secrets/orders.env \
+  --column id --limit 3 --diagnostics=json
+```
+
+The command reads that file once. It does not search for `.env` files or use
+inherited credentials to fill missing values. `--env-file` conflicts with
+`--auth-source` and `--databricks-profile`. For queries using `--tables-file`,
+set each table's `authorization.env_file` in the
+[manifest](#join-table-snapshots) instead of passing `--env-file`.
+
+An optional `--storage-options-file` may supply noncredential connection
+settings. Its values override env-file settings such as the S3 region or Azure
+account name. Credential values in that JSON file are rejected when using
+`--env-file`. File, configuration, token acquisition, renewal, and storage
+failures do not select another identity.
+
+Env files accept S3 access keys, the Azure credential families supported by
+`--auth-source env`, or an explicit GCS ADC file reference. S3 access keys and
+Azure account keys, SAS tokens, and bearer tokens stay fixed during a command;
+Azure client-secret and GCS ADC providers renew tokens for the loaded identity.
+Use a focused guide when preparing or correcting a file:
+
+```sh
+dar capabilities --authorization s3 --detail env-file
+dar capabilities --authorization azure-blob --detail env-file
+dar capabilities --authorization gcs --detail env-file
+```
+
+Each guide lists only that service's accepted, case-sensitive variable names
+and credential combinations. JSON key aliases and unrelated environment
+variables are not accepted. A relative `GOOGLE_APPLICATION_CREDENTIALS` path
+resolves against the env file's directory. The `--env-file` path itself resolves
+against the working directory; `-` names a file rather than standard input.
+
+<details markdown="1">
+<summary>Env-file grammar and limits</summary>
+
+Files contain UTF-8 text with LF or CRLF line endings, at most 1 MiB, and 1 to
+1,024 variable records. Blank lines and whole-line `#` comments do not count as
+records. Each record is `NAME=VALUE`; names match `[A-Za-z_][A-Za-z0-9_]*`.
+Spaces and tabs around names and values are trimmed.
+
+Values may be unquoted text without quotes, or enclosed in matching single or
+double quotes. Enclosing quotes are removed and preserve interior whitespace;
+the enclosing quote cannot appear inside the value. Empty or whitespace-only
+values, duplicate names, control characters, and text after a closing quote
+are invalid. The parser does not support escapes, multiline values, inline
+comments, `export`, interpolation, or execution. Dollar signs, backticks, `#`,
+and backslashes inside values are literal. For example,
+`AWS_SECRET_ACCESS_KEY='$VALUE'` supplies the literal string `$VALUE`.
+
+The same grammar is available offline through
+`dar capabilities --authorization s3 --detail env-file-grammar`; it applies
+to all three storage services. For an invalid record, diagnostics identify its
+line and expected syntax without including names, values, or file contents.
+
+</details>
 
 ## S3 credential sources
 

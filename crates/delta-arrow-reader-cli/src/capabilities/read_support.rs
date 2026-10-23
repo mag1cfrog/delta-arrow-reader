@@ -59,7 +59,7 @@ impl AuthorizationGuide {
                     "commands": storage["commands"],
                     "source_argument": storage["source_argument"],
                     "sources": storage["sources"][self.name()],
-                    "env_file_argument": storage["env_file_argument"],
+                    "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "env-file"],
                     "storage_options_argument": storage["storage_options_argument"],
                     "credential_keys": keys,
                     "notes": storage["backend_notes"][self.name()],
@@ -104,6 +104,14 @@ impl AuthorizationGuide {
         } else {
             let name = self.name();
             let mut storage = sources["direct_storage"].clone();
+            storage["env_file_details_command"] = json!([
+                crate::command_name(),
+                "capabilities",
+                "--authorization",
+                self,
+                "--detail",
+                "env-file"
+            ]);
             storage["sources"] = storage["sources"][name].clone();
             storage["schema_command"] = json!([
                 crate::command_name(),
@@ -163,6 +171,7 @@ pub(super) fn authorization_sources() -> Value {
             },
             "env_file_input": true,
             "env_file_argument": "--env-file",
+            "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", "NAME", "--detail", "env-file"],
             "imports_storage_options_from_environment": true,
             "option_names_case_sensitive": false,
             "unknown_options": {"with_explicit_source": "rejected", "without_explicit_source": "ignored_by_backend"},
@@ -384,7 +393,17 @@ mod tests {
             assert!(authorization.get("profile_argument").is_none());
             assert_eq!(authorization["storage_options_schema"], "storage-options");
             assert_eq!(selected["source_argument"], "--auth-source");
-            assert_eq!(selected["env_file_argument"], "--env-file");
+            assert_eq!(
+                selected["env_file_details_command"],
+                json!([
+                    crate::command_name(),
+                    "capabilities",
+                    "--authorization",
+                    guide,
+                    "--detail",
+                    "env-file"
+                ])
+            );
             assert_eq!(selected["sources"], authorization["sources"]);
         }
         let document = AuthorizationGuide::UnityCatalog.full_document();
