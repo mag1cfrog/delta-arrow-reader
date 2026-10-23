@@ -93,7 +93,7 @@ impl DiagnosticFormat {
 
     pub(crate) fn report_failure(self, error: &crate::Error) {
         match self {
-            Self::Text => error.log_failure(),
+            Self::Text => error.emit_tracing_diagnostic(),
             Self::Json => self.write_terminal_record(error.to_json_diagnostic()),
         }
     }
@@ -304,7 +304,7 @@ pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
     }
     let (targets, invalid) = log_targets();
     // Failure reporting can reach this after command setup already installed tracing.
-    if subscriber(targets, io::stderr).try_init().is_ok() && invalid {
+    if build_subscriber(targets, io::stderr).try_init().is_ok() && invalid {
         tracing::warn!(target: "delta_arrow_reader_cli",
             event = "cli.log_filter.invalid",
             reason = "invalid_rust_log",
@@ -324,7 +324,7 @@ fn log_targets() -> (Targets, bool) {
     }
 }
 
-fn subscriber<W>(targets: Targets, writer: W) -> impl Subscriber + Send + Sync
+fn build_subscriber<W>(targets: Targets, writer: W) -> impl Subscriber + Send + Sync
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
@@ -354,12 +354,12 @@ where
 }
 
 #[cfg(test)]
-pub(crate) fn capture(filter: &str, emit: impl FnOnce()) -> String {
+pub(crate) fn capture_tracing_output(filter: &str, emit: impl FnOnce()) -> String {
     use std::io::{Read, Seek};
 
     let mut file = tempfile::tempfile().unwrap();
     tracing::subscriber::with_default(
-        subscriber(
+        build_subscriber(
             if filter.is_empty() {
                 Targets::new()
             } else {
@@ -387,7 +387,7 @@ mod tests {
     use arrow_schema::ArrowError;
     use serde_json::Value;
 
-    use super::{DiagnosticFormat, capture};
+    use super::{DiagnosticFormat, capture_tracing_output};
     use crate::Error;
 
     struct PanicOnFormatError;
@@ -546,7 +546,7 @@ mod tests {
                 vec!["DEBUG", "TRACE"],
             ),
         ] {
-            let text = capture(filter, emit_levels);
+            let text = capture_tracing_output(filter, emit_levels);
             assert_eq!(
                 text.lines()
                     .map(|line| line.split_whitespace().next().unwrap())
@@ -565,7 +565,7 @@ mod tests {
             "reqwest=trace,object_store=trace,delta_arrow_reader_extra=trace",
             "off,reqwest=error",
         ] {
-            let text = capture(filter, || {
+            let text = capture_tracing_output(filter, || {
                 tracing::error!(target: "reqwest", token = "secret-token", "secret HTTP error");
                 tracing::warn!(target: "object_store", "secret storage error");
                 tracing::trace!(target: "reqwest", "secret HTTP body");

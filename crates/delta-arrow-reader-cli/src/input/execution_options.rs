@@ -149,7 +149,7 @@ mod tests {
     use super::*;
     use crate::{ConfigurationSnafu, Error, input::JsonObject};
 
-    fn parse(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
+    fn parse_with_schema_assertions(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
         let result = crate::input::parse_json::<JsonObject<ExecutionOptionsInput>>(
             text.as_bytes(),
             JsonInputKind::ExecutionOptions,
@@ -183,17 +183,20 @@ mod tests {
     #[test]
     fn omitted_fields_keep_native_defaults() {
         let defaults = DeltaScanExecutionOptions::new();
-        assert_eq!(parse("{}").unwrap(), defaults);
-        assert_eq!(parse(r#"{"parquet_backend":"direct"}"#).unwrap(), defaults);
+        assert_eq!(parse_with_schema_assertions("{}").unwrap(), defaults);
         assert_eq!(
-            parse(r#"{"prefetch_files_per_partition":0}"#).unwrap(),
+            parse_with_schema_assertions(r#"{"parquet_backend":"direct"}"#).unwrap(),
+            defaults
+        );
+        assert_eq!(
+            parse_with_schema_assertions(r#"{"prefetch_files_per_partition":0}"#).unwrap(),
             defaults.with_prefetch_files_per_partition(0)
         );
     }
 
     #[test]
     fn maps_every_field_to_its_native_option() {
-        let options = parse(
+        let options = parse_with_schema_assertions(
             r#"{
                 "parquet_backend":"delta_kernel",
                 "max_concurrent_file_reads_per_scan":7,
@@ -219,7 +222,7 @@ mod tests {
 
     #[test]
     fn explicit_null_clears_each_optional_value() {
-        let options = parse(
+        let options = parse_with_schema_assertions(
             r#"{
                 "max_concurrent_file_reads_per_scan":null,
                 "parquet_metadata_size_hint_bytes":null,
@@ -230,7 +233,7 @@ mod tests {
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.parquet_metadata_size_hint_bytes(), None);
         assert_eq!(options.parquet_full_file_read_threshold_bytes(), None);
-        assert_ne!(options, parse("{}").unwrap());
+        assert_ne!(options, parse_with_schema_assertions("{}").unwrap());
     }
 
     #[test]
@@ -257,7 +260,10 @@ mod tests {
             r#"{"parquet_backend":"direct","parquet_backend":"delta_kernel"}"#,
         ] {
             assert!(
-                matches!(parse(text), Err(Error::InputJson { .. })),
+                matches!(
+                    parse_with_schema_assertions(text),
+                    Err(Error::InputJson { .. })
+                ),
                 "{text}"
             );
         }
@@ -274,20 +280,29 @@ mod tests {
             ] {
                 let text = format!(r#"{{"{field}":{value}}}"#);
                 assert!(
-                    matches!(parse(&text), Err(Error::InputJson { .. })),
+                    matches!(
+                        parse_with_schema_assertions(&text),
+                        Err(Error::InputJson { .. })
+                    ),
                     "{text}"
                 );
             }
             let overflow = usize::MAX as u128 + 1;
             let text = format!(r#"{{"{field}":{overflow}}}"#);
             assert!(
-                matches!(parse(&text), Err(Error::InputJson { .. })),
+                matches!(
+                    parse_with_schema_assertions(&text),
+                    Err(Error::InputJson { .. })
+                ),
                 "{text}"
             );
             if !nullable {
                 let text = format!(r#"{{"{field}":null}}"#);
                 assert!(
-                    matches!(parse(&text), Err(Error::InputJson { .. })),
+                    matches!(
+                        parse_with_schema_assertions(&text),
+                        Err(Error::InputJson { .. })
+                    ),
                     "{text}"
                 );
             }
@@ -300,7 +315,10 @@ mod tests {
                 for duplicate in [field, &escaped_key] {
                     let text = format!(r#"{{"{field}":{value},"{duplicate}":{value}}}"#);
                     assert!(
-                        matches!(parse(&text), Err(Error::InputJson { .. })),
+                        matches!(
+                            parse_with_schema_assertions(&text),
+                            Err(Error::InputJson { .. })
+                        ),
                         "{text}"
                     );
                 }
@@ -330,13 +348,13 @@ mod tests {
             ("parquet_full_file_read_threshold_bytes", true, usize::MAX),
         ] {
             let text = format!(r#"{{"{field}":0}}"#);
-            let error = parse(&text).unwrap_err();
+            let error = parse_with_schema_assertions(&text).unwrap_err();
             assert!(matches!(error, Error::Configuration { .. }), "{text}");
             assert_eq!(error.exit_code(), ExitCode::from(2));
             assert_configuration_correction(&error, field, nullable, maximum);
         }
         let maximum = tokio::sync::Semaphore::MAX_PERMITS;
-        let options = parse(
+        let options = parse_with_schema_assertions(
             &json!({
                 "max_concurrent_file_reads_per_scan":maximum,
                 "max_concurrent_file_reads_per_partition":maximum,
@@ -354,7 +372,7 @@ mod tests {
             "output_buffer_batches_per_partition",
         ] {
             let text = format!(r#"{{"{field}":{}}}"#, maximum + 1);
-            let error = parse(&text).unwrap_err();
+            let error = parse_with_schema_assertions(&text).unwrap_err();
             assert!(matches!(error, Error::Configuration { .. }), "{text}");
             assert_eq!(error.exit_code(), ExitCode::from(2));
             assert_configuration_correction(
@@ -381,7 +399,8 @@ mod tests {
         assert_eq!(record["recovery"], "fix_input");
         assert_eq!(record["retryable"], false);
         assert!(record["hint"].as_str().unwrap().contains("omit"));
-        let text = crate::diagnostics::capture("warn", || error.log_failure());
+        let text =
+            crate::diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
         assert!(text.contains(&format!("field_path=\"/{field}\"")), "{text}");
         assert!(
             text.contains(record["expected"].as_str().unwrap()),
@@ -391,7 +410,7 @@ mod tests {
 
     #[test]
     fn size_and_prefetch_values_accept_the_full_usize_range() {
-        let options = parse(
+        let options = parse_with_schema_assertions(
             &json!({
                 "prefetch_files_per_partition":usize::MAX,
                 "parquet_metadata_size_hint_bytes":usize::MAX,
@@ -415,9 +434,11 @@ mod tests {
         let native = DeltaScanExecutionOptions::new()
             .with_output_buffer_batches_per_partition(0)
             .unwrap_err();
-        let error = parse(r#"{"output_buffer_batches_per_partition":0}"#).unwrap_err();
+        let error = parse_with_schema_assertions(r#"{"output_buffer_batches_per_partition":0}"#)
+            .unwrap_err();
         assert_eq!(error.exit_code(), ExitCode::from(2));
-        let text = crate::diagnostics::capture("warn", || error.log_failure());
+        let text =
+            crate::diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
         for (field, value) in [
             ("error_phase", native.phase().as_str()),
             ("error_code", native.code()),

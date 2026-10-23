@@ -490,7 +490,7 @@ impl Error {
         Some(input_kind.correction(hint))
     }
 
-    fn log_failure(&self) {
+    fn emit_tracing_diagnostic(&self) {
         let (source_error, manifest_field_path) = match self {
             Self::ManifestAuthorizationInput { source, field_path } => {
                 (source.as_ref(), Some(field_path.as_str()))
@@ -1098,8 +1098,12 @@ mod tests {
                 source: unity_catalog::Error::Cancelled { status },
             };
             assert_eq!(error.exit_code(), ExitCode::from(status));
-            assert!(diagnostics::capture("warn", || error.log_failure()).is_empty());
-            let text = diagnostics::capture("info", || error.log_failure());
+            assert!(
+                diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic())
+                    .is_empty()
+            );
+            let text =
+                diagnostics::capture_tracing_output("info", || error.emit_tracing_diagnostic());
             assert_eq!(text.lines().count(), 1, "{text}");
             for field in [
                 "INFO delta_arrow_reader_cli",
@@ -1249,19 +1253,20 @@ mod tests {
         let output = Error::from(ArrowError::from(io::Error::other("secret output path")));
         assert_eq!(output.exit_code(), ExitCode::from(3));
         assert!(
-            diagnostics::capture("warn", || output.log_failure())
+            diagnostics::capture_tracing_output("warn", || output.emit_tracing_diagnostic())
                 .contains("error_code=\"output_write\"")
         );
         assert!(output.source().unwrap().is::<io::Error>());
         let encoding = Error::from(ArrowError::IpcError("secret schema".into()));
         assert_eq!(encoding.exit_code(), ExitCode::from(1));
         assert!(
-            diagnostics::capture("warn", || encoding.log_failure())
+            diagnostics::capture_tracing_output("warn", || encoding.emit_tracing_diagnostic())
                 .contains("error_code=\"arrow_ipc\"")
         );
         assert!(encoding.source().unwrap().is::<ArrowError>());
         for error in [output, encoding] {
-            let text = diagnostics::capture("warn", || error.log_failure());
+            let text =
+                diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
             assert!(text.contains("error_phase=\"execution\""));
             assert!(!text.contains("secret"));
             assert_eq!(format!("{error:?}"), error.to_string());
@@ -1286,7 +1291,7 @@ mod tests {
         assert_eq!(record["argument"], "--tables-file");
         assert_eq!(record["field_path"], "/tables/1/authorization/env_file");
         assert_eq!(record["hint"], "Request read access to the input file.");
-        let text = diagnostics::capture("warn", || error.log_failure());
+        let text = diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
         assert_eq!(text.lines().count(), 1, "{text}");
         assert!(text.contains("io_kind=PermissionDenied"), "{text}");
         assert!(
@@ -1367,7 +1372,8 @@ mod tests {
                 }
             }
             for filter in ["warn", "trace"] {
-                let text = diagnostics::capture(filter, || error.log_failure());
+                let text =
+                    diagnostics::capture_tracing_output(filter, || error.emit_tracing_diagnostic());
                 assert_eq!(text.lines().count(), 1, "{text}");
                 assert!(
                     text.contains(&format!("error_source_kind=\"{source_kind}\"")),
@@ -1439,7 +1445,10 @@ mod tests {
             assert_eq!(record["recovery"], recovery);
             assert_eq!(record["retryable"], false);
             assert!(!record.to_string().contains("secret"));
-            assert!(!diagnostics::capture("trace", || error.log_failure()).contains("secret"));
+            assert!(
+                !diagnostics::capture_tracing_output("trace", || error.emit_tracing_diagnostic())
+                    .contains("secret")
+            );
         }
     }
 
@@ -1475,7 +1484,10 @@ mod tests {
         assert_eq!(source.classify(), serde_json::error::Category::Data);
         assert!(source.to_string().contains("secret-field"));
         assert!(error.to_string().contains("kind=Data"));
-        assert!(!diagnostics::capture("trace", || error.log_failure()).contains("secret"));
+        assert!(
+            !diagnostics::capture_tracing_output("trace", || error.emit_tracing_diagnostic())
+                .contains("secret")
+        );
         assert!(!format!("{error:?}").contains("secret"));
 
         std::fs::write(&path, b" \n !secret").unwrap();
@@ -1502,7 +1514,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.source().unwrap().is::<io::Error>());
-        let text = diagnostics::capture("warn", || error.log_failure());
+        let text = diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
         assert!(text.contains("error_code=\"input_file_io\""));
         assert!(!text.contains("secret"));
         assert_eq!(format!("{error:?}"), error.to_string());
