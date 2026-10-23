@@ -16,6 +16,26 @@ use crate::{
 
 impl ProcessFixture<'_> {
     pub(super) fn check_failure_reporting_without_threads(&self) -> Result<()> {
+        let panic = run_cli(
+            self.command()
+                .args(["capabilities", "--diagnostics=json"])
+                .env("LD_PRELOAD", self.fault_library)
+                .env("DAR_TEST_REJECT_THREADS", "1"),
+        )?;
+        let diagnostic: serde_json::Value =
+            serde_json::from_slice(&panic.stderr).context(crate::error::JsonSnafu {
+                subject: "thread-exhaustion panic diagnostic",
+            })?;
+        ensure!(
+            panic.status.code() == Some(1)
+                && panic.stdout.is_empty()
+                && diagnostic["kind"] == "diagnostic"
+                && diagnostic["reason"] == "process_panicked"
+                && !String::from_utf8_lossy(&panic.stderr).contains("secret"),
+            InvalidInputSnafu {
+                message: "Thread exhaustion lost the safe panic diagnostic"
+            }
+        );
         for machine in [false, true] {
             for filter in ["warn", "off"] {
                 for args in [

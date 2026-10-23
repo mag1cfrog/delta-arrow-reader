@@ -432,6 +432,10 @@ mod tests {
         tracing::error!(target: "delta_arrow_reader_cli", "secret CLI trace");
         let error = match scenario.as_str() {
             "main_panic" => panic!("secret panic payload"),
+            "locked_terminal_panic" => {
+                let _guard = super::TERMINAL_RECORD_STARTED.lock().unwrap();
+                panic!("secret panic while a terminal writer owns the lock");
+            }
             "worker_panics" => {
                 let barrier = Barrier::new(3);
                 std::thread::scope(|scope| {
@@ -464,9 +468,14 @@ mod tests {
     }
 
     #[test]
-    fn panics_and_source_errors_emit_one_safe_terminal_record() {
+    fn panics_and_source_errors_keep_safe_bounded_reporting() {
         for (scenario, code, reason) in [
             ("main_panic", "runtime_initialization", "process_panicked"),
+            (
+                "locked_terminal_panic",
+                "runtime_initialization",
+                "process_panicked",
+            ),
             (
                 "worker_panics",
                 "runtime_initialization",
@@ -490,7 +499,7 @@ mod tests {
                     .stderr(Stdio::piped())
                     .spawn()
                     .unwrap();
-                let deadline = Instant::now() + Duration::from_secs(15);
+                let deadline = Instant::now() + Duration::from_secs(3);
                 while child.try_wait().unwrap().is_none() {
                     if Instant::now() >= deadline {
                         child.kill().unwrap();
@@ -502,6 +511,10 @@ mod tests {
                 let output = child.wait_with_output().unwrap();
                 assert_eq!(output.status.code(), Some(1), "{output:?}");
                 let text = String::from_utf8(output.stderr).unwrap();
+                if scenario == "locked_terminal_panic" {
+                    assert!(text.is_empty(), "{text}");
+                    continue;
+                }
                 assert_eq!(text.lines().count(), 1, "{text}");
                 assert!(text.ends_with('\n') && text.len() <= 8192, "{text}");
                 assert!(!text.contains("secret") && !text.contains('\x1b'), "{text}");
