@@ -8,25 +8,29 @@ use std::collections::HashMap;
 
 use crate::Error;
 
-use super::{MAX_INPUT_BYTES, read_input_bytes};
+use super::{MAX_INPUT_BYTES, read_input_file_bytes};
 
 pub(crate) const MAX_ENV_FILE_RECORDS: usize = 1024;
 
 pub(crate) fn read_env_file(path: &str) -> Result<HashMap<String, String>, Error> {
-    parse(&read_input_bytes(path, "--env-file")?)
+    parse_env_file(&read_input_file_bytes(path, "--env-file")?)
 }
 
-fn parse(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
+fn parse_env_file(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
     if bytes.len() as u64 > MAX_INPUT_BYTES {
-        return Err(error("input_file_too_large", "at most 1 MiB", None));
+        return Err(env_file_input_error(
+            "input_file_too_large",
+            "at most 1 MiB",
+            None,
+        ));
     }
-    let text =
-        std::str::from_utf8(bytes).map_err(|_| error("env_file_not_utf8", "UTF-8 text", None))?;
+    let text = std::str::from_utf8(bytes)
+        .map_err(|_| env_file_input_error("env_file_not_utf8", "UTF-8 text", None))?;
     let mut variables = HashMap::new();
     for (index, line) in text.lines().enumerate() {
         let line_number = Some(index + 1);
         let invalid_record = || {
-            error(
+            env_file_input_error(
                 "env_file_invalid_record",
                 "NAME=VALUE with optional enclosing quotes and no control characters",
                 line_number,
@@ -40,7 +44,7 @@ fn parse(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
             continue;
         }
         if variables.len() == MAX_ENV_FILE_RECORDS {
-            return Err(error(
+            return Err(env_file_input_error(
                 "env_file_too_many_records",
                 "at most 1024 variable records",
                 line_number,
@@ -77,7 +81,7 @@ fn parse(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
             .insert(name.to_owned(), value.to_owned())
             .is_some()
         {
-            return Err(error(
+            return Err(env_file_input_error(
                 "env_file_duplicate_name",
                 "each variable name exactly once",
                 line_number,
@@ -85,7 +89,7 @@ fn parse(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
         }
     }
     if variables.is_empty() {
-        return Err(error(
+        return Err(env_file_input_error(
             "env_file_empty",
             "at least one NAME=VALUE record",
             None,
@@ -94,7 +98,11 @@ fn parse(bytes: &[u8]) -> Result<HashMap<String, String>, Error> {
     Ok(variables)
 }
 
-fn error(reason: &'static str, expected: &'static str, line: Option<usize>) -> Error {
+fn env_file_input_error(
+    reason: &'static str,
+    expected: &'static str,
+    line: Option<usize>,
+) -> Error {
     Error::EnvFileInput {
         reason,
         line,
@@ -110,7 +118,7 @@ mod tests {
 
     #[test]
     fn whitespace_quotes_and_shell_metacharacters_preserve_literal_values() {
-        let variables = parse(
+        let variables = parse_env_file(
             b" # comment\r\n\r\n A = one=two \r\nB=' $VALUE `command` #literal '\nC=\"C:\\path\\file\"\nD=raw#literal",
         )
         .unwrap();
@@ -139,7 +147,7 @@ mod tests {
             "SECRET=bad\rvalue",
         ] {
             let contents = format!("# comment\n{record}");
-            let result = parse(contents.as_bytes());
+            let result = parse_env_file(contents.as_bytes());
             assert!(
                 matches!(result, Err(Error::EnvFileInput { line: Some(2), .. })),
                 "{record}"
@@ -148,7 +156,7 @@ mod tests {
             assert!(!displayed.contains("SECRET") && !displayed.contains("value"));
         }
         assert!(matches!(
-            parse(b"SECRET=one\nSECRET=two"),
+            parse_env_file(b"SECRET=one\nSECRET=two"),
             Err(Error::EnvFileInput {
                 reason: "env_file_duplicate_name",
                 line: Some(2),
@@ -161,7 +169,7 @@ mod tests {
     fn files_have_exact_byte_and_record_bounds() {
         for bytes in [b"".as_slice(), b"  \n# comment"] {
             assert!(matches!(
-                parse(bytes),
+                parse_env_file(bytes),
                 Err(Error::EnvFileInput {
                     reason: "env_file_empty",
                     ..
@@ -169,7 +177,7 @@ mod tests {
             ));
         }
         assert!(matches!(
-            parse(b"KEY=\xff"),
+            parse_env_file(b"KEY=\xff"),
             Err(Error::EnvFileInput {
                 reason: "env_file_not_utf8",
                 ..
@@ -177,10 +185,10 @@ mod tests {
         ));
         let mut bytes = b"KEY=".to_vec();
         bytes.resize(MAX_INPUT_BYTES as usize, b'x');
-        assert!(parse(&bytes).is_ok());
+        assert!(parse_env_file(&bytes).is_ok());
         bytes.push(b'x');
         assert!(matches!(
-            parse(&bytes),
+            parse_env_file(&bytes),
             Err(Error::EnvFileInput {
                 reason: "input_file_too_large",
                 ..
@@ -190,11 +198,11 @@ mod tests {
             .map(|n| format!("KEY_{n}=value\n"))
             .collect::<String>();
         assert_eq!(
-            parse(records.as_bytes()).unwrap().len(),
+            parse_env_file(records.as_bytes()).unwrap().len(),
             MAX_ENV_FILE_RECORDS
         );
         assert!(matches!(
-            parse(format!("{records}EXTRA=value").as_bytes()),
+            parse_env_file(format!("{records}EXTRA=value").as_bytes()),
             Err(Error::EnvFileInput {
                 reason: "env_file_too_many_records",
                 ..

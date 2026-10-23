@@ -10,16 +10,19 @@ use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
 use object_store::{ObjectStoreScheme, azure::AzureConfigKey, gcp::GoogleConfigKey};
 use snafu::ensure;
 
-use super::{CredentialSource, azure_blob, gcs, normalize_storage_options, s3, storage_scheme};
+use super::{
+    CredentialSource, azure_blob, gcs, normalize_storage_options, parse_supported_storage_scheme,
+    s3,
+};
 use crate::{Error, StorageAuthorizationSnafu, input};
 
-pub(crate) fn configure_table_credentials(
+pub(crate) fn configure_credentials_from_env_file(
     builder: DeltaTableBuilder,
     location: &str,
     json_options: DeltaStorageOptions,
     path: &str,
 ) -> Result<DeltaTableBuilder, Error> {
-    let scheme = storage_scheme(location)?;
+    let scheme = parse_supported_storage_scheme(location)?;
     // Apply the existing env source's restrictions before combining either file.
     let configuration = match scheme {
         ObjectStoreScheme::AmazonS3 => normalize_storage_options(json_options, |key, value| {
@@ -35,13 +38,14 @@ pub(crate) fn configure_table_credentials(
                 gcs::validate_storage_option(key, value, CredentialSource::Env)
             })
         }
-        _ => unreachable!("storage_scheme accepts only supported cloud backends"),
+        _ => unreachable!("parse_supported_storage_scheme accepts only supported cloud backends"),
     }?;
     let mut options = DeltaStorageOptions::new();
     for (name, value) in input::read_env_file(path)? {
-        let key = storage_option_key(&name, &scheme).ok_or(Error::StorageAuthorization {
-            reason: "env_file_unsupported_variable",
-        })?;
+        let key =
+            storage_key_for_env_variable(&name, &scheme).ok_or(Error::StorageAuthorization {
+                reason: "env_file_unsupported_variable",
+            })?;
         ensure!(
             options.insert(key, value).is_none(),
             StorageAuthorizationSnafu {
@@ -67,21 +71,21 @@ pub(crate) fn configure_table_credentials(
     )
 }
 
-fn storage_option_key(name: &str, scheme: &ObjectStoreScheme) -> Option<String> {
+fn storage_key_for_env_variable(variable_name: &str, scheme: &ObjectStoreScheme) -> Option<String> {
     match scheme {
         ObjectStoreScheme::AmazonS3 => s3::CREDENTIAL_ENVIRONMENT_VARIABLES
             .iter()
             .chain(s3::REGION_ENVIRONMENT_VARIABLES)
-            .find_map(|(variable, key)| (*variable == name).then(|| key.as_ref())),
+            .find_map(|(variable, key)| (*variable == variable_name).then(|| key.as_ref())),
         ObjectStoreScheme::MicrosoftAzure
-            if name == azure_blob::ACCOUNT_NAME_ENVIRONMENT_VARIABLE =>
+            if variable_name == azure_blob::ACCOUNT_NAME_ENVIRONMENT_VARIABLE =>
         {
             Some(AzureConfigKey::AccountName.as_ref())
         }
         ObjectStoreScheme::MicrosoftAzure => azure_blob::CREDENTIAL_ENVIRONMENT_VARIABLES
             .iter()
-            .find_map(|(variable, key)| (*variable == name).then(|| key.as_ref())),
-        ObjectStoreScheme::GoogleCloudStorage if name == gcs::ADC_ENVIRONMENT_VARIABLE => {
+            .find_map(|(variable, key)| (*variable == variable_name).then(|| key.as_ref())),
+        ObjectStoreScheme::GoogleCloudStorage if variable_name == gcs::ADC_ENVIRONMENT_VARIABLE => {
             Some(GoogleConfigKey::ApplicationCredentials.as_ref())
         }
         _ => None,

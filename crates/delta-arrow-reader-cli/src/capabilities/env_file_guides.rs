@@ -7,11 +7,14 @@
 use clap::error::ErrorKind;
 use serde_json::{Value, json};
 
-use super::read_support::AuthorizationGuide;
+use super::read_support::AuthorizationService;
 use crate::{Error, diagnostics::InputCorrection, input};
 
-pub(super) fn document(service: AuthorizationGuide, detail: &str) -> Result<Value, Error> {
-    if matches!(service, AuthorizationGuide::UnityCatalog)
+pub(super) fn build_env_file_guide(
+    service: AuthorizationService,
+    detail: &str,
+) -> Result<Value, Error> {
+    if matches!(service, AuthorizationService::UnityCatalog)
         || !matches!(detail, "env-file" | "env-file-grammar")
     {
         return Err(Error::Argument {
@@ -25,7 +28,7 @@ pub(super) fn document(service: AuthorizationGuide, detail: &str) -> Result<Valu
             }),
         });
     }
-    let mut document = if detail == "env-file-grammar" {
+    let mut guide = if detail == "env-file-grammar" {
         json!({
             "max_file_bytes": input::MAX_INPUT_BYTES,
             "min_records": 1,
@@ -41,12 +44,12 @@ pub(super) fn document(service: AuthorizationGuide, detail: &str) -> Result<Valu
         })
     } else {
         let mut variables = match service {
-            AuthorizationGuide::S3 => json!({
+            AuthorizationService::S3 => json!({
                 "required": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
                 "optional": ["AWS_SESSION_TOKEN", "AWS_REGION", "AWS_DEFAULT_REGION"],
                 "notes": "AWS_REGION overrides AWS_DEFAULT_REGION; JSON region settings override both. Set the bucket's region; the native default is us-east-1.",
             }),
-            AuthorizationGuide::AzureBlob => json!({
+            AuthorizationService::AzureBlob => json!({
                 "one_credential_family": [
                     ["AZURE_STORAGE_ACCOUNT_KEY"],
                     ["AZURE_STORAGE_SAS_KEY"],
@@ -56,11 +59,11 @@ pub(super) fn document(service: AuthorizationGuide, detail: &str) -> Result<Valu
                 "configuration": ["AZURE_STORAGE_ACCOUNT_NAME"],
                 "notes": "Use exactly one complete family. Supply the account name if absent from the URL; JSON account settings override the env file. Client-secret tokens renew for the loaded identity.",
             }),
-            AuthorizationGuide::Gcs => json!({
+            AuthorizationService::Gcs => json!({
                 "required": ["GOOGLE_APPLICATION_CREDENTIALS"],
                 "notes": "Reference a service-account or authorized-user ADC file. Relative paths use the env file's directory. No default ADC lookup; tokens renew for the loaded identity.",
             }),
-            AuthorizationGuide::UnityCatalog => {
+            AuthorizationService::UnityCatalog => {
                 unreachable!("rejected before constructing the guide")
             }
         };
@@ -73,11 +76,11 @@ pub(super) fn document(service: AuthorizationGuide, detail: &str) -> Result<Valu
             "grammar_command": [crate::command_name(), "capabilities", "--authorization", service, "--detail", "env-file-grammar"],
         })
     };
-    document["format_version"] = json!(1);
-    document["kind"] = json!("authorization_detail");
-    document["name"] = json!(service);
-    document["detail"] = json!(detail);
-    Ok(document)
+    guide["format_version"] = json!(1);
+    guide["kind"] = json!("authorization_detail");
+    guide["name"] = json!(service);
+    guide["detail"] = json!(detail);
+    Ok(guide)
 }
 
 #[cfg(test)]
@@ -103,11 +106,11 @@ mod tests {
         )?;
         let path = directory.path().join("selected.env");
         for (service, location) in [
-            (AuthorizationGuide::S3, "s3://bucket/table"),
-            (AuthorizationGuide::AzureBlob, "az://container/table"),
-            (AuthorizationGuide::Gcs, "gs://bucket/table"),
+            (AuthorizationService::S3, "s3://bucket/table"),
+            (AuthorizationService::AzureBlob, "az://container/table"),
+            (AuthorizationService::Gcs, "gs://bucket/table"),
         ] {
-            let guide = document(service, "env-file")?;
+            let guide = build_env_file_guide(service, "env-file")?;
             let variables = &guide["variables"];
             let families = variables["one_credential_family"]
                 .as_array()
@@ -134,7 +137,7 @@ mod tests {
                     records.push_str(&format!("{name}={value}\n"));
                 }
                 std::fs::write(&path, records)?;
-                let _ = crate::direct_credentials::env_file::configure_table_credentials(
+                let _ = crate::direct_credentials::env_file::configure_credentials_from_env_file(
                     DeltaTableBuilder::new(location),
                     location,
                     DeltaStorageOptions::new(),

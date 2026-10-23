@@ -84,7 +84,7 @@ impl JsonInputKind {
                 "Use only documented execution-option fields, once each, with their declared types."
             }
             Self::Tables => {
-                "Use format_version 1 and a tables array; each object has alias, location, and optional table_version and authorization. Authorization requires source and may reference storage_options_file or databricks_profile; inline credentials are invalid. Do not repeat fields."
+                "Use format_version 1 and a tables array; each object has alias, location, and optional table_version and authorization. Authorization requires source and may reference storage_options_file, env_file, or databricks_profile; inline credentials are invalid. Do not repeat fields."
             }
         }
     }
@@ -94,7 +94,7 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
     path: &str,
     input_kind: JsonInputKind,
 ) -> Result<T, Error> {
-    let bytes = read_input_bytes(path, input_kind.argument())?;
+    let bytes = read_input_file_bytes(path, input_kind.argument())?;
     ensure!(
         bytes.len() as u64 <= MAX_INPUT_BYTES,
         InputValidationSnafu {
@@ -105,7 +105,7 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
     parse_json(&bytes, input_kind)
 }
 
-fn read_input_bytes(path: &str, argument: &'static str) -> Result<Vec<u8>, Error> {
+fn read_input_file_bytes(path: &str, argument: &'static str) -> Result<Vec<u8>, Error> {
     let file = File::open(path).context(InputIoSnafu { argument })?;
     let mut bytes = Vec::new();
     // One extra byte lets each format report its own size-limit correction.

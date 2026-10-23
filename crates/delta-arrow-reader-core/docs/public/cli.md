@@ -647,6 +647,11 @@ or `aws_web_identity_token_file` use the options file's directory.
 Absolute paths stay absolute. Paths inherited from environment variables use
 the process working directory, as they do for positional table commands.
 
+For read or parse errors in `env_file` or `storage_options_file`, diagnostics
+identify `--tables-file` and the reference's JSON Pointer, such as
+`/tables/1/authorization/env_file`. Any reported line and column refer to the
+contents of that referenced file.
+
 The CLI reads the options and env files for every binding before loading any
 table. Each binding retains its selected provider; changing those files during
 the query cannot switch its identity. Native providers can still renew credentials

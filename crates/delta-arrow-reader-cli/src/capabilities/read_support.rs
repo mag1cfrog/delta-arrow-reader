@@ -20,19 +20,19 @@ pub(super) const QUERY_ROW_ORDERING: &str =
 
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub(super) enum AuthorizationGuide {
+pub(super) enum AuthorizationService {
     S3,
     AzureBlob,
     Gcs,
     UnityCatalog,
 }
 
-impl AuthorizationGuide {
-    pub(super) fn guide_document(self) -> Value {
-        let sources = authorization_sources();
+impl AuthorizationService {
+    pub(super) fn build_authorization_guide(self) -> Value {
+        let capabilities = build_authorization_capabilities();
         let mut authorization = match self {
             Self::UnityCatalog => {
-                let catalog = &sources["unity_catalog"];
+                let catalog = &capabilities["unity_catalog"];
                 json!({
                     "commands": catalog["commands"],
                     "target": catalog["target"],
@@ -46,7 +46,7 @@ impl AuthorizationGuide {
                 })
             }
             _ => {
-                let storage = &sources["direct_storage"];
+                let storage = &capabilities["direct_storage"];
                 let keys: Vec<_> = storage["credential_option_aliases"][self.name()]
                     .as_object()
                     .into_iter()
@@ -67,7 +67,7 @@ impl AuthorizationGuide {
                 })
             }
         };
-        authorization["credential_handling"] = json!(self.credential_handling());
+        authorization["credential_handling"] = json!(self.credential_handling_guidance());
         json!({
             "format_version": 1,
             "kind": "authorization_guide",
@@ -86,7 +86,7 @@ impl AuthorizationGuide {
         }
     }
 
-    fn credential_handling(self) -> &'static str {
+    fn credential_handling_guidance(self) -> &'static str {
         match self {
             Self::UnityCatalog => {
                 "Pass an existing Databricks profile name; never put credential values in arguments."
@@ -97,13 +97,13 @@ impl AuthorizationGuide {
         }
     }
 
-    pub(super) fn full_document(self) -> Value {
-        let sources = authorization_sources();
+    pub(super) fn build_full_authorization_guide(self) -> Value {
+        let capabilities = build_authorization_capabilities();
         let mut authorization = if matches!(self, Self::UnityCatalog) {
-            sources["unity_catalog"].clone()
+            capabilities["unity_catalog"].clone()
         } else {
             let name = self.name();
-            let mut storage = sources["direct_storage"].clone();
+            let mut storage = capabilities["direct_storage"].clone();
             storage["env_file_details_command"] = json!([
                 crate::command_name(),
                 "capabilities",
@@ -138,7 +138,7 @@ impl AuthorizationGuide {
             }
             storage
         };
-        authorization["credential_handling"] = json!(self.credential_handling());
+        authorization["credential_handling"] = json!(self.credential_handling_guidance());
         json!({
             "format_version": 1,
             "kind": "authorization_capabilities",
@@ -150,7 +150,7 @@ impl AuthorizationGuide {
     }
 }
 
-pub(super) fn authorization_sources() -> Value {
+pub(super) fn build_authorization_capabilities() -> Value {
     json!({
         "local": {
             "commands": ["inspect", "scan", "preview", "query"],
@@ -333,12 +333,12 @@ mod tests {
             "azure_storage_account_key",
             "google_application_credentials",
         ];
-        for (guide, expected_key) in [
-            (AuthorizationGuide::S3, credential_keys[0]),
-            (AuthorizationGuide::AzureBlob, credential_keys[1]),
-            (AuthorizationGuide::Gcs, credential_keys[2]),
+        for (service, expected_key) in [
+            (AuthorizationService::S3, credential_keys[0]),
+            (AuthorizationService::AzureBlob, credential_keys[1]),
+            (AuthorizationService::Gcs, credential_keys[2]),
         ] {
-            let document = guide.full_document();
+            let document = service.build_full_authorization_guide();
             let authorization = &document["authorization"];
             assert_eq!(document["format_version"], 1);
             for (selector, policy) in [
@@ -352,7 +352,7 @@ mod tests {
                 .as_object()
                 .unwrap();
             assert!(aliases.contains_key(expected_key));
-            let concise = guide.guide_document();
+            let concise = service.build_authorization_guide();
             let selected = &concise["authorization"];
             assert_eq!(
                 selected["credential_handling"],
@@ -373,7 +373,8 @@ mod tests {
             assert!(selected.get("credential_option_aliases").is_none());
             assert_eq!(
                 selected["notes"],
-                authorization_sources()["direct_storage"]["backend_notes"][guide.name()]
+                build_authorization_capabilities()["direct_storage"]["backend_notes"]
+                    [service.name()]
             );
             assert_eq!(
                 concise["full_command"],
@@ -381,7 +382,7 @@ mod tests {
                     crate::command_name(),
                     "capabilities",
                     "--authorization",
-                    guide,
+                    service,
                     "--full"
                 ])
             );
@@ -407,15 +408,15 @@ mod tests {
                     crate::command_name(),
                     "capabilities",
                     "--authorization",
-                    guide,
+                    service,
                     "--detail",
                     "env-file"
                 ])
             );
             assert_eq!(selected["sources"], authorization["sources"]);
         }
-        let document = AuthorizationGuide::UnityCatalog.full_document();
-        let concise = AuthorizationGuide::UnityCatalog.guide_document();
+        let document = AuthorizationService::UnityCatalog.build_full_authorization_guide();
+        let concise = AuthorizationService::UnityCatalog.build_authorization_guide();
         assert_eq!(
             concise["authorization"]["credential_handling"],
             document["authorization"]["credential_handling"]
@@ -439,7 +440,7 @@ mod tests {
 
     #[test]
     fn advertised_credential_aliases_resolve_to_the_same_backend_option() {
-        let authorization = authorization_sources();
+        let authorization = build_authorization_capabilities();
         let backends = authorization["direct_storage"]["credential_option_aliases"]
             .as_object()
             .unwrap();
@@ -469,7 +470,7 @@ mod tests {
 
     #[test]
     fn authorization_command_lists_match_clap_and_table_target_validation() {
-        let authorization = authorization_sources();
+        let authorization = build_authorization_capabilities();
         let support = command_read_support();
         assert_eq!(
             support
@@ -538,7 +539,7 @@ mod tests {
 
     #[test]
     fn advertised_sources_match_clap_and_unsupported_options_stay_rejected() {
-        let authorization = authorization_sources();
+        let authorization = build_authorization_capabilities();
         assert_eq!(
             authorization["direct_storage"]["explicit_source_selection"],
             true

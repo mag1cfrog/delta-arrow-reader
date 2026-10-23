@@ -117,7 +117,7 @@ impl TableOptions {
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(self.snapshot_selection());
         if let Some(path) = &self.env_file {
-            return crate::direct_credentials::env_file::configure_table_credentials(
+            return crate::direct_credentials::env_file::configure_credentials_from_env_file(
                 builder, location, options, path,
             );
         }

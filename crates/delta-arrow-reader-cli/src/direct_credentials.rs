@@ -42,7 +42,7 @@ impl CredentialSource {
         mut options: DeltaStorageOptions,
         credential_file_directory: Option<&Path>,
     ) -> Result<DeltaTableBuilder, Error> {
-        let scheme = storage_scheme(location)?;
+        let scheme = parse_supported_storage_scheme(location)?;
         if let Some(directory) = credential_file_directory {
             credential_file_paths::resolve_relative_paths(&mut options, &scheme, directory)?;
         }
@@ -65,7 +65,7 @@ impl CredentialSource {
     }
 }
 
-fn storage_scheme(location: &str) -> Result<ObjectStoreScheme, Error> {
+fn parse_supported_storage_scheme(location: &str) -> Result<ObjectStoreScheme, Error> {
     let unsupported_storage = || Error::StorageAuthorization {
         reason: "auth_source_unsupported_storage",
     };

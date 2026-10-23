@@ -54,7 +54,7 @@ pub(crate) struct CapabilitiesArgs {
     detail: Option<String>,
     /// Show an authorization guide for a storage or catalog service.
     #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
-    authorization: Option<read_support::AuthorizationGuide>,
+    authorization: Option<read_support::AuthorizationService>,
     /// Export a full JSON Schema for validators, or command/authorization metadata for tooling.
     #[arg(long, requires = "full_definition_target", conflicts_with = "detail")]
     full: bool,
@@ -312,7 +312,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
     if selected_command.is_none() || matches!(selected_command, Some("query" | "preview")) {
         output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
     }
-    let mut authorization = read_support::authorization_sources();
+    let mut authorization = read_support::build_authorization_capabilities();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
         "capabilities": {"format": "json", "format_version": 1},
@@ -511,16 +511,22 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
         } else {
             (build_command_guide(&name)?, MAX_COMMAND_GUIDE_BYTES)
         }
-    } else if let Some(guide) = options.authorization {
+    } else if let Some(service) = options.authorization {
         if options.full {
-            (guide.full_document(), MAX_FULL_RESPONSE_BYTES)
+            (
+                service.build_full_authorization_guide(),
+                MAX_FULL_RESPONSE_BYTES,
+            )
         } else if let Some(detail) = options.detail.as_deref() {
             (
-                env_file_guides::document(guide, detail)?,
+                env_file_guides::build_env_file_guide(service, detail)?,
                 MAX_AUTHORIZATION_GUIDE_BYTES,
             )
         } else {
-            (guide.guide_document(), MAX_AUTHORIZATION_GUIDE_BYTES)
+            (
+                service.build_authorization_guide(),
+                MAX_AUTHORIZATION_GUIDE_BYTES,
+            )
         }
     } else if options.all {
         (build_capability_details(None)?, MAX_FULL_RESPONSE_BYTES)
