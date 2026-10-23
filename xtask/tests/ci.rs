@@ -386,6 +386,20 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
             .unwrap()
             .contains("-p delta-arrow-reader-cli --test cli query::resources")
     );
+    let output_completion = platform_steps
+        .iter()
+        .find(|step| step["name"] == "Test Windows output completion")
+        .unwrap();
+    assert_eq!(
+        output_completion["if"],
+        "needs.changes.outputs.cli == 'true' && runner.os == 'Windows'"
+    );
+    assert!(
+        output_completion["run"]
+            .as_str()
+            .unwrap()
+            .contains("-p delta-arrow-reader-cli --bin dar output_capacity::")
+    );
     let platform_uc = platform_steps
         .iter()
         .find(|step| step["name"] == "Test offline Unity Catalog validation")

@@ -146,6 +146,9 @@ jobs:
       - name: Test core
         if: needs.changes.outputs.code == 'true'
         run: cargo test --locked --all-features
+      - name: Test Windows output completion
+        if: needs.changes.outputs.cli == 'true' && runner.os == 'Windows'
+        run: 'cargo test --locked -p delta-arrow-reader-cli --bin dar output_capacity:: -- --test-threads=1'
       - name: Test CLI query resource limits
         if: needs.changes.outputs.cli == 'true'
         run: cargo test --locked -p delta-arrow-reader-cli --test cli query::resources -- --test-threads=1
