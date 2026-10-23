@@ -32,7 +32,7 @@ const MAX_COMMAND_GUIDE_BYTES: usize = 4 * 1024;
 const MAX_SCHEMA_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_AUTHORIZATION_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
-const DEADLINE: Duration = Duration::from_secs(5);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
 #[command(group(ArgGroup::new("full_definition_target").args(["command", "schema", "authorization"])))]
@@ -101,7 +101,7 @@ fn build_capability_index() -> Value {
 fn discovery_limits(max_output_bytes: usize) -> Value {
     json!({
         "max_output_bytes": max_output_bytes,
-        "deadline_ms": DEADLINE.as_millis(),
+        "deadline_ms": DISCOVERY_TIMEOUT.as_millis(),
         "failure_diagnostic_timeout_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
     })
 }
@@ -452,7 +452,7 @@ pub(crate) fn run_capabilities(
     options: CapabilitiesArgs,
     diagnostic_format: DiagnosticFormat,
 ) -> ExitCode {
-    let deadline = std::time::Instant::now() + DEADLINE;
+    let deadline = std::time::Instant::now() + DISCOVERY_TIMEOUT;
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -498,7 +498,7 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
             (schema.schema_document(), MAX_FULL_RESPONSE_BYTES)
         } else {
             (
-                schema.guide_document(options.detail.as_deref())?,
+                schema.build_schema_guide(options.detail.as_deref())?,
                 MAX_SCHEMA_GUIDE_BYTES,
             )
         }

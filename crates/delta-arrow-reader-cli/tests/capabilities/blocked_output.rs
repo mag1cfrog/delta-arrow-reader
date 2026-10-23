@@ -39,7 +39,7 @@ fn wait_for_exit(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus>
     }
 }
 
-fn wait_for_response(child: &mut Child, stdout: &std::fs::File) -> io::Result<()> {
+fn wait_for_stdout_start(child: &mut Child, stdout: &std::fs::File) -> io::Result<()> {
     let deadline = Instant::now() + Duration::from_secs(3);
     while stdout.metadata()?.len() == 0 {
         if Instant::now() >= deadline {
@@ -128,7 +128,7 @@ fn cancellation_with_blocked_stderr_keeps_the_signal_status() -> io::Result<()> 
             .stdout(stdout.try_clone()?)
             .stderr(Stdio::from(writer))
             .spawn()?;
-        wait_for_response(&mut child, &stdout)?;
+        wait_for_stdout_start(&mut child, &stdout)?;
         // SAFETY: this is the live subprocess started above.
         assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
         assert_eq!(
@@ -193,7 +193,7 @@ fn draining_stderr_after_failure_never_publishes_completion() -> io::Result<()> 
             .stdout(stdout.try_clone()?)
             .stderr(Stdio::from(writer))
             .spawn()?;
-        wait_for_response(&mut child, &stdout)?;
+        wait_for_stdout_start(&mut child, &stdout)?;
         if let Some(signal) = signal {
             // SAFETY: this is the live subprocess started above.
             assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
@@ -232,7 +232,7 @@ fn draining_stderr_before_deadline_finishes_without_changing_pipe_flags() -> io:
         .stdout(stdout.try_clone()?)
         .stderr(Stdio::from(writer))
         .spawn()?;
-    wait_for_response(&mut child, &stdout)?;
+    wait_for_stdout_start(&mut child, &stdout)?;
     thread::sleep(Duration::from_millis(50));
     // SAFETY: the writer stays open for the duration of the query.
     assert_eq!(

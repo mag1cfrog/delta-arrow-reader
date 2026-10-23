@@ -582,12 +582,12 @@ mod tests {
             crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputKind::Predicate)?
                 .into_predicate();
         if result.is_ok() {
-            static SCHEMA: std::sync::LazyLock<jsonschema::Validator> =
+            static SCHEMA_VALIDATOR: std::sync::LazyLock<jsonschema::Validator> =
                 std::sync::LazyLock::new(|| {
                     jsonschema::validator_for(&JsonInputKind::Predicate.schema_document()["schema"])
                         .unwrap()
                 });
-            SCHEMA
+            SCHEMA_VALIDATOR
                 .validate(&serde_json::from_str(text).unwrap())
                 .unwrap();
             assert!(

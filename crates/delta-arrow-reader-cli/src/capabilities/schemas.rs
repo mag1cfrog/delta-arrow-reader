@@ -26,7 +26,7 @@ pub(crate) enum DiscoverySchema {
 }
 
 impl DiscoverySchema {
-    pub(super) fn guide_document(self, detail: Option<&str>) -> Result<Value, Error> {
+    pub(super) fn build_schema_guide(self, detail: Option<&str>) -> Result<Value, Error> {
         let document = self.schema_document();
         let schema = &document["schema"];
         let executable = command_name();
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn row_value_encodings_are_disclosed_only_when_selected() {
-        let guide = DiscoverySchema::Rows.guide_document(None).unwrap();
+        let guide = DiscoverySchema::Rows.build_schema_guide(None).unwrap();
         assert!(guide.get("encodings").is_none());
         assert!(!guide.to_string().contains("base64"));
         assert!(
@@ -407,15 +407,19 @@ mod tests {
                 .unwrap()
                 .contains("integers use exact decimal strings")
         );
-        let rows = DiscoverySchema::Rows.guide_document(Some("rows")).unwrap();
+        let rows = DiscoverySchema::Rows
+            .build_schema_guide(Some("rows"))
+            .unwrap();
         for name in rows["encodings"].as_array().unwrap() {
-            let detail = DiscoverySchema::Rows.guide_document(name.as_str()).unwrap();
+            let detail = DiscoverySchema::Rows
+                .build_schema_guide(name.as_str())
+                .unwrap();
             assert!(detail["definition"]["description"].is_string());
             assert!(detail.get("encodings").is_none());
             assert!(detail.get("detail_command").is_none());
         }
         let binary = DiscoverySchema::Rows
-            .guide_document(Some("binary"))
+            .build_schema_guide(Some("binary"))
             .unwrap();
         assert!(
             binary["definition"]["description"]
@@ -430,11 +434,13 @@ mod tests {
     fn row_field_guides_explain_states_without_validation_branches() {
         let full = DiscoverySchema::Rows.schema_document();
         for field in full["schema"]["properties"].as_object().unwrap().keys() {
-            let detail = DiscoverySchema::Rows.guide_document(Some(field)).unwrap();
+            let detail = DiscoverySchema::Rows
+                .build_schema_guide(Some(field))
+                .unwrap();
             assert!(detail.get("conditions").is_none(), "{field}");
         }
         let detail = DiscoverySchema::Rows
-            .guide_document(Some("has_more"))
+            .build_schema_guide(Some("has_more"))
             .unwrap();
         let description = detail["definition"]["description"].as_str().unwrap();
         assert!(description.contains("Preview only"));
@@ -474,7 +480,7 @@ mod tests {
     #[test]
     fn binding_details_defer_validation_rules_to_the_full_schema() {
         for format in [DiscoverySchema::Rows, DiscoverySchema::Completion] {
-            let detail = format.guide_document(Some("bindings")).unwrap();
+            let detail = format.build_schema_guide(Some("bindings")).unwrap();
             assert_eq!(detail["full_command"][4], "--full");
             let definition = &detail["definition"];
             assert!(detail.get("conditions").is_none());
@@ -550,7 +556,7 @@ mod tests {
                 ],
             ),
         ] {
-            let detail = schema.guide_document(Some(field)).unwrap();
+            let detail = schema.build_schema_guide(Some(field)).unwrap();
             let conditions = json!({"allOf": detail["conditions"]});
             for (record, expected) in cases {
                 assert_eq!(
@@ -601,7 +607,7 @@ mod tests {
     #[test]
     fn authorization_details_offer_a_reference_example_and_selected_field_rules() {
         let guide = DiscoverySchema::Tables
-            .guide_document(Some("tables[].authorization"))
+            .build_schema_guide(Some("tables[].authorization"))
             .unwrap();
         for omitted in ["allOf", "properties"] {
             assert!(guide["definition"].get(omitted).is_none());
@@ -629,7 +635,7 @@ mod tests {
         );
         for field in fields {
             let detail = DiscoverySchema::Tables
-                .guide_document(Some(&format!("tables[].authorization.{field}")))
+                .build_schema_guide(Some(&format!("tables[].authorization.{field}")))
                 .unwrap();
             assert_eq!(detail["definition"], schema["properties"][&field]);
             if field == "env_file" {
@@ -668,7 +674,7 @@ mod tests {
     #[test]
     fn field_details_keep_only_applicable_conditions_and_integer_rules() {
         let version = DiscoverySchema::Completion
-            .guide_document(Some("format_version"))
+            .build_schema_guide(Some("format_version"))
             .unwrap();
         assert_eq!(version["definition"]["enum"], json!([1, 2]));
         assert!(
@@ -688,12 +694,12 @@ mod tests {
             assert!(version.get(omitted).is_none(), "{omitted}");
         }
         let rows = DiscoverySchema::Completion
-            .guide_document(Some("rows"))
+            .build_schema_guide(Some("rows"))
             .unwrap();
         assert_eq!(rows["conditions"].as_array().unwrap().len(), 1);
         assert!(!rows["conditions"].to_string().contains("bindings"));
         let bindings = DiscoverySchema::Completion
-            .guide_document(Some("bindings"))
+            .build_schema_guide(Some("bindings"))
             .unwrap();
         let description = bindings["definition"]["description"].as_str().unwrap();
         assert!(description.contains("query has at least one binding"));
@@ -704,7 +710,7 @@ mod tests {
             "parquet_metadata_size_hint_bytes",
         ] {
             let guide = DiscoverySchema::ExecutionOptions
-                .guide_document(Some(field))
+                .build_schema_guide(Some(field))
                 .unwrap();
             assert!(
                 guide["integer_notation"]
@@ -715,7 +721,7 @@ mod tests {
         }
         for name in ["decimal128", "fixed_size_binary", "binary"] {
             let guide = DiscoverySchema::Predicate
-                .guide_document(Some(name))
+                .build_schema_guide(Some(name))
                 .unwrap();
             assert!(guide["integer_notation"].is_string(), "{name}");
         }
@@ -725,7 +731,7 @@ mod tests {
         ] {
             assert!(
                 format
-                    .guide_document(Some(field))
+                    .build_schema_guide(Some(field))
                     .unwrap()
                     .get("integer_notation")
                     .is_none()
@@ -736,7 +742,7 @@ mod tests {
     #[test]
     fn batch_count_detail_requires_it_only_for_arrow_completions() {
         let guide = DiscoverySchema::Completion
-            .guide_document(Some("batches"))
+            .build_schema_guide(Some("batches"))
             .unwrap();
         let conditions = json!({"allOf": guide["conditions"]});
         assert_eq!(guide["conditions"].as_array().unwrap().len(), 1);
@@ -765,7 +771,7 @@ mod tests {
     fn retryable_detail_keeps_recovery_semantics() {
         let full = DiscoverySchema::Diagnostic.schema_document();
         let detail = DiscoverySchema::Diagnostic
-            .guide_document(Some("retryable"))
+            .build_schema_guide(Some("retryable"))
             .unwrap();
         assert_eq!(
             detail["definition"],
@@ -810,7 +816,7 @@ mod tests {
             ),
         ] {
             let guide = DiscoverySchema::Predicate
-                .guide_document(Some(name))
+                .build_schema_guide(Some(name))
                 .unwrap();
             jsonschema::validate(&guide["definition"], &literal).unwrap();
             assert!(guide.get("scalar_types").is_none());
@@ -836,14 +842,14 @@ mod tests {
             }
         }
         let guide = DiscoverySchema::Predicate
-            .guide_document(Some("timestamp_us"))
+            .build_schema_guide(Some("timestamp_us"))
             .unwrap();
         assert!(!jsonschema::is_valid(
             &guide["definition"],
             &json!({"type": "timestamp_us", "value": "0"})
         ));
         let guide = DiscoverySchema::Predicate
-            .guide_document(Some("int64"))
+            .build_schema_guide(Some("int64"))
             .unwrap();
         assert!(!jsonschema::is_valid(
             &guide["definition"],
@@ -859,7 +865,7 @@ mod tests {
             ("and", "operators"),
         ] {
             let guide = DiscoverySchema::Predicate
-                .guide_document(Some(name))
+                .build_schema_guide(Some(name))
                 .unwrap();
             assert!(!guide["definition"].to_string().contains("$ref"));
             assert_eq!(
@@ -880,13 +886,13 @@ mod tests {
             for name in guide[next].as_array().unwrap() {
                 assert!(
                     DiscoverySchema::Predicate
-                        .guide_document(name.as_str())
+                        .build_schema_guide(name.as_str())
                         .is_ok()
                 );
             }
         }
         let guide = DiscoverySchema::Predicate
-            .guide_document(Some("float32"))
+            .build_schema_guide(Some("float32"))
             .unwrap();
         assert_eq!(
             guide["definition"]["properties"]["type"]["enum"],
@@ -894,12 +900,12 @@ mod tests {
         );
         assert!(
             DiscoverySchema::Completion
-                .guide_document(Some("int64"))
+                .build_schema_guide(Some("int64"))
                 .is_err()
         );
         assert!(
             DiscoverySchema::Predicate
-                .guide_document(Some("rows"))
+                .build_schema_guide(Some("rows"))
                 .is_err()
         );
     }

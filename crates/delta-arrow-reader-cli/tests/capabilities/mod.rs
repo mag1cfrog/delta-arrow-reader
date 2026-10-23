@@ -9,28 +9,28 @@ mod blocked_output;
 pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
     use std::sync::LazyLock;
 
-    static INSPECTION: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("inspection"));
-    static INSPECTION_SUMMARY: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("inspection-summary"));
-    static DIAGNOSTIC: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("diagnostic"));
-    static COMPLETION: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("completion"));
-    static ROWS: LazyLock<jsonschema::Validator> =
-        LazyLock::new(|| output_schema_validator("rows"));
+    static INSPECTION_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("inspection"));
+    static INSPECTION_SUMMARY_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("inspection-summary"));
+    static DIAGNOSTIC_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("diagnostic"));
+    static COMPLETION_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("completion"));
+    static ROWS_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("rows"));
     let validator = match name {
-        "inspection" => &*INSPECTION,
-        "inspection-summary" => &*INSPECTION_SUMMARY,
-        "diagnostic" => &*DIAGNOSTIC,
-        "completion" => &*COMPLETION,
-        "rows" => &*ROWS,
+        "inspection" => &*INSPECTION_VALIDATOR,
+        "inspection-summary" => &*INSPECTION_SUMMARY_VALIDATOR,
+        "diagnostic" => &*DIAGNOSTIC_VALIDATOR,
+        "completion" => &*COMPLETION_VALIDATOR,
+        "rows" => &*ROWS_VALIDATOR,
         _ => panic!("unknown output schema: {name}"),
     };
     validator.validate(output).unwrap();
 }
 
-fn output_schema_validator(name: &str) -> jsonschema::Validator {
+fn load_cli_output_schema_validator(name: &str) -> jsonschema::Validator {
     let output = run_with_timeout(
         Command::new(env!("CARGO_BIN_EXE_dar"))
             .env_clear()

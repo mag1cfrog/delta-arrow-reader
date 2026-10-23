@@ -159,14 +159,14 @@ mod tests {
         .into_execution_options()
         .context(ConfigurationSnafu);
         if result.is_ok() {
-            static SCHEMA: std::sync::LazyLock<jsonschema::Validator> =
+            static SCHEMA_VALIDATOR: std::sync::LazyLock<jsonschema::Validator> =
                 std::sync::LazyLock::new(|| {
                     jsonschema::validator_for(
                         &JsonInputKind::ExecutionOptions.schema_document()["schema"],
                     )
                     .unwrap()
                 });
-            SCHEMA
+            SCHEMA_VALIDATOR
                 .validate(&serde_json::from_str(text).unwrap())
                 .unwrap();
             assert!(
