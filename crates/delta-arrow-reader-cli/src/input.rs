@@ -1,4 +1,4 @@
-//! JSON file inputs for storage options, row filters, and scan execution settings.
+//! File inputs for storage options, credential variables, row filters, and scan settings.
 //!
 //! Each file is associated with a CLI option and has its own accepted structure
 //! and value types. This module loads the files and associates read and format
@@ -25,15 +25,17 @@ use snafu::{ResultExt, ensure};
 
 use crate::{Error, InputIoSnafu, InputValidationSnafu, diagnostics::InputCorrection};
 
+mod env_file;
 mod execution_options;
 mod predicate;
 mod schema_errors;
 mod schemas;
 
+pub(crate) use env_file::read_env_file;
 pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_correction};
 pub(crate) use predicate::{PredicateInput, predicate_type_mismatch_correction};
 
-const MAX_JSON_BYTES: u64 = 1024 * 1024;
+const MAX_INPUT_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -92,23 +94,25 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
     path: &str,
     input_kind: JsonInputKind,
 ) -> Result<T, Error> {
-    let file = File::open(path).context(InputIoSnafu {
-        argument: input_kind.argument(),
-    })?;
-    let mut bytes = Vec::new();
-    file.take(MAX_JSON_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .context(InputIoSnafu {
-            argument: input_kind.argument(),
-        })?;
+    let bytes = read_input_bytes(path, input_kind.argument())?;
     ensure!(
-        bytes.len() as u64 <= MAX_JSON_BYTES,
+        bytes.len() as u64 <= MAX_INPUT_BYTES,
         InputValidationSnafu {
             reason: "input_file_too_large",
             correction: input_kind.correction("Keep the JSON input at or below 1 MiB."),
         }
     );
     parse_json(&bytes, input_kind)
+}
+
+fn read_input_bytes(path: &str, argument: &'static str) -> Result<Vec<u8>, Error> {
+    let file = File::open(path).context(InputIoSnafu { argument })?;
+    let mut bytes = Vec::new();
+    // One extra byte lets each format report its own size-limit correction.
+    file.take(MAX_INPUT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .context(InputIoSnafu { argument })?;
+    Ok(bytes)
 }
 
 pub(crate) fn parse_json<T: DeserializeOwned>(

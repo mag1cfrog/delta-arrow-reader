@@ -2,6 +2,7 @@
 
 mod azure_blob;
 mod credential_file_paths;
+pub(crate) mod env_file;
 mod gcs;
 mod s3;
 
@@ -41,23 +42,7 @@ impl CredentialSource {
         mut options: DeltaStorageOptions,
         credential_file_directory: Option<&Path>,
     ) -> Result<DeltaTableBuilder, Error> {
-        let unsupported_storage = || Error::StorageAuthorization {
-            reason: "auth_source_unsupported_storage",
-        };
-        let url = Url::parse(location).map_err(|_| unsupported_storage())?;
-        let (scheme, _) = ObjectStoreScheme::parse(&url).map_err(|_| unsupported_storage())?;
-        ensure!(
-            matches!(
-                scheme,
-                ObjectStoreScheme::AmazonS3
-                    | ObjectStoreScheme::MicrosoftAzure
-                    | ObjectStoreScheme::GoogleCloudStorage
-            ),
-            StorageAuthorizationSnafu {
-                reason: "auth_source_unsupported_storage"
-            }
-        );
-        validate_table_url(&url, &scheme)?;
+        let scheme = storage_scheme(location)?;
         if let Some(directory) = credential_file_directory {
             credential_file_paths::resolve_relative_paths(&mut options, &scheme, directory)?;
         }
@@ -73,9 +58,32 @@ impl CredentialSource {
             (ObjectStoreScheme::GoogleCloudStorage, Self::Json | Self::Env) => {
                 gcs::configure_table_credentials(builder, location, options, self)
             }
-            _ => Err(unsupported_storage()),
+            _ => Err(Error::StorageAuthorization {
+                reason: "auth_source_unsupported_storage",
+            }),
         }
     }
+}
+
+fn storage_scheme(location: &str) -> Result<ObjectStoreScheme, Error> {
+    let unsupported_storage = || Error::StorageAuthorization {
+        reason: "auth_source_unsupported_storage",
+    };
+    let url = Url::parse(location).map_err(|_| unsupported_storage())?;
+    let (scheme, _) = ObjectStoreScheme::parse(&url).map_err(|_| unsupported_storage())?;
+    ensure!(
+        matches!(
+            scheme,
+            ObjectStoreScheme::AmazonS3
+                | ObjectStoreScheme::MicrosoftAzure
+                | ObjectStoreScheme::GoogleCloudStorage
+        ),
+        StorageAuthorizationSnafu {
+            reason: "auth_source_unsupported_storage"
+        }
+    );
+    validate_table_url(&url, &scheme)?;
+    Ok(scheme)
 }
 
 /// Azure Blob URLs may use container@account; passwords and embedded tokens remain invalid.

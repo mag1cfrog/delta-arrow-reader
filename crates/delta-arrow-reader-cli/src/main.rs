@@ -148,6 +148,12 @@ enum Error {
         reason: &'static str,
         correction: InputCorrection,
     },
+    #[snafu(display("Invalid env file (reason={reason})."))]
+    EnvFileInput {
+        reason: &'static str,
+        line: Option<usize>,
+        expected: &'static str,
+    },
     #[snafu(display("Could not read the input file."))]
     InputIo {
         source: io::Error,
@@ -241,6 +247,12 @@ impl Error {
                 reason,
                 source_kind: None,
             },
+            Self::EnvFileInput { reason, .. } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_input_env",
+                reason,
+                source_kind: None,
+            },
             Self::InputIo { source, .. } => ErrorClassification {
                 phase: "configuration",
                 code: "input_file_io",
@@ -315,6 +327,15 @@ impl Error {
         let (input_kind, hint) = match self {
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. } => return Some(correction.clone()),
+            Self::EnvFileInput { expected, .. } => {
+                return Some(InputCorrection {
+                    argument: "--env-file".into(),
+                    field_path: None,
+                    expected: (*expected).into(),
+                    supplied: None,
+                    hint: "Use one NAME=VALUE record per line; quotes must enclose the whole value.",
+                });
+            }
             Self::InputJson {
                 correction: Some(correction),
                 ..
@@ -524,6 +545,10 @@ impl Error {
             ),
             _ => (None, None),
         };
+        let env_file_line = match self {
+            Self::EnvFileInput { line, .. } => *line,
+            _ => None,
+        };
         let message: &dyn fmt::Display = match self {
             Self::UnityCatalog { source } => source,
             Self::Query { source } => source,
@@ -534,7 +559,7 @@ impl Error {
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
             error_source_kind = source_kind, argument_kind, argument, expected, supplied, hint, field_path,
-            json_kind, json_line, json_column, io_kind, os_error,
+            json_kind, json_line, json_column, env_file_line, io_kind, os_error,
             "{message}"
         );
     }
@@ -596,6 +621,11 @@ impl Error {
                 record["line"] = source.line().into();
                 record["column"] = source.column().into();
             }
+            Self::EnvFileInput {
+                line: Some(line), ..
+            } => {
+                record["line"] = (*line).into();
+            }
             Self::InputIo { source, .. }
             | Self::Runtime { source, .. }
             | Self::Output { source } => {
@@ -624,6 +654,7 @@ impl Error {
             | Self::TerminalOutput
             | Self::InputJson { .. }
             | Self::InputValidation { .. }
+            | Self::EnvFileInput { .. }
             | Self::InputIo { .. }
             | Self::StorageAuthorization { .. }
             | Self::Configuration { .. } => 2,

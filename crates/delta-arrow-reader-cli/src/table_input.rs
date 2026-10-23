@@ -70,7 +70,10 @@ pub(crate) struct TableOptions {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     pub(crate) storage_options_file: Option<String>,
-    /// Explicit S3, Azure Blob, or GCS credential source. Without it, existing storage behavior applies.
+    /// Explicit UTF-8 NAME=VALUE credential file, at most 1 MiB. Values are literal.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["auth_source", "databricks_profile"])]
+    pub(crate) env_file: Option<String>,
+    /// Explicit S3, Azure Blob, or GCS credential source. Without a selector, existing storage behavior applies.
     #[arg(long, value_enum)]
     pub(crate) auth_source: Option<CredentialSource>,
 }
@@ -113,6 +116,11 @@ impl TableOptions {
         let builder = DeltaTableBuilder::new(location)
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(self.snapshot_selection());
+        if let Some(path) = &self.env_file {
+            return crate::direct_credentials::env_file::configure_table_credentials(
+                builder, location, options, path,
+            );
+        }
         match self.auth_source {
             Some(source) => source.configure_table_credentials(
                 builder,
@@ -131,12 +139,24 @@ impl TableOptions {
         uc_target: Option<UnityCatalogTableTarget>,
         credential_file_directory: Option<&Path>,
     ) -> Result<TableLoadRequest, Error> {
+        ensure!(
+            self.env_file.is_none() || self.auth_source.is_none(),
+            StorageAuthorizationSnafu {
+                reason: "env_file_conflicts_with_auth_source"
+            }
+        );
         match uc_target {
             Some(target) => {
                 ensure!(
                     self.auth_source.is_none(),
                     StorageAuthorizationSnafu {
                         reason: "auth_source_conflicts_with_unity_catalog"
+                    }
+                );
+                ensure!(
+                    self.env_file.is_none(),
+                    StorageAuthorizationSnafu {
+                        reason: "env_file_conflicts_with_unity_catalog"
                     }
                 );
                 let storage_options = self.read_storage_options()?;

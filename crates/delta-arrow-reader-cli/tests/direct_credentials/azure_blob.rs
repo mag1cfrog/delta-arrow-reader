@@ -5,7 +5,7 @@ mod managed_identity;
 mod mock_token_server;
 mod workload_identity;
 
-use std::{collections::HashMap, process::Command};
+use std::{collections::HashMap, fs, process::Command};
 
 use serde_json::json;
 use url::Url;
@@ -75,7 +75,7 @@ fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) -> T
 
 #[test]
 fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
-    for source in ["json", "env"] {
+    for source in ["json", "env", "env-file"] {
         for (option, variable, value) in CREDENTIALS {
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let mut options = json!({"account_name":"account"});
@@ -83,10 +83,19 @@ fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
                 options[option] = json!(value);
             }
             fixture.write_options(options)?;
+            let env_file = fixture.directory.path().join("selected.env");
+            if source == "env-file" {
+                fs::write(&env_file, format!("{variable}={value}\n"))?;
+            }
             for operation in ["inspect", "scan", "preview", "query"] {
                 let mut command = fixture.command(operation);
+                if source == "env-file" {
+                    command.arg("--env-file").arg(&env_file);
+                } else {
+                    command.args(["--auth-source", source]);
+                }
                 command
-                    .args(["--auth-source", source, "--diagnostics=json"])
+                    .arg("--diagnostics=json")
                     .env("AZURE_STORAGE_ACCOUNT_NAME", "secret-unused-account")
                     .env("AZURE_USE_AZURE_CLI", "true")
                     .env("AZURE_STORAGE_USE_EMULATOR", "true")

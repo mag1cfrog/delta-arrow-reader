@@ -230,7 +230,7 @@ fn validate_credential_family(
     Ok(())
 }
 
-fn validate_storage_option(
+pub(super) fn validate_storage_option(
     key: &AzureConfigKey,
     value: &str,
     source: CredentialSource,

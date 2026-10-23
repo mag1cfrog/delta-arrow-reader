@@ -129,7 +129,7 @@ fn configure_native_credentials(
         ))))
 }
 
-fn validate_storage_option(
+pub(super) fn validate_storage_option(
     key: &AmazonS3ConfigKey,
     value: &str,
     source: CredentialSource,

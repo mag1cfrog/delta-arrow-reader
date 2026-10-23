@@ -58,8 +58,8 @@ pub(crate) struct QueryArgs {
     #[arg(required_unless_present = "tables_file")]
     table: Option<String>,
     /// Local JSON manifest of 1-64 named tables; at most 1 MiB. Relative locations use its directory.
-    /// Conflicts with TABLE, --table-version, --storage-options-file, --auth-source, and --databricks-profile.
-    #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "auth_source", "databricks_profile"])]
+    /// Conflicts with TABLE, --table-version, --storage-options-file, --env-file, --auth-source, and --databricks-profile.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "env_file", "auth_source", "databricks_profile"])]
     tables_file: Option<String>,
     #[command(flatten)]
     table_options: TableOptions,

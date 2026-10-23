@@ -62,7 +62,7 @@ pub(super) fn configure_table_credentials(
         ))))
 }
 
-fn validate_storage_option(
+pub(super) fn validate_storage_option(
     key: &GoogleConfigKey,
     value: &str,
     source: CredentialSource,
