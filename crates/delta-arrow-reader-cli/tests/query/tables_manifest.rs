@@ -5,7 +5,8 @@ use std::{fs, path::Path, process::Command};
 use serde_json::{Value, json};
 
 use super::{
-    TestResult, assert_single_terminal_record, decode_query_result, fixture_path, run_with_timeout,
+    TestResult, assert_query_success_and_decode_arrow, assert_single_terminal_record, fixture_path,
+    run_with_timeout,
 };
 
 fn manifest_directory() -> TestResult<tempfile::TempDir> {
@@ -267,7 +268,7 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         "--max-output-bytes",
         "8192",
     ]))?;
-    assert_eq!(decode_query_result(&saved)?.num_rows(), 5);
+    assert_eq!(assert_query_success_and_decode_arrow(&saved)?.num_rows(), 5);
     let receipt = assert_single_terminal_record(&saved.stderr, "completion");
     assert_eq!(receipt["bindings"], result["bindings"]);
     Ok(())
@@ -495,7 +496,7 @@ fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
         manifest.to_string(),
     )?;
     let output = run_with_timeout(&mut manifest_command(directory.path()))?;
-    decode_query_result(&output)?;
+    assert_query_success_and_decode_arrow(&output)?;
     assert!(output.stderr.len() <= 8192);
     assert_eq!(
         assert_single_terminal_record(&output.stderr, "completion")["bindings"]

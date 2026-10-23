@@ -18,7 +18,7 @@ use futures_util::{Stream, StreamExt};
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{OutputLimits, field_descriptions::field_details, on_stdout_thread};
+use super::{OutputLimits, field_descriptions::field_details, write_on_stdout_thread};
 use crate::{Error, StdoutStats, write_stdout};
 use value::{JsonRow, validate_type};
 
@@ -96,7 +96,7 @@ pub(crate) async fn write_query_to_stdout(
     limits: OutputLimits,
 ) -> Result<StdoutStats, Error> {
     let runtime = tokio::runtime::Handle::current();
-    on_stdout_thread(move || {
+    write_on_stdout_thread(move || {
         let (bytes, stats) = runtime.block_on(encode_query(schema, stream, &bindings, limits))?;
         write_stdout(&bytes)?;
         Ok(stats)

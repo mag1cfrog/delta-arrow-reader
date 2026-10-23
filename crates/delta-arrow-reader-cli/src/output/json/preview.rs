@@ -10,7 +10,7 @@ use futures_util::{Stream, StreamExt};
 use serde::Serialize;
 use serde_json::json;
 
-use super::{BoundedJsonBuffer, JsonRow, OutputLimits, on_stdout_thread};
+use super::{BoundedJsonBuffer, JsonRow, OutputLimits, write_on_stdout_thread};
 use crate::{Error, StdoutStats, write_stdout};
 
 #[derive(Serialize)]
@@ -52,7 +52,7 @@ pub(crate) async fn write_preview_to_stdout(
     limits: OutputLimits,
 ) -> Result<StdoutStats, Error> {
     let runtime = tokio::runtime::Handle::current();
-    on_stdout_thread(move || {
+    write_on_stdout_thread(move || {
         let (bytes, stats) =
             runtime.block_on(encode_preview(schema, stream, table_version, limits))?;
         write_stdout(&bytes)?;

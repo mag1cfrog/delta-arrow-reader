@@ -80,7 +80,7 @@ fn json_queries_preserve_exact_values_and_snapshot_selection() -> TestResult {
         let result = decode_json(&output)?;
         assert_eq!(result["bindings"][0]["table_version"], version);
         assert_eq!(result["rows"].as_array().unwrap().len(), expected_rows);
-        let arrow = decode_query_result(&run_with_timeout(
+        let arrow = assert_query_success_and_decode_arrow(&run_with_timeout(
             fixture.command().args(["--table-version", version]),
         )?)?;
         let values = arrow
@@ -240,7 +240,7 @@ fn unsupported_json_types_offer_arrow_recovery_even_for_empty_results() -> TestR
                 .unwrap()
                 .contains("--format arrow")
         );
-        decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
     }
     Ok(())
 }

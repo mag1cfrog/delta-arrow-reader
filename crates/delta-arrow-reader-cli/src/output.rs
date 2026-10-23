@@ -20,7 +20,7 @@ pub(crate) struct OutputLimits {
 }
 
 // A blocked pipe must leave the runtime and its blocking pool free to read files.
-async fn on_stdout_thread(
+async fn write_on_stdout_thread(
     write: impl FnOnce() -> Result<StdoutStats, Error> + Send + 'static,
 ) -> Result<StdoutStats, Error> {
     let (sender, receiver) = tokio::sync::oneshot::channel();

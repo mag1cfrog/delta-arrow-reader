@@ -19,7 +19,7 @@ use crate::{
     mock_cloud_storage::{
         append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
     },
-    query::decode_query_result,
+    query::assert_query_success_and_decode_arrow,
     sort_by_id,
 };
 
@@ -238,7 +238,7 @@ fn joins_keep_loaded_snapshots_when_tables_change_and_credentials_refresh() -> T
 
     // A fresh query must see both new versions, proving the updates were visible and changed data.
     let output = run_with_timeout(&mut command)?;
-    let actual = decode_query_result(&output)?;
+    let actual = assert_query_success_and_decode_arrow(&output)?;
     assert_eq!(
         assert_single_terminal_record(&output.stderr, "completion")["bindings"],
         json!([

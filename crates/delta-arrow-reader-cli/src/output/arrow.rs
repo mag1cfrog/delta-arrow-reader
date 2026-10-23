@@ -9,7 +9,7 @@ use snafu::Snafu;
 
 use crate::{Error, StdoutStats};
 
-use super::{OutputLimits, on_stdout_thread};
+use super::{OutputLimits, write_on_stdout_thread};
 
 /// Preserves the resource error through Arrow's io::Error wrapper.
 #[derive(Debug, Snafu)]
@@ -47,7 +47,7 @@ pub(crate) async fn write_arrow_stream_to_stdout(
     limits: Option<OutputLimits>,
 ) -> Result<StdoutStats, Error> {
     let runtime = tokio::runtime::Handle::current();
-    on_stdout_thread(move || {
+    write_on_stdout_thread(move || {
         runtime.block_on(async {
             let mut writer = StreamWriter::try_new(
                 ByteBudgetWriter {

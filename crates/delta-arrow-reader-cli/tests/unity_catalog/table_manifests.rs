@@ -21,7 +21,7 @@ use crate::{
         CloudStorageProtocol, append_west_partition_removal_commit, expected_partitioned_rows,
         partitioned_objects, partitioned_objects_with_large_parquet_footers,
     },
-    query::decode_query_result,
+    query::assert_query_success_and_decode_arrow,
     sort_by_id,
 };
 
@@ -112,7 +112,7 @@ fn mixed_joins_isolate_profiles_and_capture_options_before_any_table_loads() -> 
                     "ambient-secret-missing.json",
                 ),
         )?;
-        let actual = decode_query_result(&output)?;
+        let actual = assert_query_success_and_decode_arrow(&output)?;
         let expected = expected_partitioned_rows()?;
         let regions = expected
             .column_by_name("region")

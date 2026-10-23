@@ -23,7 +23,7 @@ use crate::{
         append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
         partitioned_objects_with_large_parquet_footers, requested_object_path,
     },
-    query::{decode_query_result, fixture_path, json::decode_json},
+    query::{assert_query_success_and_decode_arrow, fixture_path, json::decode_json},
 };
 
 #[test]
@@ -106,7 +106,7 @@ fn single_table_queries_preserve_values_versions_and_vended_credentials() -> Tes
                 command.args(["--table-version", "0"]);
             }
             let output = run_with_timeout(&mut command)?;
-            let actual = decode_query_result(&output)?;
+            let actual = assert_query_success_and_decode_arrow(&output)?;
             let ids = expected
                 .column_by_name("id")
                 .unwrap()
@@ -297,7 +297,7 @@ fn concurrent_sql_reads_renew_once_and_keep_the_original_snapshot_for_every_clou
             })?;
         // Hold the refresh open so concurrent file reads must share its result.
         let output = run_with_timeout(command.env("DAR_TEST_REFRESH_DELAY", "1"))?;
-        let actual = decode_query_result(&output)?;
+        let actual = assert_query_success_and_decode_arrow(&output)?;
         assert_eq!(actual.columns(), expected.columns(), "{kind:?}");
         assert_eq!(
             assert_single_terminal_record(&output.stderr, "completion")["bindings"],
