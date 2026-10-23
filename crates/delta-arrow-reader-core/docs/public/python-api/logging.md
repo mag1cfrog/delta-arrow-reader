@@ -48,9 +48,8 @@ apply to later events, including reads from an existing table.
 
 ## When a read fails
 
-Handle the exception from opening, planning, or reading batches. Logging does
-not change whether the call succeeds. See [Handle errors](errors.md) for the
-exceptions to catch and their error attributes.
+Handle the exception from opening, planning, or reading batches.
+[Handle errors](errors.md) lists the exceptions to catch and their error attributes.
 
 ## Customize log records
 

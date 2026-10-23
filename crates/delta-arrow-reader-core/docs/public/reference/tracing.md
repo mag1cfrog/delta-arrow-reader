@@ -561,7 +561,7 @@ target without formatting the dependency error.
 [stream-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/tests/stream_tracing.rs
 [scheduling-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/scheduling.rs
 [lifecycle-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/operation_tracing.rs
-[task-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/tasks.rs
+[task-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/task_propagation.rs
 [provider-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion.rs
 [callback-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion_callbacks.rs
 [execution-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/datafusion/execution.rs
