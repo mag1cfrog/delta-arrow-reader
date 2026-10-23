@@ -47,7 +47,7 @@ pub(crate) struct InspectionArgs {
 }
 
 impl InspectionArgs {
-    pub(crate) fn validate(&self) -> Result<(), Error> {
+    pub(crate) fn validate_view_options(&self) -> Result<(), Error> {
         if self.view == InspectionView::Full
             && (!self.columns.is_empty()
                 || self.column_prefix.is_some()
@@ -63,7 +63,7 @@ impl InspectionArgs {
         Ok(())
     }
 
-    pub(crate) fn encode(&self, table: &DeltaTable) -> Result<Vec<u8>, Error> {
+    pub(crate) fn encode_json(&self, table: &DeltaTable) -> Result<Vec<u8>, Error> {
         if self.view == InspectionView::Full {
             return Ok(crate::encode_inspection_json(
                 table.version(),
@@ -86,7 +86,7 @@ impl InspectionArgs {
                     .collect::<Vec<_>>()
             );
         } else if !self.columns.is_empty() {
-            result["fields"] = self.selected_fields(schema.as_ref())?.into();
+            result["fields"] = self.selected_field_details(schema.as_ref())?.into();
         } else {
             result["checks"] = json!({
                 "scan_protocol": if table.validate_protocol().is_ok() { "passed" } else { "failed" },
@@ -107,7 +107,7 @@ impl InspectionArgs {
         Ok(output)
     }
 
-    fn selected_fields(&self, schema: &Schema) -> Result<Vec<Value>, Error> {
+    fn selected_field_details(&self, schema: &Schema) -> Result<Vec<Value>, Error> {
         let mut fields = Vec::with_capacity(self.columns.len());
         for (index, name) in self.columns.iter().enumerate() {
             if self.columns[..index].contains(name) {

@@ -815,7 +815,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     if let Command::Inspect { inspection, .. } = &command {
-        inspection.validate()?;
+        inspection.validate_view_options()?;
     }
     let uc_target = match &command {
         Command::Capabilities(_) => {
@@ -880,7 +880,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         } => async move {
             let (table, _authorized_access) = table.load_table(uc_target).await?;
             let version = table.version();
-            let output = inspection.encode(&table)?;
+            let output = inspection.encode_json(&table)?;
             let stdout_stats = StdoutStats {
                 bytes_written: output.len() as u64,
                 ..Default::default()
