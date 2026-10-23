@@ -419,13 +419,14 @@ fn stream_completion_distinguishes_eof_and_limits_without_duplicate_terminals() 
                 let mut rows = 0;
                 while let Some(batch) = runtime.block_on(stream.next_batch())? {
                     rows += batch.num_rows();
+                    if limit == Some(rows) {
+                        break;
+                    }
                 }
                 assert_eq!(rows, expected_rows);
                 if empty || limit == Some(0) {
                     assert_eq!(stream.metrics().snapshot().file_tasks_started, 0);
                 }
-                assert!(runtime.block_on(stream.next_batch())?.is_none());
-                drop(stream);
                 let events = collector.events();
                 assert_eq!(events.len(), 2, "{events:?}");
                 let (start, terminal) = (&events[0], &events[1]);
@@ -448,6 +449,9 @@ fn stream_completion_distinguishes_eof_and_limits_without_duplicate_terminals() 
                         >= start.fields["elapsed_micros"].as_u64().unwrap()
                 );
                 assert!(!format!("{:?}", collector.records()).contains("secret-"));
+                assert!(runtime.block_on(stream.next_batch())?.is_none());
+                drop(stream);
+                assert_eq!(collector.events().len(), events.len());
                 Ok(())
             })?;
         }
