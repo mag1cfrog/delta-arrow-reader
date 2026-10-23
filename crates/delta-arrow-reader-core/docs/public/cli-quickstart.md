@@ -19,6 +19,8 @@ Both commands accept the same arguments.
 
 ## Inspect the snapshot
 
+<span id="see-the-tables-columns"></span>
+
 ```sh
 dar inspect /path/to/table --view summary
 ```

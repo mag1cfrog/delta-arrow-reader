@@ -172,7 +172,11 @@ stderr records; extract each response's `schema` field
 for validation. Both commands work offline.
 Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
 unsupported `format_version` values for each record kind. Incompatible field meanings or types
-require a new version. This opt-in format replaces the former unversioned
+require a new version.
+
+<span id="json-stderr-migration"></span>
+
+This opt-in format replaces the former unversioned
 JSON stderr object; plain text remains the default.
 
 ## Target filters

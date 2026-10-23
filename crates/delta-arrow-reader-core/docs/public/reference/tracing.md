@@ -1,5 +1,7 @@
 # Tracing event reference
 
+<span id="tracing"></span>
+
 <span id="subscribe-from-rust"></span>
 
 Use this reference when consuming structured events or integrating tracing with
