@@ -146,7 +146,7 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         }
         fs::write(&path, manifest.to_string())?;
         let output = run_with_timeout(&mut command)?;
-        let actual = super::json::decode_json(&output)?;
+        let actual = super::json::assert_query_success_and_decode_json(&output)?;
         let fields = actual["schema"]["fields"].as_array().unwrap();
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0]["name"], "id");
@@ -204,7 +204,7 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         ]}))?,
     )?;
     let output = run_with_timeout(manifest_command(directory.path()).args(["--format", "json"]))?;
-    let result = super::json::decode_json(&output)?;
+    let result = super::json::assert_query_success_and_decode_json(&output)?;
     assert_eq!(
         result["rows"],
         json!([["1", "1"], ["2", null], ["3", "3"], ["4", "4"], ["5", null]])
@@ -243,7 +243,10 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         diagnostic["argument"].as_str().unwrap(),
         &output.stdout.len().to_string(),
     ]))?;
-    assert_eq!(super::json::decode_json(&exact)?, result);
+    assert_eq!(
+        super::json::assert_query_success_and_decode_json(&exact)?,
+        result
+    );
     // An explicit byte budget survives a format change and can still reject Arrow.
     let arrow_overflow = run_with_timeout(manifest_command(directory.path()).args([
         "--format",

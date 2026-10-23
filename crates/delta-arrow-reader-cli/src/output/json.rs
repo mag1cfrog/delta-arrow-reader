@@ -20,7 +20,7 @@ use serde_json::Value;
 
 use super::{OutputLimits, field_descriptions::field_details, write_on_stdout_thread};
 use crate::{Error, StdoutStats, write_stdout};
-use value::{JsonRow, validate_type};
+use value::{JsonRow, validate_json_type_support};
 
 pub(crate) const DEFAULT_MAX_BYTES: usize = 8 * 1024;
 
@@ -44,39 +44,39 @@ impl Write for BoundedJsonBuffer {
 }
 
 impl BoundedJsonBuffer {
-    fn start(
+    fn with_rows_header(
         schema: &SchemaRef,
         bindings: &[Value],
         max_bytes: u64,
         command: &'static str,
     ) -> Result<Self, Error> {
         for field in schema.fields() {
-            validate_type(field.data_type(), command)?;
+            validate_json_type_support(field.data_type(), command)?;
         }
         let mut output = BoundedJsonBuffer {
             bytes: Vec::new(),
             max_bytes,
         };
-        output.push(b"{\"format_version\":1,\"kind\":\"rows\",\"bindings\":")?;
-        output.encode(&bindings)?;
-        output.push(b",\"schema\":{\"fields\":[")?;
+        output.append_bytes(b"{\"format_version\":1,\"kind\":\"rows\",\"bindings\":")?;
+        output.append_json(&bindings)?;
+        output.append_bytes(b",\"schema\":{\"fields\":[")?;
         for (index, field) in schema.fields().iter().enumerate() {
             if index > 0 {
-                output.push(b",")?;
+                output.append_bytes(b",")?;
             }
-            output.encode(&field_details(field, false))?;
+            output.append_json(&field_details(field, false))?;
         }
-        output.push(b"]},\"rows\":[")?;
+        output.append_bytes(b"]},\"rows\":[")?;
         Ok(output)
     }
 
-    fn push(&mut self, bytes: &[u8]) -> Result<(), Error> {
+    fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
         self.write_all(bytes).map_err(|_| Error::OutputLimit {
             reason: "json_output_limit_exceeded",
         })
     }
 
-    fn encode(&mut self, value: &impl Serialize) -> Result<(), Error> {
+    fn append_json(&mut self, value: &impl Serialize) -> Result<(), Error> {
         serde_json::to_writer(self, value).map_err(|source| {
             if source.is_io() {
                 Error::OutputLimit {
@@ -110,7 +110,8 @@ async fn encode_query(
     bindings: &[Value],
     limits: OutputLimits,
 ) -> Result<(Vec<u8>, StdoutStats), Error> {
-    let mut output = BoundedJsonBuffer::start(&schema, bindings, limits.max_bytes, "query")?;
+    let mut output =
+        BoundedJsonBuffer::with_rows_header(&schema, bindings, limits.max_bytes, "query")?;
     let mut stream = Box::pin(stream);
     let mut stats = StdoutStats::default();
     while let Some(batch) = stream.next().await {
@@ -122,9 +123,9 @@ async fn encode_query(
         }
         for index in 0..batch.num_rows() {
             if stats.rows_written > 0 {
-                output.push(b",")?;
+                output.append_bytes(b",")?;
             }
-            output.encode(&JsonRow {
+            output.append_json(&JsonRow {
                 columns: batch.columns(),
                 index,
             })?;
@@ -132,9 +133,9 @@ async fn encode_query(
         }
         stats.batches_written += 1;
     }
-    output.push(b"],\"row_count\":")?;
-    output.encode(&stats.rows_written.to_string())?;
-    output.push(b",\"completion\":\"complete\",\"scope\":\"query\"}\n")?;
+    output.append_bytes(b"],\"row_count\":")?;
+    output.append_json(&stats.rows_written.to_string())?;
+    output.append_bytes(b",\"completion\":\"complete\",\"scope\":\"query\"}\n")?;
     stats.bytes_written = output.bytes.len() as u64;
     Ok((output.bytes, stats))
 }
@@ -155,7 +156,11 @@ mod tests {
 
     use super::*;
 
-    async fn encode(batch: RecordBatch, max_rows: u64, max_bytes: u64) -> Result<Vec<u8>, Error> {
+    async fn encode_and_check_query_batch(
+        batch: RecordBatch,
+        max_rows: u64,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, Error> {
         encode_query(
             batch.schema(),
             stream::iter([Ok(batch)]),
@@ -185,23 +190,27 @@ mod tests {
             ),
         ])
         .unwrap();
-        let bytes = encode(batch.clone(), 1, 8192).await.unwrap();
+        let bytes = encode_and_check_query_batch(batch.clone(), 1, 8192)
+            .await
+            .unwrap();
         let result: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(result["rows"], json!([["9007199254740993", "中文\n\""]]));
         assert_eq!(result["schema"]["fields"].as_array().unwrap().len(), 2);
         assert_eq!(bytes.last(), Some(&b'\n'));
         assert_eq!(
-            encode(batch.clone(), 1, bytes.len() as u64).await.unwrap(),
+            encode_and_check_query_batch(batch.clone(), 1, bytes.len() as u64)
+                .await
+                .unwrap(),
             bytes
         );
         assert!(matches!(
-            encode(batch.clone(), 1, bytes.len() as u64 - 1).await,
+            encode_and_check_query_batch(batch.clone(), 1, bytes.len() as u64 - 1).await,
             Err(Error::OutputLimit {
                 reason: "json_output_limit_exceeded"
             })
         ));
         assert!(matches!(
-            encode(batch, 0, 8192).await,
+            encode_and_check_query_batch(batch, 0, 8192).await,
             Err(Error::OutputLimit {
                 reason: "output_row_limit_exceeded"
             })
@@ -220,7 +229,7 @@ mod tests {
             "omit".repeat(100_000),
         )]));
         let schema = Arc::new(Schema::new(vec![field]));
-        let bytes = encode(RecordBatch::new_empty(schema), 0, 8192)
+        let bytes = encode_and_check_query_batch(RecordBatch::new_empty(schema), 0, 8192)
             .await
             .unwrap();
         let result: Value = serde_json::from_slice(&bytes).unwrap();
@@ -237,7 +246,9 @@ mod tests {
             &RecordBatchOptions::new().with_row_count(Some(2)),
         )
         .unwrap();
-        let result: Value = serde_json::from_slice(&encode(batch, 2, 8192).await.unwrap()).unwrap();
+        let result: Value =
+            serde_json::from_slice(&encode_and_check_query_batch(batch, 2, 8192).await.unwrap())
+                .unwrap();
         assert_eq!(result["schema"]["fields"], json!([]));
         assert_eq!(result["rows"], json!([[], []]));
         assert_eq!(result["row_count"], "2");
@@ -343,7 +354,9 @@ mod tests {
             expected = json!([expected]);
         }
         let batch = RecordBatch::try_from_iter([("nested", array)]).unwrap();
-        let result: Value = serde_json::from_slice(&encode(batch, 1, 8192).await.unwrap()).unwrap();
+        let result: Value =
+            serde_json::from_slice(&encode_and_check_query_batch(batch, 1, 8192).await.unwrap())
+                .unwrap();
         assert_eq!(result["rows"], json!([[expected]]));
         let mut field = &result["schema"]["fields"][0];
         for _ in 0..24 {

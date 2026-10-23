@@ -1050,7 +1050,7 @@ fn main() -> ExitCode {
             command: Command::Preview(args),
             ..
         }) => {
-            return preview::run(args, diagnostic_format);
+            return preview::run_preview(args, diagnostic_format);
         }
         Ok(cli) => {
             diagnostics::init_tracing(diagnostic_format);

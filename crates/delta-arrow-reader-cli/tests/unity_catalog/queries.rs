@@ -23,7 +23,10 @@ use crate::{
         append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
         partitioned_objects_with_large_parquet_footers, requested_object_path,
     },
-    query::{assert_query_success_and_decode_arrow, fixture_path, json::decode_json},
+    query::{
+        assert_query_success_and_decode_arrow, fixture_path,
+        json::assert_query_success_and_decode_json,
+    },
 };
 
 #[test]
@@ -60,7 +63,7 @@ fn json_queries_preserve_uc_and_local_bindings_with_complete_receipts() -> TestR
             None => fixture.query(sql)?,
         };
         let output = run_with_timeout(command.args(["--format", "json", "--diagnostics=json"]))?;
-        let result = decode_json(&output)?;
+        let result = assert_query_success_and_decode_json(&output)?;
         assert_eq!(result["bindings"], expected_bindings);
         assert_eq!(result["rows"], expected_rows);
         for field in result["schema"]["fields"].as_array().unwrap() {

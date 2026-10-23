@@ -93,7 +93,7 @@ pub(super) fn verify_signed_session_generations(
 }
 
 #[test]
-fn selected_credentials_sign_inspection_scan_and_sql_requests() -> TestResult {
+fn selected_credentials_sign_all_read_commands() -> TestResult {
     for (source, options, environment_region) in [
         (
             "json",

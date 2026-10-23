@@ -14,13 +14,14 @@ pub(crate) const MAX_COMMAND_OUTPUT_BYTES: u64 = 1024 * 1024;
 pub(crate) const DATABRICKS_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 // One CLI command owns every initial and renewed grant request in this process.
-static CANCEL_REQUESTS: LazyLock<watch::Sender<bool>> = LazyLock::new(|| watch::channel(false).0);
+static REQUEST_CANCELLATION_SIGNAL: LazyLock<watch::Sender<bool>> =
+    LazyLock::new(|| watch::channel(false).0);
 
 /// Requests cooperative cancellation of initial and renewed grants before the runtime exits.
 /// Returns whether a runner still owns a child or is about to spawn one.
 pub(crate) fn cancel_pending_requests() -> bool {
-    CANCEL_REQUESTS.send_replace(true);
-    CANCEL_REQUESTS.receiver_count() > 0
+    REQUEST_CANCELLATION_SIGNAL.send_replace(true);
+    REQUEST_CANCELLATION_SIGNAL.receiver_count() > 0
 }
 
 /// Fetches metadata including the table-kind manifest used to check direct-read support.
@@ -99,7 +100,7 @@ async fn run_command_with_timeout(
     command: &mut Command,
     timeout: Duration,
 ) -> Result<Vec<u8>, Error> {
-    let mut cancellation = CANCEL_REQUESTS.subscribe();
+    let mut cancellation = REQUEST_CANCELLATION_SIGNAL.subscribe();
     if *cancellation.borrow() {
         return Err(Error::Cancelled { status: 1 });
     }

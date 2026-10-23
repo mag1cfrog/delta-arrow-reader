@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::capabilities::assert_output_matches_schema;
 
-pub(crate) fn decode_json(output: &Output) -> TestResult<Value> {
+pub(crate) fn assert_query_success_and_decode_json(output: &Output) -> TestResult<Value> {
     assert!(
         output.status.success(),
         "{}",
@@ -16,6 +16,7 @@ pub(crate) fn decode_json(output: &Output) -> TestResult<Value> {
     let completion = assert_single_terminal_record(&output.stderr, "completion");
     assert_output_matches_schema("completion", &completion);
     assert_eq!(completion["format_version"], 2);
+    assert_eq!(completion["command"], "query");
     for field in [
         "batches",
         "stop_reason",
@@ -46,7 +47,7 @@ fn json_queries_preserve_exact_values_and_snapshot_selection() -> TestResult {
         fixture_path("partitioned").join("table"),
         "SELECT CAST('9007199254740993' AS BIGINT) AS id, CAST('-12.34' AS DECIMAL(10,2)) AS amount, TIMESTAMP '2020-01-01 00:00:00' AS at FROM t LIMIT 1",
     )?;
-    let result = decode_json(&run_with_timeout(
+    let result = assert_query_success_and_decode_json(&run_with_timeout(
         fixture.command().args(["--format", "json"]),
     )?)?;
     assert_eq!(
@@ -77,7 +78,7 @@ fn json_queries_preserve_exact_values_and_snapshot_selection() -> TestResult {
             "--table-version",
             version,
         ]))?;
-        let result = decode_json(&output)?;
+        let result = assert_query_success_and_decode_json(&output)?;
         assert_eq!(result["bindings"][0]["table_version"], version);
         assert_eq!(result["rows"].as_array().unwrap().len(), expected_rows);
         let arrow = assert_query_success_and_decode_arrow(&run_with_timeout(
@@ -113,7 +114,7 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
             .command()
             .args(["--format", "json", "--max-rows", "3"]),
     )?;
-    decode_json(&output)?;
+    assert_query_success_and_decode_json(&output)?;
     let exact_bytes = output.stdout.len();
     let exact = run_with_timeout(fixture.command().args([
         "--format",
@@ -121,7 +122,10 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
         "--max-output-bytes",
         &exact_bytes.to_string(),
     ]))?;
-    assert_eq!(decode_json(&exact)?, decode_json(&output)?);
+    assert_eq!(
+        assert_query_success_and_decode_json(&exact)?,
+        assert_query_success_and_decode_json(&output)?
+    );
     for (flag, value, reason) in [
         (
             "--max-output-bytes",
@@ -166,7 +170,7 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
                 "3",
             ]))?;
             assert_eq!(
-                decode_json(&recovered)?["rows"],
+                assert_query_success_and_decode_json(&recovered)?["rows"],
                 json!([["1"], ["2"], ["3"]])
             );
         }
@@ -175,7 +179,7 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
         fixture_path("partitioned").join("table"),
         "SELECT id FROM t WHERE false",
     )?;
-    let result = decode_json(&run_with_timeout(empty.command().args([
+    let result = assert_query_success_and_decode_json(&run_with_timeout(empty.command().args([
         "--format",
         "json",
         "--max-rows",
@@ -206,12 +210,13 @@ fn oversized_values_and_wide_schemas_need_deliberate_output_choices() -> TestRes
             assert_single_terminal_record(&output.stderr, "diagnostic")["reason"],
             "json_output_limit_exceeded"
         );
-        let result = decode_json(&run_with_timeout(fixture.command().args([
-            "--format",
-            "json",
-            "--max-output-bytes",
-            "131072",
-        ]))?)?;
+        let result =
+            assert_query_success_and_decode_json(&run_with_timeout(fixture.command().args([
+                "--format",
+                "json",
+                "--max-output-bytes",
+                "131072",
+            ]))?)?;
         if result["rows"].as_array().unwrap().is_empty() {
             assert_eq!(result["schema"]["fields"].as_array().unwrap().len(), 1000);
         } else {

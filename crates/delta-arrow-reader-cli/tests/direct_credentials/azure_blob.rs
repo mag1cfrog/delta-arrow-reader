@@ -74,7 +74,7 @@ fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) -> T
 }
 
 #[test]
-fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
+fn selected_credentials_authorize_all_read_commands() -> TestResult {
     for source in ["json", "env", "env-file"] {
         for (option, variable, value) in STATIC_CREDENTIAL_CASES {
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;

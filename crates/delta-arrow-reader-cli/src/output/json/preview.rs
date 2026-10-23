@@ -36,13 +36,13 @@ fn append_sample_footer(
     row_count: usize,
     stop_reason: &SampleStopReason,
 ) -> Result<(), Error> {
-    output.push(b"],\"row_count\":")?;
-    output.encode(&row_count.to_string())?;
-    output.push(b",\"completion\":\"sample\",\"stop_reason\":")?;
-    output.encode(stop_reason)?;
-    output.push(b",\"has_more\":")?;
-    output.encode(&stop_reason.has_more())?;
-    output.push(b"}\n")
+    output.append_bytes(b"],\"row_count\":")?;
+    output.append_json(&row_count.to_string())?;
+    output.append_bytes(b",\"completion\":\"sample\",\"stop_reason\":")?;
+    output.append_json(stop_reason)?;
+    output.append_bytes(b",\"has_more\":")?;
+    output.append_json(&stop_reason.has_more())?;
+    output.append_bytes(b"}\n")
 }
 
 pub(crate) async fn write_preview_to_stdout(
@@ -67,7 +67,7 @@ async fn encode_preview(
     table_version: u64,
     limits: OutputLimits,
 ) -> Result<(Vec<u8>, StdoutStats), Error> {
-    let mut output = BoundedJsonBuffer::start(
+    let mut output = BoundedJsonBuffer::with_rows_header(
         &schema,
         &[json!({"alias": "t", "table_version": table_version.to_string()})],
         limits.max_bytes,
@@ -95,9 +95,9 @@ async fn encode_preview(
             let row_start = output.bytes.len();
             let encoded = (|| {
                 if !row_offsets.is_empty() {
-                    output.push(b",")?;
+                    output.append_bytes(b",")?;
                 }
-                output.encode(&JsonRow {
+                output.append_json(&JsonRow {
                     columns: batch.columns(),
                     index,
                 })?;
@@ -174,14 +174,18 @@ mod tests {
 
     use super::*;
 
-    async fn encode(batch: RecordBatch, rows: u64, bytes: u64) -> Result<Vec<u8>, Error> {
+    async fn encode_and_check_preview_batch(
+        batch: RecordBatch,
+        max_rows: u64,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, Error> {
         encode_preview(
             batch.schema(),
             stream::iter([Ok(batch)]),
             42,
             OutputLimits {
-                max_rows: rows,
-                max_bytes: bytes,
+                max_rows,
+                max_bytes,
             },
         )
         .await
@@ -191,7 +195,7 @@ mod tests {
         })
     }
 
-    fn batch(values: Vec<&str>) -> RecordBatch {
+    fn string_batch(values: Vec<&str>) -> RecordBatch {
         RecordBatch::try_from_iter([("text", Arc::new(StringArray::from(values)) as ArrayRef)])
             .unwrap()
     }
@@ -204,13 +208,15 @@ mod tests {
             (vec!["one", "two"], 2, "row_limit", Value::Null),
             (vec!["one", "two", "three"], 2, "row_limit", Value::Null),
         ] {
-            let bytes = encode(batch(values), limit, 8192).await.unwrap();
+            let bytes = encode_and_check_preview_batch(string_batch(values), limit, 8192)
+                .await
+                .unwrap();
             let result: Value = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(result["completion"], "sample");
             assert_eq!(result["stop_reason"], reason);
             assert_eq!(result["has_more"], more);
         }
-        let schema = batch(vec![]).schema();
+        let schema = string_batch(vec![]).schema();
         let never_poll = stream::poll_fn(|_| panic!("zero-row preview polled its input"));
         let (bytes, _) = encode_preview(
             schema,
@@ -232,13 +238,17 @@ mod tests {
     #[tokio::test]
     async fn byte_boundary_includes_utf8_escaping_count_digits_and_sample_footer() {
         for count in [1, 9, 10] {
-            let batch = batch(vec!["中文\n\""; count]);
-            let bytes = encode(batch.clone(), 20, 8192).await.unwrap();
+            let batch = string_batch(vec!["中文\n\""; count]);
+            let bytes = encode_and_check_preview_batch(batch.clone(), 20, 8192)
+                .await
+                .unwrap();
             assert_eq!(
-                encode(batch.clone(), 20, bytes.len() as u64).await.unwrap(),
+                encode_and_check_preview_batch(batch.clone(), 20, bytes.len() as u64)
+                    .await
+                    .unwrap(),
                 bytes
             );
-            let shorter = encode(batch, 20, bytes.len() as u64 - 1).await;
+            let shorter = encode_and_check_preview_batch(batch, 20, bytes.len() as u64 - 1).await;
             if count == 1 {
                 assert!(matches!(
                     shorter,
@@ -260,7 +270,7 @@ mod tests {
     #[tokio::test]
     async fn oversized_row_returns_only_the_valid_prefix_and_stops_reading() {
         let large = "private".repeat(20_000);
-        let input = batch(vec!["small", &large]);
+        let input = string_batch(vec!["small", &large]);
         let schema = input.schema();
         let input =
             stream::iter([Ok(input)]).chain(stream::poll_fn(|_| panic!("read after byte limit")));
@@ -280,7 +290,7 @@ mod tests {
         assert_eq!(result["stop_reason"], "byte_limit");
         assert_eq!(result["has_more"], true);
         assert!(matches!(
-            encode(batch(vec![&large]), 20, 8192).await,
+            encode_and_check_preview_batch(string_batch(vec![&large]), 20, 8192).await,
             Err(Error::OutputLimit {
                 reason: "preview_row_too_large"
             })
@@ -289,8 +299,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_row_that_cannot_fit_its_footer_does_not_wait_for_another_batch() {
-        let input = batch(vec!["one", "two"]);
-        let complete = encode(input.clone(), 20, 8192).await.unwrap();
+        let input = string_batch(vec!["one", "two"]);
+        let complete = encode_and_check_preview_batch(input.clone(), 20, 8192)
+            .await
+            .unwrap();
         // Both row bodies fit, but the second row cannot fit even the shorter byte-limit footer.
         let max_bytes = complete.len() as u64 - 10;
         let schema = input.schema();
@@ -320,19 +332,23 @@ mod tests {
             .collect::<Vec<_>>();
         let wide = RecordBatch::new_empty(Arc::new(Schema::new(fields)));
         assert!(matches!(
-            encode(wide, 20, 8192).await,
+            encode_and_check_preview_batch(wide, 20, 8192).await,
             Err(Error::OutputLimit {
                 reason: "preview_schema_limit_exceeded"
             })
         ));
-        let empty = batch(vec![]);
-        let bytes = encode(empty.clone(), 20, 8192).await.unwrap();
+        let empty = string_batch(vec![]);
+        let bytes = encode_and_check_preview_batch(empty.clone(), 20, 8192)
+            .await
+            .unwrap();
         assert_eq!(
-            encode(empty.clone(), 20, bytes.len() as u64).await.unwrap(),
+            encode_and_check_preview_batch(empty.clone(), 20, bytes.len() as u64)
+                .await
+                .unwrap(),
             bytes
         );
         assert!(matches!(
-            encode(empty, 20, bytes.len() as u64 - 1).await,
+            encode_and_check_preview_batch(empty, 20, bytes.len() as u64 - 1).await,
             Err(Error::OutputLimit {
                 reason: "preview_schema_limit_exceeded"
             })
@@ -343,8 +359,12 @@ mod tests {
             &RecordBatchOptions::new().with_row_count(Some(2)),
         )
         .unwrap();
-        let result: Value =
-            serde_json::from_slice(&encode(no_columns, 3, 8192).await.unwrap()).unwrap();
+        let result: Value = serde_json::from_slice(
+            &encode_and_check_preview_batch(no_columns, 3, 8192)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(result["rows"], json!([[], []]));
         assert_eq!(result["row_count"], "2");
     }
@@ -360,8 +380,12 @@ mod tests {
             vec![Arc::new(Int64Array::from(vec![9007199254740993]))],
         )
         .unwrap();
-        let result: Value =
-            serde_json::from_slice(&encode(batch.clone(), 20, 8192).await.unwrap()).unwrap();
+        let result: Value = serde_json::from_slice(
+            &encode_and_check_preview_batch(batch.clone(), 20, 8192)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(result["rows"], json!([["9007199254740993"]]));
         assert!(result["schema"]["fields"][0].get("metadata").is_none());
         let stream = stream::iter([Ok(batch), Err(Error::Cancelled { status: 130 })]);

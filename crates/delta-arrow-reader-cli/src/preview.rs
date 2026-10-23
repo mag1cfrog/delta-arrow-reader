@@ -32,7 +32,7 @@ pub(crate) struct PreviewArgs {
     deadline_ms: NonZeroUsize,
 }
 
-pub(crate) fn run(args: PreviewArgs, diagnostic_format: DiagnosticFormat) -> ExitCode {
+pub(crate) fn run_preview(args: PreviewArgs, diagnostic_format: DiagnosticFormat) -> ExitCode {
     let started = std::time::Instant::now();
     let time_budget = Duration::from_millis(args.deadline_ms.get() as u64);
     let runtime = match tokio::runtime::Builder::new_current_thread()

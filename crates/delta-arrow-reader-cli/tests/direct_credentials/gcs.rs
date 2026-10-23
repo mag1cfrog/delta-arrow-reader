@@ -106,7 +106,7 @@ impl DirectStorageFixture {
 }
 
 #[test]
-fn service_account_files_sign_inspection_scan_and_sql_requests() -> TestResult {
+fn service_account_files_sign_all_read_commands() -> TestResult {
     for source in ["json", "env"] {
         let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
         fixture.write_adc(service_account_adc())?;

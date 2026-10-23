@@ -232,7 +232,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
 | `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
 | `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
-| `execution` | `uc_cancelled` | A UC inspect or scan command was interrupted |
+| `execution` | `uc_cancelled` | A UC inspect, scan, or query command was interrupted |
 
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
@@ -277,8 +277,8 @@ the process with status 1 and a synchronous diagnostic with code
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
 
-UC inspect and scan handle SIGINT/SIGTERM during authorization, metadata loading,
-and scanning, terminate any pending Databricks child, and exit 130/143. In text mode,
+UC inspect, scan, and query handle SIGINT/SIGTERM during authorization, metadata
+loading, and execution, terminate any pending Databricks child, and exit 130/143. In text mode,
 cancellation emits an INFO `cli.cancelled` event with code `uc_cancelled`,
 visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
 that code, including with `RUST_LOG=off`. Cancellation remains responsive
