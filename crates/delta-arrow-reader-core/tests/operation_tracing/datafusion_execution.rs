@@ -24,7 +24,7 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(
+        fixture.write_commit(
             1,
             &[
                 fixture.parquet("secret-a.parquet", &[1, 2])?,
@@ -32,10 +32,10 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
             ],
         )?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 2))?;
-        let first = Collector::new(Level::DEBUG);
-        let second = Collector::new(Level::DEBUG);
-        let unrelated = Collector::new(Level::DEBUG);
-        let task = |collector: &Collector| {
+        let first = TraceCollector::new(Level::DEBUG);
+        let second = TraceCollector::new(Level::DEBUG);
+        let unrelated = TraceCollector::new(Level::DEBUG);
+        let task = |collector: &TraceCollector| {
             let config = context
                 .task_ctx()
                 .session_config()
@@ -113,7 +113,7 @@ pub(super) async fn plan(
         },
     )?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_batch_size(2));
-    let collector = Collector::new(Level::INFO);
+    let collector = TraceCollector::new(Level::INFO);
     let plan = provider
         .scan(&context.state(), None, &[], None)
         .with_subscriber(collector.clone())
@@ -128,7 +128,7 @@ pub(super) async fn plan(
     Ok((context, plan, plan_id))
 }
 
-fn lifecycle(collector: &Collector, plan_id: u64, outcome: &str, output: bool) {
+fn lifecycle(collector: &TraceCollector, plan_id: u64, outcome: &str, output: bool) {
     let events = collector.events();
     assert_eq!(events.len(), 2, "{events:?}");
     for (event, outcome) in events.iter().zip(["started", outcome]) {
@@ -169,10 +169,10 @@ fn empty_eof_and_drop_have_distinct_partition_outcomes() -> TestResult {
                 }
                 let fixture = LogTable::new()?;
                 if !empty {
-                    fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+                    fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
                 }
                 let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
-                let collector = Collector::new(Level::INFO);
+                let collector = TraceCollector::new(Level::INFO);
                 let mut stream =
                     with_default(collector.clone(), || plan.execute(0, context.task_ctx()))?;
                 assert_eq!(
@@ -222,10 +222,10 @@ fn upstream_limit_drops_the_partition_without_claiming_eof() -> TestResult {
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2, 3, 4])?])?;
+        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2, 3, 4])?])?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
         let limited: Arc<dyn ExecutionPlan> = Arc::new(GlobalLimitExec::new(plan, 0, Some(1)));
-        let collector = Collector::new(Level::INFO);
+        let collector = TraceCollector::new(Level::INFO);
         let batches = runtime
             .block_on(collect(limited, context.task_ctx()).with_subscriber(collector.clone()))?;
         assert_eq!(
@@ -241,18 +241,18 @@ fn upstream_limit_drops_the_partition_without_claiming_eof() -> TestResult {
 fn dropping_a_pending_partition_cannot_become_late_success() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+    fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
     let (context, plan, plan_id) =
         runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
-    let owner = Collector::new(Level::INFO);
+    let owner = TraceCollector::new(Level::INFO);
     let mut stream = with_default(owner.clone(), || plan.execute(0, context.task_ctx()))?;
-    let mut worker = Collector::new(Level::DEBUG);
+    let mut worker = TraceCollector::new(Level::DEBUG);
     let observed = worker.clone();
     let (started, wait_started) = std::sync::mpsc::channel();
     let (release, wait_release) = std::sync::mpsc::channel();
     let wait_release = Mutex::new(wait_release);
     let blocked = std::sync::atomic::AtomicBool::new(false);
-    worker.probe = Some(Arc::new(move || {
+    worker.on_capture = Some(Arc::new(move || {
         if observed
             .records()
             .last()
@@ -299,17 +299,17 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
                 let first = fixture.parquet("secret-first.parquet", &[1, 2])?;
                 let mut second = fixture.parquet("secret-second.parquet", &[3])?;
                 if cause == "deletion_vector" {
-                    fixture.write(0, &[json!({"protocol": {
+                    fixture.write_commit(0, &[json!({"protocol": {
                         "minReaderVersion": 3, "minWriterVersion": 7,
                         "readerFeatures": ["deletionVectors"], "writerFeatures": ["deletionVectors"]
-                    }}), metadata(false)])?;
+                    }}), metadata_action(false)])?;
                     // Valid relative descriptor; its referenced object is deliberately absent.
                     second["add"]["deletionVector"] = json!({
                         "storageType": "u", "pathOrInlineDv": "vBn[lx{q8@P<9BNH/isA",
                         "offset": 1, "sizeInBytes": 36, "cardinality": 1
                     });
                 }
-                fixture.write(1, &[first, second])?;
+                fixture.write_commit(1, &[first, second])?;
                 let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
                 let path = fixture.0.join("secret-second.parquet");
                 if cause == "missing" {
@@ -318,7 +318,7 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
                 if cause == "corrupt" {
                     fs::write(&path, vec![0; path.metadata()?.len() as usize])?;
                 }
-                let collector = Collector::new(level);
+                let collector = TraceCollector::new(level);
                 let mut stream =
                     with_default(collector.clone(), || plan.execute(0, context.task_ctx()))?;
                 assert_eq!(runtime.block_on(stream.next()).unwrap()?.num_rows(), 2);
@@ -339,7 +339,7 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
                 assert!(runtime.block_on(stream.next()).is_none());
                 assert!(runtime.block_on(stream.next()).is_none());
                 drop(stream);
-                let event = failure(&collector, EXECUTION, error);
+                let event = assert_and_take_failure_event(&collector, EXECUTION, error);
                 assert_eq!(event.fields["event"], format!("{EXECUTION}.failed"));
                 assert_eq!(event.fields["plan_id"], plan_id);
                 assert_eq!(event.fields["snapshot_version"], 1);
@@ -367,7 +367,7 @@ fn repeated_and_concurrent_executions_report_independent_failures() -> TestResul
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(
+        fixture.write_commit(
             1,
             &[
                 fixture.parquet("secret-first.parquet", &[1, 2])?,
@@ -379,7 +379,10 @@ fn repeated_and_concurrent_executions_report_independent_failures() -> TestResul
         fs::remove_file(fixture.0.join("secret-second.parquet"))?;
         let mut identities = std::collections::HashSet::new();
         for partitions in [[0, 1], [0, 0], [0, 1]] {
-            let collectors = [Collector::new(Level::WARN), Collector::new(Level::ERROR)];
+            let collectors = [
+                TraceCollector::new(Level::WARN),
+                TraceCollector::new(Level::ERROR),
+            ];
             let mut streams = partitions
                 .iter()
                 .zip(&collectors)
@@ -399,7 +402,7 @@ fn repeated_and_concurrent_executions_report_independent_failures() -> TestResul
                 let error = result.unwrap().unwrap_err();
                 let error = reader_error(&error);
                 assert_eq!(error.source_kind(), Some("not_found"));
-                let event = failure(collector, EXECUTION, error);
+                let event = assert_and_take_failure_event(collector, EXECUTION, error);
                 assert_eq!(event.fields["plan_id"], plan_id);
                 assert_eq!(event.fields["partition"], partition);
                 assert_eq!(event.fields["partition_count"], 2);
@@ -429,13 +432,13 @@ fn invalid_partition_reports_setup_failure_without_reading() -> TestResult {
     ] {
         let fixture = LogTable::new()?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
-        let collector = Collector::new(Level::ERROR);
+        let collector = TraceCollector::new(Level::ERROR);
         let error = with_default(collector.clone(), || plan.execute(1, context.task_ctx()))
             .err()
             .unwrap();
         let error = reader_error(&error);
         assert_eq!(error.reason(), "scan_partition_index_out_of_range");
-        let event = failure(&collector, EXECUTION, error);
+        let event = assert_and_take_failure_event(&collector, EXECUTION, error);
         assert_eq!(event.fields["plan_id"], plan_id);
         assert_eq!(event.fields["partition"], 1);
         assert_eq!(event.fields["partition_count"], 1);
@@ -455,14 +458,14 @@ fn invalid_partition_reports_setup_failure_without_reading() -> TestResult {
 fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+    fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
     let (context, plan, plan_id) =
         runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
-    let owner = Collector::new(Level::ERROR);
+    let owner = TraceCollector::new(Level::ERROR);
     let mut stream = with_default(owner.clone(), || plan.execute(0, context.task_ctx()))?;
-    let mut injector = Collector::new(Level::DEBUG);
+    let mut injector = TraceCollector::new(Level::DEBUG);
     let observed = injector.clone();
-    injector.probe =
+    injector.on_capture =
         Some(Arc::new(move || {
             assert!(
             !observed.records().last().is_some_and(|record|
@@ -484,7 +487,7 @@ fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
     );
     assert!(runtime.block_on(stream.next()).is_none());
     drop(stream);
-    let event = failure(&owner, EXECUTION, error);
+    let event = assert_and_take_failure_event(&owner, EXECUTION, error);
     assert_eq!(event.fields["error_source_kind"], "worker_panicked");
     assert_eq!(event.fields["plan_id"], plan_id);
     assert_eq!(event.fields["output_started"], false);
@@ -503,7 +506,7 @@ fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
 fn repartitioned_and_cloned_plans_keep_plan_identity_but_start_new_executions() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    fixture.write(
+    fixture.write_commit(
         1,
         &[
             fixture.parquet("secret-first.parquet", &[1, 2])?,
@@ -525,7 +528,7 @@ fn repartitioned_and_cloned_plans_keep_plan_identity_but_start_new_executions() 
         4
     );
     let cloned = Arc::clone(&repartitioned).with_new_children(vec![])?;
-    let collector = Collector::new(Level::INFO);
+    let collector = TraceCollector::new(Level::INFO);
     let mut identities = std::collections::HashSet::new();
     for plan in [plan, repartitioned, cloned] {
         let partitions = plan.properties().output_partitioning().partition_count();
@@ -551,7 +554,7 @@ fn repartitioned_and_cloned_plans_keep_plan_identity_but_start_new_executions() 
             assert_eq!(events[1].fields["partition"], partition);
             assert_eq!(events[1].fields["partition_count"], partitions);
             assert!(identities.insert(events[1].fields["operation_id"].as_u64().unwrap()));
-            collector.clear();
+            collector.clear_records();
         }
         assert_eq!(rows, 4);
     }
@@ -566,14 +569,14 @@ fn disabled_and_warn_datafusion_tracing_preserve_rows_and_read_metrics() -> Test
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(
+        fixture.write_commit(
             1,
             &[
                 fixture.parquet("secret-first.parquet", &[1, 2])?,
                 fixture.parquet("secret-second.parquet", &[3, 4])?,
             ],
         )?;
-        let collector = Collector::new(Level::WARN);
+        let collector = TraceCollector::new(Level::WARN);
         let mut results = Vec::new();
         for dispatch in [
             tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),

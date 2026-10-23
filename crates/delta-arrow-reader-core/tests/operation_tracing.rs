@@ -15,7 +15,7 @@ mod datafusion_provider;
 #[path = "operation_tracing/tasks.rs"]
 mod tasks;
 
-use capture::{Captured, Collector};
+use capture::{CapturedTraceRecord, TraceCollector};
 use delta_arrow_reader::{
     DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaScalar, DeltaScanExecutionOptions,
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
@@ -47,10 +47,10 @@ impl LogTable {
         ));
         fs::create_dir_all(root.join("_delta_log"))?;
         let table = Self(root);
-        table.write(0, &[protocol(1), metadata(false)])?;
+        table.write_commit(0, &[protocol_action(1), metadata_action(false)])?;
         Ok(table)
     }
-    fn write(&self, version: u64, actions: &[Value]) -> TestResult {
+    fn write_commit(&self, version: u64, actions: &[Value]) -> TestResult {
         fs::write(
             self.0.join(format!("_delta_log/{version:020}.json")),
             actions
@@ -99,18 +99,18 @@ impl Drop for LogTable {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
-fn protocol(version: u64) -> Value {
+fn protocol_action(version: u64) -> Value {
     json!({"protocol":{"minReaderVersion":version,"minWriterVersion":2}})
 }
-fn metadata(invalid: bool) -> Value {
-    let field = if invalid {
+fn metadata_action(invalid_nested_ids: bool) -> Value {
+    let field = if invalid_nested_ids {
         json!({"name":"secret-column", "type":{"type":"array", "elementType":"string", "containsNull":true}, "nullable":true,"metadata":{"delta.columnMapping.nested.ids":"secret-invalid-metadata"}})
     } else {
         json!({"name":"id","type":"integer","nullable":true,"metadata":{}})
     };
     json!({"metaData":{"id":"test","format":{"provider":"parquet","options":{}},"schemaString":json!({"type":"struct","fields":[field]}).to_string(),"partitionColumns":[],"configuration":{},"createdTime":0}})
 }
-fn malformed_add() -> Value {
+fn malformed_add_action() -> Value {
     json!({"add":{"path":"secret-file.parquet","partitionValues":{},"size":"secret-invalid-size","modificationTime":0,"dataChange":true}})
 }
 fn runtime() -> TestResult<tokio::runtime::Runtime> {
@@ -120,7 +120,11 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
         .build()?)
 }
 
-fn failure(collector: &Collector, operation: &str, error: &DeltaReaderError) -> Captured {
+fn assert_and_take_failure_event(
+    collector: &TraceCollector,
+    operation: &str,
+    error: &DeltaReaderError,
+) -> CapturedTraceRecord {
     let events = collector.events();
     assert_eq!(events.len(), 1, "{events:?}");
     let event = events.into_iter().next().unwrap();
@@ -142,7 +146,7 @@ fn failure(collector: &Collector, operation: &str, error: &DeltaReaderError) -> 
     assert!(event.fields["elapsed_micros"].as_u64().is_some());
     assert!(collector.records().iter().all(|event| !event.is_span));
     assert!(!format!("{:?}", collector.records()).contains("secret-"));
-    collector.clear();
+    collector.clear_records();
     event
 }
 
@@ -154,14 +158,14 @@ fn load_failures_are_self_contained_at_warn_and_error() -> TestResult {
             ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let fixture = LogTable::new()?;
             with_default(collector.clone(), || -> TestResult {
                 let error = runtime
                     .block_on(DeltaTableBuilder::new("").load_table())
                     .unwrap_err();
                 assert_eq!(error.reason(), "empty_table_location");
-                let event = failure(&collector, "load_table", &error);
+                let event = assert_and_take_failure_event(&collector, "load_table", &error);
                 assert!(!event.fields.contains_key("snapshot_version"));
                 assert!(!event.fields.contains_key("requested_snapshot_version"));
 
@@ -177,7 +181,7 @@ fn load_failures_are_self_contained_at_warn_and_error() -> TestResult {
                     error.reason(),
                     "snapshot_load_does_not_support_table_warmup"
                 );
-                failure(&collector, "load_snapshot", &error);
+                assert_and_take_failure_event(&collector, "load_snapshot", &error);
 
                 let mut identities = Vec::new();
                 for _ in 0..2 {
@@ -191,7 +195,7 @@ fn load_failures_are_self_contained_at_warn_and_error() -> TestResult {
                         .unwrap_err();
                     assert_eq!(error.source_kind(), Some("missing_version"));
                     assert!(error.source().is_some());
-                    let event = failure(&collector, "load_table", &error);
+                    let event = assert_and_take_failure_event(&collector, "load_table", &error);
                     assert_eq!(event.fields["requested_snapshot_version"], 99);
                     assert!(!event.fields.contains_key("snapshot_version"));
                     identities.push(event.fields["operation_id"].clone());
@@ -206,13 +210,13 @@ fn load_failures_are_self_contained_at_warn_and_error() -> TestResult {
                     .block_on(fixture.builder(backend).load_snapshot())
                     .unwrap_err();
                 assert_eq!(error.source_kind(), Some("arrow_json"));
-                failure(&collector, "load_snapshot", &error);
+                assert_and_take_failure_event(&collector, "load_snapshot", &error);
                 fs::remove_file(fixture.0.join("_delta_log/00000000000000000000.json"))?;
                 let error = runtime
                     .block_on(fixture.builder(backend).load_table())
                     .unwrap_err();
                 assert_eq!(error.source_kind(), Some("unknown"));
-                failure(&collector, "load_table", &error);
+                assert_and_take_failure_event(&collector, "load_table", &error);
                 Ok(())
             })?;
         }
@@ -228,27 +232,27 @@ fn conversion_and_required_metadata_failures_keep_resolved_versions() -> TestRes
             ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let fixture = LogTable::new()?;
-            fixture.write(1, &[json!({"commitInfo":{"timestamp":1}})])?;
-            fixture.write(2, &[json!({"commitInfo":{"timestamp":2}})])?;
-            fixture.write(3, &[metadata(true)])?;
+            fixture.write_commit(1, &[json!({"commitInfo":{"timestamp":1}})])?;
+            fixture.write_commit(2, &[json!({"commitInfo":{"timestamp":2}})])?;
+            fixture.write_commit(3, &[metadata_action(true)])?;
             with_default(collector.clone(), || -> TestResult {
                 let snapshot = runtime.block_on(fixture.builder(backend).load_snapshot())?;
                 assert_eq!(snapshot.version(), 3);
                 let error = snapshot.into_table().unwrap_err();
                 assert_eq!(error.code(), "schema_conversion");
-                let event = failure(&collector, "into_table", &error);
+                let event = assert_and_take_failure_event(&collector, "into_table", &error);
                 assert_eq!(event.fields["snapshot_version"], 3);
 
                 let error = runtime
                     .block_on(fixture.builder(backend).load_table())
                     .unwrap_err();
-                let event = failure(&collector, "load_table", &error);
+                let event = assert_and_take_failure_event(&collector, "load_table", &error);
                 assert_eq!(event.fields["snapshot_version"], 3);
                 assert!(!event.fields.contains_key("requested_snapshot_version"));
 
-                fixture.write(3, &[metadata(false), malformed_add()])?;
+                fixture.write_commit(3, &[metadata_action(false), malformed_add_action()])?;
                 let error = runtime
                     .block_on(
                         fixture
@@ -261,7 +265,7 @@ fn conversion_and_required_metadata_failures_keep_resolved_versions() -> TestRes
                     error.reason(),
                     "query_planning_warmup_materialization_failed"
                 );
-                let event = failure(&collector, "load_table", &error);
+                let event = assert_and_take_failure_event(&collector, "load_table", &error);
                 assert_eq!(event.fields["snapshot_version"], 3);
                 Ok(())
             })?;
@@ -278,7 +282,7 @@ fn refresh_failures_leave_the_original_table_usable() -> TestResult {
             ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let fixture = LogTable::new()?;
             with_default(collector.clone(), || -> TestResult {
                 let table = runtime.block_on(
@@ -288,20 +292,23 @@ fn refresh_failures_leave_the_original_table_usable() -> TestResult {
                         .load_table(),
                 )?;
                 for (actions, reason) in [
-                    (vec![metadata(true)], "schema_conversion_failed"),
-                    (vec![malformed_add()], "query_planning_cache_refresh_failed"),
+                    (vec![metadata_action(true)], "schema_conversion_failed"),
+                    (
+                        vec![malformed_add_action()],
+                        "query_planning_cache_refresh_failed",
+                    ),
                 ] {
-                    fixture.write(1, &actions)?;
+                    fixture.write_commit(1, &actions)?;
                     let error = runtime.block_on(table.refresh()).unwrap_err();
                     assert_eq!(error.reason(), reason);
-                    let event = failure(&collector, "refresh", &error);
+                    let event = assert_and_take_failure_event(&collector, "refresh", &error);
                     assert_eq!(event.fields["previous_snapshot_version"], 0);
                     assert_eq!(event.fields["snapshot_version"], 1);
                     assert_eq!(table.version(), 0);
                     let mut stream = runtime.block_on(table.scan().build())?.into_stream();
                     assert!(runtime.block_on(stream.next_batch())?.is_none());
                 }
-                fixture.write(1, &[json!({"commitInfo":{"timestamp":1}})])?;
+                fixture.write_commit(1, &[json!({"commitInfo":{"timestamp":1}})])?;
                 assert_eq!(runtime.block_on(table.refresh())?.version(), 1);
                 assert_eq!(table.version(), 0);
                 assert!(collector.events().is_empty());
@@ -320,7 +327,7 @@ fn planning_owns_validation_failures_but_pure_helpers_are_quiet() -> TestResult 
             ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let fixture = LogTable::new()?;
             with_default(collector.clone(), || -> TestResult {
                 let table = runtime.block_on(fixture.builder(backend).load_table())?;
@@ -340,14 +347,14 @@ fn planning_owns_validation_failures_but_pure_helpers_are_quiet() -> TestResult 
                     }),
                 ] {
                     let error = runtime.block_on(scan.build()).err().unwrap();
-                    let event = failure(&collector, "scan_planning", &error);
+                    let event = assert_and_take_failure_event(&collector, "scan_planning", &error);
                     assert_eq!(event.fields["snapshot_version"], 0);
                     assert_eq!(event.fields["plan_id"], event.fields["operation_id"]);
                     assert_eq!(event.fields["backend"], format!("{backend:?}"));
                     assert_eq!(event.fields["scan_metadata_source"], "delta_log");
                     assert!(!event.fields.contains_key("partition_count"));
                 }
-                fixture.write(1, &[protocol(4)])?;
+                fixture.write_commit(1, &[protocol_action(4)])?;
                 let unsupported = runtime.block_on(fixture.builder(backend).load_table())?;
                 assert!(unsupported.validate_protocol().is_err());
                 let snapshot = runtime.block_on(fixture.builder(backend).load_snapshot())?;
@@ -355,7 +362,7 @@ fn planning_owns_validation_failures_but_pure_helpers_are_quiet() -> TestResult 
                 assert!(collector.events().is_empty());
                 let error = runtime.block_on(unsupported.scan().build()).err().unwrap();
                 assert_eq!(error.code(), "unsupported_protocol");
-                failure(&collector, "scan_planning", &error);
+                assert_and_take_failure_event(&collector, "scan_planning", &error);
                 let error = runtime
                     .block_on(
                         fixture
@@ -365,7 +372,7 @@ fn planning_owns_validation_failures_but_pure_helpers_are_quiet() -> TestResult 
                     )
                     .unwrap_err();
                 assert_eq!(error.code(), "unsupported_protocol");
-                failure(&collector, "load_table", &error);
+                assert_and_take_failure_event(&collector, "load_table", &error);
                 Ok(())
             })?;
         }
@@ -391,9 +398,9 @@ fn stream_completion_distinguishes_eof_and_limits_without_duplicate_terminals() 
         ] {
             let fixture = LogTable::new()?;
             if !empty {
-                fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+                fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
             }
-            let collector = Collector::new(Level::INFO);
+            let collector = TraceCollector::new(Level::INFO);
             with_default(collector.clone(), || -> TestResult {
                 let table = runtime.block_on(fixture.builder(backend).load_table())?;
                 let mut builder = table.scan();
@@ -402,7 +409,7 @@ fn stream_completion_distinguishes_eof_and_limits_without_duplicate_terminals() 
                 }
                 let plan = runtime.block_on(builder.build())?;
                 let mut stream = plan.into_stream();
-                collector.clear();
+                collector.clear_records();
                 drop(stream.next_batch());
                 assert!(collector.events().is_empty());
                 let mut rows = 0;
@@ -452,19 +459,19 @@ fn stream_drop_distinguishes_unpolled_and_partially_consumed_scans() -> TestResu
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
-        let collector = Collector::new(Level::INFO);
+        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        let collector = TraceCollector::new(Level::INFO);
         with_default(collector.clone(), || -> TestResult {
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let unpolled = runtime.block_on(table.scan().build())?.into_stream();
             let metrics = unpolled.metrics();
-            collector.clear();
+            collector.clear_records();
             drop(unpolled);
             assert!(collector.events().is_empty());
             assert_eq!(metrics.snapshot().file_tasks_started, 0);
 
             let mut partial = runtime.block_on(table.scan().build())?.into_stream();
-            collector.clear();
+            collector.clear_records();
             assert_eq!(
                 runtime.block_on(partial.next_batch())?.unwrap().num_rows(),
                 2
@@ -498,9 +505,9 @@ fn stream_failures_after_output_are_self_contained_and_terminal() -> TestResult 
             let fixture = LogTable::new()?;
             let first = fixture.parquet("secret-first.parquet", &[1, 2])?;
             let second = fixture.parquet("secret-second.parquet", &[3])?;
-            fixture.write(1, &[first, second])?;
+            fixture.write_commit(1, &[first, second])?;
             fs::remove_file(fixture.0.join("secret-second.parquet"))?;
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             with_default(collector.clone(), || -> TestResult {
                 let table = runtime.block_on(fixture.builder(backend).load_table())?;
                 let plan = runtime.block_on(table.scan().with_target_partitions(1)?.build())?;
@@ -512,7 +519,7 @@ fn stream_failures_after_output_are_self_contained_and_terminal() -> TestResult 
                 let error = runtime.block_on(stream.next_batch()).unwrap_err();
                 assert!(runtime.block_on(stream.next_batch())?.is_none());
                 drop(stream);
-                let event = failure(&collector, "scan_execution", &error);
+                let event = assert_and_take_failure_event(&collector, "scan_execution", &error);
                 assert_eq!(event.fields["event"], "scan_execution.failed");
                 assert_eq!(event.fields["snapshot_version"], 1);
                 assert_eq!(event.fields["backend"], format!("{backend:?}"));
@@ -535,14 +542,14 @@ fn disabled_and_warn_tracing_preserve_rows_and_read_metrics() -> TestResult {
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(
+        fixture.write_commit(
             1,
             &[
                 fixture.parquet("secret-first.parquet", &[1, 2])?,
                 fixture.parquet("secret-second.parquet", &[3, 4])?,
             ],
         )?;
-        let collector = Collector::new(Level::WARN);
+        let collector = TraceCollector::new(Level::WARN);
         let mut results = Vec::new();
         for dispatch in [
             tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
@@ -592,7 +599,7 @@ fn disabled_and_warn_tracing_preserve_rows_and_read_metrics() -> TestResult {
 fn concurrent_plans_have_distinct_ids_and_link_to_execution() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    let collector = Collector::new(Level::TRACE);
+    let collector = TraceCollector::new(Level::TRACE);
     with_default(collector.clone(), || -> TestResult {
         let snapshot = runtime.block_on(
             fixture
@@ -690,7 +697,7 @@ fn storage_setup_preserves_typed_causes_and_worker_panics() -> TestResult {
     )?;
     let runtime = runtime()?;
     for level in [Level::WARN, Level::ERROR] {
-        let collector = Collector::new(level);
+        let collector = TraceCollector::new(level);
         with_default(collector.clone(), || -> TestResult {
             for (scheme, cause) in [
                 ("trace-denied", "permission_denied"),
@@ -705,7 +712,7 @@ fn storage_setup_preserves_typed_causes_and_worker_panics() -> TestResult {
                     .unwrap_err();
                 assert_eq!(error.source_kind(), Some(cause));
                 assert!(error.source().is_some());
-                let event = failure(&collector, "load_table", &error);
+                let event = assert_and_take_failure_event(&collector, "load_table", &error);
                 assert!(!event.fields.contains_key("snapshot_version"));
             }
             Ok(())
@@ -739,8 +746,8 @@ fn dropping_a_pending_load_never_reports_late_success() -> TestResult {
         }),
     )?;
     let runtime = runtime()?;
-    let owner = Collector::new(Level::INFO);
-    let unrelated = Collector::new(Level::INFO);
+    let owner = TraceCollector::new(Level::INFO);
+    let unrelated = TraceCollector::new(Level::INFO);
     let mut future = Box::pin(DeltaTableBuilder::new("trace-blocked://secret-host/").load_table());
     with_default(owner.clone(), || {
         runtime.block_on(async {
@@ -762,7 +769,7 @@ fn dropping_a_pending_load_never_reports_late_success() -> TestResult {
     );
     assert!(unrelated.events().is_empty());
     with_default(owner.clone(), || {
-        owner.clear();
+        owner.clear_records();
         drop(DeltaTableBuilder::new("").load_table());
         drop(DeltaTableBuilder::new("").load_snapshot());
         assert!(owner.events().is_empty());

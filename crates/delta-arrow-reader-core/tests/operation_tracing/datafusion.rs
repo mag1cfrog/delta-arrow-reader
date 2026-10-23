@@ -26,13 +26,13 @@ pub(super) fn reader_error(error: &DataFusionError) -> &DeltaReaderError {
 }
 
 fn provider_failure(
-    collector: &Collector,
+    collector: &TraceCollector,
     operation: &str,
     error: &DeltaReaderError,
     backend: ParquetReaderBackend,
     version: u64,
-) -> Captured {
-    let event = failure(collector, operation, error);
+) -> CapturedTraceRecord {
+    let event = assert_and_take_failure_event(collector, operation, error);
     assert_eq!(event.fields["event"], format!("{operation}.failed"));
     assert_eq!(event.fields["snapshot_version"], version);
     assert_eq!(event.fields["backend"], format!("{backend:?}"));
@@ -49,11 +49,11 @@ fn creation_and_registration_failures_have_one_owner() -> TestResult {
         ] {
             let fixture = LogTable::new()?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
-            fixture.write(1, &[protocol(4)])?;
+            fixture.write_commit(1, &[protocol_action(4)])?;
             let unsupported = runtime
                 .block_on(fixture.builder(backend).load_snapshot())?
                 .into_table()?;
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             with_default(collector.clone(), || -> TestResult {
                 let invalid_options = ScanOptions {
                     target_partitions: Some(0),
@@ -132,7 +132,7 @@ fn planning_validation_and_metadata_failures_remain_distinguishable() -> TestRes
             let fixture = LogTable::new()?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let provider = DeltaTableProvider::try_new(table, options(backend))?;
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let context = SessionContext::new();
             with_default(collector.clone(), || -> TestResult {
                 let unsupported = col("secret-column").eq(lit("secret-value"));
@@ -192,7 +192,7 @@ fn planning_validation_and_metadata_failures_remain_distinguishable() -> TestRes
                     );
                     provider_failure(&collector, "provider_scan", error, backend, 0);
                 }
-                fixture.write(0, &[protocol(1), metadata(false)])?;
+                fixture.write_commit(0, &[protocol_action(1), metadata_action(false)])?;
                 runtime.block_on(provider.scan(&context.state(), None, &[], None))?;
                 assert!(collector.events().is_empty());
                 Ok(())
@@ -213,7 +213,7 @@ fn refresh_assigns_snapshot_and_provider_failures_to_their_own_boundaries() -> T
             let fixture = LogTable::new()?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let provider = DeltaTableProvider::try_new(table, options(backend))?;
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             with_default(collector.clone(), || -> TestResult {
                 fs::write(
                     fixture.0.join("_delta_log/00000000000000000001.json"),
@@ -221,10 +221,10 @@ fn refresh_assigns_snapshot_and_provider_failures_to_their_own_boundaries() -> T
                 )?;
                 let error = runtime.block_on(provider.refresh()).unwrap_err();
                 assert_eq!(error.source_kind(), Some("arrow_json"));
-                let event = failure(&collector, "refresh", &error);
+                let event = assert_and_take_failure_event(&collector, "refresh", &error);
                 assert_eq!(event.fields["previous_snapshot_version"], 0);
 
-                fixture.write(1, &[protocol(4)])?;
+                fixture.write_commit(1, &[protocol_action(4)])?;
                 let error = runtime.block_on(provider.refresh()).unwrap_err();
                 assert_eq!(error.reason(), "unsupported_reader_version");
                 let event = provider_failure(&collector, "provider_refresh", &error, backend, 1);
@@ -232,7 +232,7 @@ fn refresh_assigns_snapshot_and_provider_failures_to_their_own_boundaries() -> T
                 assert!(format!("{provider:?}").contains("snapshot_version: 0"));
                 let context = SessionContext::new();
                 runtime.block_on(provider.scan(&context.state(), None, &[], None))?;
-                fixture.write(1, &[protocol(1)])?;
+                fixture.write_commit(1, &[protocol_action(1)])?;
                 let refreshed = runtime.block_on(provider.refresh())?;
                 assert!(format!("{refreshed:?}").contains("snapshot_version: 1"));
                 assert!(collector.events().is_empty());
@@ -254,7 +254,7 @@ fn provider_milestones_are_bounded_and_planning_ids_are_fresh() -> TestResult {
             let fixture = LogTable::new()?;
             let table =
                 runtime.block_on(fixture.builder(backend).with_warmup(warmup).load_table())?;
-            let collector = Collector::new(Level::INFO);
+            let collector = TraceCollector::new(Level::INFO);
             with_default(collector.clone(), || -> TestResult {
                 let provider = DeltaTableProvider::try_new(table.clone(), options(backend))?;
                 let context = SessionContext::new();
@@ -280,7 +280,7 @@ fn provider_milestones_are_bounded_and_planning_ids_are_fresh() -> TestResult {
                         events[1].fields["operation_id"]
                     );
                 }
-                collector.clear();
+                collector.clear_records();
                 runtime.block_on(async {
                     let state = context.state();
                     let (first, second) = futures_util::future::join(
@@ -341,7 +341,7 @@ fn debug_provider_diagnostics_do_not_expose_inputs_or_sources() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
     let table = runtime.block_on(fixture.builder(ParquetReaderBackend::Direct).load_table())?;
-    let collector = Collector::new(Level::DEBUG);
+    let collector = TraceCollector::new(Level::DEBUG);
     with_default(collector.clone(), || -> TestResult {
         let context = SessionContext::new();
         register_table(
@@ -394,9 +394,9 @@ fn planning_worker_panics_emit_one_typed_terminal_failure() -> TestResult {
     let table = runtime.block_on(fixture.builder(ParquetReaderBackend::Direct).load_table())?;
     let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
     for name in ["Delta scan planning", "Delta scan execution setup"] {
-        let mut collector = Collector::new(Level::DEBUG);
+        let mut collector = TraceCollector::new(Level::DEBUG);
         let observed = collector.clone();
-        collector.probe = Some(Arc::new(move || {
+        collector.on_capture = Some(Arc::new(move || {
             assert!(
                 !observed
                     .records()
@@ -457,9 +457,9 @@ fn abandoned_provider_planning_cannot_emit_late_success() -> TestResult {
     let (entered, started) = std::sync::mpsc::channel();
     let (release, wait) = std::sync::mpsc::channel();
     let wait = Mutex::new(wait);
-    let mut collector = Collector::new(Level::DEBUG);
+    let mut collector = TraceCollector::new(Level::DEBUG);
     let observed = collector.clone();
-    collector.probe = Some(Arc::new(move || {
+    collector.on_capture = Some(Arc::new(move || {
         if observed
             .records()
             .last()

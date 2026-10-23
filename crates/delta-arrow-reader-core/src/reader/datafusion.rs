@@ -36,7 +36,7 @@ use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::{DeltaKernelPredicate, kernel_pruning_predicate},
     error::ScanPlanningSnafu,
-    operation_tracing::{Operation, OperationContext, OperationFields, OperationKind},
+    operation_tracing::{OperationFields, OperationKind, OperationTrace, SharedOperationFields},
     reader::{
         DELTA_LOG_SCAN_METADATA_SOURCE, QUERY_PLANNING_CACHE_SCAN_METADATA_SOURCE,
         planning::{
@@ -115,7 +115,7 @@ pub struct DeltaTableProvider {
 impl DeltaTableProvider {
     /// Creates a provider after validating its options and table protocol.
     pub fn try_new(table: DeltaTable, options: ScanOptions) -> Result<Self, DeltaReaderError> {
-        let operation = Operation::start(
+        let operation = OperationTrace::start(
             OperationKind::ProviderCreation,
             OperationFields {
                 snapshot_version: Some(table.version()),
@@ -135,7 +135,7 @@ impl DeltaTableProvider {
         async {
             // Core owns snapshot refresh; the provider owns validation of the refreshed table.
             let table = self.table.refresh().await?;
-            let operation = Operation::start(
+            let operation = OperationTrace::start(
                 OperationKind::ProviderRefresh,
                 OperationFields {
                     previous_snapshot_version: Some(self.table.version()),
@@ -198,7 +198,7 @@ impl DeltaTableProvider {
         projection: Option<&[usize]>,
         filters: &[Expr],
         limit: Option<usize>,
-        operation_context: &OperationContext,
+        operation_fields: &SharedOperationFields,
         plan_id: u64,
     ) -> Result<ScanPreparation, DeltaReaderError> {
         let _planning = tracing::debug_span!(
@@ -274,7 +274,7 @@ impl DeltaTableProvider {
             },
         )?;
         // DataFusion keeps one executable partition even for an empty reader plan.
-        operation_context.planned(reader_plan.partitions.len().max(1));
+        operation_fields.record_partition_count(reader_plan.partitions.len().max(1));
         reader_plan.logical_schema = build_provider_schema(
             &reader_plan.logical_schema,
             &partition_columns,
@@ -410,7 +410,7 @@ impl TableProvider for DeltaTableProvider {
         filters: &[Expr],
         limit: Option<usize>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
-        let operation = Operation::start(
+        let operation = OperationTrace::start(
             OperationKind::ProviderScan,
             OperationFields {
                 snapshot_version: Some(self.table.version()),
@@ -430,7 +430,7 @@ impl TableProvider for DeltaTableProvider {
         let projection = projection.cloned();
         let filters = filters.to_vec();
         let result = async {
-            let operation_context = operation.context();
+            let operation_fields = operation.shared_fields();
             let plan_id = operation.id();
             let dispatch = tracing::dispatcher::get_default(Clone::clone);
             let span = tracing::Span::current();
@@ -442,7 +442,7 @@ impl TableProvider for DeltaTableProvider {
                             projection.as_deref(),
                             &filters,
                             limit,
-                            &operation_context,
+                            &operation_fields,
                             plan_id,
                         )
                     })
@@ -573,7 +573,7 @@ pub fn register_table(
 ) -> Result<TableRegistration, DeltaReaderError> {
     let name = name.into();
     let snapshot_version = table.version();
-    let operation = Operation::start(
+    let operation = OperationTrace::start(
         OperationKind::ProviderRegistration,
         OperationFields {
             snapshot_version: Some(snapshot_version),

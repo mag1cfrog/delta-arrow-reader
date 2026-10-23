@@ -10,7 +10,7 @@ fn assert_subscriber_released(lifetime: &std::sync::Weak<()>, message: &str) {
     }
 }
 
-fn caller(collector: &Collector) -> tracing::Span {
+fn caller(collector: &TraceCollector) -> tracing::Span {
     with_default(
         collector.clone(),
         || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),
@@ -19,7 +19,7 @@ fn caller(collector: &Collector) -> tracing::Span {
 
 #[test]
 fn unpolled_future_does_not_capture_its_creation_subscriber() -> TestResult {
-    let creation = Collector::new(Level::TRACE);
+    let creation = TraceCollector::new(Level::TRACE);
     let lifetime = creation.lifetime();
     let future = with_default(creation.clone(), || DeltaTableBuilder::new("").load_table());
     assert!(creation.records().is_empty());
@@ -28,11 +28,11 @@ fn unpolled_future_does_not_capture_its_creation_subscriber() -> TestResult {
         &lifetime,
         "unpolled future retained its creation subscriber",
     );
-    let polling = Collector::new(Level::ERROR);
+    let polling = TraceCollector::new(Level::ERROR);
     let error = runtime()?
         .block_on(future.with_subscriber(polling.clone()))
         .unwrap_err();
-    failure(&polling, "load_table", &error);
+    assert_and_take_failure_event(&polling, "load_table", &error);
     Ok(())
 }
 
@@ -52,8 +52,8 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
                 .build()?
         };
         let fixture = LogTable::new()?;
-        fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
-        let collector = Collector::new(Level::TRACE);
+        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        let collector = TraceCollector::new(Level::TRACE);
         let span = caller(&collector);
         let parent = span.id().unwrap().into_u64();
         let table = runtime.block_on(
@@ -99,7 +99,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
         runtime.block_on(async {
             assert!(
                 !tokio::task::spawn_blocking(|| tracing::dispatcher::get_default(|dispatch| {
-                    dispatch.is::<Collector>()
+                    dispatch.is::<TraceCollector>()
                 }))
                 .await
                 .unwrap()
@@ -116,7 +116,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
 #[test]
 fn snapshot_load_propagates_dispatch_and_parent_to_its_worker() -> TestResult {
     let fixture = LogTable::new()?;
-    let collector = Collector::new(Level::TRACE);
+    let collector = TraceCollector::new(Level::TRACE);
     let parent = caller(&collector);
     let parent_id = parent.id().unwrap().into_u64();
     let caller_thread = std::thread::current().id();
@@ -150,10 +150,10 @@ fn streams_use_the_polling_caller_for_both_backends() -> TestResult {
         for complete in [false, true] {
             let runtime = runtime()?;
             let fixture = LogTable::new()?;
-            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let plan = runtime.block_on(table.scan().build())?;
-            let collector = Collector::new(Level::TRACE);
+            let collector = TraceCollector::new(Level::TRACE);
             let mut stream = plan.into_stream();
             assert!(collector.events().is_empty());
             let parent = caller(&collector);
@@ -209,7 +209,7 @@ fn concurrent_operations_keep_distinct_spans_on_a_reused_worker() -> TestResult 
         .enable_all()
         .build()?;
     let fixture = LogTable::new()?;
-    let collector = Collector::new(Level::TRACE);
+    let collector = TraceCollector::new(Level::TRACE);
     let roots = [caller(&collector), caller(&collector)];
     let ids = roots.each_ref().map(|span| span.id().unwrap().into_u64());
     let (one, two) = runtime.block_on(
@@ -277,7 +277,7 @@ fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources()
             ParquetReaderBackend::DeltaKernel,
         ] {
             let runtime = runtime()?;
-            let owner = Collector::new(level);
+            let owner = TraceCollector::new(level);
             let disabled = caller(&owner);
             assert!(disabled.is_disabled());
             let error = runtime
@@ -288,9 +288,9 @@ fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources()
                         .with_subscriber(owner.clone()),
                 )
                 .unwrap_err();
-            failure(&owner, "load_table", &error);
+            assert_and_take_failure_event(&owner, "load_table", &error);
             let fixture = LogTable::new()?;
-            fixture.write(1, &[fixture.parquet("secret-missing.parquet", &[1])?])?;
+            fixture.write_commit(1, &[fixture.parquet("secret-missing.parquet", &[1])?])?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let plan = runtime.block_on(table.scan().build())?;
             fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
@@ -298,7 +298,7 @@ fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources()
             let error = runtime
                 .block_on(stream.next_batch().with_subscriber(owner.clone()))
                 .unwrap_err();
-            failure(&owner, "scan_execution", &error);
+            assert_and_take_failure_event(&owner, "scan_execution", &error);
             let lifetime = owner.lifetime();
             drop(owner);
             assert!(runtime.block_on(stream.next_batch())?.is_none());
@@ -320,9 +320,9 @@ fn pending_load_and_refresh_report_abandonment_before_workers_finish() -> TestRe
         let (entered, started) = std::sync::mpsc::channel();
         let (release, wait) = std::sync::mpsc::channel();
         let wait = Mutex::new(wait);
-        let mut owner = Collector::new(Level::TRACE);
+        let mut owner = TraceCollector::new(Level::TRACE);
         let observed = owner.clone();
-        owner.probe = Some(Arc::new(move || {
+        owner.on_capture = Some(Arc::new(move || {
             let event = if refresh {
                 "snapshot_refresh.started"
             } else {
@@ -418,7 +418,7 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
         for level in [Level::TRACE, Level::ERROR] {
             let runtime = runtime()?;
             let fixture = LogTable::new()?;
-            fixture.write(1, &[fixture.parquet("secret-missing.parquet", &[1, 2])?])?;
+            fixture.write_commit(1, &[fixture.parquet("secret-missing.parquet", &[1, 2])?])?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let provider = DeltaTableProvider::try_new(
                 table,
@@ -431,7 +431,7 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
             let session = SessionContext::new();
             let plan = runtime.block_on(provider.scan(&session.state(), None, &[], None))?;
             fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
-            let owner = Collector::new(level);
+            let owner = TraceCollector::new(level);
             let parent = caller(&owner);
             let mut stream = with_default(owner.clone(), || {
                 parent.in_scope(|| plan.execute(0, session.task_ctx()))
@@ -472,13 +472,13 @@ fn task_context_subscribers_are_released_at_the_terminal_poll() -> TestResult {
         for missing_file in [false, true] {
             let runtime = runtime()?;
             let fixture = LogTable::new()?;
-            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
             let (session, plan, _) =
                 runtime.block_on(super::datafusion_execution::plan(&fixture, backend, 1))?;
             if missing_file {
                 fs::remove_file(fixture.0.join("secret-data.parquet"))?;
             }
-            let owner = Collector::new(Level::TRACE);
+            let owner = TraceCollector::new(Level::TRACE);
             let config = session
                 .task_ctx()
                 .session_config()
@@ -525,7 +525,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
         let table = runtime.block_on(fixture.builder(backend).load_table())?;
         let provider = DeltaTableProvider::try_new(
             table,
@@ -536,7 +536,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
             },
         )?;
         let session = SessionContext::new();
-        let planning = Collector::new(Level::TRACE);
+        let planning = TraceCollector::new(Level::TRACE);
         let parent = caller(&planning);
         let parent_id = parent.id().unwrap().into_u64();
         let plan = runtime.block_on(
@@ -558,7 +558,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
         drop(planning);
         assert_subscriber_released(&lifetime, "plan retained the planning subscriber");
         for _ in 0..2 {
-            let owner = Collector::new(Level::TRACE);
+            let owner = TraceCollector::new(Level::TRACE);
             let parent = caller(&owner);
             let id = parent.id().unwrap().into_u64();
             let mut stream = with_default(owner.clone(), || {

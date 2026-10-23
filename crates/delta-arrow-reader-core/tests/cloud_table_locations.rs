@@ -66,7 +66,7 @@ async fn optional_network_sampling_failure_warns_but_table_loading_succeeds() ->
     ]);
     let mut server = JoinSet::new();
     server.spawn(cloud_http::serve(listener, store, None));
-    let collector = capture::Collector::new(Level::WARN);
+    let collector = capture::TraceCollector::new(Level::WARN);
     let table = DeltaTableBuilder::new("s3://bucket/table/")
         .with_storage_options(options)
         .with_warmup(delta_arrow_reader::WarmupMode::Network {

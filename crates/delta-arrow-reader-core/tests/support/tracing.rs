@@ -20,7 +20,7 @@ use tracing::{
 use tracing_core::span::Current;
 
 #[derive(Clone, Debug)]
-pub struct Captured {
+pub struct CapturedTraceRecord {
     pub name: String,
     pub span_id: Option<u64>,
     pub parent: Option<u64>,
@@ -32,17 +32,17 @@ pub struct Captured {
 }
 
 #[derive(Clone)]
-pub struct Collector {
+pub struct TraceCollector {
     level: Level,
-    records: Arc<Mutex<Vec<Captured>>>,
+    records: Arc<Mutex<Vec<CapturedTraceRecord>>>,
     spans: Arc<Mutex<Spans>>,
     lifetime: Arc<()>,
     // Keep untraced threads from caching disabled callsites for a scoped collector.
     _untraced: tracing::Dispatch,
-    pub probe: Option<Arc<dyn Fn() + Send + Sync>>,
+    pub on_capture: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
-impl Collector {
+impl TraceCollector {
     pub fn new(level: Level) -> Self {
         Self {
             level,
@@ -50,25 +50,25 @@ impl Collector {
             spans: Arc::default(),
             lifetime: Arc::new(()),
             _untraced: tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
-            probe: None,
+            on_capture: None,
         }
     }
 
-    pub fn records(&self) -> Vec<Captured> {
+    pub fn records(&self) -> Vec<CapturedTraceRecord> {
         self.records
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
-    pub fn events(&self) -> Vec<Captured> {
+    pub fn events(&self) -> Vec<CapturedTraceRecord> {
         self.records()
             .into_iter()
             .filter(|record| !record.is_span)
             .collect()
     }
 
-    pub fn clear(&self) {
+    pub fn clear_records(&self) {
         self.records
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -79,7 +79,7 @@ impl Collector {
         Arc::downgrade(&self.lifetime)
     }
 
-    pub fn linked_to(&self, record: &Captured, ancestor: u64) -> bool {
+    pub fn linked_to(&self, record: &CapturedTraceRecord, ancestor: u64) -> bool {
         let spans = self.spans.lock().unwrap();
         let mut pending: Vec<_> = record.span_id.or(record.parent).into_iter().collect();
         while let Some(id) = pending.pop() {
@@ -116,14 +116,14 @@ impl Collector {
     fn capture(
         &self,
         metadata: &Metadata<'_>,
-        fields: Fields,
+        fields: TraceFieldVisitor,
         span_id: Option<u64>,
         parent: Option<u64>,
     ) {
         self.records
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(Captured {
+            .push(CapturedTraceRecord {
                 name: metadata.name().into(),
                 span_id,
                 parent,
@@ -133,13 +133,13 @@ impl Collector {
                 is_span: metadata.is_span(),
                 fields: fields.0,
             });
-        if let Some(probe) = &self.probe {
+        if let Some(probe) = &self.on_capture {
             probe();
         }
     }
 }
 
-impl Subscriber for Collector {
+impl Subscriber for TraceCollector {
     fn register_callsite(&self, _: &'static Metadata<'static>) -> Interest {
         Interest::sometimes()
     }
@@ -147,7 +147,7 @@ impl Subscriber for Collector {
         metadata.target().starts_with("delta_arrow_reader") && *metadata.level() <= self.level
     }
     fn new_span(&self, attributes: &Attributes<'_>) -> Id {
-        let mut fields = Fields::default();
+        let mut fields = TraceFieldVisitor::default();
         attributes.record(&mut fields);
         static NEXT_SPAN: AtomicU64 = AtomicU64::new(1);
         let id = NEXT_SPAN.fetch_add(1, Ordering::Relaxed);
@@ -170,7 +170,7 @@ impl Subscriber for Collector {
         Id::from_u64(id)
     }
     fn event(&self, event: &Event<'_>) {
-        let mut fields = Fields::default();
+        let mut fields = TraceFieldVisitor::default();
         event.record(&mut fields);
         let parent = event
             .parent()
@@ -179,12 +179,12 @@ impl Subscriber for Collector {
         self.capture(event.metadata(), fields, None, parent);
     }
     fn record(&self, id: &Id, values: &Record<'_>) {
-        let mut fields = Fields::default();
+        let mut fields = TraceFieldVisitor::default();
         values.record(&mut fields);
         self.records
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(Captured {
+            .push(CapturedTraceRecord {
                 name: "span.record".into(),
                 span_id: Some(id.into_u64()),
                 parent: self.spans.lock().unwrap().values[&id.into_u64()].parent,
@@ -254,8 +254,8 @@ impl Subscriber for Collector {
 }
 
 #[derive(Default)]
-struct Fields(BTreeMap<String, Value>);
-impl Visit for Fields {
+struct TraceFieldVisitor(BTreeMap<String, Value>);
+impl Visit for TraceFieldVisitor {
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
         self.0
             .insert(field.name().into(), json!(format!("{value:?}")));

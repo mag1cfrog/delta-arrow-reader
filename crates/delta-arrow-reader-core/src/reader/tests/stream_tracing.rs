@@ -1,11 +1,11 @@
 use super::*;
-use crate::test_tracing::{Captured, Collector};
+use crate::test_tracing::{CapturedTraceRecord, TraceCollector};
 use serde_json::json;
 use tracing::instrument::WithSubscriber;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn terminal(collector: &Collector, outcome: &str) -> Captured {
+fn terminal(collector: &TraceCollector, outcome: &str) -> CapturedTraceRecord {
     let events = collector.events();
     assert_eq!(events.len(), 2, "{events:?}");
     assert_eq!(events[0].fields["event"], "scan_execution.started");
@@ -21,8 +21,8 @@ fn terminal(collector: &Collector, outcome: &str) -> Captured {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion() -> TestResult {
     for stop in ["resume", "drop", "cancel"] {
-        let collector = Collector::new(Level::INFO);
-        let unrelated = Collector::new(Level::INFO);
+        let collector = TraceCollector::new(Level::INFO);
+        let unrelated = TraceCollector::new(Level::INFO);
         let ControlledMerge {
             mut stream,
             limiter,
@@ -86,7 +86,7 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
 
 #[tokio::test]
 async fn cancellation_before_first_poll_is_not_eof() -> TestResult {
-    let collector = Collector::new(Level::INFO);
+    let collector = TraceCollector::new(Level::INFO);
     let ControlledMerge {
         mut stream,
         cancellation,
@@ -125,7 +125,7 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
             cancellation,
         );
         let mut stream = direct_stream(VecDeque::from([partition]), metrics, 1);
-        let collector = Collector::new(Level::INFO);
+        let collector = TraceCollector::new(Level::INFO);
         let error = stream
             .next_batch()
             .with_subscriber(collector.clone())
@@ -153,7 +153,7 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
 
 #[tokio::test]
 async fn finalizing_a_batch_reports_one_error_and_releases_reads() -> TestResult {
-    let collector = Collector::new(Level::ERROR);
+    let collector = TraceCollector::new(Level::ERROR);
     let ControlledMerge {
         mut stream,
         limiter,
@@ -188,9 +188,9 @@ async fn finalizing_a_batch_reports_one_error_and_releases_reads() -> TestResult
 #[test]
 fn terminal_subscriber_panic_never_reports_another_outcome() -> TestResult {
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let mut collector = Collector::new(Level::INFO);
+    let mut collector = TraceCollector::new(Level::INFO);
     let callback_calls = Arc::clone(&calls);
-    collector.probe = Some(Arc::new(move || {
+    collector.on_capture = Some(Arc::new(move || {
         if callback_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
             panic!("terminal subscriber failed");
         }

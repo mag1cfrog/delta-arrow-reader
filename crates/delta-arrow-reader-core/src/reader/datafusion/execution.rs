@@ -64,7 +64,7 @@ use crate::{
     DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
     delta::kernel::DeltaKernelPredicate,
     operation_tracing::{
-        Operation, OperationFields, OperationKind, StreamOperation, StreamOutcome,
+        OperationFields, OperationKind, OperationTrace, StreamOperation, StreamOutcome,
     },
     reader::{
         delta_kernel_executor,
@@ -382,8 +382,8 @@ impl DeltaScanExec {
         }
     }
 
-    fn start_plan_operation(&self, kind: OperationKind) -> Operation {
-        Operation::start(
+    fn start_plan_operation(&self, kind: OperationKind) -> OperationTrace {
+        OperationTrace::start(
             kind,
             OperationFields {
                 plan_id: Some(self.plan_id),
@@ -657,7 +657,9 @@ impl ExecutionPlan for DeltaScanExec {
             else {
                 return Ok(None);
             };
-            operation.context().planned(partitions.len().max(1));
+            operation
+                .shared_fields()
+                .record_partition_count(partitions.len().max(1));
             Ok(Some(self.with_repartitioned_partitions(partitions)))
         })();
         operation.finish(result).map_err(datafusion_error)
@@ -1206,7 +1208,7 @@ mod tests {
 
     #[tokio::test]
     async fn repartition_failures_keep_typed_reasons_and_leave_the_plan_usable() -> TestResult {
-        use crate::{WarmupMode, test_tracing::Collector};
+        use crate::{WarmupMode, test_tracing::TraceCollector};
         use tracing::{Level, subscriber::with_default};
 
         let fixture = TestTable::partitioned("secret-repartition-errors")?;
@@ -1238,7 +1240,7 @@ mod tests {
                     reader.partitions[0].file_tasks[0].parquet_byte_range = Some(1..1);
                 }
                 let before = scan.metrics.snapshot().reader_metrics;
-                let collector = Collector::new(level);
+                let collector = TraceCollector::new(level);
                 let error = with_default(collector.clone(), || {
                     invalid.repartitioned(4, &ConfigOptions::default())
                 })
@@ -1289,7 +1291,7 @@ mod tests {
 
     #[tokio::test]
     async fn dynamic_pruning_fallback_keeps_rows_and_safe_debug_causes() -> TestResult {
-        use crate::{WarmupMode, test_tracing::Collector};
+        use crate::{WarmupMode, test_tracing::TraceCollector};
         use tracing::{Level, instrument::WithSubscriber, subscriber::with_default};
 
         for backend in [
@@ -1314,7 +1316,7 @@ mod tests {
                     )?;
                     let context = session(2);
                     let plan = provider.scan(&context.state(), None, &[], None).await?;
-                    let collector = Collector::new(level);
+                    let collector = TraceCollector::new(level);
                     let rejected = with_default(collector.clone(), || {
                         plan.handle_child_pushdown_result(
                             FilterPushdownPhase::Post,
@@ -1393,7 +1395,8 @@ mod tests {
     #[tokio::test]
     async fn execution_traces_projection_and_transform_failures_before_wrapping() -> TestResult {
         use crate::{
-            WarmupMode, delta::kernel::KernelPhysicalToLogicalTransform, test_tracing::Collector,
+            WarmupMode, delta::kernel::KernelPhysicalToLogicalTransform,
+            test_tracing::TraceCollector,
         };
         use delta_kernel::expressions::{ColumnName, Expression};
         use tracing::{Level, instrument::WithSubscriber, subscriber::with_default};
@@ -1429,7 +1432,7 @@ mod tests {
                             Expression::Column(ColumnName::new(["secret_missing_column"])),
                         );
                     }
-                    let collector = Collector::new(level);
+                    let collector = TraceCollector::new(level);
                     let mut stream =
                         with_default(collector.clone(), || plan.execute(0, context.task_ctx()))?;
                     if !projection_failure {
@@ -1506,7 +1509,7 @@ mod tests {
     #[tokio::test]
     async fn native_and_datafusion_scans_use_the_recovered_profile() -> TestResult {
         use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
-        use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, test_tracing::Collector};
+        use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, test_tracing::TraceCollector};
         use futures_util::TryStreamExt;
         use tracing::{Instrument, Level, instrument::WithSubscriber};
 
@@ -1554,7 +1557,7 @@ mod tests {
 
             for use_datafusion in [datafusion_first, !datafusion_first, datafusion_first] {
                 let mut actual = if use_datafusion {
-                    let collector = Collector::new(Level::TRACE);
+                    let collector = TraceCollector::new(Level::TRACE);
                     let parent = tracing::subscriber::with_default(
                         collector.clone(),
                         || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),
@@ -1606,7 +1609,7 @@ mod tests {
     #[tokio::test]
     async fn provider_recovery_warns_once_and_preserves_results() -> TestResult {
         use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
-        use crate::test_tracing::Collector;
+        use crate::test_tracing::TraceCollector;
         use tracing::{Level, instrument::WithSubscriber};
 
         for level in [Level::WARN, Level::INFO] {
@@ -1618,7 +1621,7 @@ mod tests {
             table.range_read_state.defer_network_warmup(warmup).await;
             let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
             let context = SessionContext::new();
-            let collector = Collector::new(level);
+            let collector = TraceCollector::new(level);
             let mut previous_requests = None;
             for _ in 0..2 {
                 let plan = provider
@@ -1667,7 +1670,7 @@ mod tests {
     async fn provider_recovery_setup_panic_retains_partition_context_and_join_error() -> TestResult
     {
         use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
-        use crate::test_tracing::Collector;
+        use crate::test_tracing::TraceCollector;
         use tracing::{Level, instrument::WithSubscriber};
 
         let fixture = TestTable::partitioned("provider-recovery-setup-failure")?;
@@ -1677,9 +1680,9 @@ mod tests {
         table.range_read_state.defer_network_warmup(warmup).await;
         let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
         let context = SessionContext::new();
-        let mut collector = Collector::new(Level::DEBUG);
+        let mut collector = TraceCollector::new(Level::DEBUG);
         let observed = collector.clone();
-        collector.probe = Some(Arc::new(move || {
+        collector.on_capture = Some(Arc::new(move || {
             assert!(
                 !observed.records().last().is_some_and(
                     |record| record.is_span && record.name == "Delta scan execution setup"

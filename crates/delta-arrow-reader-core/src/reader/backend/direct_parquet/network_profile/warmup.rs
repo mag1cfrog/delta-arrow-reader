@@ -47,8 +47,8 @@ struct RecoveryState {
 }
 
 // Wake peers on cancellation too; consuming the plan still uses its one retry.
-struct RecoveryAttempt<'a>(&'a ParquetRangeReadState);
-impl Drop for RecoveryAttempt<'_> {
+struct WarmupRecoveryGuard<'a>(&'a ParquetRangeReadState);
+impl Drop for WarmupRecoveryGuard<'_> {
     fn drop(&mut self) {
         self.0
             .recovery
@@ -126,7 +126,7 @@ impl ParquetRangeReadState {
             finished.await;
         };
         // Peers wait for publication while storage/subscriber callbacks run without this lock.
-        let attempt = RecoveryAttempt(self);
+        let attempt = WarmupRecoveryGuard(self);
         let outcome = plan.run(&self.estimator()).await;
         if let Some(estimator) = outcome.estimator() {
             self.set_estimator(estimator);
@@ -283,10 +283,10 @@ impl NetworkWarmupOutcome {
     pub(crate) fn warn(
         &self,
         phase: &'static str,
-        operation: &crate::operation_tracing::Operation,
+        operation: &crate::operation_tracing::OperationTrace,
     ) {
         if matches!(self.status, "read_failed" | "timeout") {
-            operation.network_warmup_degraded(
+            operation.warn_network_warmup_degraded(
                 phase,
                 self.status,
                 self.error
@@ -445,7 +445,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let (plan, _) =
             crate::reader::backend::direct_parquet::tests::network_warmup_fixture().await?;
-        let collector = crate::test_tracing::Collector::new(Level::DEBUG);
+        let collector = crate::test_tracing::TraceCollector::new(Level::DEBUG);
         let outcome = plan
             .run(&ParquetRangeReadEstimator::default())
             .with_subscriber(collector.clone())
@@ -480,9 +480,9 @@ mod tests {
             crate::reader::backend::direct_parquet::tests::network_warmup_fixture().await?;
         store.fail_range(1);
         state.defer_network_warmup(plan).await;
-        let mut collector = crate::test_tracing::Collector::new(Level::TRACE);
+        let mut collector = crate::test_tracing::TraceCollector::new(Level::TRACE);
         let observed = Arc::clone(&state);
-        collector.probe = Some(Arc::new(move || {
+        collector.on_capture = Some(Arc::new(move || {
             assert!(observed.recovery.try_lock().is_ok());
             assert!(observed.estimator.try_read().is_ok());
         }));
@@ -504,7 +504,7 @@ mod tests {
                 .any(|record| record.target == "delta_arrow_reader::diagnostics::network_warmup")
         );
         assert_eq!(store.range_call_count(), 1);
-        collector.clear();
+        collector.clear_records();
         Ok(())
     }
 }

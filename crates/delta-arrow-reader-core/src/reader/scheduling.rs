@@ -2321,7 +2321,7 @@ mod tests {
     #[tokio::test]
     async fn failed_partition_workers_preserve_the_join_cause_and_terminal_state()
     -> Result<(), Box<dyn std::error::Error>> {
-        use crate::test_tracing::Collector;
+        use crate::test_tracing::TraceCollector;
         use std::error::Error as _;
         use tracing::instrument::WithSubscriber;
 
@@ -2353,7 +2353,7 @@ mod tests {
                 ..OrderedPartitionStream::default()
             };
             stream.partition_count = 1;
-            let collector = Collector::new(tracing::Level::ERROR);
+            let collector = TraceCollector::new(tracing::Level::ERROR);
 
             let error = timeout(Duration::from_secs(5), stream.next())
                 .with_subscriber(collector.clone())
