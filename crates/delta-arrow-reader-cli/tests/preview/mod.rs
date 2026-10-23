@@ -1,7 +1,5 @@
 //! Bounded samples retain native scan projection, predicates, and snapshot selection.
 
-#[cfg(target_os = "linux")]
-mod deadlines;
 mod wide_tables;
 
 use std::{

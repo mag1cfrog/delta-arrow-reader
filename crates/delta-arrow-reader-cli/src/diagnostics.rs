@@ -35,7 +35,6 @@ use tracing_subscriber::{
 };
 
 mod fallback;
-mod stderr_capacity;
 
 pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
 pub(crate) const DIAGNOSTIC_FORMAT_VERSION: u8 = 2;
@@ -142,7 +141,7 @@ impl DiagnosticFormat {
                     // POSIX guarantees at least 512 bytes for an atomic pipe write.
                     let end = (bytes_written + 512).min(line.len());
                     let chunk = &line.as_bytes()[bytes_written..end];
-                    if stderr_capacity::can_write(chunk.len())? {
+                    if crate::output_capacity::can_write(&io::stderr(), chunk.len())? {
                         // A partial record must not be followed by a second terminal record.
                         *started = true;
                         io::stderr().lock().write_all(chunk)?;

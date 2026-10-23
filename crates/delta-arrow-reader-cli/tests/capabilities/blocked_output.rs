@@ -32,16 +32,34 @@ fn wait_for_stdout_start(child: &mut Child, stdout: &std::fs::File) -> io::Resul
 
 #[test]
 fn blocked_stdout_respects_the_deadline() -> Result<(), Box<dyn std::error::Error>> {
-    let (reader, writer) = create_full_pipe()?;
-    let output = run_with_stdout(
-        Command::new(env!("CARGO_BIN_EXE_dar")).args(["capabilities", "--diagnostics=json"]),
-        Stdio::from(writer),
-    )?;
-    drop(reader);
-    assert_eq!(output.status.code(), Some(1));
-    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-    assert_eq!(record["reason"], "discovery_deadline_exceeded");
-    assert_eq!(record["source_kind"], "timeout");
+    for args in [
+        vec!["capabilities"],
+        vec!["--help"],
+        vec!["help", "query"],
+        vec!["--version"],
+        vec!["capabilities", "--command", "query", "--detail", "runtime"],
+    ] {
+        let (reader, writer) = create_full_pipe()?;
+        let started = Instant::now();
+        let output = run_with_stdout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .arg("--diagnostics=json")
+                .args(args),
+            Stdio::from(writer),
+        )?;
+        assert!(started.elapsed() < Duration::from_secs(7));
+        drop(reader);
+        assert_eq!(output.status.code(), Some(1));
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["reason"], "discovery_deadline_exceeded");
+        assert_eq!(record["source_kind"], "timeout");
+        assert!(
+            record["hint"]
+                .as_str()
+                .unwrap()
+                .contains("Drain stdout and stderr")
+        );
+    }
     Ok(())
 }
 
@@ -49,6 +67,8 @@ fn blocked_stdout_respects_the_deadline() -> Result<(), Box<dyn std::error::Erro
 fn blocked_stderr_respects_the_deadline_for_completion_and_log_setup() -> io::Result<()> {
     for args in [
         vec!["capabilities", "--diagnostics=json"],
+        vec!["--help", "--diagnostics=json"],
+        vec!["--version", "--diagnostics=json"],
         vec![
             "capabilities",
             "--schema",

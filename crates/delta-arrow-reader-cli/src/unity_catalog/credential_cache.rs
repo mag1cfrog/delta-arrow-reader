@@ -35,7 +35,7 @@ impl TableCredentialRefresher {
     async fn refresh(self: &Arc<Self>) -> Result<TemporaryTableCredentials, Error> {
         let refresher = Arc::clone(self);
         let mut task = JoinSet::new();
-        // Runtime shutdown kills pending children; dropping the waiter also aborts this task.
+        // Dropping the waiter aborts response parsing; command cleanup owns child termination.
         task.spawn_on(
             async move {
                 let bytes = databricks_cli::generate_read_credentials(

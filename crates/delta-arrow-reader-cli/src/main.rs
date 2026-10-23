@@ -20,11 +20,13 @@
 
 mod azure_sas;
 mod capabilities;
+mod command_runtime;
 mod diagnostics;
 mod direct_credentials;
 mod input;
 mod inspection;
 mod output;
+mod output_capacity;
 mod preview;
 mod query;
 mod signals;
@@ -39,6 +41,7 @@ use std::{
     path::Path,
     process::ExitCode,
     str::FromStr,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use arrow_schema::{ArrowError, Schema};
@@ -81,6 +84,9 @@ enum Command {
         databricks_profile: Option<String>,
         #[command(flatten)]
         inspection: inspection::InspectionArgs,
+        /// Whole-command deadline in milliseconds. Summary defaults to 30000; full has no default.
+        #[arg(long, value_name = "N", default_value_if("view", "summary", "30000"), value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+        deadline_ms: Option<NonZeroUsize>,
     },
     /// Read a small typed JSON sample with row, byte, and time limits.
     Preview(preview::PreviewArgs),
@@ -95,6 +101,9 @@ enum Command {
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
+        /// Whole-command deadline in milliseconds; no default for legacy stdout scans.
+        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+        deadline_ms: Option<NonZeroUsize>,
     },
 }
 
@@ -484,10 +493,10 @@ impl Error {
             Self::DeadlineExceeded => {
                 return Some(InputCorrection {
                     argument: "--deadline-ms".to_owned(),
-                    expected: "enough time to finish the preview".to_owned(),
+                    expected: "enough milliseconds to finish the command".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Check source responsiveness, then retry with an explicitly chosen --deadline-ms budget.",
+                    hint: "Discard stdout; check source responsiveness, then retry the same pinned request with an explicit --deadline-ms. Keep authorization and all other limits.",
                 });
             }
             Self::UnsupportedJsonType { .. } => {
@@ -672,6 +681,12 @@ impl Error {
             } => {
                 record["hint"] = source.to_string().into();
             }
+            Self::Cancelled { .. }
+            | Self::UnityCatalog {
+                source: unity_catalog::Error::Cancelled { .. },
+            } => {
+                record["hint"] = "Discard stdout. Retry only if intended, preserving the request, pinned snapshots, authorization and limits.".into();
+            }
             Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();
                 record["hint"] = diagnostics::argument_error_hint(*kind).into();
@@ -691,6 +706,11 @@ impl Error {
             | Self::Output { source } => {
                 record["io_kind"] = format!("{:?}", source.kind()).into();
                 record["os_error"] = json!(source.raw_os_error());
+                if matches!(self, Self::Output { .. }) {
+                    record["hint"] = "Discard stdout. Restore the output consumer before retrying the same request and limits.".into();
+                } else if reason == "discovery_deadline_exceeded" {
+                    record["hint"] = "Discard stdout. Drain stdout and stderr before retrying the same discovery request.".into();
+                }
             }
             _ => {}
         }
@@ -809,21 +829,6 @@ fn build_completion_record(
     record
 }
 
-fn run_table_command(
-    command: Command,
-    diagnostic_format: DiagnosticFormat,
-) -> Result<Value, Error> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context(RuntimeSnafu {
-            reason: "runtime_build_failed",
-        })?;
-    let result = runtime.block_on(execute_table_command(command, diagnostic_format));
-    runtime.shutdown_background();
-    result
-}
-
 fn build_json_read_completion(
     command: &'static str,
     bindings: Vec<Value>,
@@ -841,7 +846,7 @@ fn build_json_read_completion(
 
 async fn execute_table_command(
     command: Command,
-    diagnostic_format: DiagnosticFormat,
+    report_uc_cancellation: &AtomicBool,
 ) -> Result<Value, Error> {
     let arrow_stdout = match &command {
         Command::Scan { .. } => true,
@@ -876,7 +881,10 @@ async fn execute_table_command(
         }
         Command::Query(_) => None,
     };
-    let mut uses_unity_catalog = uc_target.is_some();
+    report_uc_cancellation.store(
+        uc_target.is_some() && !matches!(command, Command::Preview(_)),
+        Ordering::Relaxed,
+    );
     let row_read = match &command {
         Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
             Some(read)
@@ -909,7 +917,7 @@ async fn execute_table_command(
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let (query_uses_unity_catalog, execution) = args.prepare_execution()?;
-            uses_unity_catalog = query_uses_unity_catalog;
+            report_uc_cancellation.store(query_uses_unity_catalog, Ordering::Relaxed);
             execution
         }
         Command::Inspect {
@@ -922,17 +930,7 @@ async fn execute_table_command(
                 bytes_written: output.len() as u64,
                 ..Default::default()
             };
-            if uses_unity_catalog {
-                // Keep the UC cancellation handler responsive when stdout is blocked.
-                tokio::task::spawn_blocking(move || write_stdout(&output))
-                    .await
-                    .map_err(io::Error::other)
-                    .context(RuntimeSnafu {
-                        reason: "inspection_output_task_failed",
-                    })?
-            } else {
-                write_stdout(&output)
-            }?;
+            write_stdout(&output)?;
             Ok(build_completion_record(
                 "inspect",
                 Some(version),
@@ -1005,41 +1003,7 @@ async fn execute_table_command(
         }
         .boxed_local(),
     };
-    let handles_cancellation = (uses_unity_catalog && !matches!(command, Command::Preview(_)))
-        || matches!(command, Command::Query(_));
-    let command_with_completion = async {
-        let completion = tokio::select! {
-            source = stdout_monitor::wait_for_disconnect(), if handles_cancellation && matches!(command, Command::Scan { .. } | Command::Query(_)) => {
-                Err(Error::Output { source })
-            },
-            result = command_output => result,
-        }?;
-        // Preview's supervisor owns its whole-command deadline and terminal record.
-        if !matches!(command, Command::Preview(_)) {
-            diagnostic_format
-                .write_terminal_record_when_writable(&completion)
-                .await
-                .context(OutputSnafu)?;
-        }
-        Ok(completion)
-    };
-    if handles_cancellation {
-        tokio::select! {
-            // Install listeners before polling work; cancellation drops any pending child.
-            biased;
-            exit_status = signals::wait_for_cancellation() => {
-                let status = exit_status?;
-                if uses_unity_catalog {
-                    Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
-                } else {
-                    Err(Error::Cancelled { status })
-                }
-            },
-            result = command_with_completion => result,
-        }
-    } else {
-        command_with_completion.await
-    }
+    command_output.await
 }
 
 fn write_stdout(output: &[u8]) -> Result<(), Error> {
@@ -1089,49 +1053,27 @@ fn main() -> ExitCode {
     }) {
         return diagnostic_format.report_failure_with_timeout(error);
     }
-    let result = match Cli::try_parse() {
+    match Cli::try_parse() {
         Ok(Cli {
             command: Command::Capabilities(options),
             ..
-        }) => {
-            return capabilities::run_capabilities(options, diagnostic_format);
-        }
-        Ok(Cli {
-            command: Command::Preview(args),
-            ..
-        }) => {
-            return preview::run_preview(args, diagnostic_format);
-        }
-        Ok(cli) => {
-            diagnostics::init_tracing(diagnostic_format);
-            return match run_table_command(cli.command, diagnostic_format) {
-                Ok(_) => ExitCode::SUCCESS,
-                Err(error) => diagnostic_format.report_failure_with_timeout(error),
-            };
-        }
+        }) => capabilities::run_capabilities(options, diagnostic_format),
+        Ok(cli) => command_runtime::run_table_command(cli.command, diagnostic_format),
         Err(error)
             if matches!(
                 error.kind(),
                 ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
             ) =>
         {
-            diagnostics::init_tracing(diagnostic_format);
-            write_help_or_version(error)
+            capabilities::run_help_or_version(error, diagnostic_format)
         }
         Err(error) => {
             // Clap's diagnostics may contain argument values; report only safe fields.
-            Err(Error::Argument {
+            diagnostic_format.report_failure_with_timeout(Error::Argument {
                 kind: error.kind(),
                 correction: InputCorrection::from_clap(&error),
             })
         }
-    };
-    match result {
-        Ok(completion_record) => {
-            diagnostic_format.write_terminal_record(completion_record);
-            ExitCode::SUCCESS
-        }
-        Err(error) => diagnostic_format.report_failure_with_timeout(error),
     }
 }
 
@@ -1143,6 +1085,50 @@ mod tests {
     use serde_json::Value;
 
     use super::*;
+
+    #[test]
+    fn deadline_defaults_and_explicit_values_preserve_legacy_commands() {
+        for (args, expected) in [
+            (vec!["inspect", "table"], None),
+            (vec!["inspect", "table", "--view", "full"], None),
+            (vec!["inspect", "table", "--view", "summary"], Some(30000)),
+            (vec!["scan", "table"], None),
+            (vec!["preview", "table"], Some(30000)),
+            (
+                vec!["query", "table", "--sql-file", "query.sql"],
+                Some(300000),
+            ),
+        ] {
+            for explicit in [None, Some("1234"), Some("0"), Some("-1")] {
+                let mut argv = vec!["dar"];
+                argv.extend(args.iter().copied());
+                if let Some(value) = explicit {
+                    argv.extend(["--deadline-ms", value]);
+                }
+                let parsed = Cli::try_parse_from(argv);
+                if matches!(explicit, Some("0" | "-1")) {
+                    assert!(parsed.is_err());
+                    continue;
+                }
+                let deadline = match parsed.unwrap().command {
+                    Command::Inspect { deadline_ms, .. } | Command::Scan { deadline_ms, .. } => {
+                        deadline_ms
+                    }
+                    Command::Preview(args) => Some(args.deadline_ms),
+                    Command::Query(args) => Some(args.deadline_ms),
+                    Command::Capabilities(_) => unreachable!(),
+                };
+                assert_eq!(
+                    deadline.map(NonZeroUsize::get),
+                    if explicit.is_some() {
+                        Some(1234)
+                    } else {
+                        expected
+                    }
+                );
+            }
+        }
+    }
 
     #[test]
     fn uc_cancellation_is_informational_and_keeps_signal_exit_status() {

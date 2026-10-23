@@ -295,6 +295,10 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
         (vec!["--command", "capabilities"], "command_guide"),
         (vec!["--command", "help"], "command_guide"),
         (vec!["--command", "query", "--full"], "command_capabilities"),
+        (
+            vec!["--command", "query", "--detail", "runtime"],
+            "command_detail",
+        ),
         (vec!["--schema", "predicate"], "schema_guide"),
         (vec!["--schema", "tables"], "schema_guide"),
         (
@@ -352,6 +356,7 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
         assert_eq!(inventory["kind"], kind);
         let limit = match kind {
             "capability_index"
+            | "command_detail"
             | "schema_guide"
             | "schema_detail"
             | "authorization_guide"

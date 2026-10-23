@@ -525,14 +525,14 @@ fn cancelling_or_closing_stdout_terminates_a_pending_scan_refresh() -> TestResul
         } else {
             assert_eq!(record["source_kind"], "broken_pipe");
         }
-        let stopped = || {
-            fs::read_to_string(format!("/proc/{pid}/stat"))
-                .map_or(true, |stat| stat.split_whitespace().nth(2) == Some("Z"))
-        };
+        let stopped = || !std::path::Path::new(&format!("/proc/{pid}/stat")).exists();
         while !stopped() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(stopped(), "credential process survived its CLI invocation");
+        assert!(
+            stopped(),
+            "credential process was not reaped by its CLI invocation"
+        );
     }
     Ok(())
 }

@@ -312,6 +312,8 @@ pub(super) fn command_read_support() -> Value {
             "summary_budget_argument": "--max-output-bytes",
             "summary_only_options": ["--column", "--column-prefix", "--include-metadata", "--max-output-bytes"],
             "deadline_ms": null,
+            "summary_deadline_ms": 30000,
+            "deadline_argument": "--deadline-ms",
         },
         "scan": {
             "authorization": ["local", "direct_storage", "unity_catalog"],
@@ -322,6 +324,7 @@ pub(super) fn command_read_support() -> Value {
             "requires_redirected_stdout": true,
             "max_output_bytes": null,
             "deadline_ms": null,
+            "deadline_argument": "--deadline-ms",
         },
         "preview": {
             "authorization": ["local", "direct_storage", "unity_catalog"],
@@ -372,7 +375,8 @@ pub(super) fn command_read_support() -> Value {
             "disk_spill": false,
             "requires_redirected_stdout": true,
             "json_requires_redirected_stdout": false,
-            "deadline_ms": null,
+            "deadline_ms": 300000,
+            "deadline_argument": "--deadline-ms",
         },
     })
 }
@@ -673,10 +677,10 @@ mod tests {
         );
         let support = command_read_support();
         for name in ["inspect", "scan", "preview", "query"] {
-            if name == "preview" {
-                assert_eq!(support[name]["deadline_ms"], 30000);
-            } else {
-                assert!(support[name]["deadline_ms"].is_null());
+            match name {
+                "preview" => assert_eq!(support[name]["deadline_ms"], 30000),
+                "query" => assert_eq!(support[name]["deadline_ms"], 300000),
+                _ => assert!(support[name]["deadline_ms"].is_null()),
             }
             for source in &advertised_sources {
                 let mut args = vec!["dar", name, "s3://bucket/table", "--auth-source", source];
@@ -698,14 +702,8 @@ mod tests {
                 args.extend(["--sql-file", "query.sql"]);
             }
             assert!(Cli::try_parse_from(args).is_ok());
-            for (option, value) in [
-                ("--output", "result.arrow"),
-                ("--format", "json"),
-                ("--deadline-ms", "1000"),
-            ] {
-                if (name == "query" && option == "--format")
-                    || (name == "preview" && option == "--deadline-ms")
-                {
+            for (option, value) in [("--output", "result.arrow"), ("--format", "json")] {
+                if name == "query" && option == "--format" {
                     continue;
                 }
                 let mut args = vec!["dar", name, "table"];

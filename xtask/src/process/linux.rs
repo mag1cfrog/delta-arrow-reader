@@ -228,7 +228,8 @@ impl ProcessFixture<'_> {
                 self.command()
                     .args(&args)
                     .env("LD_PRELOAD", self.fault_library)
-                    .env("DAR_TEST_REJECT_THREADS", "1"),
+                    // One supervised writer is needed to bound blocked help output.
+                    .env("DAR_TEST_THREAD_LIMIT", "1"),
             )?;
             ensure!(
                 output.status.success() && output.stderr.is_empty(),
@@ -263,7 +264,7 @@ impl ProcessFixture<'_> {
                 self.command()
                     .arg(flag)
                     .env("LD_PRELOAD", self.fault_library)
-                    .env("DAR_TEST_REJECT_THREADS", "1"),
+                    .env("DAR_TEST_THREAD_LIMIT", "1"),
             )?;
             ensure!(
                 output.status.success()
@@ -297,8 +298,8 @@ impl ProcessFixture<'_> {
 
     fn check_thread_start_failures(&self) -> Result<()> {
         let table = self.create_metadata_table(json!([]), 1)?;
-        // Fail the core blocking thread, Kernel background thread, and worker in turn.
-        for limit in 0..=3 {
+        // Fail the command thread, core blocking thread, and Kernel workers in turn.
+        for limit in 0..=4 {
             let output = run_cli(
                 self.command()
                     .arg("inspect")
@@ -307,7 +308,7 @@ impl ProcessFixture<'_> {
                     .env("RUST_BACKTRACE", "full")
                     .env("DAR_TEST_THREAD_LIMIT", limit.to_string()),
             )?;
-            if limit < 3 {
+            if limit < 4 {
                 check_error(&output, 1, "execution", "runtime_initialization")?;
             } else {
                 check_inspection(&output)?;

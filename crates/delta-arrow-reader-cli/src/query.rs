@@ -81,6 +81,9 @@ pub(crate) struct QueryArgs {
     /// DataFusion memory-pool ceiling in bytes; not a process RSS limit. Disk spill is disabled.
     #[arg(long, default_value = "268435456", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) memory_limit_bytes: NonZeroUsize,
+    /// Whole-command deadline in milliseconds, including inputs, planning and output.
+    #[arg(long, default_value = "300000", value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+    pub(crate) deadline_ms: NonZeroUsize,
 }
 
 impl QueryArgs {

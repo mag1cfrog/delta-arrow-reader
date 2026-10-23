@@ -11,9 +11,7 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::os::windows::io::AsHandle;
 
-use super::{
-    DiagnosticFormat, TERMINAL_RECORD_STARTED, build_subscriber, log_targets, stderr_capacity,
-};
+use super::{DiagnosticFormat, TERMINAL_RECORD_STARTED, build_subscriber, log_targets};
 
 impl DiagnosticFormat {
     pub(super) fn report_failure_without_thread(self, error: &crate::Error) {
@@ -54,7 +52,7 @@ struct FallbackStderrWriter(File);
 impl Write for FallbackStderrWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let bytes = &bytes[..bytes.len().min(512)];
-        if !stderr_capacity::can_write(bytes.len())? {
+        if !crate::output_capacity::can_write(&io::stderr(), bytes.len())? {
             return Err(io::ErrorKind::WouldBlock.into());
         }
         self.0.write(bytes)

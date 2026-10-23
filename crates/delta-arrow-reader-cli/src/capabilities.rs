@@ -29,6 +29,7 @@ use crate::{
 
 const MAX_INDEX_BYTES: usize = 2 * 1024;
 const MAX_COMMAND_GUIDE_BYTES: usize = 4 * 1024;
+const MAX_COMMAND_DETAIL_BYTES: usize = 2 * 1024;
 const MAX_SCHEMA_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_AUTHORIZATION_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
@@ -36,7 +37,7 @@ const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
 #[command(group(ArgGroup::new("full_definition_target").args(["command", "schema", "authorization"])))]
-#[command(group(ArgGroup::new("detail_target").args(["schema", "authorization"])))]
+#[command(group(ArgGroup::new("detail_target").args(["command", "schema", "authorization"])))]
 pub(crate) struct CapabilitiesArgs {
     /// Show usage and limits for one command.
     #[arg(long, value_name = "NAME", value_parser = parse_command_name, conflicts_with_all = ["schema", "authorization", "all"])]
@@ -44,12 +45,12 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an example and available fields or types for one JSON format.
     #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
     schema: Option<DiscoverySchema>,
-    /// Describe a field/type from --schema, or env-file/env-file-grammar from --authorization.
+    /// Select runtime from --command, a field/type from --schema, or env-file/env-file-grammar from --authorization.
     #[arg(
         long,
         value_name = "NAME",
         requires = "detail_target",
-        conflicts_with_all = ["command", "all", "full"]
+        conflicts_with_all = ["all", "full"]
     )]
     detail: Option<String>,
     /// Show an authorization guide for a storage or catalog service.
@@ -121,15 +122,15 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "notes": [
                 "Pin lookups with --table-version N: --column-prefix PREFIX finds names; --column NAME returns only selected types.",
                 "Summary checks scan protocol support, not Parquet or deletion-vector access. Names/types lookups omit checks; metadata is opt-in with --include-metadata.",
-                "Summary stdout defaults to 4096 bytes; narrow selection or increase --max-output-bytes if needed. No total deadline. Omitting --view retains the unbounded full schema; redirect it to a file.",
+                "Summary defaults to 4096 stdout bytes and 30000 ms; adjust --max-output-bytes or --deadline-ms explicitly. Full inspection has neither default; redirect it and select a deadline.",
             ],
         }),
         "scan" => json!({
-            "example": [executable, "--diagnostics=json", "scan", "./table", "--limit", "1"],
+            "example": [executable, "--diagnostics=json", "scan", "./table", "--limit", "1", "--deadline-ms", "30000"],
             "stdout": "arrow_ipc_stream",
             "notes": [
                 "Redirect stdout to a file or pipe; terminal output is rejected.",
-                "--limit selects a sample. No output byte limit or total deadline.",
+                "--limit selects a sample. No output byte limit or default deadline; use --deadline-ms N for a total time budget in milliseconds.",
             ],
         }),
         "preview" => json!({
@@ -139,7 +140,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "notes": [
                 "Choose only needed columns and rows. Find names with inspect --view summary --column-prefix PREFIX; pin --table-version N.",
                 "Always a sample: end_of_input/has_more=false proves exhaustion; row_limit/null does not; byte_limit/true means an observed row was omitted.",
-                "Schema or first row too large fails with empty stdout. The deadline includes authorization and output, plus at most 1s cleanup and 1s failure reporting.",
+                "Schema or first row too large fails with empty stdout. The deadline includes inputs, authorization and output.",
             ],
         }),
         "query" => json!({
@@ -156,7 +157,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file.",
                 "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
                 "Omit --format for Arrow IPC, which requires redirected stdout and defaults to a 1 GiB byte ceiling.",
-                "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
+                "The deadline includes inputs, planning and output. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
                 read_support::QUERY_SNAPSHOT_SELECTION,
                 read_support::QUERY_ROW_ORDERING,
             ],
@@ -266,7 +267,61 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         json!([executable, name, "--help"])
     };
     guide["full_command"] = json!([executable, "capabilities", "--command", name, "--full"]);
+    guide["runtime_details_command"] = json!([
+        executable,
+        "capabilities",
+        "--command",
+        name,
+        "--detail",
+        "runtime"
+    ]);
+    guide["success"] = json!(
+        "Require exit 0; with --diagnostics=json, also require a complete completion record. Otherwise discard stdout."
+    );
+    guide["shutdown"] = json!(format!(
+        "After the deadline: at most {} ms cleanup + {} ms failure reporting.",
+        if matches!(name, "inspect" | "scan" | "preview" | "query") {
+            crate::command_runtime::CLEANUP_GRACE.as_millis()
+        } else {
+            0
+        },
+        FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
+    ));
     Ok(guide)
+}
+
+fn build_command_runtime_guide(name: &str, detail: &str) -> Result<Value, Error> {
+    if detail != "runtime" {
+        return Err(Error::Argument {
+            kind: ErrorKind::InvalidValue,
+            correction: Some(crate::InputCorrection {
+                argument: "--detail".into(),
+                field_path: None,
+                expected: "runtime for a command".into(),
+                supplied: None,
+                hint: "Use --command NAME --detail runtime for deadlines and cancellation.",
+            }),
+        });
+    }
+    let is_table_command = matches!(name, "inspect" | "scan" | "preview" | "query");
+    Ok(json!({
+        "format_version": 1, "kind": "command_detail", "command": name, "detail": "runtime",
+        "deadline": match name {
+            "inspect" => "--deadline-ms N: summary defaults to 30000 ms; full has no default.",
+            "scan" => "--deadline-ms N: no default for legacy stdout scans.",
+            "preview" => "--deadline-ms N: defaults to 30000 ms.",
+            "query" => "--deadline-ms N: defaults to 300000 ms.",
+            _ => "Fixed 5000 ms, including output and completion.",
+        },
+        "scope": if is_table_command { "Inputs, authorization, planning, execution, stdout and completion." } else { "Offline generation, stdout and completion; no input or credential files are opened." },
+        "cleanup_ms": if is_table_command { crate::command_runtime::CLEANUP_GRACE.as_millis() } else { 0 },
+        "failure_reporting_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
+        "signals": "Unix SIGINT exits 130; SIGTERM exits 143, including Linux PID 1. Windows Ctrl+C exits 130.",
+        "output": "Require exit 0; with --diagnostics=json, also require a complete completion record. Otherwise discard stdout, even if it looks complete.",
+        "retry": if is_table_command { "Retry only if intended. Preserve the request, pinned snapshots, authorization and other limits; choose any larger deadline explicitly." } else { "Drain stdout and stderr before retrying the same discovery request." },
+        "termination_limits": "SIGKILL and OS-uninterruptible IO cannot guarantee cleanup. Closed or blocked stderr can prevent a complete diagnostic.",
+        "broken_pipe": if is_table_command { "Exit 3. Unix detects a closed stdout pipe during work; other platforms detect it on the next write, with the selected deadline still applying." } else { "Exit 3 when an output write fails." },
+    }))
 }
 
 fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Error> {
@@ -446,6 +501,25 @@ pub(crate) fn run_capabilities(
     options: CapabilitiesArgs,
     diagnostic_format: DiagnosticFormat,
 ) -> ExitCode {
+    run_discovery(diagnostic_format, move || {
+        let stats = write_discovery_response(options)?;
+        Ok(build_completion_record("capabilities", None, stats, None))
+    })
+}
+
+pub(crate) fn run_help_or_version(
+    error: clap::Error,
+    diagnostic_format: DiagnosticFormat,
+) -> ExitCode {
+    run_discovery(diagnostic_format, move || {
+        crate::write_help_or_version(error)
+    })
+}
+
+fn run_discovery(
+    diagnostic_format: DiagnosticFormat,
+    write_response: impl FnOnce() -> Result<Value, Error> + Send + 'static,
+) -> ExitCode {
     let deadline = std::time::Instant::now() + DISCOVERY_TIMEOUT;
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -465,15 +539,13 @@ pub(crate) fn run_capabilities(
                 reason: "discovery_deadline_exceeded",
             }),
             result = async {
-                let stats = tokio::task::spawn_blocking(move || {
+                let completion = tokio::task::spawn_blocking(move || {
                     diagnostics::init_tracing(diagnostic_format);
-                    write_discovery_response(options)
+                    write_response()
                 }).await.map_err(io::Error::other).context(RuntimeSnafu {
                     reason: "discovery_output_task_failed",
                 })??;
-                diagnostic_format.write_terminal_record_when_writable(&build_completion_record(
-                    "capabilities", None, stats, None,
-                )).await.context(OutputSnafu)
+                diagnostic_format.write_terminal_record_when_writable(&completion).await.context(OutputSnafu)
             } => result,
         }
     });
@@ -497,7 +569,12 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
             )
         }
     } else if let Some(name) = options.command {
-        if options.full {
+        if let Some(detail) = options.detail.as_deref() {
+            (
+                build_command_runtime_guide(&name, detail)?,
+                MAX_COMMAND_DETAIL_BYTES,
+            )
+        } else if options.full {
             (
                 build_capability_details(Some(&name))?,
                 MAX_FULL_RESPONSE_BYTES,
@@ -563,6 +640,25 @@ mod tests {
         cli.build();
         for command in cli.get_subcommands() {
             let guide = build_command_guide(command.get_name()).unwrap();
+            let runtime_request: Vec<_> = guide["runtime_details_command"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect();
+            Cli::try_parse_from(runtime_request).unwrap();
+            let runtime = build_command_runtime_guide(command.get_name(), "runtime").unwrap();
+            serialize_discovery_response(&runtime, MAX_COMMAND_DETAIL_BYTES).unwrap();
+            assert!(runtime.get("options").is_none());
+            assert!(runtime.get("schema").is_none());
+            assert_eq!(
+                runtime["cleanup_ms"],
+                if matches!(command.get_name(), "inspect" | "scan" | "preview" | "query") {
+                    1000
+                } else {
+                    0
+                }
+            );
             let example: Vec<_> = guide["example"]
                 .as_array()
                 .unwrap()
@@ -706,7 +802,6 @@ mod tests {
             vec!["--full"],
             vec!["--all", "--full"],
             vec!["--detail", "rows"],
-            vec!["--command", "scan", "--detail", "rows"],
             vec!["--authorization", "s3", "--detail", "env-file", "--full"],
             vec!["--all", "--detail", "rows"],
             vec!["--schema", "predicate", "--detail", "int64", "--full"],
@@ -724,6 +819,7 @@ mod tests {
         for valid in [
             vec!["--authorization", "s3", "--full"],
             vec!["--command", "query", "--full"],
+            vec!["--command", "query", "--detail", "runtime"],
             vec!["--full", "--schema", "predicate"],
             vec!["--detail", "rows", "--schema", "completion"],
             vec!["--authorization", "s3", "--detail", "env-file"],
@@ -731,6 +827,7 @@ mod tests {
         ] {
             assert!(Cli::try_parse_from(["dar", "capabilities"].into_iter().chain(valid)).is_ok());
         }
+        assert!(build_command_runtime_guide("scan", "rows").is_err());
     }
 
     #[test]
