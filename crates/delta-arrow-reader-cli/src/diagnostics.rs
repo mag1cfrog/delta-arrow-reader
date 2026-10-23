@@ -417,7 +417,7 @@ mod tests {
 
     // Run through the production panic hook without adding a CLI fault-injection flag.
     #[test]
-    fn diagnostic_subprocess_fixture() {
+    fn run_diagnostic_subprocess_scenario() {
         let Ok(scenario) = std::env::var("DAR_DIAGNOSTIC_TEST_SCENARIO") else {
             return;
         };
@@ -477,7 +477,7 @@ mod tests {
                 let mut child = Command::new(std::env::current_exe().unwrap())
                     .args([
                         "--exact",
-                        "diagnostics::tests::diagnostic_subprocess_fixture",
+                        "diagnostics::tests::run_diagnostic_subprocess_scenario",
                         "--nocapture",
                     ])
                     .env("DAR_DIAGNOSTIC_TEST_SCENARIO", scenario)
