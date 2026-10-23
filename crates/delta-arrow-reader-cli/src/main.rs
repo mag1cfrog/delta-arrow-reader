@@ -482,7 +482,7 @@ impl Error {
                     expected: "arrow for this result type".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Use --format arrow with redirected stdout; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "Use --format arrow with redirected stdout and an explicit byte budget; keep the same SQL, authorization, table bindings, and snapshot versions.",
                 });
             }
             _ => return None,

@@ -239,13 +239,26 @@ fn unsupported_json_types_offer_arrow_recovery_even_for_empty_results() -> TestR
         let diagnostic = assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(diagnostic["code"], "unsupported_json_type");
         assert_eq!(diagnostic["recovery"], "change_request");
-        assert!(
-            diagnostic["hint"]
-                .as_str()
-                .unwrap()
-                .contains("--format arrow")
+        let hint = diagnostic["hint"].as_str().unwrap();
+        assert!(hint.contains("--format arrow"));
+        assert!(hint.contains("redirected stdout and an explicit byte budget"));
+        let overflow = run_with_timeout(fixture.command().args([
+            "--format",
+            "arrow",
+            "--max-output-bytes",
+            "1",
+        ]))?;
+        assert_eq!(overflow.status.code(), Some(1));
+        assert_eq!(
+            assert_single_terminal_record(&overflow.stderr, "diagnostic")["reason"],
+            "output_byte_limit_exceeded"
         );
-        assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
+        assert_query_success_and_decode_arrow(&run_with_timeout(fixture.command().args([
+            "--format",
+            "arrow",
+            "--max-output-bytes",
+            "8192",
+        ]))?)?;
     }
     Ok(())
 }
