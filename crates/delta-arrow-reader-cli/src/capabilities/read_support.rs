@@ -121,6 +121,11 @@ impl AuthorizationService {
             ]);
             storage["credential_option_aliases"] =
                 storage["credential_option_aliases"][name].clone();
+            if let Some(configuration) = storage["provider_configuration"].get(name).cloned() {
+                storage["provider_configuration"] = configuration;
+            } else if let Some(storage) = storage.as_object_mut() {
+                storage.remove("provider_configuration");
+            }
             storage["notes"] = storage["notes"]
                 .as_array()
                 .into_iter()
@@ -168,6 +173,60 @@ pub(super) fn build_authorization_capabilities() -> Value {
                 "s3": ["json", "env", "aws-web-identity", "aws-container"],
                 "azure-blob": ["json", "env", "azure-workload-identity", "azure-managed-identity"],
                 "gcs": ["json", "env"],
+            },
+            "provider_configuration": {
+                "s3": {
+                    "aws-web-identity": {
+                        "json_example": {"aws_role_arn": "arn:aws:iam::123456789012:role/reader", "aws_web_identity_token_file": "/run/secrets/identity.jwt"},
+                        "environment": {
+                            "aws_role_arn": "AWS_ROLE_ARN", "aws_web_identity_token_file": "AWS_WEB_IDENTITY_TOKEN_FILE",
+                            "aws_role_session_name": "AWS_ROLE_SESSION_NAME", "aws_endpoint_url_sts": "AWS_ENDPOINT_URL_STS",
+                        },
+                        "rules": [
+                            "Role ARN and token file are required. Each JSON field overrides its environment variable; omitted fields use the environment.",
+                            "Session defaults to WebIdentitySession; STS defaults to https://sts.<region>.amazonaws.com and requires HTTPS even when storage allows HTTP.",
+                            "The role, session, endpoint and file path stay fixed; refresh rereads the token file. Other credential families in JSON are rejected; ambient credentials are ignored.",
+                        ],
+                    },
+                    "aws-container": {
+                        "json_example": {"aws_container_credentials_relative_uri": "/v2/credentials/task-id"},
+                        "environment": {
+                            "aws_container_credentials_relative_uri": "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+                            "aws_container_credentials_full_uri": "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+                            "aws_container_authorization_token_file": "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+                        },
+                        "rules": [
+                            "Select either an ECS relative URI, or an EKS full URI plus token file. Any JSON reference selects the entire family and disables all environment references.",
+                            "ECS appends the URI to http://169.254.170.2; it must start with one slash and contain no backslashes. Full URIs require HTTP or HTTPS. Userinfo and fragments are rejected; queries are allowed.",
+                            "Refresh uses the fixed endpoint and rereads the EKS token file. AWS_CONTAINER_AUTHORIZATION_TOKEN is unsupported. Other credential families in JSON are rejected; ambient credentials are ignored.",
+                        ],
+                    },
+                },
+                "azure-blob": {
+                    "azure-workload-identity": {
+                        "json_example": {"azure_storage_client_id": "reader-client", "azure_storage_tenant_id": "reader-tenant", "azure_federated_token_file": "/run/secrets/identity.jwt"},
+                        "environment": {
+                            "azure_storage_client_id": "AZURE_CLIENT_ID", "azure_storage_tenant_id": "AZURE_TENANT_ID",
+                            "azure_federated_token_file": "AZURE_FEDERATED_TOKEN_FILE", "azure_storage_authority_host": "AZURE_AUTHORITY_HOST",
+                        },
+                        "rules": [
+                            "Client ID, tenant ID and token file are required. Each JSON field overrides its environment variable; omitted fields use the environment. Authority defaults to the public Azure authority.",
+                            "The principal, authority and file path stay fixed; refresh rereads the token file. Other credential families in JSON are rejected; ambient credentials are ignored.",
+                        ],
+                    },
+                    "azure-managed-identity": {
+                        "json_example": {"azure_storage_client_id": "reader-client"},
+                        "environment": {
+                            "azure_storage_client_id": "AZURE_CLIENT_ID", "azure_object_id": "AZURE_OBJECT_ID",
+                            "azure_msi_resource_id": "AZURE_MSI_RESOURCE_ID", "azure_msi_endpoint": "IDENTITY_ENDPOINT",
+                        },
+                        "rules": [
+                            "Select exactly one client ID, object ID or resource ID. One JSON selector overrides all environment selectors; otherwise exactly one environment selector is required.",
+                            "Endpoint precedence: JSON, IDENTITY_ENDPOINT, then Azure IMDS. IDENTITY_HEADER is read only from the environment and sent only to the token endpoint; AZURE_MSI_ENDPOINT is ignored.",
+                            "Refresh keeps the selected identity and endpoint. No default identity is selected. Other credential families in JSON are rejected; ambient credentials are ignored.",
+                        ],
+                    },
+                },
             },
             "env_file_input": true,
             "env_file_argument": "--env-file",
@@ -325,6 +384,56 @@ mod tests {
 
     use super::*;
     use crate::{Cli, unity_catalog::UnityCatalogTableTarget};
+
+    #[test]
+    fn full_authorization_examples_configure_each_advertised_identity_provider() {
+        use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
+
+        use crate::direct_credentials::CredentialSource;
+
+        for (service, location, expected_sources) in [
+            (
+                AuthorizationService::S3,
+                "s3://bucket/table",
+                ["aws-container", "aws-web-identity"],
+            ),
+            (
+                AuthorizationService::AzureBlob,
+                "az://container@account.blob.core.windows.net/table",
+                ["azure-managed-identity", "azure-workload-identity"],
+            ),
+        ] {
+            let full = service.build_full_authorization_guide();
+            let providers = full["authorization"]["provider_configuration"]
+                .as_object()
+                .expect("full discovery must explain the advertised identity providers");
+            assert_eq!(
+                providers.keys().map(String::as_str).collect::<Vec<_>>(),
+                expected_sources,
+            );
+            for (source, configuration) in providers {
+                let options: DeltaStorageOptions =
+                    serde_json::from_value(configuration["json_example"].clone()).unwrap();
+                assert!(
+                    CredentialSource::from_str(source, false)
+                        .unwrap()
+                        .configure_table_credentials(
+                            DeltaTableBuilder::new(location),
+                            location,
+                            options,
+                            None,
+                        )
+                        .is_ok(),
+                    "invalid advertised {source} configuration",
+                );
+            }
+            assert!(
+                service.build_authorization_guide()["authorization"]
+                    .get("provider_configuration")
+                    .is_none()
+            );
+        }
+    }
 
     #[test]
     fn authorization_guides_defer_aliases_and_keep_selected_credential_rules() {

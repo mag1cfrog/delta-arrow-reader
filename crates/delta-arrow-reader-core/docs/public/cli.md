@@ -110,6 +110,8 @@ names in `authorization.guides`; the storage-options guide lists
 for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
 The default guide lists canonical JSON credential keys. Its `full_command`
 supplies alternate spellings and complete service metadata when needed.
+For AWS and Azure identity providers, `--full` includes JSON reference examples,
+environment variable names, precedence, and renewal rules in `provider_configuration`.
 These responses contain no credential values and do not check the caller's access.
 
 For a provisioned credential env file, a read command's guide gives the
