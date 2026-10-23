@@ -1576,7 +1576,7 @@ mod tests {
                             .ok_or_else(|| format!("missing {name}"))?;
                         assert!(collector.linked_to(span, parent_id), "{span:?}");
                     }
-                    collector.assert_balanced();
+                    collector.assert_no_entered_spans();
                     let scan = plan
                         .downcast_ref::<DeltaScanExec>()
                         .ok_or("expected DeltaScanExec")?;
@@ -1725,7 +1725,7 @@ mod tests {
                 .iter()
                 .any(|event| event.fields.get("event") == Some(&json!("provider_scan.completed")))
         );
-        collector.assert_balanced();
+        collector.assert_no_entered_spans();
         Ok(())
     }
 

@@ -86,7 +86,7 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
                     .iter()
                     .any(|record| record.is_span && record.thread != std::thread::current().id())
             );
-            collector.assert_balanced();
+            collector.assert_no_entered_spans();
         }
         assert!(
             context
@@ -513,7 +513,7 @@ fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
             .all(|event| event.level != Level::ERROR)
     );
     assert!(!format!("{:?}", injector.records()).contains("secret-"));
-    injector.assert_balanced();
+    injector.assert_no_entered_spans();
     Ok(())
 }
 

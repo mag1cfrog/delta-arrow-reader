@@ -12,8 +12,8 @@ mod datafusion_execution;
 #[cfg(feature = "datafusion")]
 #[path = "operation_tracing/datafusion.rs"]
 mod datafusion_provider;
-#[path = "operation_tracing/tasks.rs"]
-mod tasks;
+#[path = "operation_tracing/task_propagation.rs"]
+mod task_propagation;
 
 use capture::{CapturedTraceRecord, TraceCollector};
 use delta_arrow_reader::{

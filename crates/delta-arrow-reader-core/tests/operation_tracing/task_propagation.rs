@@ -10,7 +10,7 @@ fn assert_subscriber_released(lifetime: &std::sync::Weak<()>, message: &str) {
     }
 }
 
-fn caller(collector: &TraceCollector) -> tracing::Span {
+fn caller_span(collector: &TraceCollector) -> tracing::Span {
     with_default(
         collector.clone(),
         || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),
@@ -57,7 +57,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
             &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
         )?;
         let collector = TraceCollector::new(Level::TRACE);
-        let span = caller(&collector);
+        let span = caller_span(&collector);
         let parent = span.id().unwrap().into_u64();
         let table = runtime.block_on(
             async {
@@ -98,7 +98,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
                 .unwrap_or_else(|| panic!("missing {name}"));
             assert!(collector.linked_to(record, parent), "{record:?}");
         }
-        collector.assert_balanced();
+        collector.assert_no_entered_spans();
         runtime.block_on(async {
             assert!(
                 !tokio::task::spawn_blocking(|| tracing::dispatcher::get_default(|dispatch| {
@@ -120,7 +120,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
 fn snapshot_load_propagates_dispatch_and_parent_to_its_worker() -> TestResult {
     let fixture = LogTable::new()?;
     let collector = TraceCollector::new(Level::TRACE);
-    let parent = caller(&collector);
+    let parent = caller_span(&collector);
     let parent_id = parent.id().unwrap().into_u64();
     let caller_thread = std::thread::current().id();
     let snapshot = runtime()?.block_on(
@@ -140,7 +140,7 @@ fn snapshot_load_propagates_dispatch_and_parent_to_its_worker() -> TestResult {
         assert_ne!(event.thread, caller_thread);
         assert!(collector.linked_to(event, parent_id), "{event:?}");
     }
-    collector.assert_balanced();
+    collector.assert_no_entered_spans();
     Ok(())
 }
 
@@ -162,7 +162,7 @@ fn streams_use_the_polling_caller_for_both_backends() -> TestResult {
             let collector = TraceCollector::new(Level::TRACE);
             let mut stream = plan.into_stream();
             assert!(collector.events().is_empty());
-            let parent = caller(&collector);
+            let parent = caller_span(&collector);
             let parent_id = parent.id().unwrap().into_u64();
             runtime.block_on(
                 async move {
@@ -201,7 +201,7 @@ fn streams_use_the_polling_caller_for_both_backends() -> TestResult {
                     .iter()
                     .all(|event| collector.linked_to(event, parent_id))
             );
-            collector.assert_balanced();
+            collector.assert_no_entered_spans();
         }
     }
     Ok(())
@@ -216,7 +216,7 @@ fn concurrent_operations_keep_distinct_spans_on_a_reused_worker() -> TestResult 
         .build()?;
     let fixture = LogTable::new()?;
     let collector = TraceCollector::new(Level::TRACE);
-    let roots = [caller(&collector), caller(&collector)];
+    let roots = [caller_span(&collector), caller_span(&collector)];
     let ids = roots.each_ref().map(|span| span.id().unwrap().into_u64());
     let (one, two) = runtime.block_on(
         async {
@@ -271,7 +271,7 @@ fn concurrent_operations_keep_distinct_spans_on_a_reused_worker() -> TestResult 
             .iter()
             .all(|record| collector.linked_to(record, ids[1]))
     );
-    collector.assert_balanced();
+    collector.assert_no_entered_spans();
     Ok(())
 }
 
@@ -284,7 +284,7 @@ fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources()
         ] {
             let runtime = runtime()?;
             let owner = TraceCollector::new(level);
-            let disabled = caller(&owner);
+            let disabled = caller_span(&owner);
             assert!(disabled.is_disabled());
             let error = runtime
                 .block_on(
@@ -349,7 +349,7 @@ fn pending_load_and_refresh_report_abandonment_before_workers_finish() -> TestRe
                     .unwrap();
             }
         }));
-        let parent = caller(&owner);
+        let parent = caller_span(&owner);
         let parent_id = parent.id().unwrap().into_u64();
         let future = async {
             if refresh {
@@ -390,7 +390,7 @@ fn pending_load_and_refresh_report_abandonment_before_workers_finish() -> TestRe
                     .all(|record| owner.linked_to(record, parent_id))
             );
             drop(result);
-            owner.assert_balanced();
+            owner.assert_no_entered_spans();
             drop(owner);
         } else {
             with_default(owner.clone(), || drop(future));
@@ -447,7 +447,7 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
             let plan = runtime.block_on(provider.scan(&session.state(), None, &[], None))?;
             fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
             let owner = TraceCollector::new(level);
-            let parent = caller(&owner);
+            let parent = caller_span(&owner);
             let mut stream = with_default(owner.clone(), || {
                 parent.in_scope(|| plan.execute(0, session.task_ctx()))
             })?;
@@ -462,7 +462,7 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
             assert!(error.is_err());
             // Outstanding workers may retain context until they finish; keep the stream alive.
             drop(runtime);
-            owner.assert_balanced();
+            owner.assert_no_entered_spans();
             let lifetime = owner.lifetime();
             drop(owner);
             assert_subscriber_released(
@@ -518,7 +518,7 @@ fn task_context_subscribers_are_released_at_the_terminal_poll() -> TestResult {
             }
             // Wait for workers, but retain the terminal stream without polling again.
             drop(runtime);
-            owner.assert_balanced();
+            owner.assert_no_entered_spans();
             let lifetime = owner.lifetime();
             drop(owner);
             assert_subscriber_released(
@@ -558,7 +558,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
         )?;
         let session = SessionContext::new();
         let planning = TraceCollector::new(Level::TRACE);
-        let parent = caller(&planning);
+        let parent = caller_span(&planning);
         let parent_id = parent.id().unwrap().into_u64();
         let plan = runtime.block_on(
             provider
@@ -574,13 +574,13 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
                 .unwrap_or_else(|| panic!("missing {name}"));
             assert!(planning.linked_to(span, parent_id), "{span:?}");
         }
-        planning.assert_balanced();
+        planning.assert_no_entered_spans();
         let lifetime = planning.lifetime();
         drop(planning);
         assert_subscriber_released(&lifetime, "plan retained the planning subscriber");
         for _ in 0..2 {
             let owner = TraceCollector::new(Level::TRACE);
-            let parent = caller(&owner);
+            let parent = caller_span(&owner);
             let id = parent.id().unwrap().into_u64();
             let mut stream = with_default(owner.clone(), || {
                 parent.in_scope(|| plan.execute(0, session.task_ctx()))
@@ -604,7 +604,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
                     .any(|record| record.name == "Delta partition task"
                         && owner.linked_to(record, id))
             );
-            owner.assert_balanced();
+            owner.assert_no_entered_spans();
             let lifetime = owner.lifetime();
             drop(owner);
             assert_subscriber_released(&lifetime, "finished execution retained its subscriber");

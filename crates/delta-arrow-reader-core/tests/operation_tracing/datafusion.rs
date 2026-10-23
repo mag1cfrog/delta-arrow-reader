@@ -443,7 +443,7 @@ fn planning_worker_panics_emit_one_typed_terminal_failure() -> TestResult {
                 .any(|event| event.fields.get("outcome") == Some(&json!("completed")))
         );
         assert!(!format!("{:?}", collector.records()).contains("secret-"));
-        collector.assert_balanced();
+        collector.assert_no_entered_spans();
     }
     Ok(())
 }
@@ -514,6 +514,6 @@ fn abandoned_provider_planning_cannot_emit_late_success() -> TestResult {
             .iter()
             .all(|event| event.level == Level::INFO && collector.linked_to(event, parent_id))
     );
-    collector.assert_balanced();
+    collector.assert_no_entered_spans();
     Ok(())
 }
