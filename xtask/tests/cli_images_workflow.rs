@@ -66,7 +66,12 @@ fn image_workflow_requires_explicit_identity_and_read_only_artifact_access() {
         assert!(job["continue-on-error"].is_null());
         for step in steps(job) {
             assert!(step["continue-on-error"].is_null());
-            assert!(step["if"].is_null());
+            if step["name"] == "Retain installed CLI invocation records" {
+                assert_eq!(step["if"], "always()");
+                assert_eq!(step["uses"], "actions/upload-artifact@v6");
+            } else {
+                assert!(step["if"].is_null());
+            }
         }
     }
     let text = workflow.to_string();
@@ -235,6 +240,7 @@ fn image_checks_use_both_native_runners_before_export_and_upload() {
             "Build and test the native CLI image",
             "Build and test the Go consumer",
             "Export and reimport the tested image",
+            "Retain installed CLI invocation records",
             "Upload tested platform image"
         ]
     );

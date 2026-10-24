@@ -87,6 +87,8 @@ pub(super) fn run(args: TestImageArgs) -> Result<()> {
     fixture.check_basic_commands(&args.expected_version)?;
     eprintln!("Image check: pinned SQL aggregate and complete result");
     fixture.check_query()?;
+    eprintln!("Image check: offline agent discovery, pinned reads, repair, and saved results");
+    fixture.check_agent_workflow(&args.expected_version)?;
     eprintln!("Image check: Spark corpus, projection, limits, predicates, and execution options");
     check_corpus(&fixture.corpus, fixture.directory.path(), &|| {
         let mut command = fixture.dar_command();
@@ -104,6 +106,63 @@ pub(super) fn run(args: TestImageArgs) -> Result<()> {
 }
 
 impl ImageFixture {
+    fn check_agent_workflow(&self, version: &str) -> Result<()> {
+        let directory = self.directory.path().join("agent-workflow");
+        fs::create_dir(&directory).context(FileSnafu { path: &directory })?;
+        // Match the mount owner so the host can verify private (0600) result artifacts.
+        let user = format!("{}:{}", unsafe { libc::geteuid() }, unsafe {
+            libc::getegid()
+        });
+        let command = |network: &str| {
+            let mut command = Command::new("docker");
+            command
+                .args([
+                    "run",
+                    "--rm",
+                    "--read-only",
+                    "--cap-drop=ALL",
+                    "--security-opt=no-new-privileges",
+                    "--security-opt=label=disable",
+                ])
+                .args([
+                    "--name",
+                    &self.name,
+                    "--network",
+                    network,
+                    "--user",
+                    &user,
+                    "--mount",
+                ])
+                .arg(format!(
+                    "type=bind,src={},dst={}",
+                    directory.display(),
+                    directory.display()
+                ))
+                .arg("--workdir")
+                .arg(&directory)
+                .args([
+                    "--entrypoint=/usr/bin/env",
+                    &self.image,
+                    "-i",
+                    "/usr/local/bin/dar",
+                ]);
+            Ok(command)
+        };
+        crate::packaged_cli::check_agent_workflow(
+            &|| command("none"),
+            &|| command("host"),
+            &directory,
+            "dar",
+            version,
+        )
+        .map_err(|error| {
+            InvalidInputSnafu {
+                message: format!("Packaged image acceptance failed: {error}"),
+            }
+            .build()
+        })
+    }
+
     fn container_command(&self, action: &str) -> Command {
         let mut command = Command::new("docker");
         command

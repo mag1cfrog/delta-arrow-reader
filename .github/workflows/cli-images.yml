@@ -165,6 +165,7 @@ jobs:
       CLI_ARCHITECTURE: ${{ matrix.architecture }}
       CLI_IMAGE: localhost/dar-cli:candidate-${{ matrix.architecture }}
       GO_IMAGE: localhost/dar-go:candidate-${{ matrix.architecture }}
+      DELTA_ARROW_READER_ACCEPTANCE_RECORDS: ${{ runner.temp }}/image-acceptance
     steps:
       - uses: actions/checkout@v5
         with:
@@ -232,6 +233,14 @@ jobs:
             --architecture "$CLI_ARCHITECTURE" --image "$CLI_IMAGE_ID" \
             --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
             --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+      - name: Retain installed CLI invocation records
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: image-acceptance-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/image-acceptance/
+          if-no-files-found: warn
+          retention-days: 90
       - name: Upload tested platform image
         uses: actions/upload-artifact@v6
         with:

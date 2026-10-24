@@ -325,15 +325,26 @@ jobs:
             --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
       - name: Execute archive acceptance tests in a fresh runtime
         run: |
+          mkdir -p "$RUNNER_TEMP/cli-acceptance"
           docker run --rm --platform "linux/$CLI_ARCHITECTURE" \
             --volume "$GITHUB_WORKSPACE:/checks:ro" \
             --volume "$RUNNER_TEMP/cli-artifacts:/artifacts:ro" \
             --volume "$RUNNER_TEMP/cli-extracted:/package:ro" \
             --volume "$RUNNER_TEMP/cli-tools/xtask:/tools/xtask:ro" \
+            --volume "$RUNNER_TEMP/cli-acceptance:/records" \
+            --env DELTA_ARROW_READER_ACCEPTANCE_RECORDS=/records \
             --workdir /tmp \
             --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
             --env CLI_ARCHITECTURE "$CLI_IMAGE" \
             bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
+      - name: Retain installed CLI invocation records
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cli-acceptance-${{ matrix.distribution.name }}-${{ matrix.platform.architecture }}
+          path: ${{ runner.temp }}/cli-acceptance/
+          if-no-files-found: warn
+          retention-days: 90
 
   validate:
     name: Validate complete CLI artifact set

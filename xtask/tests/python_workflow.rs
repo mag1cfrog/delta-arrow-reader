@@ -803,6 +803,7 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
     assert!(image.starts_with("quay.io/pypa/manylinux_2_28_x86_64@sha256:"));
     let fixture = WheelFixture::new("glibc-runtime")?;
     let workspace = fixture.directory.join("source checkout");
+    let records = fixture.directory.join("records");
     let script = runtime["run"].as_str().unwrap();
     let mut container_script = String::new();
     for status in [0, 9] {
@@ -816,6 +817,7 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             ])
             .env("GITHUB_WORKSPACE", &workspace)
             .env("MANYLINUX_IMAGE", image)
+            .env("DELTA_ARROW_READER_ACCEPTANCE_RECORDS", &records)
             .output()?;
         assert_eq!(output.status.code(), Some(status), "{output:?}");
         let stdout = String::from_utf8(output.stdout)?;
@@ -852,7 +854,7 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             );
         }
         assert_eq!(
-            &arguments[18..24],
+            &arguments[22..28],
             ["--entrypoint", "/bin/bash", image, "-euo", "pipefail", "-c"]
         );
         assert_eq!(arguments[14], "--volume");
@@ -867,8 +869,17 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             &arguments[16..18],
             ["--env", "DELTA_ARROW_READER_XTASK=/acceptance/xtask"]
         );
-        assert_eq!(arguments.len(), 25);
-        container_script = arguments[24].to_owned();
+        assert_eq!(
+            &arguments[18..22],
+            [
+                "--volume",
+                &format!("{}:/records", records.display()),
+                "--env",
+                "DELTA_ARROW_READER_ACCEPTANCE_RECORDS=/records"
+            ]
+        );
+        assert_eq!(arguments.len(), 29);
+        container_script = arguments[28].to_owned();
     }
     // Keep the actual shell control flow while replacing the container's interpreters.
     let script = container_script

@@ -10,12 +10,12 @@ mod cli_completion;
 mod command;
 mod error;
 mod external_fixtures;
-#[cfg(target_os = "linux")]
 mod http_fixture;
 mod image;
 mod image_artifacts;
 mod image_runtime;
 mod notices;
+mod packaged_cli;
 mod platform;
 mod process;
 mod python_cli;
@@ -179,6 +179,8 @@ enum CliTask {
     CheckBinary(binary::CheckBinaryArgs),
     /// Run runtime acceptance tests against an extracted CLI archive.
     TestArchive(acceptance::TestArchiveArgs),
+    /// Check agent discovery, pinned reads, repair, and saved results in an installed CLI.
+    TestAgentWorkflow(packaged_cli::TestAgentWorkflowArgs),
     /// Check a local container's read-only execution, TLS, IPC, and process lifecycle.
     TestImage(image_runtime::TestImageArgs),
     /// Record an approved release PR's validated binary and image artifact identities.
@@ -296,6 +298,7 @@ impl CliTask {
             Self::BuildImage(args) => args.run(),
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
+            Self::TestAgentWorkflow(args) => args.run(),
             Self::TestImage(args) => args.run(),
             Self::RecordValidation(args) => args.run(),
             Self::SelectReleaseArtifacts(args) => args.run(),

@@ -79,6 +79,7 @@ jobs:
       SOURCE_REF: ${{ inputs.source-ref }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
       CACHE_ONLY: ${{ inputs.cache-only }}
+      DELTA_ARROW_READER_ACCEPTANCE_RECORDS: ${{ runner.temp }}/wheel-acceptance
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
@@ -291,6 +292,7 @@ jobs:
       - name: Test installed wheel on glibc 2.28
         if: ${{ !inputs.cache-only && runner.os == 'Linux' }}
         run: |
+          mkdir -p "$DELTA_ARROW_READER_ACCEPTANCE_RECORDS"
           python_tests=crates/delta-arrow-reader-python/tests
           fixture=crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus
           # Reuse the acceptance tool compiled inside the same manylinux baseline.
@@ -301,6 +303,8 @@ jobs:
             --volume "$GITHUB_WORKSPACE/$fixture:/acceptance/$fixture:ro" \
             --volume "$GITHUB_WORKSPACE/.python-sdist-source/target/wheel-tools/debug/xtask:/acceptance/xtask:ro" \
             --env DELTA_ARROW_READER_XTASK=/acceptance/xtask \
+            --volume "$DELTA_ARROW_READER_ACCEPTANCE_RECORDS:/records" \
+            --env DELTA_ARROW_READER_ACCEPTANCE_RECORDS=/records \
             --entrypoint /bin/bash "$MANYLINUX_IMAGE" -euo pipefail -c '
               test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"
               for version in 310 314; do
@@ -340,6 +344,14 @@ jobs:
           uvx_version="$(python -m uv tool run --no-config --isolated \
             --from "$GITHUB_WORKSPACE"/dist/*.whl delta-arrow-reader --version)"
           test "$uvx_version" = "delta-arrow-reader $EXPECTED_VERSION"
+      - name: Retain installed CLI invocation records
+        if: ${{ always() && !inputs.cache-only }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: acceptance-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/wheel-acceptance/
+          if-no-files-found: warn
+          retention-days: 90
       - name: Upload validated wheel
         if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6

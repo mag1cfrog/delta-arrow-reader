@@ -152,6 +152,7 @@ fn directory_fixture_serves_encoded_files_and_lists_only_delta_metadata()
 }
 
 #[test]
+#[cfg(unix)]
 fn directory_fixture_rejects_symlinks() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     std::os::unix::fs::symlink(directory.path(), directory.path().join("loop"))?;
