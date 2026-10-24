@@ -61,6 +61,9 @@ fn image_workflow_requires_explicit_identity_and_read_only_artifact_access() {
         true
     );
     for job in workflow["jobs"].as_object().unwrap().values() {
+        if let Some(path) = job["env"]["DELTA_ARROW_READER_ACCEPTANCE_RECORDS"].as_str() {
+            assert!(!path.contains(".."));
+        }
         assert!(job["environment"].is_null());
         assert!(job["permissions"].is_null());
         assert!(job["continue-on-error"].is_null());

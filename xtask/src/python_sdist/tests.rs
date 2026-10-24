@@ -37,6 +37,10 @@ impl Fixture {
             ),
             ("xtask/Cargo.toml", "xtask manifest"),
             ("xtask/src/main.rs", "fn main() {}"),
+            (
+                "benches/selective_read/runners/contract.rs",
+                "shared request types",
+            ),
             ("target/release/dar", "generated executable"),
             (
                 "crates/delta-arrow-reader-cli/target/debug/dar",
@@ -119,6 +123,7 @@ fn preserves_metadata_and_adds_build_sources_without_generated_files() -> TestRe
         "crates/delta-arrow-reader-cli/build.rs",
         "crates/delta-arrow-reader-cli/src/main.rs",
         "xtask/src/main.rs",
+        "benches/selective_read/runners/contract.rs",
     ] {
         assert_eq!(
             files[Path::new(relative)],

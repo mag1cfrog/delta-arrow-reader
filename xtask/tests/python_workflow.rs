@@ -789,6 +789,12 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
     let runtime_position = position("Test installed wheel on glibc 2.28");
     let records = &steps[position("Retain installed CLI invocation records")];
     assert!(
+        !build["env"]["DELTA_ARROW_READER_ACCEPTANCE_RECORDS"]
+            .as_str()
+            .unwrap()
+            .contains("..")
+    );
+    assert!(
         records["with"]["name"]
             .as_str()
             .unwrap()

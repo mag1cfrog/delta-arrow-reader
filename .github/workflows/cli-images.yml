@@ -165,7 +165,7 @@ jobs:
       CLI_ARCHITECTURE: ${{ matrix.architecture }}
       CLI_IMAGE: localhost/dar-cli:candidate-${{ matrix.architecture }}
       GO_IMAGE: localhost/dar-go:candidate-${{ matrix.architecture }}
-      DELTA_ARROW_READER_ACCEPTANCE_RECORDS: ${{ github.workspace }}/../image-acceptance
+      DELTA_ARROW_READER_ACCEPTANCE_RECORDS: ${{ github.workspace }}/target/acceptance-records/image
     steps:
       - uses: actions/checkout@v5
         with:
