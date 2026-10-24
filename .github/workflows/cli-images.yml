@@ -237,7 +237,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: image-acceptance-${{ matrix.architecture }}
+          name: image-acceptance-${{ matrix.architecture }}-${{ github.run_attempt }}
           path: ${{ env.DELTA_ARROW_READER_ACCEPTANCE_RECORDS }}/
           if-no-files-found: warn
           retention-days: 90

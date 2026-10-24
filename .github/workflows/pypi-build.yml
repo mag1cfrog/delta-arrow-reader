@@ -348,7 +348,7 @@ jobs:
         if: ${{ always() && !inputs.cache-only }}
         uses: actions/upload-artifact@v6
         with:
-          name: acceptance-${{ matrix.artifact }}
+          name: acceptance-${{ matrix.artifact }}-${{ github.run_attempt }}
           path: ${{ env.DELTA_ARROW_READER_ACCEPTANCE_RECORDS }}/
           if-no-files-found: warn
           retention-days: 90

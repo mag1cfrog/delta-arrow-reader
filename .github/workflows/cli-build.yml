@@ -341,7 +341,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: cli-acceptance-${{ matrix.distribution.name }}-${{ matrix.platform.architecture }}
+          name: cli-acceptance-${{ matrix.distribution.name }}-${{ matrix.platform.architecture }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/cli-acceptance/
           if-no-files-found: warn
           retention-days: 90

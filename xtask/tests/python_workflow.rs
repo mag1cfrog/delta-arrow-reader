@@ -787,6 +787,14 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
     let steps = build["steps"].as_array().unwrap();
     let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
     let runtime_position = position("Test installed wheel on glibc 2.28");
+    let records = &steps[position("Retain installed CLI invocation records")];
+    assert!(
+        records["with"]["name"]
+            .as_str()
+            .unwrap()
+            .contains("github.run_attempt")
+    );
+    assert_eq!(records["if"], "${{ always() && !inputs.cache-only }}");
     assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < runtime_position);
     assert!(runtime_position < position("Upload validated wheel"));
     let runtime = &steps[runtime_position];

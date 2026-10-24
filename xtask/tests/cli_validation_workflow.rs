@@ -165,6 +165,15 @@ fn binary_and_image_handoffs_return_the_uploaded_manifest_hash_and_retain_all_in
             for step in steps(job) {
                 if step["uses"] == "actions/upload-artifact@v6" {
                     assert_eq!(step["with"]["retention-days"], 90);
+                    if step["name"] == "Retain installed CLI invocation records" {
+                        assert!(
+                            step["with"]["name"]
+                                .as_str()
+                                .unwrap()
+                                .contains("github.run_attempt")
+                        );
+                        assert_eq!(step["if"], "always()");
+                    }
                 }
             }
         }
