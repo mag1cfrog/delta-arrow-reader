@@ -2,6 +2,104 @@
 
 ## Unreleased
 
+## [0.8.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.8.0) - 2026-10-24
+
+### Added
+
+- *(cli)* save complete result artifacts and manifests ([#566](https://github.com/mag1cfrog/delta-arrow-reader/pull/566))
+- *(cli)* bound SQL memory and spill storage ([#565](https://github.com/mag1cfrog/delta-arrow-reader/pull/565))
+- *(cli)* enforce command deadlines and cancellation ([#564](https://github.com/mag1cfrog/delta-arrow-reader/pull/564))
+- *(cli)* load explicitly selected credential env files ([#562](https://github.com/mag1cfrog/delta-arrow-reader/pull/562))
+- integrate typed JSON with named query snapshots
+- join Unity Catalog and direct-storage snapshots
+- add bounded typed JSON previews
+- query a Unity Catalog snapshot with local SQL
+- add bounded typed JSON query output
+- *(cli)* add focused snapshot inspection
+- complete discovery for named-table SQL queries
+- expose multi-table SQL through capability discovery
+- select authorization per table in SQL manifests
+- *(cli)* bound every level of capability discovery
+- query named snapshots from a bounded table manifest
+- *(cli)* load capability details on demand
+- support explicit AWS container credentials
+- support explicit S3 web identity credentials
+- support explicit Azure managed identities
+- support Azure workload identity credentials
+- support Azure client-secret credential sources
+- select explicit GCS credential files in the CLI
+- select explicit Azure credential sources in the CLI
+- select explicit S3 credential sources in the CLI
+- *(cli)* publish inspection and terminal record schemas
+- *(cli)* describe authorization sources and read limits
+- *(cli)* publish input schemas for offline discovery
+- *(cli)* describe installed command capabilities
+- *(cli)* report actionable input errors ([#548](https://github.com/mag1cfrog/delta-arrow-reader/pull/548))
+- *(cli)* query Delta snapshots with local read-only SQL ([#550](https://github.com/mag1cfrog/delta-arrow-reader/pull/550))
+- *(cli)* scan Unity Catalog tables with renewable credentials ([#549](https://github.com/mag1cfrog/delta-arrow-reader/pull/549))
+- *(storage)* accept renewable cloud credential providers ([#547](https://github.com/mag1cfrog/delta-arrow-reader/pull/547))
+- *(cli)* add versioned JSON diagnostics ([#546](https://github.com/mag1cfrog/delta-arrow-reader/pull/546))
+- *(cli)* inspect Unity Catalog tables through Databricks profiles ([#524](https://github.com/mag1cfrog/delta-arrow-reader/pull/524))
+- *(python)* forward core tracing into logging ([#523](https://github.com/mag1cfrog/delta-arrow-reader/pull/523))
+- *(cli)* consume core tracing for stderr diagnostics ([#522](https://github.com/mag1cfrog/delta-arrow-reader/pull/522))
+
+### Changed
+
+- *(cli)* clarify authorization guide names
+- distinguish Azure Blob storage from Azure identity
+- generate Python API documentation in Rust
+- finalize external writer fixtures in Rust
+- run core HTTPS checks through native tooling
+- migrate scan scheduling runner to Rust
+- simplify Python build frontend bootstrap
+
+### Documentation
+
+- organize Unity Catalog guides by reader task ([#561](https://github.com/mag1cfrog/delta-arrow-reader/pull/561))
+- record Azure Unity Catalog live validation
+- prepare Azure Unity Catalog validation handoff
+- align schema guide field selection with examples
+- define supported CLI credential sources and provider limits
+- finish benchmark provenance cleanup and pin replay guides
+- organize guides around reader tasks ([#544](https://github.com/mag1cfrog/delta-arrow-reader/pull/544))
+- align guides and release recovery with v0.7 ([#505](https://github.com/mag1cfrog/delta-arrow-reader/pull/505))
+- update README and installation for the PyPI release ([#503](https://github.com/mag1cfrog/delta-arrow-reader/pull/503))
+
+### Fixed
+
+- preserve query lifecycle and CLI recovery context ([#563](https://github.com/mag1cfrog/delta-arrow-reader/pull/563))
+- keep related row encoding guidance together
+- focus JSON encoding details on selected types
+- narrow authorization guidance and clarify reserved aliases
+- validate live Unity Catalog manifests on macOS
+- clarify CLI recovery and completion guides
+- streamline CLI discovery and budget recovery
+- align CLI discovery and diagnostic contracts
+- *(cli)* align capability discovery with explicit credential sources
+- *(cli)* remove redundant failure message from JSON diagnostics
+- *(cli)* remove repeated schema fields and clarify type repair
+- *(cli)* clarify completion checks and predicate recovery
+- *(cli)* clarify focused authorization and retry guidance
+- *(cli)* make diagnostic recovery actionable
+- *(cli)* minimize discovery context for common tasks
+- *(cli)* bound diagnostics and cancel pending discovery completion
+- *(core)* complete DataFusion tracing lifecycles ([#521](https://github.com/mag1cfrog/delta-arrow-reader/pull/521))
+- *(core)* propagate tracing across task boundaries ([#520](https://github.com/mag1cfrog/delta-arrow-reader/pull/520))
+- *(core)* trace ordinary stream execution outcomes ([#519](https://github.com/mag1cfrog/delta-arrow-reader/pull/519))
+- *(core)* trace table and planning operation outcomes ([#518](https://github.com/mag1cfrog/delta-arrow-reader/pull/518))
+- *(core)* preserve and classify tracing error sources ([#517](https://github.com/mag1cfrog/delta-arrow-reader/pull/517))
+
+### Maintenance
+
+- sync main for CLI JSON merge checks
+- merge main and verify JSON catalog queries
+- sync multi-table queries with latest main
+- sync inspection with capability and credential updates
+- sync named-table SQL branch with main
+- sync CLI credential changes from main
+- sync CLI capabilities with main
+- sync benchmark tooling with main
+
 ## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-15
 
 ### Python
