@@ -23,10 +23,15 @@ pub(crate) enum DiscoverySchema {
     Diagnostic,
     Completion,
     Rows,
+    ResultArtifact,
+    ResultManifest,
 }
 
 impl DiscoverySchema {
     pub(super) fn build_schema_guide(self, detail: Option<&str>) -> Result<Value, Error> {
+        if matches!(self, Self::ResultArtifact | Self::ResultManifest) {
+            return self.build_artifact_schema_guide(detail);
+        }
         let document = self.schema_document();
         let schema = &document["schema"];
         let executable = command_name();
@@ -111,7 +116,7 @@ impl DiscoverySchema {
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "v1/v2 only; --output v3 keeps bindings in the result manifest. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {
@@ -125,7 +130,7 @@ impl DiscoverySchema {
                 } else if name == "tables[].authorization" {
                     guide["definition"] = json!({
                         "type": "object", "required": ["source"],
-                        "description": "References only; no inline credentials. Omit for direct-storage defaults. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
+                        "description": "References only; no inline credentials. Required for remote --output; stdout allows direct-storage defaults when omitted. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
                     });
                     guide["example"] = json!({
                         "source": "json", "storage_options_file": "credentials.json",
@@ -292,6 +297,41 @@ impl DiscoverySchema {
         Ok(guide)
     }
 
+    fn build_artifact_schema_guide(self, detail: Option<&str>) -> Result<Value, Error> {
+        let document = self.schema_document();
+        let mut selected = &document["schema"];
+        if let Some(path) = detail {
+            for field in path.split('.') {
+                selected = selected["properties"].get(field).ok_or_else(|| Error::Argument {
+                    kind: clap::error::ErrorKind::InvalidValue,
+                    correction: Some(InputCorrection {
+                        argument: "--detail".into(), field_path: None, supplied: None,
+                        expected: "a listed field, with dots for nested fields".into(),
+                        hint: "Run capabilities --schema NAME, then select a field using --detail.",
+                    }),
+                })?;
+            }
+        }
+        let mut guide = json!({
+            "format_version": 1, "kind": if detail.is_some() { "schema_detail" } else { "schema_guide" },
+            "name": self,
+            "detail_command": [command_name(), "capabilities", "--schema", self, "--detail", "FIELD"],
+            "full_command": [command_name(), "capabilities", "--schema", self, "--full"],
+        });
+        if let Some(path) = detail {
+            guide["detail"] = json!(path);
+        }
+        if let Some(fields) = selected["properties"].as_object() {
+            guide["fields"] = json!(fields.keys().collect::<Vec<_>>());
+            if let Some(description) = selected.get("description") {
+                guide["description"] = description.clone();
+            }
+        } else {
+            guide["definition"] = selected.clone();
+        }
+        Ok(guide)
+    }
+
     pub(crate) fn schema_document(self) -> Value {
         let (mut schema, stream) = match self {
             Self::StorageOptions => return JsonInputKind::StorageOptions.schema_document(),
@@ -301,6 +341,11 @@ impl DiscoverySchema {
             Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
             Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
             Self::Rows => (output_schemas::rows_schema(), "stdout"),
+            Self::ResultArtifact => (
+                output_schemas::artifacts::result_artifact_schema(),
+                "stdout",
+            ),
+            Self::ResultManifest => (output_schemas::artifacts::result_manifest_schema(), "file"),
             Self::Diagnostic => (output_schemas::diagnostic_schema(), "stderr"),
             Self::Completion => (output_schemas::completion_schema(), "stderr"),
         };
@@ -684,12 +729,12 @@ mod tests {
         let version = DiscoverySchema::Completion
             .build_schema_guide(Some("format_version"))
             .unwrap();
-        assert_eq!(version["definition"]["enum"], json!([1, 2]));
+        assert_eq!(version["definition"]["enum"], json!([1, 2, 3]));
         assert!(
             version["definition"]["description"]
                 .as_str()
                 .unwrap()
-                .contains("query --format json")
+                .contains("JSON stdout")
         );
         for omitted in [
             "conditions",
@@ -710,6 +755,8 @@ mod tests {
             .build_schema_guide(Some("bindings"))
             .unwrap();
         let description = bindings["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("v1/v2 only; --output v3"));
+        assert!(description.contains("bindings in the result manifest"));
         assert!(description.contains("query has at least one binding"));
         assert!(description.contains("inspect/scan/preview have one binding named t"));
         assert!(description.contains("Other commands have no bindings"));

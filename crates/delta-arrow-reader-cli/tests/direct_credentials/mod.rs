@@ -28,6 +28,47 @@ use super::{
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+#[test]
+fn file_output_selects_only_the_supplied_json_identity() -> TestResult {
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
+    fixture.write_options(json!({"aws_region": "eu-west-1", "aws_skip_signature": "true"}))?;
+    for operation in ["scan", "query"] {
+        let output = run_with_timeout(
+            fixture
+                .command(operation)
+                .arg("--diagnostics=json")
+                .arg("--output")
+                .arg(fixture.directory.path().join(operation)),
+        )?;
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        assert_eq!(
+            assert_single_terminal_record(&output.stderr, "diagnostic")["reason"],
+            "auth_source_unsupported_option"
+        );
+    }
+    assert!(fixture.server.requests.lock().unwrap().is_empty());
+    fixture.write_options(json!({"aws_region": "eu-west-1", "aws_access_key_id": "test-key", "aws_secret_access_key": "secret-file-password"}))?;
+    for operation in ["scan", "query"] {
+        let output = run_with_timeout(
+            fixture
+                .command(operation)
+                .arg("--diagnostics=json")
+                .arg("--output")
+                .arg(fixture.directory.path().join(operation)),
+        )?;
+        assert!(output.status.success(), "{output:?}");
+        let receipt: Value = serde_json::from_slice(&output.stdout)?;
+        let manifest = fs::read_to_string(receipt["manifest"].as_str().unwrap())?;
+        assert!(!manifest.contains("secret-file-password"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&manifest)?["replay"]["options"]["auth-source"],
+            "json"
+        );
+    }
+    fixture.assert_signed_s3_requests("test-key", "secret-file-password", None, "eu-west-1")?;
+    Ok(())
+}
+
 /// Owns the selected options file and the storage endpoint that records the resulting requests.
 struct DirectStorageFixture {
     directory: tempfile::TempDir,

@@ -19,12 +19,18 @@ pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
         LazyLock::new(|| load_cli_output_schema_validator("completion"));
     static ROWS_VALIDATOR: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| load_cli_output_schema_validator("rows"));
+    static ARTIFACT_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("result-artifact"));
+    static MANIFEST_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("result-manifest"));
     let validator = match name {
         "inspection" => &*INSPECTION_VALIDATOR,
         "inspection-summary" => &*INSPECTION_SUMMARY_VALIDATOR,
         "diagnostic" => &*DIAGNOSTIC_VALIDATOR,
         "completion" => &*COMPLETION_VALIDATOR,
         "rows" => &*ROWS_VALIDATOR,
+        "result-artifact" => &*ARTIFACT_VALIDATOR,
+        "result-manifest" => &*MANIFEST_VALIDATOR,
         _ => panic!("unknown output schema: {name}"),
     };
     validator.validate(output).unwrap();
@@ -153,7 +159,8 @@ fn discovered_completion_versions_match_each_command_and_query_format()
             metadata["diagnostics"]["json"]["completion_format_versions"],
             match name {
                 "preview" => serde_json::json!([2]),
-                "query" => serde_json::json!([1, 2]),
+                "query" => serde_json::json!([1, 2, 3]),
+                "scan" => serde_json::json!([1, 3]),
                 _ => serde_json::json!([1]),
             }
         );
@@ -301,6 +308,14 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
         ),
         (
             vec!["--command", "query", "--detail", "resources"],
+            "command_detail",
+        ),
+        (
+            vec!["--command", "query", "--detail", "artifacts"],
+            "command_detail",
+        ),
+        (
+            vec!["--command", "scan", "--detail", "artifacts"],
             "command_detail",
         ),
         (vec!["--schema", "predicate"], "schema_guide"),
@@ -482,7 +497,17 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             if matches!(name, "preview" | "query") {
                 assert_eq!(
                     guide["output_schemas"],
-                    serde_json::json!(["diagnostic", "completion", "rows"])
+                    if name == "query" {
+                        serde_json::json!([
+                            "diagnostic",
+                            "completion",
+                            "rows",
+                            "result-artifact",
+                            "result-manifest"
+                        ])
+                    } else {
+                        serde_json::json!(["diagnostic", "completion", "rows"])
+                    }
                 );
                 assert!(guide.get("join").is_none());
                 let mut invocation = guide["schema_command"].clone();
@@ -614,7 +639,20 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "diagnostic",
                     "completion",
                 ],
-                "query" | "preview" => vec!["diagnostic", "completion", "rows"],
+                "query" => vec![
+                    "diagnostic",
+                    "completion",
+                    "rows",
+                    "result-artifact",
+                    "result-manifest",
+                ],
+                "preview" => vec!["diagnostic", "completion", "rows"],
+                "scan" => vec![
+                    "diagnostic",
+                    "completion",
+                    "result-artifact",
+                    "result-manifest",
+                ],
                 _ => vec!["diagnostic", "completion"],
             };
             assert_eq!(output_names, expected_outputs);
@@ -647,6 +685,26 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             }
             let full = run_advertised(&guide["full_command"])?;
             assert_eq!(&full["name"], name);
+            if matches!(name.as_str(), Some("result-artifact" | "result-manifest")) {
+                assert_eq!(
+                    guide["fields"],
+                    serde_json::json!(
+                        full["schema"]["properties"]
+                            .as_object()
+                            .unwrap()
+                            .keys()
+                            .collect::<Vec<_>>()
+                    )
+                );
+                for field in guide["fields"].as_array().unwrap() {
+                    let mut invocation = guide["detail_command"].clone();
+                    *invocation.as_array_mut().unwrap().last_mut().unwrap() = field.clone();
+                    let detail = run_advertised(&invocation)?;
+                    assert_eq!(detail["detail"], *field);
+                    assert!(detail.get("definition").is_some() || detail.get("fields").is_some());
+                }
+                continue;
+            }
             jsonschema::validate(&full["schema"], &guide["example"])
                 .map_err(|error| io::Error::other(error.to_string()))?;
             let mut detail_names = std::collections::BTreeSet::new();
@@ -662,6 +720,10 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             }
             if name == "completion" {
                 assert_eq!(guide["example"]["format_version"], 2);
+                let description = guide["description"].as_str().unwrap();
+                assert!(description.contains("File output uses v3"));
+                assert!(description.contains("result_artifact receipt"));
+                assert!(description.contains("JSON stdout"));
                 assert!(guide.get("other_fields").is_none());
                 let legacy_fields = guide["version_1_fields"].as_array().unwrap();
                 assert_eq!(legacy_fields.len(), 6);

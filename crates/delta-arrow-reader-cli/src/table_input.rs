@@ -51,17 +51,20 @@ impl TableLoadRequest {
 }
 
 /// Required location and settings for inspect, scan, and preview.
-#[derive(Args)]
+#[derive(Args, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct TableArgs {
     /// UTF-8 local path or storage URL. Relative paths use the working directory.
     /// Use '--' before a table path beginning with '-'.
     pub(crate) table: String,
     #[command(flatten)]
+    #[serde(flatten)]
     pub(crate) options: TableOptions,
 }
 
 /// Settings for one table, shared by positional inputs and manifest entries.
-#[derive(Args, Default)]
+#[derive(Args, Default, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct TableOptions {
     /// Unsigned decimal snapshot version; default: latest.
     #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<u64>)]
@@ -73,12 +76,42 @@ pub(crate) struct TableOptions {
     /// Explicit UTF-8 NAME=VALUE credential file, at most 1 MiB. Values are literal.
     #[arg(long, value_name = "PATH", conflicts_with_all = ["auth_source", "databricks_profile"])]
     pub(crate) env_file: Option<String>,
-    /// Explicit S3, Azure Blob, or GCS credential source. Without a selector, existing storage behavior applies.
+    /// S3, Azure Blob, or GCS credential source. Remote --output requires a source or --env-file;
+    /// a storage-options file alone selects json. Stdout keeps backend defaults.
     #[arg(long, value_enum)]
     pub(crate) auth_source: Option<CredentialSource>,
 }
 
 impl TableOptions {
+    /// File results must be replayable without an implicit provider-chain identity.
+    pub(crate) fn select_file_output_credentials(&mut self, location: &str) -> Result<(), Error> {
+        if Path::new(location).is_absolute() || location.starts_with("uc://") {
+            return Ok(());
+        }
+        let Ok(url) = url::Url::parse(location) else {
+            return Ok(());
+        };
+        let (scheme, _) = object_store::ObjectStoreScheme::parse(&url).map_err(|_| {
+            Error::StorageAuthorization {
+                reason: "auth_source_invalid_table_url",
+            }
+        })?;
+        crate::direct_credentials::validate_table_url(&url, &scheme)?;
+        if matches!(scheme, object_store::ObjectStoreScheme::Local) {
+            return Ok(());
+        }
+        if self.env_file.is_none() && self.auth_source.is_none() {
+            ensure!(
+                self.storage_options_file.is_some(),
+                StorageAuthorizationSnafu {
+                    reason: "file_output_requires_auth_source",
+                }
+            );
+            self.auth_source = Some(CredentialSource::Json);
+        }
+        Ok(())
+    }
+
     fn snapshot_selection(&self) -> DeltaSnapshotSelection {
         self.table_version.map_or(
             DeltaSnapshotSelection::Latest,

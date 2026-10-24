@@ -288,7 +288,7 @@ fn compile_spill_fault_library(directory: &std::path::Path) -> TestResult<PathBu
         .arg(&library)
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/spill_io_failure.c"
+            "/tests/fixtures/storage_io_failure.c"
         ))
         .arg("-ldl")
         .output()?;
@@ -312,8 +312,8 @@ fn full_spill_storage_and_write_errors_fail_without_leaking_temporary_files() ->
         let output = run_with_timeout(
             spill_enabled_command(&fixture, spill.path())
                 .env("LD_PRELOAD", &library)
-                .env("DAR_SPILL_FAULT_MARKER", &marker)
-                .env("DAR_SPILL_FAULT_ERRNO", errno.to_string()),
+                .env("DAR_STORAGE_FAULT_MARKER", &marker)
+                .env("DAR_STORAGE_FAULT_ERRNO", errno.to_string()),
         )?;
         assert!(
             marker.exists(),
@@ -354,8 +354,8 @@ fn cleanup_failure_prevents_success_and_preserves_snapshot_bindings() -> TestRes
         let output = run_with_timeout(
             spill_enabled_command(&fixture, spill.path())
                 .env("LD_PRELOAD", &library)
-                .env("DAR_SPILL_FAULT_MARKER", &marker)
-                .env("DAR_SPILL_FAULT_REMOVE", "1"),
+                .env("DAR_STORAGE_FAULT_MARKER", &marker)
+                .env("DAR_STORAGE_FAULT_REMOVE", "1"),
         )?;
         assert!(marker.exists());
         assert_eq!(output.status.code(), Some(1));

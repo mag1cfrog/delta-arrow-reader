@@ -97,6 +97,13 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
     path: &str,
     input_kind: JsonInputKind,
 ) -> Result<T, Error> {
+    read_json_file_with_bytes(path, input_kind).map(|(value, _)| value)
+}
+
+pub(crate) fn read_json_file_with_bytes<T: DeserializeOwned>(
+    path: &str,
+    input_kind: JsonInputKind,
+) -> Result<(T, Vec<u8>), Error> {
     let bytes = read_bounded_input_bytes(path, input_kind.argument())?;
     ensure!(
         bytes.len() as u64 <= MAX_INPUT_BYTES,
@@ -105,7 +112,7 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
             correction: input_kind.correction("Keep the JSON input at or below 1 MiB."),
         }
     );
-    parse_json(&bytes, input_kind)
+    Ok((parse_json(&bytes, input_kind)?, bytes))
 }
 
 fn read_bounded_input_bytes(path: &str, argument: &'static str) -> Result<Vec<u8>, Error> {

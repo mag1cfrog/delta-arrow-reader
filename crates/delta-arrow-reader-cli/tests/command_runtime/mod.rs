@@ -222,7 +222,11 @@ fn deadlines_close_stalled_metadata_and_parquet_reads() -> TestResult {
     use std::sync::mpsc;
 
     let directory = tempfile::tempdir()?;
-    for name in TABLE_COMMANDS {
+    for (name, file_output) in TABLE_COMMANDS
+        .into_iter()
+        .map(|name| (name, false))
+        .chain([("scan", true), ("query", true)])
+    {
         for parquet in [false, true] {
             if parquet && matches!(name, "inspect" | "summary") {
                 continue;
@@ -246,12 +250,16 @@ fn deadlines_close_stalled_metadata_and_parquet_reads() -> TestResult {
                 &options,
                 serde_json::to_vec(&serde_json::json!({
                     "aws_endpoint": server.endpoint, "aws_allow_http": "true",
-                    "aws_skip_signature": "true", "aws_region": "us-east-1"
+                    "aws_access_key_id": "test-key", "aws_secret_access_key": "test-secret", "aws_region": "us-east-1"
                 }))?,
             )?;
             let mut command =
                 table_command(name, directory.path(), Path::new("s3://bucket/table"))?;
             fs::write(directory.path().join("query.sql"), "SELECT id FROM t")?;
+            let destination = directory.path().join("saved.arrow");
+            if file_output {
+                command.arg("--output").arg(&destination);
+            }
             let mut child = command
                 .arg("--storage-options-file")
                 .arg(options)
@@ -267,6 +275,18 @@ fn deadlines_close_stalled_metadata_and_parquet_reads() -> TestResult {
             let output = child.wait_with_output()?;
             drop(release);
             assert_deadline_failure(&output);
+            if file_output {
+                assert!(output.stdout.is_empty());
+                assert!(!destination.exists());
+                assert!(!directory.path().join("saved.arrow.manifest.json").exists());
+                assert!(fs::read_dir(directory.path())?.all(|entry| {
+                    !entry
+                        .unwrap()
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(".dar-")
+                }));
+            }
             assert!(!output.stdout.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]));
             if matches!(name, "inspect" | "summary" | "preview") {
                 assert!(output.stdout.is_empty());
@@ -436,7 +456,7 @@ fn draining_stdout_after_cancellation_does_not_finish_an_arrow_stream() -> TestR
             let setup = (|| -> io::Result<()> {
                 wait_for_pipe_state(|| {
                     if !header_already_written {
-                        return thread_is_blocked_on_pipe(pid, "dar-stdout");
+                        return thread_is_blocked_on_pipe(pid, "dar-output");
                     }
                     let mut available = 0;
                     // SAFETY: ioctl writes an integer byte count for this live pipe.

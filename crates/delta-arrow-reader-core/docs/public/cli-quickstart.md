@@ -57,18 +57,19 @@ for byte-limit behavior and overrides.
 ## Save a small result
 
 ```sh
-dar scan --table-version "$version" --limit 10 /path/to/table > sample.arrow
+dar scan --table-version "$version" --limit 10 /path/to/table --output sample.arrow
 ```
 
 This saves up to ten rows, with all columns, to `sample.arrow`. The limit keeps
-your first result small. Row order is not guaranteed.
+your first result small. Row order is not guaranteed. Stdout prints a JSON receipt
+with the result and completion-manifest paths. Neither destination may already
+exist; use a new name for another run.
 
 The file contains an **Arrow IPC stream**, a binary format that Arrow libraries
-can read. It is not CSV or text, so `scan` requires output to a file or pipe
-instead of printing rows in the terminal.
-
-Only use the file if the command succeeds. If it reports an error, discard the
-file: a failed scan can leave an incomplete result.
+can read. It is not CSV or text. File mode publishes the result and then its
+manifest; a result without a matching manifest is uncommitted. Check the
+[publication and verification rules](cli.md#save-a-result-with-a-manifest)
+before accepting a file left by a failed command.
 
 ## Read the saved result
 
@@ -79,11 +80,27 @@ in an isolated environment.
 
 ```sh
 uv run --no-project --with pyarrow python - sample.arrow <<'PY'
-import sys
+import hashlib, json, pathlib, sys
+import pyarrow as pa
 import pyarrow.ipc as ipc
 
-with ipc.open_stream(sys.argv[1]) as reader:
-    print(reader.read_all().to_pydict())
+path = pathlib.Path(sys.argv[1])
+manifest = json.loads(pathlib.Path(str(path) + '.manifest.json').read_text())
+assert manifest['completion'] == 'complete' and manifest['result']['format'] == 'arrow'
+digest = hashlib.sha256()
+with path.open('rb') as source:
+    for chunk in iter(lambda: source.read(65536), b''):
+        digest.update(chunk)
+    source.seek(-8, 2)
+    assert source.read() == bytes([255, 255, 255, 255, 0, 0, 0, 0])
+assert digest.hexdigest() == manifest['result']['sha256']
+assert path.stat().st_size == int(manifest['output_bytes'])
+with ipc.open_stream(path) as reader:
+    batches = list(reader)
+    table = pa.Table.from_batches(batches, schema=reader.schema)
+assert len(batches) == int(manifest['batches'])
+assert table.num_rows == int(manifest['rows'])
+print(table.to_pydict())
 PY
 ```
 
@@ -101,7 +118,7 @@ Once the first scan works, repeat `--column` to select the columns you need:
 
 ```sh
 dar scan --table-version "$version" --column id --column region --limit 10 \
-  /path/to/table > selected.arrow
+  /path/to/table --output selected.arrow
 ```
 
 Replace `id` and `region` with names from your table. The output contains those

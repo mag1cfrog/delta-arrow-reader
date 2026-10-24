@@ -83,6 +83,66 @@ fn s3_env_file_reaches_every_read_with_literal_values_and_json_configuration_pre
 }
 
 #[test]
+fn saved_results_record_credential_references_without_values_or_hashes() -> TestResult {
+    use sha2::{Digest, Sha256};
+
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
+    fixture.write_options(json!({"region": "eu-west-1"}))?;
+    let credentials =
+        b"AWS_ACCESS_KEY_ID=secret-artifact-key\nAWS_SECRET_ACCESS_KEY=secret-artifact-password\n";
+    let path = fixture.directory.path().join("credentials.env");
+    fs::write(&path, credentials)?;
+    let credential_hash = format!("{:x}", Sha256::digest(credentials));
+    let options_hash = format!(
+        "{:x}",
+        Sha256::digest(fs::read(fixture.directory.path().join("options.json"))?)
+    );
+    for operation in ["scan", "query"] {
+        let destination = fixture.directory.path().join(operation);
+        let output = run_with_timeout(
+            fixture
+                .command(operation)
+                .arg("--env-file")
+                .arg(&path)
+                .arg("--output")
+                .arg(&destination)
+                .arg("--diagnostics=json"),
+        )?;
+        assert!(output.status.success(), "{output:?}");
+        let receipt: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let manifest = fs::read_to_string(receipt["manifest"].as_str().unwrap())?;
+        for text in [
+            &manifest,
+            &String::from_utf8(output.stdout)?,
+            &String::from_utf8(output.stderr)?,
+        ] {
+            for secret in ["secret-artifact", &credential_hash, &options_hash] {
+                assert!(!text.contains(secret));
+            }
+        }
+        let manifest: serde_json::Value = serde_json::from_str(&manifest)?;
+        assert_eq!(
+            manifest["replay"]["options"]["env-file"],
+            path.to_str().unwrap()
+        );
+        assert!(
+            manifest["replay"]["inputs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|input| input["argument"] == "--sql-file")
+        );
+    }
+    fixture.assert_signed_s3_requests(
+        "secret-artifact-key",
+        "secret-artifact-password",
+        None,
+        "eu-west-1",
+    )?;
+    Ok(())
+}
+
+#[test]
 fn malformed_and_incomplete_files_never_use_ambient_credentials() -> TestResult {
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
     fixture.write_options(json!({"region":"eu-west-1"}))?;

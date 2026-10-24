@@ -38,7 +38,7 @@ use std::{
     fmt,
     io::{self, IsTerminal, Write},
     num::NonZeroUsize,
-    path::Path,
+    path::{Path, PathBuf},
     process::ExitCode,
     str::FromStr,
     sync::atomic::{AtomicBool, Ordering},
@@ -50,6 +50,7 @@ use delta_arrow_reader::{DeltaReaderError, error_source_kind};
 use diagnostics::{DiagnosticFormat, ErrorClassification, InputCorrection};
 use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
 use input::JsonInputKind;
+use output::OutputStats;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 use table_input::TableArgs;
@@ -92,31 +93,44 @@ enum Command {
     Preview(preview::PreviewArgs),
     /// Run one read-only SQL query over explicitly selected Delta snapshots.
     Query(query::QueryArgs),
-    /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
+    /// Export a Delta snapshot's rows as Arrow IPC.
     ///
-    /// Redirect stdout to a file or pipe; terminal output is rejected.
+    /// Use --output PATH to save with a completion manifest, or redirect stdout.
     Scan {
         #[command(flatten)]
         read: RowReadArgs,
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
-        /// Whole-command deadline in milliseconds; no default for legacy stdout scans.
-        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+        /// Save a complete result and PATH.manifest.json without replacing existing files.
+        /// Stdout returns a small JSON receipt. Windows staging inherits the directory ACL.
+        #[arg(long, value_name = "PATH")]
+        output: Option<PathBuf>,
+        /// File result row ceiling; defaults to 1000000. Exceeding it fails, unlike --limit.
+        #[arg(long, requires = "output", default_value_if("output", clap::builder::ArgPredicate::IsPresent, "1000000"), value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
+        max_rows: Option<usize>,
+        /// File result byte ceiling, including framing; defaults to 1 GiB.
+        #[arg(long, requires = "output", default_value_if("output", clap::builder::ArgPredicate::IsPresent, "1073741824"), value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+        max_output_bytes: Option<NonZeroUsize>,
+        /// Whole-command deadline in milliseconds; file output defaults to 300000, stdout has no default.
+        #[arg(long, default_value_if("output", clap::builder::ArgPredicate::IsPresent, "300000"), value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
         deadline_ms: Option<NonZeroUsize>,
     },
 }
 
 /// Snapshot, projection, predicate, and execution choices shared by scan and preview.
-#[derive(Args)]
+#[derive(Args, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct RowReadArgs {
     #[command(flatten)]
+    #[serde(flatten)]
     table: TableArgs,
     /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
     #[arg(long, value_name = "PROFILE")]
     databricks_profile: Option<String>,
     /// Logical column name; repeat to select columns in argument order. Default: all columns.
     #[arg(long = "column", value_name = "NAME")]
+    #[serde(rename = "column")]
     columns: Vec<String>,
     /// Read zero columns while preserving row counts.
     #[arg(long, conflicts_with = "columns")]
@@ -187,6 +201,11 @@ enum Error {
     },
     #[snafu(display("Could not write or flush stdout."))]
     Output { source: io::Error },
+    #[snafu(display("Could not save the result artifact (reason={reason})."))]
+    ArtifactIo {
+        source: io::Error,
+        reason: &'static str,
+    },
     #[snafu(display("Could not encode the Arrow IPC stream."))]
     ArrowIpc { source: ArrowError },
     #[snafu(display("Could not encode the JSON result."))]
@@ -202,10 +221,12 @@ enum Error {
     #[snafu(display("{source}"))]
     Query { source: query::QueryError },
     #[snafu(display("{source}"))]
-    QueryWithResolvedBindings {
+    WithResolvedBindings {
         source: Box<Error>,
         bindings: Vec<Value>,
     },
+    #[snafu(display("{source}"))]
+    ArtifactPublicationInterrupted { source: Box<Error> },
     #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
     OutputLimit { reason: &'static str },
     #[snafu(display("Command exceeded its time budget."))]
@@ -220,7 +241,7 @@ impl From<ArrowError> for Error {
             ArrowError::IoError(_, source)
                 if source
                     .get_ref()
-                    .is_some_and(|error| error.is::<output::arrow::OutputBytesExceeded>()) =>
+                    .is_some_and(|error| error.is::<output::OutputBytesExceeded>()) =>
             {
                 Self::OutputLimit {
                     reason: "output_byte_limit_exceeded",
@@ -243,7 +264,8 @@ impl Error {
         match self {
             Self::ManifestAuthorizationInput { source, .. }
             | Self::CredentialFileValidation { source, .. }
-            | Self::QueryWithResolvedBindings { source, .. } => source.classification(),
+            | Self::ArtifactPublicationInterrupted { source }
+            | Self::WithResolvedBindings { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
                 code: source.code(),
@@ -304,6 +326,12 @@ impl Error {
                 reason: "stdout_write_failed",
                 source_kind: Some(error_source_kind(source)),
             },
+            Self::ArtifactIo { source, reason } => ErrorClassification {
+                phase: "execution",
+                code: "artifact_io",
+                reason,
+                source_kind: Some(error_source_kind(source)),
+            },
             Self::ArrowIpc { source } => ErrorClassification {
                 phase: "execution",
                 code: "arrow_ipc",
@@ -352,7 +380,18 @@ impl Error {
 
     fn input_correction(&self) -> Option<InputCorrection> {
         let (input_kind, hint) = match self {
-            Self::QueryWithResolvedBindings { source, .. } => return source.input_correction(),
+            Self::ArtifactPublicationInterrupted { source } => {
+                let mut correction = source.input_correction().unwrap_or(InputCorrection {
+                    argument: "--output".into(),
+                    expected: "a verified complete artifact pair".into(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "",
+                });
+                correction.hint = "Check PATH and PATH.manifest.json before retrying; a verified complete pair may already exist. Otherwise choose unused names and preserve the pinned request and authorization; adjust only the reported budget.";
+                return Some(correction);
+            }
+            Self::WithResolvedBindings { source, .. } => return source.input_correction(),
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. }
             | Self::CredentialFileValidation { correction, .. } => return Some(correction.clone()),
@@ -394,6 +433,37 @@ impl Error {
                     serde_json::error::Category::Io => "Check that the input file is readable.",
                 },
             ),
+            Self::StorageAuthorization {
+                reason: "file_output_requires_auth_source",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--auth-source".into(),
+                    expected: "an explicit credential source".into(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Select --auth-source, --env-file, or a credential JSON --storage-options-file. For --tables-file, set authorization for every remote binding.",
+                });
+            }
+            Self::ArtifactIo { .. } => {
+                return Some(InputCorrection {
+                    argument: "--output".into(),
+                    expected: "unused result and manifest names in a writable directory".into(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Check PATH and PATH.manifest.json; verify a complete pair before accepting it. Otherwise retry with unused names, preserving inputs, snapshots and limits.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "artifact_receipt_too_large" | "artifact_manifest_too_large",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--output".into(),
+                    expected: "shorter local paths".into(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Use shorter output or input references. Preserve the request, snapshots and limits; no artifacts were published.",
+                });
+            }
             Self::InputIo { source, argument } => {
                 let hint = match source.kind() {
                     io::ErrorKind::NotFound => {
@@ -484,7 +554,7 @@ impl Error {
                     expected: "enough bytes for the complete JSON result".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Explicitly increase --max-output-bytes for the complete JSON, or use --format arrow with redirected stdout and an explicit byte budget. Keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "For a large complete result, use --output PATH; if already saving a file, increase --max-output-bytes explicitly. Preserve SQL, authorization, bindings and actual versions; verify the saved manifest before acceptance.",
                 });
             }
             Self::OutputLimit {
@@ -495,7 +565,7 @@ impl Error {
                     expected: "enough bytes for the complete Arrow stream".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Increase --max-output-bytes explicitly; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "Increase --max-output-bytes explicitly; preserve the request, authorization, table bindings, and snapshot versions.",
                 });
             }
             Self::OutputLimit {
@@ -514,10 +584,10 @@ impl Error {
             } => {
                 return Some(InputCorrection {
                     argument: "--max-rows".to_owned(),
-                    expected: "enough rows for the complete SQL result".to_owned(),
+                    expected: "enough rows for the complete requested result".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Explicitly increase --max-rows; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "Explicitly increase --max-rows; preserve the request, authorization, table bindings, and snapshot versions.",
                 });
             }
             Self::OutputLimit {
@@ -555,7 +625,7 @@ impl Error {
                     expected: "arrow for this result type".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Use --format arrow with redirected stdout and an explicit byte budget; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "Use --format arrow, redirecting stdout unless --output is set. Explicitly preserve --max-output-bytes, SQL, authorization, bindings and versions.",
                 });
             }
             _ => return None,
@@ -572,7 +642,8 @@ impl Error {
                     source_error = source;
                     manifest_field_path = Some(field_path.as_str());
                 }
-                Self::QueryWithResolvedBindings { source, .. }
+                Self::WithResolvedBindings { source, .. }
+                | Self::ArtifactPublicationInterrupted { source }
                 | Self::CredentialFileValidation { source, .. } => source_error = source,
                 _ => break,
             }
@@ -581,6 +652,7 @@ impl Error {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
                 error_phase = "execution", error_code = "command_cancelled", exit_status = status,
+                hint = self.input_correction().map(|correction| correction.hint),
                 "CLI command cancelled"
             );
             return;
@@ -592,6 +664,7 @@ impl Error {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
                 error_phase = "execution", error_code = "uc_cancelled", exit_status = status,
+                hint = self.input_correction().map(|correction| correction.hint),
                 "Unity Catalog command cancelled"
             );
             return;
@@ -648,7 +721,8 @@ impl Error {
         let (io_kind, os_error) = match source_error {
             Self::InputIo { source, .. }
             | Self::Runtime { source, .. }
-            | Self::Output { source } => (
+            | Self::Output { source }
+            | Self::ArtifactIo { source, .. } => (
                 Some(tracing::field::debug(source.kind())),
                 source.raw_os_error(),
             ),
@@ -686,6 +760,8 @@ impl Error {
                     self,
                     Self::OutputLimit {
                         reason: "preview_schema_limit_exceeded"
+                            | "artifact_receipt_too_large"
+                            | "artifact_manifest_too_large"
                     }
                 ) =>
             {
@@ -717,7 +793,10 @@ impl Error {
             "recovery": recovery,
         });
         match self {
-            Self::CredentialFileValidation { source, .. } => record = source.to_json_diagnostic(),
+            Self::CredentialFileValidation { source, .. }
+            | Self::ArtifactPublicationInterrupted { source } => {
+                record = source.to_json_diagnostic()
+            }
             Self::Query { .. } if source_kind == Some("resource_exhausted") => {
                 record["resource_details_command"] = json!([
                     command_name(),
@@ -728,7 +807,7 @@ impl Error {
                     "resources"
                 ]);
             }
-            Self::QueryWithResolvedBindings { source, bindings } => {
+            Self::WithResolvedBindings { source, bindings } => {
                 record = source.to_json_diagnostic();
                 record["bindings"] = bindings.clone().into();
             }
@@ -764,7 +843,8 @@ impl Error {
             }
             Self::InputIo { source, .. }
             | Self::Runtime { source, .. }
-            | Self::Output { source } => {
+            | Self::Output { source }
+            | Self::ArtifactIo { source, .. } => {
                 record["io_kind"] = format!("{:?}", source.kind()).into();
                 record["os_error"] = json!(source.raw_os_error());
                 if matches!(self, Self::Output { .. }) {
@@ -796,7 +876,8 @@ impl Error {
         ExitCode::from(match self {
             Self::ManifestAuthorizationInput { source, .. }
             | Self::CredentialFileValidation { source, .. }
-            | Self::QueryWithResolvedBindings { source, .. } => return source.exit_code(),
+            | Self::ArtifactPublicationInterrupted { source }
+            | Self::WithResolvedBindings { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput
             | Self::InputJson { .. }
@@ -810,7 +891,7 @@ impl Error {
             | Self::ArrowIpc { .. }
             | Self::JsonOutput { .. }
             | Self::UnsupportedJsonType { .. } => 1,
-            Self::Output { .. } => 3,
+            Self::Output { .. } | Self::ArtifactIo { .. } => 3,
             Self::UnityCatalog { source } => source.exit_status(),
             Self::Query { source } => source.exit_status(),
             Self::OutputLimit { .. } | Self::DeadlineExceeded => 1,
@@ -860,20 +941,13 @@ fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
     output
 }
 
-#[derive(Default)]
-struct StdoutStats {
-    rows_written: u64,
-    batches_written: u64,
-    bytes_written: u64,
-}
-
 fn build_completion_record(
     command: &'static str,
     table_version: Option<u64>,
-    stdout_stats: StdoutStats,
+    output_stats: OutputStats,
     row_limit: Option<usize>,
 ) -> Value {
-    let limit_reached = row_limit.is_some_and(|limit| stdout_stats.rows_written >= limit as u64);
+    let limit_reached = row_limit.is_some_and(|limit| output_stats.rows_written >= limit as u64);
     let mut record = json!({
         "format_version": 1,
         "kind": "completion",
@@ -884,11 +958,11 @@ fn build_completion_record(
         "stop_reason": if limit_reached { "row_limit" } else { "end_of_input" },
         "has_more": if limit_reached { None } else { Some(false) },
         "bindings": table_version.map(|version| json!({"alias": "t", "table_version": version.to_string()})).into_iter().collect::<Vec<_>>(),
-        "output_bytes": stdout_stats.bytes_written.to_string(),
+        "output_bytes": output_stats.bytes_written.to_string(),
     });
     if matches!(command, "scan" | "query") {
-        record["rows"] = stdout_stats.rows_written.to_string().into();
-        record["batches"] = stdout_stats.batches_written.to_string().into();
+        record["rows"] = output_stats.rows_written.to_string().into();
+        record["batches"] = output_stats.batches_written.to_string().into();
     }
     record
 }
@@ -896,26 +970,48 @@ fn build_completion_record(
 fn build_json_read_completion(
     command: &'static str,
     bindings: Vec<Value>,
-    stdout_stats: StdoutStats,
+    output_stats: OutputStats,
 ) -> Value {
     json!({
         "format_version": 2,
         "kind": "completion",
         "command": command,
         "bindings": bindings,
-        "rows": stdout_stats.rows_written.to_string(),
-        "output_bytes": stdout_stats.bytes_written.to_string(),
+        "rows": output_stats.rows_written.to_string(),
+        "output_bytes": output_stats.bytes_written.to_string(),
     })
 }
 
 async fn execute_table_command(
-    command: Command,
+    mut command: Command,
     report_uc_cancellation: &AtomicBool,
     spill_directory: &mut Option<tempfile::TempDir>,
+    pending_artifact: &mut Option<output::artifact::PendingArtifactPublication>,
+    cancellation: &futures_util::future::AbortHandle,
 ) -> Result<Value, Error> {
+    match &mut command {
+        Command::Scan {
+            read,
+            output: Some(_),
+            ..
+        } => {
+            read.table
+                .options
+                .select_file_output_credentials(&read.table.table)?;
+        }
+        Command::Query(args) if args.output.is_some() => {
+            if let Some(location) = &args.table {
+                args.table_options
+                    .select_file_output_credentials(location)?;
+            }
+        }
+        _ => {}
+    }
     let arrow_stdout = match &command {
-        Command::Scan { .. } => true,
-        Command::Query(args) => args.output_format == query::QueryOutputFormat::Arrow,
+        Command::Scan { output, .. } => output.is_none(),
+        Command::Query(args) => {
+            args.output.is_none() && args.output_format == output::RowOutputFormat::Arrow
+        }
         _ => false,
     };
     if arrow_stdout {
@@ -956,20 +1052,61 @@ async fn execute_table_command(
         }
         _ => None,
     };
+    let mut artifact = match &command {
+        Command::Scan {
+            read,
+            output: Some(path),
+            limit,
+            deadline_ms,
+            max_rows,
+            max_output_bytes,
+        } => {
+            let mut options =
+                serde_json::to_value(read).map_err(|source| Error::JsonOutput { source })?;
+            options["limit"] = json!(limit);
+            options["deadline-ms"] = json!(deadline_ms);
+            options["max-rows"] = json!(max_rows);
+            options["max-output-bytes"] = json!(max_output_bytes);
+            Some(output::artifact::StagedResult::new(
+                path,
+                output::RowOutputFormat::Arrow,
+                options,
+                cancellation.clone(),
+            )?)
+        }
+        _ => None,
+    };
     let predicate = match row_read.and_then(|read| read.predicate_file.as_deref()) {
-        Some(path) => Some(
-            input::read_json_file::<input::PredicateInput>(path, JsonInputKind::Predicate)?
-                .into_predicate()?,
-        ),
+        Some(path) => {
+            let (value, bytes) = input::read_json_file_with_bytes::<input::PredicateInput>(
+                path,
+                JsonInputKind::Predicate,
+            )?;
+            if let Some(artifact) = &mut artifact {
+                artifact.record_input_digest(
+                    "--predicate-file",
+                    path,
+                    output::artifact::sha256(&bytes),
+                );
+            }
+            Some(value.into_predicate()?)
+        }
         _ => None,
     };
     let execution_options = match row_read.and_then(|read| read.execution_options_file.as_deref()) {
         Some(path) => {
-            let options = input::read_json_file::<input::JsonObject<input::ExecutionOptionsInput>>(
-                path,
-                JsonInputKind::ExecutionOptions,
-            )?
-            .0;
+            let (input::JsonObject(options), bytes) = input::read_json_file_with_bytes::<
+                input::JsonObject<input::ExecutionOptionsInput>,
+            >(
+                path, JsonInputKind::ExecutionOptions
+            )?;
+            if let Some(artifact) = &mut artifact {
+                artifact.record_input_digest(
+                    "--execution-options-file",
+                    path,
+                    output::artifact::sha256(&bytes),
+                );
+            }
             Some(
                 options
                     .into_execution_options()
@@ -981,7 +1118,8 @@ async fn execute_table_command(
     let command_output: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
-            let (query_uses_unity_catalog, execution) = args.prepare_execution(spill_directory)?;
+            let (query_uses_unity_catalog, execution) =
+                args.prepare_execution(spill_directory, pending_artifact, cancellation)?;
             report_uc_cancellation.store(query_uses_unity_catalog, Ordering::Relaxed);
             execution
         }
@@ -991,7 +1129,7 @@ async fn execute_table_command(
             let (table, _authorized_access) = table.load_table(uc_target).await?;
             let version = table.version();
             let output = inspection.encode_json(&table)?;
-            let stdout_stats = StdoutStats {
+            let output_stats = OutputStats {
                 bytes_written: output.len() as u64,
                 ..Default::default()
             };
@@ -999,7 +1137,7 @@ async fn execute_table_command(
             Ok(build_completion_record(
                 "inspect",
                 Some(version),
-                stdout_stats,
+                output_stats,
                 None,
             ))
         }
@@ -1052,6 +1190,28 @@ async fn execute_table_command(
                         vec![json!({"alias": "t", "table_version": version.to_string()})],
                         stats,
                     ))
+                } else if let Some(staged) = artifact.take() {
+                    let (staged, stats) = staged
+                        .write_rows(
+                            schema,
+                            stream,
+                            Vec::new(),
+                            match &command {
+                                Command::Scan {
+                                    max_rows: Some(rows),
+                                    max_output_bytes: Some(bytes),
+                                    ..
+                                } => Some(output::OutputLimits {
+                                    max_rows: *rows as u64,
+                                    max_bytes: bytes.get() as u64,
+                                }),
+                                _ => None,
+                            },
+                        )
+                        .await?;
+                    let completion = build_completion_record("scan", Some(version), stats, limit);
+                    *pending_artifact = Some(staged.stage_manifest(&completion)?);
+                    Ok(completion)
                 } else {
                     let stats =
                         output::arrow::write_arrow_stream_to_stdout(schema, stream, None).await?;
@@ -1059,11 +1219,25 @@ async fn execute_table_command(
                 }
             }
             .await;
-            match (scan_result, &authorized_access) {
+            let result = match (scan_result, &authorized_access) {
                 (Err(error @ Error::Reader { .. }), Some(access)) => {
-                    return Err(access.map_read_error(error).await);
+                    Err(access.map_read_error(error).await)
                 }
                 (result, _) => result,
+            };
+            if matches!(
+                &command,
+                Command::Scan {
+                    output: Some(_),
+                    ..
+                }
+            ) {
+                result.map_err(|source| Error::WithResolvedBindings {
+                    source: Box::new(source),
+                    bindings: vec![json!({"alias": "t", "table_version": version.to_string()})],
+                })
+            } else {
+                result
             }
         }
         .boxed_local(),
@@ -1089,7 +1263,7 @@ fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
             "version"
         },
         None,
-        StdoutStats {
+        OutputStats {
             bytes_written: output.len() as u64,
             ..Default::default()
         },
@@ -1158,6 +1332,7 @@ mod tests {
             (vec!["inspect", "table", "--view", "full"], None),
             (vec!["inspect", "table", "--view", "summary"], Some(30000)),
             (vec!["scan", "table"], None),
+            (vec!["scan", "table", "--output", "rows"], Some(300000)),
             (vec!["preview", "table"], Some(30000)),
             (
                 vec!["query", "table", "--sql-file", "query.sql"],
@@ -1192,6 +1367,55 @@ mod tests {
                     }
                 );
             }
+        }
+    }
+
+    #[test]
+    fn file_and_stdout_defaults_match_their_distinct_output_budgets() {
+        for format in ["arrow", "json"] {
+            for output in [false, true] {
+                let mut argv = vec![
+                    "dar",
+                    "query",
+                    "table",
+                    "--sql-file",
+                    "query.sql",
+                    "--format",
+                    format,
+                ];
+                if output {
+                    argv.extend(["--output", "rows"]);
+                }
+                let Command::Query(args) = Cli::try_parse_from(&argv).unwrap().command else {
+                    unreachable!()
+                };
+                let expected = match (format, output) {
+                    ("json", false) => 8192,
+                    ("json", true) => 16777216,
+                    _ => 1073741824,
+                };
+                assert_eq!(args.output_byte_limit(), expected);
+                argv.extend(["--max-output-bytes", "123"]);
+                let Command::Query(args) = Cli::try_parse_from(&argv).unwrap().command else {
+                    unreachable!()
+                };
+                assert_eq!(args.output_byte_limit(), 123);
+            }
+        }
+        let Command::Scan {
+            max_rows,
+            max_output_bytes,
+            ..
+        } = Cli::try_parse_from(["dar", "scan", "table", "--output", "rows"])
+            .unwrap()
+            .command
+        else {
+            unreachable!()
+        };
+        assert_eq!(max_rows, Some(1000000));
+        assert_eq!(max_output_bytes.map(NonZeroUsize::get), Some(1073741824));
+        for flag in ["--max-rows", "--max-output-bytes"] {
+            assert!(Cli::try_parse_from(["dar", "scan", "table", flag, "1"]).is_err());
         }
     }
 
@@ -1504,7 +1728,7 @@ mod tests {
                 })
             })
             .collect();
-        let error = Error::QueryWithResolvedBindings {
+        let error = Error::WithResolvedBindings {
             source: Box::new(source),
             bindings: bindings.clone(),
         };

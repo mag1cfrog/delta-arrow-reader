@@ -104,9 +104,10 @@ Keep existing full `inspect` JSON v1, Arrow-stream `scan`, and input-file format
 compatible. New inspection behavior is opt-in. New JSON envelopes have `kind`
 and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
-failure message. Preview and query JSON completions use version 2, retaining command,
-bindings, rows, and output bytes alongside kind and version. Other completions and
-discovery envelopes retain version 1.
+failure message. Preview and stdout query JSON completions use version 2, retaining command,
+bindings, rows, and output bytes alongside kind and version. File-output
+completion v3 reports command and receipt bytes; result counts and bindings
+belong to the manifest. Other completions and discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
 
@@ -195,9 +196,10 @@ preserves the chosen authorization, snapshot, and output semantics.
 
 Machine mode attempts one terminal failure or completion record, independent of
 `RUST_LOG`. The completion kind marks terminal success for the requested command.
-Completion includes actual bindings and result-byte counts; scan, preview, and
-query add row counts. Version 1 also reports scope, exhaustion, and Arrow batch counts.
-Data-sized quantities are decimal strings. For query JSON, verify the stdout
+For stdout row reads, completion includes actual bindings and result-byte counts;
+scan, preview, and query add row counts. File mode's v3 completion counts the
+stdout receipt bytes; its manifest carries result counts and actual bindings. Version 1 also reports scope, exhaustion, and Arrow batch counts.
+Data-sized quantities are decimal strings. For query JSON to stdout, verify the
 envelope's complete status and query scope, then compare its bindings and row
 count with the terminal record. For preview, check sample status and its
 stop_reason/has_more pair in stdout, then compare bindings and row count.
@@ -232,7 +234,7 @@ context-efficiency acceptance also compares complete task outcomes and cost.
 
 Stdout limits include schema, framing, and the final newline, not just row
 values. Terminal records have their separate diagnostic budget; workflow tests
-count both streams. Stream Arrow queries; buffer only bounded JSON results.
+count both streams. Stream Arrow queries; buffer only bounded JSON stdout. Stream JSON file outputs into temporary storage.
 Query-pool memory bounds DataFusion execution reservations, not total process
 RSS; reader, metadata, and output buffers are outside it. Hard process limits
 require OS or container controls.
