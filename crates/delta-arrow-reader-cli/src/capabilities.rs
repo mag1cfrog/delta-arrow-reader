@@ -163,6 +163,15 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 read_support::QUERY_ROW_ORDERING,
             ],
         }),
+        "explain" => json!({
+            "example": [executable, "--diagnostics=json", "explain", "./table", "--sql-file", "query.sql"],
+            "stdout": "json", "completion_format_version": 3,
+            "notes": [
+                "Loads snapshot metadata and plans; never executes result rows or reads data files. Default: counts and actual bindings. Pin snapshots and preserve SQL/options for follow-ups. Memory bounds the DataFusion pool, not metadata, planning buffers or process RSS.",
+                "Physical plan: combine --node N (operator/children), repeated --field N (exact output types), and --statistics. Fields/statistics default to root node 0; estimates are not observed results.",
+                "Add --scan N for source projection and pushdown. Physical nodes and logical scans have separate zero-based preorder IDs; selectors can be combined within one output budget.",
+            ],
+        }),
         _ => json!({
             "example": [executable, name],
             "stdout": if name == "capabilities" { "json" } else { "text" },
@@ -186,7 +195,14 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     if !options.is_empty() {
         guide["options"] = json!(options);
     }
-    if matches!(name, "query" | "preview") {
+    if name == "explain" {
+        guide["options"] = json!({
+            "TABLE": "Snapshot location, registered as t.",
+            "--tables-file": "Named bindings instead of TABLE; relative locations use the manifest directory.",
+            "--table-version": "Snapshot version for TABLE; default: latest.",
+        });
+    }
+    if matches!(name, "query" | "preview" | "explain") {
         let ceilings: serde_json::Map<_, _> = command
             .get_arguments()
             .filter(|argument| {
@@ -207,8 +223,10 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             })
             .collect();
         guide["resource_defaults"] = json!(ceilings);
-        guide["resource_defaults"]["--max-output-bytes"] =
-            json!(crate::output::json::DEFAULT_MAX_BYTES.to_string());
+        if name != "explain" {
+            guide["resource_defaults"]["--max-output-bytes"] =
+                json!(crate::output::json::DEFAULT_MAX_BYTES.to_string());
+        }
     }
     let input_schemas: Vec<_> = JsonInputKind::value_variants()
         .iter()
@@ -242,20 +260,24 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "details_command": [executable, "capabilities", "--authorization", "NAME"],
         });
         let mut conflicts = vec!["--auth-source", "--databricks-profile"];
-        if name == "query" {
+        if matches!(name, "query" | "explain") {
             conflicts.push("--tables-file");
         }
-        guide["authorization"]["env_file"] = json!({
-            "arguments": ["--env-file", "PATH"],
-            "conflicts_with": conflicts,
-            "usage": "For a direct cloud TABLE, pass a provisioned credential file without reading or expanding its values. Selected-file failures never fall back to another identity.",
-        });
+        if name != "explain" {
+            guide["authorization"]["env_file"] = json!({
+                "arguments": ["--env-file", "PATH"],
+                "conflicts_with": conflicts,
+                "usage": "For a direct cloud TABLE, pass a provisioned credential file without reading or expanding its values. Selected-file failures never fall back to another identity.",
+            });
+        }
     }
     let mut output_schemas = vec![DiscoverySchema::Diagnostic, DiscoverySchema::Completion];
     if name == "inspect" {
         output_schemas.push(DiscoverySchema::InspectionSummary);
     } else if matches!(name, "query" | "preview") {
         output_schemas.push(DiscoverySchema::Rows);
+    } else if name == "explain" {
+        output_schemas.push(DiscoverySchema::QueryPlan);
     }
     if matches!(name, "scan" | "query") {
         output_schemas.extend([
@@ -295,7 +317,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     );
     guide["shutdown"] = json!(format!(
         "After the deadline: at most {} ms cleanup + {} ms failure reporting.",
-        if matches!(name, "inspect" | "scan" | "preview" | "query") {
+        if matches!(name, "inspect" | "scan" | "preview" | "query" | "explain") {
             crate::command_runtime::CLEANUP_GRACE.as_millis()
         } else {
             0
@@ -341,17 +363,17 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
             }),
         });
     }
-    let is_table_command = matches!(name, "inspect" | "scan" | "preview" | "query");
+    let is_table_command = matches!(name, "inspect" | "scan" | "preview" | "query" | "explain");
     Ok(json!({
         "format_version": 1, "kind": "command_detail", "command": name, "detail": "runtime",
         "deadline": match name {
             "inspect" => "--deadline-ms N: summary defaults to 30000 ms; full has no default.",
             "scan" => "--deadline-ms N: defaults to 300000 with --output; stdout has no default.",
-            "preview" => "--deadline-ms N: defaults to 30000 ms.",
+            "preview" | "explain" => "--deadline-ms N: defaults to 30000 ms.",
             "query" => "--deadline-ms N: defaults to 300000 ms.",
             _ => "Fixed 5000 ms, including output and completion.",
         },
-        "scope": if is_table_command { "Inputs, authorization, planning, execution, stdout and completion." } else { "Offline generation, stdout and completion; no input or credential files are opened." },
+        "scope": if name == "explain" { "Inputs, authorization, metadata IO, planning, stdout and completion; no result execution." } else if is_table_command { "Inputs, authorization, planning, execution, stdout and completion." } else { "Offline generation, stdout and completion; no input or credential files are opened." },
         "cleanup_ms": if is_table_command { crate::command_runtime::CLEANUP_GRACE.as_millis() } else { 0 },
         "failure_reporting_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
         "signals": "Unix SIGINT exits 130; SIGTERM exits 143, including Linux PID 1. Windows Ctrl+C exits 130.",
@@ -399,6 +421,9 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
     if selected_command.is_none() || matches!(selected_command, Some("query" | "preview")) {
         output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
     }
+    if selected_command.is_none() || selected_command == Some("explain") {
+        output_schemas.push(json!({"name": DiscoverySchema::QueryPlan, "stream": "stdout"}));
+    }
     if selected_command.is_none() || matches!(selected_command, Some("scan" | "query")) {
         output_schemas.extend([
             json!({"name": DiscoverySchema::ResultArtifact, "stream": "stdout"}),
@@ -417,6 +442,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
         },
         "scan": {"format": "arrow_ipc_stream"},
         "preview": {"format": "json", "schema": DiscoverySchema::Rows, "completion_format_version": 2},
+        "explain": {"format": "json", "schema": DiscoverySchema::QueryPlan, "completion_format_version": 3},
         "query": {
             "format": "arrow_ipc_stream",
             "default": "arrow",
@@ -462,10 +488,11 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
                 "option": "--diagnostics=json",
                 "format_versions": {
                     "diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION,
-                    "completion": if selected_command == Some("preview") { 2 } else { 1 },
+                    "completion": match selected_command { Some("preview") => 2, Some("explain") => 3, _ => 1 },
                 },
                 "completion_format_versions": match selected_command {
                     Some("preview") => vec![2],
+                    Some("explain") => vec![3],
                     Some("query") | None => vec![1, 2, 3],
                     Some("scan") => vec![1, 3],
                     _ => vec![1],
@@ -701,7 +728,10 @@ mod tests {
             assert!(runtime.get("schema").is_none());
             assert_eq!(
                 runtime["cleanup_ms"],
-                if matches!(command.get_name(), "inspect" | "scan" | "preview" | "query") {
+                if matches!(
+                    command.get_name(),
+                    "inspect" | "scan" | "preview" | "query" | "explain"
+                ) {
                     1000
                 } else {
                     0
@@ -747,7 +777,7 @@ mod tests {
                     "--env-file",
                     "credentials.env",
                 ];
-                if command.get_name() == "query" {
+                if matches!(command.get_name(), "query" | "explain") {
                     args.extend(["--sql-file", "query.sql"]);
                 }
                 assert!(Cli::try_parse_from(&args).is_ok());
@@ -842,7 +872,7 @@ mod tests {
                 assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
             }
         }
-        for name in ["unknown", "explain", "query --help", "", "QUERY"] {
+        for name in ["unknown", "analyze", "query --help", "", "QUERY"] {
             assert!(Cli::try_parse_from(["dar", "capabilities", "--command", name]).is_err());
             assert!(build_capability_details(Some(name)).is_err());
         }
@@ -938,6 +968,7 @@ mod tests {
             advertised,
             [
                 "capabilities",
+                "explain",
                 "help",
                 "inspect",
                 "preview",
@@ -963,7 +994,7 @@ mod tests {
             let error = Cli::try_parse_from(args).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
         }
-        for name in ["unknown", "explain"] {
+        for name in ["unknown", "analyze"] {
             let error = Cli::try_parse_from(["dar", name]).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
         }
@@ -1089,6 +1120,7 @@ mod tests {
                 json!("diagnostic"),
                 json!("completion"),
                 json!("rows"),
+                json!("query-plan"),
                 json!("result-artifact"),
                 json!("result-manifest"),
             ]

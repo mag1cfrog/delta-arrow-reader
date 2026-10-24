@@ -139,7 +139,7 @@ fn broken_pipe_reaps_a_credential_refresh_after_the_reader_is_dropped() -> TestR
 #[cfg(target_os = "linux")]
 #[test]
 fn deadlines_reap_initial_and_renewal_databricks_processes() -> TestResult {
-    for operation in ["inspect", "scan", "preview", "query"] {
+    for operation in ["inspect", "scan", "preview", "query", "explain"] {
         for during_refresh in [false, true] {
             let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
             let _server = if during_refresh {
@@ -150,11 +150,12 @@ fn deadlines_reap_initial_and_renewal_databricks_processes() -> TestResult {
             } else {
                 None
             };
-            let mut command = if operation == "query" {
-                fixture.query("SELECT * FROM t")?
-            } else {
-                fixture.table_command(operation)
-            };
+            let mut command = fixture.table_command(operation);
+            if matches!(operation, "query" | "explain") {
+                let sql = fixture.directory.path().join("query.sql");
+                fs::write(&sql, "SELECT * FROM t")?;
+                command.arg("--sql-file").arg(sql);
+            }
             let started = Instant::now();
             let output = run_with_timeout(
                 command

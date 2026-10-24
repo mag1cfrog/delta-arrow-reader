@@ -30,6 +30,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
         Command::Inspect { deadline_ms, .. } | Command::Scan { deadline_ms, .. } => *deadline_ms,
         Command::Preview(args) => Some(args.deadline_ms),
         Command::Query(args) => Some(args.deadline_ms),
+        Command::Explain(args) => Some(args.deadline_ms),
         Command::Capabilities(_) => unreachable!("discovery has its own fixed deadline"),
     };
     let (spawn_failure, lost_result) = if matches!(command, Command::Preview(_)) {

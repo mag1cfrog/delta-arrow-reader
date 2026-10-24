@@ -93,6 +93,8 @@ enum Command {
     Preview(preview::PreviewArgs),
     /// Run one read-only SQL query over explicitly selected Delta snapshots.
     Query(query::QueryArgs),
+    /// Plan a read-only SQL query without executing result rows.
+    Explain(query::explain::ExplainArgs),
     /// Export a Delta snapshot's rows as Arrow IPC.
     ///
     /// Use --output PATH to save with a completion manifest, or redirect stdout.
@@ -534,6 +536,17 @@ impl Error {
                 });
             }
             Self::Reader { source } => return InputCorrection::from_reader(source),
+            Self::OutputLimit {
+                reason: "plan_output_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "enough bytes for the complete selected plan detail".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Select fewer --field values or explicitly increase --max-output-bytes. Preserve SQL, authorization, bindings, actual versions and other budgets. The summary still includes every binding.",
+                });
+            }
             Self::OutputLimit {
                 reason: "inspection_output_limit_exceeded",
             } => {
@@ -1000,8 +1013,9 @@ async fn execute_table_command(
                 .select_file_output_credentials(&read.table.table)?;
         }
         Command::Query(args) if args.output.is_some() => {
-            if let Some(location) = &args.table {
-                args.table_options
+            if let Some(location) = &args.input.table {
+                args.input
+                    .table_options
                     .select_file_output_credentials(location)?;
             }
         }
@@ -1040,7 +1054,7 @@ async fn execute_table_command(
             )
             .context(UnityCatalogSnafu)?
         }
-        Command::Query(_) => None,
+        Command::Query(_) | Command::Explain(_) => None,
     };
     report_uc_cancellation.store(
         uc_target.is_some() && !matches!(command, Command::Preview(_)),
@@ -1117,6 +1131,11 @@ async fn execute_table_command(
     };
     let command_output: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
+        Command::Explain(args) => {
+            let (uses_unity_catalog, planning) = args.prepare_planning()?;
+            report_uc_cancellation.store(uses_unity_catalog, Ordering::Relaxed);
+            planning
+        }
         Command::Query(args) => {
             let (query_uses_unity_catalog, execution) =
                 args.prepare_execution(spill_directory, pending_artifact, cancellation)?;
@@ -1335,6 +1354,10 @@ mod tests {
             (vec!["scan", "table", "--output", "rows"], Some(300000)),
             (vec!["preview", "table"], Some(30000)),
             (
+                vec!["explain", "table", "--sql-file", "query.sql"],
+                Some(30000),
+            ),
+            (
                 vec!["query", "table", "--sql-file", "query.sql"],
                 Some(300000),
             ),
@@ -1356,6 +1379,7 @@ mod tests {
                     }
                     Command::Preview(args) => Some(args.deadline_ms),
                     Command::Query(args) => Some(args.deadline_ms),
+                    Command::Explain(args) => Some(args.deadline_ms),
                     Command::Capabilities(_) => unreachable!(),
                 };
                 assert_eq!(

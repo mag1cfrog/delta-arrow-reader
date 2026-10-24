@@ -6,6 +6,8 @@
 
 use std::{
     io,
+    num::NonZeroUsize,
+    path::Path,
     sync::Arc,
     thread,
     time::{Duration, Instant},
@@ -18,18 +20,20 @@ use datafusion::execution::{
 };
 use snafu::ResultExt;
 
-use super::{InitializationSnafu, QueryArgs, SpillCleanupSnafu, SpillDirectorySnafu};
+use super::{InitializationSnafu, SpillCleanupSnafu, SpillDirectorySnafu};
 use crate::{Error, InputCorrection, QuerySnafu};
 
 /// The caller must keep the returned directory outside the cancellable query future.
 pub(super) fn build_query_runtime(
-    args: &QueryArgs,
+    memory_limit_bytes: NonZeroUsize,
+    spill_limit_bytes: u64,
+    spill_dir: Option<&Path>,
 ) -> Result<(Arc<RuntimeEnv>, Option<tempfile::TempDir>), Error> {
-    if (args.spill_limit_bytes > 0) != args.spill_dir.is_some() {
+    if (spill_limit_bytes > 0) != spill_dir.is_some() {
         return Err(Error::Argument {
             kind: clap::error::ErrorKind::MissingRequiredArgument,
             correction: Some(InputCorrection {
-                argument: if args.spill_dir.is_some() {
+                argument: if spill_dir.is_some() {
                     "--spill-limit-bytes"
                 } else {
                     "--spill-dir"
@@ -42,9 +46,7 @@ pub(super) fn build_query_runtime(
             }),
         });
     }
-    let spill_directory = args
-        .spill_dir
-        .as_ref()
+    let spill_directory = spill_dir
         .map(|parent| {
             let mut builder = tempfile::Builder::new();
             builder.prefix("dar-query-");
@@ -64,11 +66,11 @@ pub(super) fn build_query_runtime(
         None => DiskManagerMode::Disabled,
     };
     let datafusion = RuntimeEnvBuilder::new()
-        .with_memory_pool(Arc::new(FairSpillPool::new(args.memory_limit_bytes.get())))
+        .with_memory_pool(Arc::new(FairSpillPool::new(memory_limit_bytes.get())))
         .with_disk_manager_builder(
             DiskManagerBuilder::default()
                 .with_mode(mode)
-                .with_max_temp_directory_size(args.spill_limit_bytes),
+                .with_max_temp_directory_size(spill_limit_bytes),
         )
         .build_arc()
         .context(InitializationSnafu)

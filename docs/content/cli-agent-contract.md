@@ -107,7 +107,8 @@ require a new version. Diagnostics use version 2 after removing the fixed
 failure message. Preview and stdout query JSON completions use version 2, retaining command,
 bindings, rows, and output bytes alongside kind and version. File-output
 completion v3 reports command and receipt bytes; result counts and bindings
-belong to the manifest. Other completions and discovery envelopes retain version 1.
+belong to the manifest. Explain uses v3 with stdout document bytes and keeps
+bindings in the query-plan document. Other completions and discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
 
