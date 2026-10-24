@@ -570,9 +570,17 @@ fn long_paths_either_fit_the_receipt_or_fail_before_publication() -> TestResult 
         .len()
             + 1
     };
+    let mut path_limit_reached = false;
     while receipt_size(&parent) <= 8192 {
         parent.push("\"".repeat(80));
-        fs::create_dir(&parent)?;
+        match fs::create_dir(&parent) {
+            Ok(()) => {}
+            Err(error) if error.raw_os_error() == Some(libc::ENAMETOOLONG) => {
+                path_limit_reached = true;
+                break;
+            }
+            Err(error) => return Err(error.into()),
+        }
     }
     let output = run_with_timeout(
         Command::new(env!("CARGO_BIN_EXE_dar"))
@@ -581,25 +589,40 @@ fn long_paths_either_fit_the_receipt_or_fail_before_publication() -> TestResult 
             .arg("--output")
             .arg(parent.join("rows")),
     )?;
-    assert!(!output.status.success());
+    assert_eq!(
+        output.status.code(),
+        Some(if path_limit_reached { 3 } else { 1 })
+    );
     assert!(output.stdout.is_empty());
     assert!(output.stderr.len() <= 8192);
     assert_eq!(
         assert_single_terminal_record(&output.stderr, "diagnostic")["reason"],
-        "artifact_receipt_too_large"
+        if path_limit_reached {
+            "artifact_directory_unavailable"
+        } else {
+            "artifact_receipt_too_large"
+        }
     );
-    assert_eq!(
-        assert_single_terminal_record(&output.stderr, "diagnostic")["recovery"],
-        "change_request"
-    );
-    assert_eq!(fs::read_dir(&parent)?.count(), 0);
-    parent.pop();
+    if !path_limit_reached {
+        assert_eq!(
+            assert_single_terminal_record(&output.stderr, "diagnostic")["recovery"],
+            "change_request"
+        );
+    }
+    let last_created_parent = if path_limit_reached {
+        parent.parent().unwrap()
+    } else {
+        &parent
+    };
+    assert_eq!(fs::read_dir(last_created_parent)?.count(), 0);
+    // Reserve one component for result, manifest and temporary filenames.
+    let output_parent = last_created_parent.parent().unwrap();
     let output = run_with_timeout(
         Command::new(env!("CARGO_BIN_EXE_dar"))
             .args(["--diagnostics=json", "scan", "--limit", "0"])
             .arg(fixture_path("partitioned").join("table"))
             .arg("--output")
-            .arg(parent.join("rows")),
+            .arg(output_parent.join("rows")),
     )?;
     verify_artifact(&output)?;
     Ok(())
