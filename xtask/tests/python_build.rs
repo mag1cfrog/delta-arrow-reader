@@ -288,6 +288,10 @@ fn source_archives_use_the_current_workspace_with_a_cached_xtask() -> Result {
             "xtask/src/main.rs",
             b"source from the active workspace".to_vec(),
         ),
+        (
+            "benches/selective_read/runners/contract.rs",
+            b"shared request types".to_vec(),
+        ),
     ] {
         let destination = root.join(path);
         fs::create_dir_all(destination.parent().unwrap())?;
