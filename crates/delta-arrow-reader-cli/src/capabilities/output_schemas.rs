@@ -18,7 +18,7 @@ use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 pub(super) fn rows_schema() -> Value {
     json!({
         "title": "Typed JSON rows",
-        "description": "Rows follow schema field order, including duplicate names. Arrow integers use exact decimal strings. Metadata is omitted. Other value encodings: --detail rows.",
+        "description": "Use schema.fields for column types and order; names may repeat. Arrow integers use exact decimal strings. Metadata is omitted. Other value encodings: --detail rows.",
         "type": "object",
         "required": ["format_version", "kind", "bindings", "schema", "rows", "row_count", "completion"],
         "properties": {
