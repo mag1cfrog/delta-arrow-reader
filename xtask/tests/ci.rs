@@ -375,30 +375,14 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         .find(|step| step["name"] == "Test core")
         .unwrap();
     assert_eq!(core_test["if"], "needs.changes.outputs.code == 'true'");
-    let query_resources = platform_steps
+    let cli_test = platform_steps
         .iter()
-        .find(|step| step["name"] == "Test CLI query resource limits")
+        .find(|step| step["name"] == "Test CLI")
         .unwrap();
-    assert_eq!(query_resources["if"], "needs.changes.outputs.cli == 'true'");
-    assert!(
-        query_resources["run"]
-            .as_str()
-            .unwrap()
-            .contains("-p delta-arrow-reader-cli --test cli query::resources")
-    );
-    let output_completion = platform_steps
-        .iter()
-        .find(|step| step["name"] == "Test Windows output completion")
-        .unwrap();
+    assert_eq!(cli_test["if"], "needs.changes.outputs.cli == 'true'");
     assert_eq!(
-        output_completion["if"],
-        "needs.changes.outputs.cli == 'true' && runner.os == 'Windows'"
-    );
-    assert!(
-        output_completion["run"]
-            .as_str()
-            .unwrap()
-            .contains("-p delta-arrow-reader-cli --bin dar output_capacity::")
+        cli_test["run"],
+        "cargo test --locked -p delta-arrow-reader-cli"
     );
     let platform_uc = platform_steps
         .iter()
