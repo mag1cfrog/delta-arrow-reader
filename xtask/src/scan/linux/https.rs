@@ -1,7 +1,6 @@
 use std::{
     fs,
     process::{Command, Stdio},
-    time::Duration,
 };
 
 use snafu::{ResultExt, ensure};
@@ -13,7 +12,7 @@ use crate::{
     http_fixture::{
         HttpTestServer,
         table::HttpTable,
-        tls::{create_certificates, load_server_config},
+        tls::{TLS_TRUST_CHECK_TIMEOUT, create_certificates, load_server_config},
     },
     process::{check_error, check_inspection},
 };
@@ -57,7 +56,7 @@ impl ScanFixture<'_> {
                 }
                 let output = output_with_timeout(
                     command.arg(format!("{}/", server.origin)),
-                    Duration::from_secs(15),
+                    TLS_TRUST_CHECK_TIMEOUT,
                 )?;
                 let requests = server.take_requests()?;
                 if certificate == "untrusted" {

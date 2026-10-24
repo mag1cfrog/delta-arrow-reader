@@ -15,7 +15,7 @@ use crate::{
     http_fixture::{
         HttpTestServer,
         table::HttpTable,
-        tls::{create_certificates, load_server_config},
+        tls::{TLS_TRUST_CHECK_TIMEOUT, create_certificates, load_server_config},
     },
     platform::Architecture,
     process::{check_error, check_inspection},
@@ -316,7 +316,7 @@ test -r /usr/share/doc/dar/NOTICE
                 }
                 let output = output_with_timeout(
                     command.arg(format!("{}/", server.origin)),
-                    Duration::from_secs(30),
+                    TLS_TRUST_CHECK_TIMEOUT,
                 )?;
                 let requests = server.take_requests()?;
                 if certificate == "untrusted" || !custom_ca {
