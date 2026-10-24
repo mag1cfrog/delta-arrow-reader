@@ -116,7 +116,7 @@ impl DiscoverySchema {
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "v1/v2 only; --output v3 keeps bindings in the result manifest. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {
@@ -755,6 +755,8 @@ mod tests {
             .build_schema_guide(Some("bindings"))
             .unwrap();
         let description = bindings["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("v1/v2 only; --output v3"));
+        assert!(description.contains("bindings in the result manifest"));
         assert!(description.contains("query has at least one binding"));
         assert!(description.contains("inspect/scan/preview have one binding named t"));
         assert!(description.contains("Other commands have no bindings"));

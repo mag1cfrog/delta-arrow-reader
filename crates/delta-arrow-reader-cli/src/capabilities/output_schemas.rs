@@ -217,7 +217,7 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "With --diagnostics=json, require exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, and rows and batches, when present, with decoded counts. Counts are decimal strings. For JSON, check stdout.row_count and stdout.completion: complete with stdout.scope=query for SQL, sample with stdout.stop_reason and stdout.has_more for preview.",
+        "description": "With --diagnostics=json, require exit 0, valid stdout and one stderr completion. Match command and output_bytes to the request and stdout length. Counts are decimal strings. File output uses v3: stdout is a result_artifact receipt; verify counts, snapshots and completion in its manifest. Otherwise match bindings and decoded rows/batches when present. For JSON stdout, compare row_count; query requires completion=complete and scope=query, preview uses completion=sample with stop_reason/has_more.",
         "type": "object",
         "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {
