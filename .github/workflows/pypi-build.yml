@@ -79,7 +79,7 @@ jobs:
       SOURCE_REF: ${{ inputs.source-ref }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
       CACHE_ONLY: ${{ inputs.cache-only }}
-      DELTA_ARROW_READER_ACCEPTANCE_RECORDS: ${{ runner.temp }}/wheel-acceptance
+      DELTA_ARROW_READER_ACCEPTANCE_RECORDS: ${{ github.workspace }}/../wheel-acceptance
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
@@ -349,7 +349,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: acceptance-${{ matrix.artifact }}
-          path: ${{ runner.temp }}/wheel-acceptance/
+          path: ${{ env.DELTA_ARROW_READER_ACCEPTANCE_RECORDS }}/
           if-no-files-found: warn
           retention-days: 90
       - name: Upload validated wheel
