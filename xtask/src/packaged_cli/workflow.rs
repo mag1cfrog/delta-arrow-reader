@@ -409,6 +409,39 @@ impl PackagedCli<'_> {
             2,
             "invalid_sql_input",
         )?;
+        #[cfg(windows)]
+        {
+            let directory = self.directory.canonicalize()?;
+            for name in ["missing-table", "query.sql"] {
+                let invalid_table = directory.join(name);
+                self.check_failure(
+                    &[
+                        "inspect",
+                        invalid_table.to_str().ok_or("non-UTF-8 fixture path")?,
+                    ],
+                    1,
+                    "invalid_table_location",
+                )?;
+            }
+            for name in ["table.", "table "] {
+                let distinct_table = directory.join(name);
+                fs::create_dir(&distinct_table)?;
+                assert_ne!(
+                    distinct_table.canonicalize()?,
+                    directory.join("table").canonicalize()?
+                );
+                // Neither empty directory may resolve to the populated ordinary sibling.
+                self.invoke(
+                    &[
+                        "inspect",
+                        distinct_table.to_str().ok_or("non-UTF-8 fixture path")?,
+                    ],
+                    1,
+                    0,
+                )?;
+                fs::remove_dir(&distinct_table)?;
+            }
+        }
         // Configuration errors must not start implicit credential discovery or echo file contents.
         fs::write(
             self.directory.join("credentials.json"),

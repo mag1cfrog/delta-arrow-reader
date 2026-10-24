@@ -251,6 +251,10 @@ mod tests {
             normalize_table_location(absolute_uri.as_str())?,
             absolute_uri
         );
+        assert_eq!(
+            normalize_table_location(&fs::canonicalize(&absolute.0)?.to_string_lossy())?,
+            absolute_uri
+        );
         Ok(())
     }
 
