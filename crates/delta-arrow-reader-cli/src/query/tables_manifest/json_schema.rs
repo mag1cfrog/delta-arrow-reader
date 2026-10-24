@@ -25,7 +25,7 @@ pub(crate) fn tables_manifest_schema() -> Value {
             "tables": {
                 "type": "array", "minItems": 1, "maxItems": super::MAX_TABLES,
                 "items": {"$ref": "#/$defs/table"},
-                "description": "Unique aliases in declaration order; completion reports each alias and actual version in that order.",
+                "description": "Unique aliases in declaration order. Actual versions appear in that order in stderr completion for stdout results, or the result manifest with --output.",
             },
         },
         "$defs": {
@@ -52,7 +52,7 @@ pub(crate) fn tables_manifest_schema() -> Value {
             },
             "authorization": {
                 "type": "object", "additionalProperties": false, "required": ["source"],
-                "description": "References only; no inline credentials. Omit for direct-storage defaults. UC requires databricks. Null is invalid.",
+                "description": "References only; no inline credentials. Required for remote --output; stdout allows direct-storage defaults when omitted. UC requires databricks. Null is invalid.",
                 "properties": {
                     "source": {
                         "type": "string", "enum": sources,

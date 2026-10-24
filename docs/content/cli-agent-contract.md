@@ -104,7 +104,7 @@ Keep existing full `inspect` JSON v1, Arrow-stream `scan`, and input-file format
 compatible. New inspection behavior is opt-in. New JSON envelopes have `kind`
 and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
-failure message. Preview and query JSON completions use version 2, retaining command,
+failure message. Preview and stdout query JSON completions use version 2, retaining command,
 bindings, rows, and output bytes alongside kind and version. File-output
 completion v3 reports command and receipt bytes; result counts and bindings
 belong to the manifest. Other completions and discovery envelopes retain version 1.
@@ -199,7 +199,7 @@ Machine mode attempts one terminal failure or completion record, independent of
 For stdout row reads, completion includes actual bindings and result-byte counts;
 scan, preview, and query add row counts. File mode's v3 completion counts the
 stdout receipt bytes; its manifest carries result counts and actual bindings. Version 1 also reports scope, exhaustion, and Arrow batch counts.
-Data-sized quantities are decimal strings. For query JSON, verify the stdout
+Data-sized quantities are decimal strings. For query JSON to stdout, verify the
 envelope's complete status and query scope, then compare its bindings and row
 count with the terminal record. For preview, check sample status and its
 stop_reason/has_more pair in stdout, then compare bindings and row count.

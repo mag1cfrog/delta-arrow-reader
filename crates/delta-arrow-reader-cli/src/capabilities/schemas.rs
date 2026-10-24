@@ -130,7 +130,7 @@ impl DiscoverySchema {
                 } else if name == "tables[].authorization" {
                     guide["definition"] = json!({
                         "type": "object", "required": ["source"],
-                        "description": "References only; no inline credentials. Omit for direct-storage defaults. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
+                        "description": "References only; no inline credentials. Required for remote --output; stdout allows direct-storage defaults when omitted. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
                     });
                     guide["example"] = json!({
                         "source": "json", "storage_options_file": "credentials.json",

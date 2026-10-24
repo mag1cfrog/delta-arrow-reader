@@ -142,9 +142,10 @@ to another operator or scalar choice through `detail_command`. Use a guide's
 `full_command` when a JSON Schema validator or a metadata consumer needs the
 complete definition.
 
-`--schema completion` shows a v2 JSON query receipt and explains how to compare
-its command, snapshots, counts, and bytes with the request and saved output.
-For preview and JSON queries, sample/completion state comes from stdout.
+`--schema completion` explains how to verify a terminal success record.
+Its v2 example applies to JSON query stdout: compare snapshots and counts with
+stdout, which carries sample/completion state. File output uses v3 and records
+result counts, snapshots, and completion state in the result manifest.
 Use `--detail FIELD` for a field's type and meaning, including fields used in
 v1 scan and Arrow receipts. `--schema rows --detail has_more` explains the three
 preview stopping states without repeating conditional validation blocks;
@@ -236,7 +237,7 @@ result appears. The schema response itself always goes to stdout.
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
 | `rows` | stdout | Typed preview or query JSON with ordered fields and positional rows. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
-| `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
+| `completion` | stderr | A terminal success record with `--diagnostics=json`. Stdout mode includes snapshots and counts; file mode counts receipt bytes and keeps result metadata in the manifest. |
 
 Output schemas allow additional object fields. Version and count strings use
 unsigned decimal notation; consumers must check the u64 range when converting
@@ -716,8 +717,9 @@ must use canonical digits without signs or leading zeros; JSON numbers and
 Aliases cannot be `t`, `datafusion`, `public`, `information_schema`, `pg_catalog`,
 `system`, or a SQL keyword recognized by the parser. URLs cannot contain a
 password, query string, or fragment. Azure Blob's `container@account` URL form
-is accepted. Omitting `authorization` uses default authentication for direct
-storage; UC entries require source `databricks` and a profile. An explicit
+is accepted. With stdout output, omitting `authorization` uses default authentication
+for direct storage. Remote `--output` requires an authorization object for each
+binding. UC entries require source `databricks` and a profile. An explicit
 authorization must be an object; `null` is invalid.
 
 </details>
@@ -913,11 +915,12 @@ Use the same option with `dar scan`, `dar preview`, or `dar query`. The
 including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
 
-Without `--auth-source` or `--env-file`, the CLI forwards keys and values unchanged,
+For stdout without `--auth-source` or `--env-file`, the CLI forwards keys and values unchanged,
 including case, spaces, and commas. The core reader interprets provider options. Omitting
 the file supplies an empty map; an empty object is also valid. This path does
 not automatically read AWS access keys from the environment. Use
-`--auth-source env` to select them.
+`--auth-source env` to select them. For remote direct storage with `--output`,
+a storage-options file alone selects the `json` source and its validation rules.
 
 For a local HTTP test endpoint, `{"allow_http":"true"}` enables plain HTTP.
 

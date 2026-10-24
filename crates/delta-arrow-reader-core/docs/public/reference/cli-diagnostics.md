@@ -155,9 +155,9 @@ in `bindings`, for example
 `[{"alias":"t","table_version":"42"}]`. Queries using `--tables-file` include
 each manifest alias and its resolved version in declaration order. Other commands
 use an empty array.
-Scan, preview, and query also report `rows`. Versions and counts are decimal strings.
+Stdout scan, preview, and query also report `rows`. Versions and counts are decimal strings.
 
-`preview` and `query --format json` use completion `format_version: 2`, containing only the
+`preview` and `query --format json` to stdout use completion `format_version: 2`, containing only the
 version, kind, command, bindings, rows, and output bytes. The completion kind
 marks terminal success for the requested command. For a query, check
 `completion: "complete"` and `scope: "query"` in stdout. A preview instead

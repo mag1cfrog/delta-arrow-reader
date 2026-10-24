@@ -92,7 +92,7 @@ impl AuthorizationService {
                 "Pass an existing Databricks profile name; never put credential values in arguments."
             }
             _ => {
-                "Use json with a storage-options file path, env with provisioned variables, or --env-file with a credential file path. env and --env-file reject credentials in storage-options. Explicit sources never fall back to another identity; never put credential values in arguments."
+                "Use json with a storage-options file path, env with provisioned variables, or --env-file with a credential file path. --output requires an explicit source; a storage-options file alone selects json. env and --env-file reject credentials in storage-options. Explicit sources never fall back to another identity; never put credential values in arguments."
             }
         }
     }
@@ -234,7 +234,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", "NAME", "--detail", "env-file"],
             "imports_storage_options_from_environment": true,
             "option_names_case_sensitive": false,
-            "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend", "with_env_file": "rejected"},
+            "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend", "without_auth_source_scope": "stdout_only", "with_env_file": "rejected"},
             "credential_option_aliases": {
                 "s3": {
                     "aws_access_key_id": ["access_key_id"],
@@ -257,20 +257,20 @@ pub(super) fn build_authorization_capabilities() -> Value {
             },
             "notes": [
                 "Explicit sources reject duplicate aliases and conflicting credential families. Local and Unity Catalog targets reject --auth-source and --env-file. These selectors cannot be combined.",
-                "Without --auth-source or --env-file, native backend precedence and credential defaults apply; environment options are not imported.",
+                "For stdout without --auth-source or --env-file, native backend precedence and credential defaults apply; environment options are not imported.",
             ],
             "backend_notes": {
                 "s3": [
                     "json/env require an access key and secret key; a session token is optional. env uses AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN, AWS_REGION and AWS_DEFAULT_REGION.",
-                    "Workload sources use provisioned role/token-file or container endpoint references. AWS profiles/SSO are unsupported. Omitting both source selectors uses backend defaults.",
+                    "Workload sources use provisioned role/token-file or container endpoint references. AWS profiles/SSO are unsupported. Stdout without source selectors uses backend defaults.",
                 ],
                 "azure-blob": [
                     "json/env require exactly one complete credential family. env accepts AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_SAS_KEY or AZURE_STORAGE_TOKEN, or AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID. If the URL omits the account, supply azure_storage_account_name in JSON or AZURE_STORAGE_ACCOUNT_NAME with env.",
-                    "Workload identity requires a client ID, tenant ID and token file; managed identity requires one client, object or resource ID. Omitting both source selectors uses backend defaults.",
+                    "Workload identity requires a client ID, tenant ID and token file; managed identity requires one client, object or resource ID. Stdout without source selectors uses backend defaults.",
                 ],
                 "gcs": [
                     "env reads GOOGLE_APPLICATION_CREDENTIALS. json/env select an explicit service-account or authorized-user ADC file without home-directory or metadata fallback.",
-                    "Service-account path/key aliases apply only without an explicit source selector, which uses backend defaults.",
+                    "Service-account path/key aliases apply only to stdout without source selectors, which uses backend defaults.",
                 ],
             },
         },
@@ -473,6 +473,10 @@ mod tests {
             ] {
                 assert_eq!(authorization["unknown_options"][selector], policy);
             }
+            assert_eq!(
+                authorization["unknown_options"]["without_auth_source_scope"],
+                "stdout_only"
+            );
             let aliases = authorization["credential_option_aliases"]
                 .as_object()
                 .unwrap();
@@ -489,6 +493,8 @@ mod tests {
             assert!(handling.contains("never put credential values in arguments"));
             assert!(handling.contains("env and --env-file reject credentials in storage-options"));
             assert!(handling.contains("never fall back to another identity"));
+            assert!(handling.contains("--output requires an explicit source"));
+            assert!(handling.contains("a storage-options file alone selects json"));
             assert!(
                 selected["credential_keys"]
                     .as_array()
