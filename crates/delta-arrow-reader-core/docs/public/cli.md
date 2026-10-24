@@ -11,6 +11,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Join named table snapshots | [Tables manifest](#join-table-snapshots) |
+| Save and verify a complete result | [Result files](#save-a-result-with-a-manifest) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Pass a provisioned credential env file | [Credential env files](#credential-env-files) |
@@ -66,7 +67,7 @@ command-line arguments, starting with the installed executable's name.
 All responses have `format_version: 1`. The directory and full definitions also
 include `cli_version`. `--command`, `--schema`, `--authorization`, and `--all`
 are mutually exclusive. `--full` requires `--command`, `--schema`, or
-`--authorization`. `--detail` requires `--schema` or `--authorization` and
+`--authorization`. `--detail` requires `--schema`, `--authorization`, or `--command` and
 conflicts with `--full`. Command names must match an installed top-level command.
 Unsupported names or conflicting selectors fail with status 2.
 For text help, use `dar query --help` or the corresponding command's help.
@@ -76,6 +77,9 @@ top-level field names and any names in `other_fields`. The latter lists only
 fields absent from the example; it is omitted when the example shows them all.
 The completion guide instead uses `version_1_fields` for the v1 fields absent
 from its v2 example.
+The `result-artifact` and `result-manifest` guides list fields without expanding
+their contents. Nested fields use dots, such as `--detail result.sha256` or
+`--detail replay.inputs`. A selected object lists its child fields.
 
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
@@ -159,7 +163,8 @@ output schemas apply.
 `diagnostics.json.format_versions` gives the default record versions for the
 selected command. A `completion_format_version` in `stdout_formats` overrides
 that default for its command or format choice. For example, preview uses version
-2; query's Arrow choice uses version 1 and its JSON choice uses version 2.
+2; query's Arrow stdout uses version 1 and its JSON stdout uses version 2.
+Scan/query with `--output` use version 3, advertised in `stdout_formats.NAME.output_file`.
 `completion_format_versions` lists all versions available in the selected scope.
 In the full inventory, the default is version 1; use each command's format entry
 to select its completion version.
@@ -360,7 +365,7 @@ dar scan --table-version 0 /data/orders > original.arrow
 ```
 
 The output uses Arrow IPC **stream** framing. Open it with a streaming IPC
-reader. Stdout must be a file or pipe; a terminal is rejected with status 2
+reader. Without `--output`, stdout must be a file or pipe; a terminal is rejected with status 2
 before table loading, including for `--limit 0`.
 
 ```text
@@ -368,13 +373,16 @@ dar scan [--table-version N] [--storage-options-file PATH]
          [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N]
-         [--deadline-ms N] [--] TABLE
+         [--output PATH [--max-rows N] [--max-output-bytes BYTES]] [--deadline-ms N] [--] TABLE
 ```
 
 Table paths, snapshot selection, and storage options follow the inspection
 rules. Each invocation reads one immutable snapshot.
-There is no default deadline; use a positive `--deadline-ms N` to bound the whole
-command, including input loading and output.
+Stdout scans have no default deadline. File scans default to 300000 ms,
+1000000 rows and 1 GiB. `--max-rows` and `--max-output-bytes` require `--output`;
+exceeding either fails the command. `--limit` instead selects a prefix.
+Use a positive `--deadline-ms N` to change the whole-command budget, including
+input loading and output.
 
 CLI scans skip table warmup and S3 connection sampling, so partial-page reads
 stay off. File, row-group, and whole-page skipping remain available. For repeated
@@ -484,7 +492,7 @@ dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
           [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
-          [--format arrow|json]
+          [--format arrow|json] [--output PATH]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--deadline-ms N] [--] TABLE
 ```
@@ -507,7 +515,7 @@ snapshot selection and storage options as `inspect`. All queries skip table warm
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
-| `--max-output-bytes` | Arrow: `1073741824` (1 GiB); JSON: `8192` (8 KiB) | Fail if the whole response, including schema, framing, and final newline for JSON, exceeds this many bytes |
+| `--max-output-bytes` | Arrow: `1073741824` (1 GiB); JSON stdout: `8192` (8 KiB); JSON file: `16777216` (16 MiB) | Fail if the complete result, including schema, framing, and final newline for JSON, exceeds this many bytes |
 | `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
 | `--deadline-ms` | `300000` (5 minutes) | Limit total time, including input files, authorization, planning, execution, stdout, and completion |
 
@@ -516,10 +524,12 @@ Byte, memory, and time limits must be positive. The memory pool does not cap tot
 process RSS: Core read buffers, SQL planning, and output encoding allocate outside
 it. Sorting and grouping can require memory before producing output.
 
-Exceeding a ceiling fails with status 1. JSON stays buffered until the full result
-fits; resource and execution failures leave stdout empty. Arrow may leave partial
-output without an IPC end marker. Require status 0 and valid output, and discard
-partial files after failure. With `--diagnostics=json`, query completion identifies
+Exceeding a ceiling fails with status 1. JSON stdout stays buffered until the full result
+fits; resource and execution failures leave stdout empty. File output streams
+both formats into temporary storage. Arrow stdout may leave partial
+output without an IPC end marker. Discard incomplete stdout after failure; for
+file output, follow the [publication checks](#save-a-result-with-a-manifest).
+For stdout results with `--diagnostics=json`, query completion identifies
 the command, each alias and its actual snapshot version, and row and output-byte counts.
 This option controls stderr diagnostics independently of the result format.
 Arrow keeps completion v1. JSON uses v2, whose completion kind marks terminal
@@ -557,12 +567,99 @@ gives the date/time units, timestamp epoch and timezone rules, and native JSON
 and null encodings together. It lists further encodings to request individually,
 such as `--detail decimal` or `--detail binary`. These lookups do not read the table.
 
-The default 8 KiB budget covers the entire response. If the complete JSON cannot
-fit, explicitly increase `--max-output-bytes`, or redirect Arrow to a file with
-a sufficient byte budget. Keep the same SQL, authorization, table bindings, and
+The default 8 KiB stdout budget covers the entire response. For larger results,
+use `--output PATH` with an explicit byte budget when needed. Keep the same SQL, authorization, table bindings, and
 snapshot versions when recovering the same result. Selecting fewer columns,
 aggregating, or adding SQL `LIMIT` changes the requested result. `--max-rows`
 never truncates a successful result.
+
+## Save a result with a manifest
+
+Use `--output PATH` on `scan` or `query` to save a complete result without
+printing its rows. The directory must exist, and neither `PATH` nor
+`PATH.manifest.json` may exist. There is no overwrite option.
+
+```sh
+dar --diagnostics=json query /data/orders --table-version 42 \
+  --sql-file query.sql --format json --output totals.json
+dar --diagnostics=json scan /data/orders --table-version 42 \
+  --column customer_id --column total --output orders.arrow
+```
+
+Stdout returns a JSON receipt with `format_version: 1`, `kind: "result_artifact"`,
+and absolute `result` and `manifest` paths. It contains no rows or schema.
+With `--diagnostics=json`, stderr completion v3 reports the command and receipt
+byte count. Result counts and snapshot bindings are in the manifest.
+
+The CLI stages both files on the destination filesystem. After the read and
+temporary-query cleanup succeed, it publishes the result without replacing an
+existing name, then publishes the manifest. A result without a matching
+completion manifest is uncommitted. The two publications are not one atomic
+transaction, and power-loss durability is not promised.
+
+The manifest records the result path/format/SHA-256, rows, source batches, byte
+count, completion/scope, actual binding versions, build versions, and replay
+inputs. `limited_scan` covers a requested prefix; a query covers its SQL result.
+JSON preserves rows but not source batch boundaries. For replay, verify the
+input hashes, use `replay.options` in `replay.working_directory`, and select a new
+`--output`. Pin every alias using `bindings`; for `--tables-file`, copy the
+referenced declarations beside the original tables file, preserving relative paths,
+and set each `table_version` to its recorded version. Numeric replay options are
+decimal strings; omit null/false options and repeat `--column` for each value.
+Keep authorization references provisioned. Snapshot/data/deletion-vector files
+must remain available, and SQL ordering or volatile expressions can still vary.
+
+Only noncredential input bytes are hashed. SQL text, credential contents,
+credential hashes, and signed URL secrets are not copied into the manifest.
+The manifest can contain local paths, profile names, columns, and resource
+settings. Treat it and the result as local data. Temporary files are owner-only
+on Unix; on Windows use a destination directory with a private inherited ACL.
+
+Inspect only the fields needed for the next check:
+
+```sh
+dar capabilities --command query --detail artifacts
+dar capabilities --schema result-manifest --detail result
+dar capabilities --schema result-manifest --detail replay.inputs
+dar capabilities --schema result-manifest --full > manifest-schema.json
+```
+
+For a JSON result, this verification prints only the verified row count:
+
+```sh
+python - totals.json.manifest.json <<'PY'
+import hashlib, json, pathlib, sys
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert manifest['format_version'] == 1 and manifest['kind'] == 'result_manifest'
+assert manifest['completion'] == 'complete' and manifest['result']['format'] == 'json'
+result = pathlib.Path(manifest['result']['path'])
+digest = hashlib.sha256()
+with result.open('rb') as source:
+    for chunk in iter(lambda: source.read(65536), b''):
+        digest.update(chunk)
+assert digest.hexdigest() == manifest['result']['sha256']
+assert result.stat().st_size == int(manifest['output_bytes'])
+with result.open() as source:
+    rows = json.load(source)
+assert rows['completion'] == 'complete' and rows['scope'] == 'query'
+assert rows['bindings'] == manifest['bindings']
+assert len(rows['rows']) == int(rows['row_count']) == int(manifest['rows'])
+print(json.dumps({'verified_rows': manifest['rows']}))
+PY
+```
+
+For Arrow, use an IPC stream reader, require its end marker, and compare decoded
+row and batch counts as well as the byte count and hash. Do not print the full
+result or manifest merely to verify it.
+
+Write, serialization, budget, or publication failures never fall back to rows
+on stdout. Existing destinations are preserved, including files created during
+the read. If publication has started, cancellation or a failed receipt can leave
+a complete pair despite a nonzero exit status. Verify that pair before deciding
+whether to accept it or retry with unused names. Crashes and uninterruptible IO
+can leave temporary files. Receipts are capped at 8 KiB and manifests at 1 MiB;
+paths or provenance that exceed those limits fail before publication.
 
 ## Join table snapshots
 
@@ -856,8 +953,12 @@ credentials.
 | GCS | [`json` or `env`](#gcs-credential-sources) | Explicit service-account or authorized-user ADC file | Renews using the identity loaded from the file |
 
 Local paths and Unity Catalog do not accept `--auth-source` or `--env-file`.
-Unity Catalog uses `--databricks-profile`. Omitting both options preserves the
-storage-options behavior, including any native provider defaults.
+Unity Catalog uses `--databricks-profile`. For `scan --output` and `query --output`,
+remote storage requires an explicit source. A storage-options file alone selects
+`json`; otherwise select `--auth-source` or `--env-file`. Every remote binding in
+`--tables-file` needs its own `authorization`. Stdout mode preserves the existing
+storage-options behavior, including native provider defaults when no source is
+selected.
 The explicit sources above do not fall back to other credential sources after
 configuration, acquisition, renewal, or permission failures.
 

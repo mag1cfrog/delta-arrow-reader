@@ -10,8 +10,8 @@ use futures_util::{Stream, StreamExt};
 use serde::Serialize;
 use serde_json::json;
 
-use super::{BoundedJsonBuffer, JsonRow, OutputLimits, write_on_stdout_thread};
-use crate::{Error, StdoutStats, write_stdout};
+use super::{BoundedJsonBuffer, JsonRow, OutputLimits, write_on_output_thread};
+use crate::{Error, OutputStats, write_stdout};
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -50,8 +50,8 @@ pub(crate) async fn write_preview_to_stdout(
     stream: impl Stream<Item = Result<RecordBatch, Error>> + Send + 'static,
     table_version: u64,
     limits: OutputLimits,
-) -> Result<StdoutStats, Error> {
-    write_on_stdout_thread(move || async move {
+) -> Result<OutputStats, Error> {
+    write_on_output_thread(move || async move {
         let (bytes, stats) = encode_preview(schema, stream, table_version, limits).await?;
         write_stdout(&bytes)?;
         Ok(stats)
@@ -64,7 +64,7 @@ async fn encode_preview(
     stream: impl Stream<Item = Result<RecordBatch, Error>>,
     table_version: u64,
     limits: OutputLimits,
-) -> Result<(Vec<u8>, StdoutStats), Error> {
+) -> Result<(Vec<u8>, OutputStats), Error> {
     let mut output = BoundedJsonBuffer::with_rows_header(
         &schema,
         &[json!({"alias": "t", "table_version": table_version.to_string()})],
@@ -151,7 +151,7 @@ async fn encode_preview(
             Err(error) => return Err(error),
         }
     }
-    let stats = StdoutStats {
+    let stats = OutputStats {
         rows_written: row_offsets.len() as u64,
         bytes_written: output.bytes.len() as u64,
         ..Default::default()

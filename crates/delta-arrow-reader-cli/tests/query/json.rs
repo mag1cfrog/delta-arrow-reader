@@ -153,19 +153,15 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
         assert_eq!(diagnostic["argument"], flag);
         if reason == "json_output_limit_exceeded" {
             let hint = diagnostic["hint"].as_str().unwrap();
-            assert!(hint.contains("--format arrow"));
-            assert!(hint.contains("Explicitly increase --max-output-bytes for the complete JSON"));
-            assert!(hint.contains("redirected stdout and an explicit byte budget"));
-            assert!(
-                hint.contains("same SQL, authorization, table bindings, and snapshot versions")
-            );
+            assert!(hint.contains("--output PATH"));
+            assert!(hint.contains("increase --max-output-bytes explicitly"));
+            assert!(hint.contains("Preserve SQL, authorization, bindings and actual versions"));
+            assert!(hint.contains("verify the saved manifest"));
             assert!(!hint.contains("aggregate"));
         } else {
             let hint = diagnostic["hint"].as_str().unwrap();
             assert!(hint.contains("Explicitly increase --max-rows"));
-            assert!(
-                hint.contains("same SQL, authorization, table bindings, and snapshot versions")
-            );
+            assert!(hint.contains("request, authorization, table bindings, and snapshot versions"));
             assert!(!hint.contains("LIMIT"));
             let recovered = run_with_timeout(fixture.command().args([
                 "--format",
@@ -245,7 +241,8 @@ fn unsupported_json_types_offer_arrow_recovery_even_for_empty_results() -> TestR
         assert_eq!(diagnostic["recovery"], "change_request");
         let hint = diagnostic["hint"].as_str().unwrap();
         assert!(hint.contains("--format arrow"));
-        assert!(hint.contains("redirected stdout and an explicit byte budget"));
+        assert!(hint.contains("unless --output is set"));
+        assert!(hint.contains("Explicitly preserve --max-output-bytes"));
         let overflow = run_with_timeout(fixture.command().args([
             "--format",
             "arrow",

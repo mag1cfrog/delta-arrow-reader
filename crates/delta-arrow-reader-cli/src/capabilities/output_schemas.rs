@@ -9,6 +9,8 @@
 //! nested type encoding in inspection results; its Rust Serde decoder checks
 //! those types.
 
+pub(super) mod artifacts;
+
 use serde_json::{Value, json};
 
 use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
@@ -217,9 +219,9 @@ pub(super) fn completion_schema() -> Value {
         "title": "Terminal success completion",
         "description": "With --diagnostics=json, require exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, and rows and batches, when present, with decoded counts. Counts are decimal strings. For JSON, check stdout.row_count and stdout.completion: complete with stdout.scope=query for SQL, sample with stdout.stop_reason and stdout.has_more for preview.",
         "type": "object",
-        "required": ["format_version", "kind", "command", "bindings", "output_bytes"],
+        "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {
-            "format_version": {"enum": [1, 2], "description": "Version 2 for preview and query --format json reports command, bindings, rows and output_bytes. Other commands/formats retain version 1."},
+            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output, only command and stdout receipt byte count. Version 2: preview/query JSON stdout. Other stdout uses version 1. File counts and bindings belong to the manifest."},
             "kind": {"const": "completion", "description": "Terminal success for the requested command, emitted after stdout is flushed. Also require exit 0 and valid stdout."},
             "terminal": {"const": true},
             "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "help", "version"]},
@@ -236,12 +238,20 @@ pub(super) fn completion_schema() -> Value {
             "batches": unsigned_integer_string_schema(),
         },
         "allOf": [{
-            "if": {"properties": {"command": {"enum": ["scan", "preview", "query"]}}},
+            "if": {"properties": {"format_version": {"enum": [1, 2]}, "command": {"enum": ["scan", "preview", "query"]}}},
             "then": {"required": ["rows"]},
+        }, {
+            "if": {"properties": {"format_version": {"enum": [1, 2]}}},
+            "then": {"required": ["bindings"]},
         }, {
             "if": {"properties": {"format_version": {"const": 1}}},
             "then": {"required": ["terminal", "completion", "scope", "stop_reason", "has_more"], "properties": {"command": {"not": {"const": "preview"}}}},
-            "else": {"properties": {"command": {"enum": ["query", "preview"]}}},
+        }, {
+            "if": {"properties": {"format_version": {"const": 2}}},
+            "then": {"properties": {"command": {"enum": ["query", "preview"]}}},
+        }, {
+            "if": {"properties": {"format_version": {"const": 3}}},
+            "then": {"properties": {"command": {"enum": ["query", "scan"]}}},
         }, {
             "if": {"properties": {"format_version": {"const": 1}, "command": {"enum": ["scan", "query"]}}},
             "then": {"required": ["batches"]},
@@ -269,7 +279,7 @@ pub(super) fn completion_schema() -> Value {
             "format_version": 2, "kind": "completion", "command": "query",
             "bindings": [{"alias": "t", "table_version": "42"}],
             "output_bytes": "228", "rows": "1",
-        }],
+        }, {"format_version": 3, "kind": "completion", "command": "query", "output_bytes": "182"}],
     })
 }
 
@@ -303,7 +313,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        Error, StdoutStats, build_completion_record, capabilities::DiscoverySchema,
+        Error, OutputStats, build_completion_record, capabilities::DiscoverySchema,
         encode_inspection_json,
     };
 
@@ -337,8 +347,7 @@ mod tests {
                     assert!(!validator.is_valid(&invalid), "{name:?}: {invalid}");
                 }
                 let mut incompatible = example.clone();
-                incompatible["format_version"] =
-                    json!(example["format_version"].as_u64().unwrap() + 1);
+                incompatible["format_version"] = json!(999);
                 assert!(!validator.is_valid(&incompatible));
             }
         }
@@ -366,7 +375,7 @@ mod tests {
                 build_completion_record(
                     "scan",
                     Some(42),
-                    StdoutStats {
+                    OutputStats {
                         rows_written: 1,
                         batches_written: 1,
                         bytes_written: 1024,
@@ -394,7 +403,7 @@ mod tests {
                 let record = build_completion_record(
                     command,
                     version,
-                    StdoutStats {
+                    OutputStats {
                         rows_written: 1,
                         batches_written: 1,
                         bytes_written: u64::MAX,

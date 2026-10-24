@@ -31,10 +31,10 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
         assert_eq!(record["format_version"], 2);
         assert!(record.get("message").is_none());
     } else {
-        assert!(matches!(record["format_version"].as_u64(), Some(1 | 2)));
+        assert!(matches!(record["format_version"].as_u64(), Some(1..=3)));
     }
     assert_eq!(record["kind"], kind);
-    if kind == "completion" && record["format_version"] == 2 {
+    if kind == "completion" && matches!(record["format_version"].as_u64(), Some(2 | 3)) {
         assert!(record.get("terminal").is_none());
     } else {
         assert_eq!(record["terminal"], true);

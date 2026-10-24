@@ -1385,6 +1385,7 @@ dependencies = [
  "serde-value",
  "serde_json",
  "serde_path_to_error",
+ "sha2",
  "snafu",
  "strum 0.27.2",
  "tempfile",

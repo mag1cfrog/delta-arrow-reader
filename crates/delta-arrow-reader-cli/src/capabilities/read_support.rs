@@ -14,7 +14,7 @@ use crate::{query, unity_catalog};
 
 const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
-pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. With --diagnostics=json, stderr bindings reports each alias and its actual table_version (a decimal string) in declaration order on success or SQL/result failure. Pin these versions on retry. Snapshots do not form a cross-table transaction.";
+pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. Actual versions are decimal strings in declaration order: stderr bindings for stdout results or SQL/result failures with --diagnostics=json; manifest bindings for saved results. Pin every alias on retry. Snapshots are not a cross-table transaction.";
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
 
@@ -166,6 +166,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             "storage_options_argument": "--storage-options-file",
             "storage_options_schema": "storage-options",
             "credential_selection": "explicit_source_or_storage_backend_default",
+            "file_output_credential_selection": "explicit_source_required; a storage-options file alone selects json",
             "explicit_source_selection": true,
             "source_argument": "--auth-source",
             "manifest_source_field": "tables[].authorization.source",
@@ -325,6 +326,8 @@ pub(super) fn command_read_support() -> Value {
             "max_output_bytes": null,
             "deadline_ms": null,
             "deadline_argument": "--deadline-ms",
+            "file_output": {"argument": "--output", "requires_redirected_stdout": false,
+                "max_rows": 1000000, "max_output_bytes": 1073741824, "deadline_ms": 300000},
         },
         "preview": {
             "authorization": ["local", "direct_storage", "unity_catalog"],
@@ -382,6 +385,8 @@ pub(super) fn command_read_support() -> Value {
             },
             "requires_redirected_stdout": true,
             "json_requires_redirected_stdout": false,
+            "file_output": {"argument": "--output", "requires_redirected_stdout": false,
+                "default_max_bytes": {"arrow": 1073741824, "json": 16777216}},
             "deadline_ms": 300000,
             "deadline_argument": "--deadline-ms",
         },
@@ -710,7 +715,9 @@ mod tests {
             }
             assert!(Cli::try_parse_from(args).is_ok());
             for (option, value) in [("--output", "result.arrow"), ("--format", "json")] {
-                if name == "query" && option == "--format" {
+                if (name == "query" && option == "--format")
+                    || (matches!(name, "scan" | "query") && option == "--output")
+                {
                     continue;
                 }
                 let mut args = vec!["dar", name, "table"];

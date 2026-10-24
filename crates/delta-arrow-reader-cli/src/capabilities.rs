@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use snafu::ResultExt;
 
 use crate::{
-    Cli, Error, OutputSnafu, RuntimeSnafu, StdoutStats, build_completion_record,
+    Cli, Error, OutputSnafu, OutputStats, RuntimeSnafu, build_completion_record,
     diagnostics::{self, DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT},
     input::JsonInputKind,
     signals, write_stdout,
@@ -45,7 +45,7 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an example and available fields or types for one JSON format.
     #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
     schema: Option<DiscoverySchema>,
-    /// Select runtime (or query resources) from --command, a field/type from --schema, or env-file/env-file-grammar from --authorization.
+    /// Select runtime/artifacts (or query resources) from --command, a field/type from --schema, or env-file/env-file-grammar from --authorization.
     #[arg(
         long,
         value_name = "NAME",
@@ -129,8 +129,8 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "example": [executable, "--diagnostics=json", "scan", "./table", "--limit", "1", "--deadline-ms", "30000"],
             "stdout": "arrow_ipc_stream",
             "notes": [
-                "Redirect stdout to a file or pipe; terminal output is rejected.",
-                "--limit selects a sample. No output byte limit or default deadline; use --deadline-ms N for a total time budget in milliseconds.",
+                "Use --output PATH to save a complete result with a manifest and return a JSON receipt. Otherwise redirect Arrow stdout to a file or pipe.",
+                "--limit selects a sample. Files default to 1000000 rows, 1 GiB and 300000 ms; --max-rows/--max-output-bytes are failure ceilings. Legacy stdout has no byte ceiling or default deadline.",
             ],
         }),
         "preview" => json!({
@@ -157,7 +157,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "notes": [
                 "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file.",
                 "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
-                "Omit --format for Arrow IPC, which requires redirected stdout and defaults to a 1 GiB byte ceiling.",
+                "For larger results, use --output PATH; stdout returns a small receipt. JSON files default to 16 MiB; Arrow to 1 GiB. Omit --format for Arrow IPC.",
                 "The deadline includes inputs, planning and output. Memory is limited to the DataFusion pool, not process RSS; spill defaults to disabled.",
                 read_support::QUERY_SNAPSHOT_SELECTION,
                 read_support::QUERY_ROW_ORDERING,
@@ -257,6 +257,20 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     } else if matches!(name, "query" | "preview") {
         output_schemas.push(DiscoverySchema::Rows);
     }
+    if matches!(name, "scan" | "query") {
+        output_schemas.extend([
+            DiscoverySchema::ResultArtifact,
+            DiscoverySchema::ResultManifest,
+        ]);
+        guide["artifact_details_command"] = json!([
+            executable,
+            "capabilities",
+            "--command",
+            name,
+            "--detail",
+            "artifacts"
+        ]);
+    }
     guide["output_schemas"] = json!(output_schemas);
     guide["schema_command"] = json!([executable, "capabilities", "--schema", "NAME"]);
     guide["format_version"] = json!(1);
@@ -292,6 +306,19 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
 }
 
 fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
+    if matches!(name, "scan" | "query") && detail == "artifacts" {
+        return Ok(json!({
+            "format_version": 1, "kind": "command_detail", "command": name, "detail": "artifacts",
+            "option": "--output PATH",
+            "authorization": "Local: none. UC: Databricks profile. Remote: --auth-source or --env-file; a storage-options file alone selects json. Each remote tables-file binding needs authorization.",
+            "publication": "Publishes PATH, then PATH.manifest.json; never overwrites either. Without a matching complete manifest, the result is uncommitted. Failures never stream rows to stdout. Before retrying, verify any existing pair; otherwise choose unused names.",
+            "receipt": "Stdout: result_artifact v1, absolute result/manifest paths, at most 8192 bytes. --diagnostics=json: completion v3 with command/output_bytes (receipt bytes). Result counts are in the manifest.",
+            "verify": "Require manifest completion=complete and result.path=receipt.result. Using result.format, check result.sha256, output_bytes, framing and decoded rows; Arrow also batches. Check bindings/scope. Use scripts; do not print complete artifacts.",
+            "replay": "Match replay.inputs hashes; use replay.options in replay.working_directory with a new --output. Pin every alias from bindings. With --tables-file, copy it beside the original tables file and set each table_version. Keep authorization/limits. SQL order or volatile values may vary.",
+            "storage": "Temporary files: owner-only on Unix; Windows needs a private inherited directory ACL. Crashes/uninterruptible IO may leave temps; no power-loss durability guarantee.",
+            "manifest_schema": [crate::command_name(), "capabilities", "--schema", "result-manifest"],
+        }));
+    }
     if name == "query" && detail == "resources" {
         return Ok(json!({
             "format_version": 1, "kind": "command_detail", "command": "query", "detail": "resources",
@@ -308,7 +335,7 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
             correction: Some(crate::InputCorrection {
                 argument: "--detail".into(),
                 field_path: None,
-                expected: "runtime for a command, or resources for query".into(),
+                expected: "runtime, artifacts for scan/query, or resources for query".into(),
                 supplied: None,
                 hint: "Use --detail runtime for deadlines and cancellation, or --command query --detail resources for memory and spill.",
             }),
@@ -319,7 +346,7 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
         "format_version": 1, "kind": "command_detail", "command": name, "detail": "runtime",
         "deadline": match name {
             "inspect" => "--deadline-ms N: summary defaults to 30000 ms; full has no default.",
-            "scan" => "--deadline-ms N: no default for legacy stdout scans.",
+            "scan" => "--deadline-ms N: defaults to 300000 with --output; stdout has no default.",
             "preview" => "--deadline-ms N: defaults to 30000 ms.",
             "query" => "--deadline-ms N: defaults to 300000 ms.",
             _ => "Fixed 5000 ms, including output and completion.",
@@ -372,6 +399,12 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
     if selected_command.is_none() || matches!(selected_command, Some("query" | "preview")) {
         output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
     }
+    if selected_command.is_none() || matches!(selected_command, Some("scan" | "query")) {
+        output_schemas.extend([
+            json!({"name": DiscoverySchema::ResultArtifact, "stream": "stdout"}),
+            json!({"name": DiscoverySchema::ResultManifest, "stream": "file"}),
+        ]);
+    }
     let mut authorization = read_support::build_authorization_capabilities();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
@@ -394,6 +427,9 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
         },
         "help": {"format": "text"},
     });
+    for name in ["scan", "query"] {
+        stdout_formats[name]["output_file"] = json!({"argument": "--output", "schema": DiscoverySchema::ResultArtifact, "completion_format_version": 3});
+    }
     if let Some(name) = selected_command {
         if let Some(sources) = authorization.as_object_mut() {
             sources.retain(|_, source| {
@@ -430,7 +466,8 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
                 },
                 "completion_format_versions": match selected_command {
                     Some("preview") => vec![2],
-                    Some("query") | None => vec![1, 2],
+                    Some("query") | None => vec![1, 2, 3],
+                    Some("scan") => vec![1, 3],
                     _ => vec![1],
                 },
                 "schemas": terminal_schemas,
@@ -569,7 +606,7 @@ fn run_discovery(
     status
 }
 
-fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Error> {
+fn write_discovery_response(options: CapabilitiesArgs) -> Result<OutputStats, Error> {
     let (document, max_output_bytes) = if let Some(schema) = options.schema {
         if options.full {
             (schema.schema_document(), MAX_FULL_RESPONSE_BYTES)
@@ -617,7 +654,7 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
     };
     let output = serialize_discovery_response(&document, max_output_bytes)?;
     write_stdout(&output)?;
-    Ok(StdoutStats {
+    Ok(OutputStats {
         bytes_written: output.len() as u64,
         ..Default::default()
     })
@@ -757,7 +794,7 @@ mod tests {
         );
         assert_eq!(
             guide["resource_defaults"]["--max-output-bytes"],
-            args.max_output_bytes.to_string()
+            args.output_byte_limit().to_string()
         );
         assert_eq!(
             guide["resource_defaults"]["--memory-limit-bytes"],
@@ -878,7 +915,7 @@ mod tests {
         let record = build_completion_record(
             "capabilities",
             None,
-            StdoutStats {
+            OutputStats {
                 bytes_written: u64::MAX,
                 ..Default::default()
             },
@@ -1002,7 +1039,6 @@ mod tests {
         let arguments = advertised["arguments"].as_array().unwrap();
         for (name, value) in [
             ("--max-rows", query.max_rows),
-            ("--max-output-bytes", query.max_output_bytes.get()),
             ("--memory-limit-bytes", query.memory_limit_bytes.get()),
             ("--spill-limit-bytes", query.spill_limit_bytes as usize),
         ] {
@@ -1053,6 +1089,8 @@ mod tests {
                 json!("diagnostic"),
                 json!("completion"),
                 json!("rows"),
+                json!("result-artifact"),
+                json!("result-manifest"),
             ]
         );
         for schema in input_catalog.iter().chain(output_catalog) {

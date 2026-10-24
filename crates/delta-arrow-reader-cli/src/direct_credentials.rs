@@ -17,7 +17,8 @@ use url::Url;
 use crate::{Error, StorageAuthorizationSnafu};
 
 /// Selects one source; missing or rejected credentials never select another identity.
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, ValueEnum, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum CredentialSource {
     /// Read credentials from the explicitly supplied storage-options file.
     Json,

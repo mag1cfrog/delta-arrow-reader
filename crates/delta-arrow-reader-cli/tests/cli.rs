@@ -2,6 +2,7 @@
 
 #![allow(clippy::panic, clippy::unwrap_used)]
 
+mod artifacts;
 mod capabilities;
 #[cfg(target_os = "linux")]
 mod command_runtime;

@@ -138,8 +138,8 @@ For SQL planning or result errors after all snapshots load, the diagnostic inclu
 with the validated aliases and actual versions. Set each manifest entry's
 `table_version` from those bindings before retrying. For positional input, set
 `--table-version` from the `t` binding. Snapshot-loading failures and cancellation omit these fields. A retry without pinned versions can read newer commits.
-For JSON byte exhaustion, another option is Arrow with redirected stdout and an
-explicit byte budget. Adding SQL `LIMIT` changes the result and is not a repair
+For large JSON results, use `--output PATH` and an explicit byte budget when
+needed, then verify the saved manifest. Adding SQL `LIMIT` changes the result and is not a repair
 for the same request.
 
 Preview schema exhaustion uses `change_request`: narrow the selected columns
@@ -150,7 +150,7 @@ Preview deadlines and query memory exhaustion also use `adjust_budget`.
 These resource failures set `retryable: false`.
 
 A successful command emits `kind: "completion"` after stdout has been flushed.
-It includes `command` and `output_bytes`. Inspect, scan, preview, and query include the actual snapshot
+It includes `command` and `output_bytes`. For stdout data, inspect, scan, preview, and query include the actual snapshot
 in `bindings`, for example
 `[{"alias":"t","table_version":"42"}]`. Queries using `--tables-file` include
 each manifest alias and its resolved version in declaration order. Other commands
@@ -164,7 +164,14 @@ marks terminal success for the requested command. For a query, check
 reports `completion: "sample"`, `stop_reason`, and `has_more` there. Check
 stdout bindings and row count in both cases.
 
-Other commands and Arrow queries use version 1, which also includes
+`scan` and `query` with `--output` use completion version 3. It contains only
+`format_version`, `kind`, `command`, and `output_bytes`, which counts the stdout
+receipt. Read result counts and bindings from the referenced manifest. A receipt
+failure can leave a complete pair; [verify it](../cli.md#save-a-result-with-a-manifest)
+before retrying. `artifact_io` diagnostics identify failed staging, writes or
+publication, without printing paths or OS messages. Existing files are preserved.
+
+Other commands and Arrow stdout queries use version 1, which also includes
 `terminal: true`, `completion: "complete"`, `scope`, `stop_reason`, and `has_more`,
 plus `batches` for scan and query.
 
@@ -172,7 +179,7 @@ In version 1, scope equals the command, except that any scan with `--limit`
 uses `limited_scan`. Reaching the limit, including zero, reports
 `stop_reason: "row_limit"` and `has_more: null`: it does not prove that another
 row exists. Other version 1 completions use `stop_reason: "end_of_input"` and
-`has_more: false`. In both versions, a query completes only after the full SQL
+`has_more: false`. In all versions, a query completes only after the full SQL
 result, including any SQL `LIMIT`. Output ceilings cannot produce a successful
 partial query completion.
 
@@ -230,7 +237,8 @@ interface; scripts should use machine diagnostics and the exit status.
 | `configuration` | `invalid_storage_authorization` | Explicit credential source is incomplete, conflicting, or unsupported |
 | `configuration` | `invalid_configuration` | A native execution setting is outside its allowed range |
 | `execution` | `runtime_initialization` | Runtime or worker setup failed, a worker panicked, or discovery exceeded its deadline |
-| `execution` | `output_write` | Result or completion output could not be written or flushed |
+| `execution` | `output_write` | Stdout or completion output could not be written or flushed |
+| `execution` | `artifact_io` | A result file, completion manifest, or artifact receipt could not be written or published |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
 | `execution` | `json_output` | Typed JSON encoding failed |
 | `execution` | `unsupported_json_type` | The selected schema contains a type unsupported by typed JSON, even if the result is empty |
@@ -303,7 +311,7 @@ emits the terminal diagnostic even with `RUST_LOG=off`.
 `--deadline-ms N` sets a positive whole-command budget in milliseconds, covering
 input files, authorization, snapshot loading, planning, execution, stdout, and
 completion reporting. Preview and summary inspection default to 30000 ms; query
-defaults to 300000 ms. Full inspection and stdout scan retain no default deadline.
+and file-output scans default to 300000 ms. Full inspection and stdout scan retain no default deadline.
 Set one explicitly for unattended use. Expiry exits 1 with `deadline_exceeded`.
 Help, version, and every capabilities view instead have a fixed 5000 ms deadline
 and use `discovery_deadline_exceeded`.

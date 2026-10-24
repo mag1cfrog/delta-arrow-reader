@@ -235,7 +235,7 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
         diagnostic["hint"]
             .as_str()
             .unwrap()
-            .contains("Explicitly increase --max-output-bytes for the complete JSON")
+            .contains("--output PATH")
     );
     let exact = run_with_timeout(manifest_command(directory.path()).args([
         "--format",

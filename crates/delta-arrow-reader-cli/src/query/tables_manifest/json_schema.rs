@@ -209,7 +209,7 @@ mod tests {
             assert_eq!(validator.is_valid(&manifest), accepted, "{manifest}");
             std::fs::write(&path, manifest.to_string())?;
             assert_eq!(
-                super::super::read_table_requests(path.to_str().unwrap()).is_ok(),
+                super::super::read_table_requests(path.to_str().unwrap(), &mut None).is_ok(),
                 accepted,
                 "{manifest}",
             );

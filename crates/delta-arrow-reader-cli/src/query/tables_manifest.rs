@@ -59,9 +59,20 @@ pub(crate) struct ManifestAuthorization {
 }
 
 /// Prepares every binding without opening any table, including when a later entry is invalid.
-pub(crate) fn read_table_requests(path: &str) -> Result<Vec<(String, TableLoadRequest)>, Error> {
-    let manifest =
-        input::read_json_file::<JsonObject<TablesManifest>>(path, JsonInputKind::Tables)?.0;
+pub(crate) fn read_table_requests(
+    path: &str,
+    artifact: &mut Option<crate::output::artifact::StagedResult>,
+) -> Result<Vec<(String, TableLoadRequest)>, Error> {
+    let (JsonObject(manifest), bytes) = input::read_json_file_with_bytes::<
+        JsonObject<TablesManifest>,
+    >(path, JsonInputKind::Tables)?;
+    if let Some(artifact) = artifact {
+        artifact.record_input_digest(
+            "--tables-file",
+            path,
+            crate::output::artifact::sha256(&bytes),
+        );
+    }
     if manifest.format_version != 1 {
         return Err(manifest_error(
             "/format_version",
@@ -206,6 +217,14 @@ pub(crate) fn read_table_requests(path: &str) -> Result<Vec<(String, TableLoadRe
             let uc_target =
                 UnityCatalogTableTarget::parse(&location, databricks_profile.as_deref())
                     .context(UnityCatalogSnafu)?;
+            if artifact.is_some() {
+                options
+                    .select_file_output_credentials(&location)
+                    .map_err(|source| Error::ManifestAuthorizationInput {
+                        source: Box::new(source),
+                        field_path: format!("/tables/{index}/authorization"),
+                    })?;
+            }
             let credential_file_directory = options
                 .storage_options_file
                 .as_deref()

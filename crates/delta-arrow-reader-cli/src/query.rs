@@ -5,7 +5,8 @@ pub(crate) mod tables_manifest;
 
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, path::PathBuf, sync::Arc};
 
-use clap::{Args, ValueEnum};
+use crate::output::RowOutputFormat;
+use clap::Args;
 use datafusion::{
     common::DataFusionError,
     execution::{
@@ -42,41 +43,43 @@ use crate::{
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
 pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub(crate) enum QueryOutputFormat {
-    Arrow,
-    Json,
-}
-
 /// Selects positional table t or a manifest of named tables, with result resource ceilings.
-#[derive(Args)]
+#[derive(Args, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct QueryArgs {
     /// UTF-8 local path or storage URL, registered as t. Relative paths use the working directory.
     /// UC targets use uc://catalog.schema.table and require --databricks-profile.
     /// Use '--' before a table path beginning with '-'.
     #[arg(required_unless_present = "tables_file")]
-    table: Option<String>,
+    pub(crate) table: Option<String>,
     /// Local JSON manifest of 1-64 named tables; at most 1 MiB. Relative locations use its directory.
     /// Conflicts with TABLE, --table-version, --storage-options-file, --env-file, --auth-source, and --databricks-profile.
     #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "env_file", "auth_source", "databricks_profile"])]
     tables_file: Option<String>,
     #[command(flatten)]
-    table_options: TableOptions,
+    #[serde(flatten)]
+    pub(crate) table_options: TableOptions,
     /// Existing Databricks CLI profile for positional uc:// TABLE; login must already be configured.
     #[arg(long, value_name = "PROFILE")]
     databricks_profile: Option<String>,
     /// UTF-8 file containing one read-only SQL query over the selected aliases; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
-    /// Arrow IPC stream (requires redirected stdout), or bounded typed JSON.
+    /// Arrow IPC stream or typed JSON; redirect stdout for Arrow unless using --output.
     #[arg(long = "format", value_enum, default_value = "arrow")]
-    pub(crate) output_format: QueryOutputFormat,
+    #[serde(rename = "format")]
+    pub(crate) output_format: RowOutputFormat,
+    /// Save a complete result and PATH.manifest.json without replacing existing files.
+    /// Stdout returns a small JSON receipt. Windows staging inherits the directory ACL.
+    #[arg(long, value_name = "PATH")]
+    #[serde(skip)]
+    pub(crate) output: Option<PathBuf>,
     /// Maximum result rows. Exceeding this ceiling fails; SQL LIMIT selects a smaller result.
     #[arg(long, default_value = "1000000", value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
     pub(crate) max_rows: usize,
-    /// Whole-response byte ceiling, including schema and framing. JSON defaults to 8192; excess fails.
-    #[arg(long, default_value = "1073741824", default_value_if("output_format", "json", "8192"), value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
-    pub(crate) max_output_bytes: NonZeroUsize,
+    /// Complete result byte ceiling. Defaults: JSON stdout 8192, JSON file 16777216, Arrow 1073741824.
+    #[arg(long, value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+    pub(crate) max_output_bytes: Option<NonZeroUsize>,
     /// DataFusion memory-pool ceiling in bytes; reader/metadata buffers and process RSS are outside it.
     #[arg(long, default_value = "268435456", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) memory_limit_bytes: NonZeroUsize,
@@ -94,14 +97,41 @@ pub(crate) struct QueryArgs {
 }
 
 impl QueryArgs {
+    pub(crate) fn output_byte_limit(&self) -> usize {
+        self.max_output_bytes.map(NonZeroUsize::get).unwrap_or(
+            match (self.output_format, self.output.is_some()) {
+                (RowOutputFormat::Json, false) => output::json::DEFAULT_MAX_BYTES,
+                (RowOutputFormat::Json, true) => 16 * 1024 * 1024,
+                (RowOutputFormat::Arrow, _) => 1024 * 1024 * 1024,
+            },
+        )
+    }
+
     /// Admits all input before any table IO; execution loads each snapshot exactly once.
     /// Returns whether UC cancellation reporting applies, followed by the pending execution.
-    pub(crate) fn prepare_execution(
-        &self,
+    pub(crate) fn prepare_execution<'a>(
+        &'a self,
         spill_directory: &mut Option<tempfile::TempDir>,
-    ) -> Result<(bool, LocalBoxFuture<'_, Result<Value, Error>>), Error> {
+        pending_artifact: &'a mut Option<output::artifact::PendingArtifactPublication>,
+        cancellation: &futures_util::future::AbortHandle,
+    ) -> Result<(bool, LocalBoxFuture<'a, Result<Value, Error>>), Error> {
+        let mut artifact = self
+            .output
+            .as_ref()
+            .map(|path| {
+                let mut options =
+                    serde_json::to_value(self).map_err(|source| Error::JsonOutput { source })?;
+                options["max-output-bytes"] = json!(self.output_byte_limit());
+                output::artifact::StagedResult::new(
+                    path,
+                    self.output_format,
+                    options,
+                    cancellation.clone(),
+                )
+            })
+            .transpose()?;
         let requests = if let Some(path) = &self.tables_file {
-            tables_manifest::read_table_requests(path)?
+            tables_manifest::read_table_requests(path, &mut artifact)?
         } else {
             let location = self.table.as_deref().ok_or(Error::Argument {
                 kind: clap::error::ErrorKind::MissingRequiredArgument,
@@ -116,6 +146,13 @@ impl QueryArgs {
             )]
         };
         let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
+        if let Some(artifact) = &mut artifact {
+            artifact.record_input_digest(
+                "--sql-file",
+                &self.sql_file,
+                sql_query.input_sha256.clone(),
+            );
+        }
         let (runtime, directory) = resources::build_query_runtime(self)?;
         *spill_directory = directory;
         let uses_unity_catalog = requests
@@ -143,14 +180,19 @@ impl QueryArgs {
                 });
                 let limits = output::OutputLimits {
                     max_rows: self.max_rows as u64,
-                    max_bytes: self.max_output_bytes.get() as u64,
+                    max_bytes: self.output_byte_limit() as u64,
                 };
+                if let Some(staged) = artifact.take() {
+                    let (staged, stats) = staged.write_rows(schema, stream, bindings.clone(), Some(limits)).await?;
+                    artifact = Some(staged);
+                    return Ok(stats);
+                }
                 match self.output_format {
-                    QueryOutputFormat::Arrow => {
+                    RowOutputFormat::Arrow => {
                         output::arrow::write_arrow_stream_to_stdout(schema, stream, Some(limits))
                             .await
                     }
-                    QueryOutputFormat::Json => {
+                    RowOutputFormat::Json => {
                         output::json::write_query_to_stdout(schema, stream, bindings.clone(), limits)
                             .await
                     }
@@ -169,18 +211,26 @@ impl QueryArgs {
                 }
                 result => result,
             };
-            let stdout_stats = query_result.map_err(|source| Error::QueryWithResolvedBindings {
+            let result_stats = query_result.map_err(|source| Error::WithResolvedBindings {
                 source: Box::new(source),
                 bindings: bindings.clone(),
             })?;
+            if let Some(staged) = artifact {
+                let mut completion = build_completion_record("query", None, result_stats, None);
+                completion["bindings"] = bindings.into();
+                *pending_artifact = Some(staged.stage_manifest(&completion).map_err(|source| Error::WithResolvedBindings {
+                    source: Box::new(source), bindings: completion["bindings"].as_array().cloned().unwrap_or_default(),
+                })?);
+                return Ok(completion);
+            }
             let completion = match self.output_format {
-                QueryOutputFormat::Arrow => {
-                    let mut completion = build_completion_record("query", None, stdout_stats, None);
+                RowOutputFormat::Arrow => {
+                    let mut completion = build_completion_record("query", None, result_stats, None);
                     completion["bindings"] = bindings.into();
                     completion
                 }
-                QueryOutputFormat::Json => {
-                    build_json_read_completion("query", bindings, stdout_stats)
+                RowOutputFormat::Json => {
+                    build_json_read_completion("query", bindings, result_stats)
                 }
             };
             Ok(completion)
@@ -282,6 +332,7 @@ impl QueryError {
 /// Parsed and admitted SQL. The AST is kept private because it contains user literals.
 pub(crate) struct ReadOnlySqlQuery {
     statement: Statement,
+    input_sha256: String,
 }
 
 impl ReadOnlySqlQuery {
@@ -336,7 +387,10 @@ impl ReadOnlySqlQuery {
         {
             return Err(QueryError::Input { reason });
         }
-        Ok(Self { statement })
+        Ok(Self {
+            statement,
+            input_sha256: output::artifact::sha256(sql.as_bytes()),
+        })
     }
 
     /// Registers only the supplied names and snapshots. URL-based table discovery stays disabled.
