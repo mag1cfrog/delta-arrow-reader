@@ -157,6 +157,8 @@ pub fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
                 io::ErrorKind::InvalidInput => return "invalid_input",
                 io::ErrorKind::Interrupted => return "interrupted",
                 io::ErrorKind::OutOfMemory => return "out_of_memory",
+                io::ErrorKind::StorageFull => return "storage_full",
+                io::ErrorKind::QuotaExceeded => return "storage_quota_exceeded",
                 io::ErrorKind::AlreadyExists => return "already_exists",
                 io::ErrorKind::Unsupported => return "unsupported",
                 _ => {}
@@ -433,6 +435,17 @@ mod tests {
         }
         let error = snapshot_error(HttpError::new(HttpErrorKind::Interrupted, Unprintable));
         assert_eq!(error.source_kind(), Some("interrupted"));
+    }
+
+    #[test]
+    fn local_storage_limits_remain_typed_through_arrow_io() {
+        for (kind, expected) in [
+            (io::ErrorKind::StorageFull, "storage_full"),
+            (io::ErrorKind::QuotaExceeded, "storage_quota_exceeded"),
+        ] {
+            let error = ArrowError::IoError("secret path".into(), io::Error::from(kind));
+            assert_eq!(source_kind(&error), expected);
+        }
     }
 
     #[test]

@@ -514,7 +514,6 @@ fn create_full_pipe() -> io::Result<(io::PipeReader, io::PipeWriter)> {
     Ok((reader, writer))
 }
 
-#[cfg(target_os = "linux")]
 fn wait_for_exit_or_kill(
     child: &mut std::process::Child,
     timeout: Duration,

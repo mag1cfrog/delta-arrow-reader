@@ -3,6 +3,7 @@
 #[cfg(target_os = "linux")]
 mod completion;
 pub(super) mod json;
+mod resources;
 mod tables_manifest;
 
 use std::{
@@ -112,6 +113,32 @@ fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestRes
         let result =
             assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?;
         assert!(result.num_rows() > 0, "{example}");
+    }
+    Ok(())
+}
+
+#[test]
+fn queries_accept_discarded_stdout_and_stderr() -> TestResult {
+    use std::{process::Stdio, time::Duration};
+
+    let fixture = SqlCommandFixture::new(
+        fixture_path("partitioned").join("table"),
+        "SELECT id FROM t LIMIT 1",
+    )?;
+    for format in ["arrow", "json"] {
+        let output =
+            crate::run_with_stdout(fixture.command().args(["--format", format]), Stdio::null())?;
+        assert!(output.status.success(), "{output:?}");
+        let completion = assert_single_terminal_record(&output.stderr, "completion");
+        assert_eq!(completion["rows"], "1");
+
+        let mut child = fixture
+            .command()
+            .args(["--format", format])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        assert!(crate::wait_for_exit_or_kill(&mut child, Duration::from_secs(15))?.success());
     }
     Ok(())
 }

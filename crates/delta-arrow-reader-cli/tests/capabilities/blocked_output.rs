@@ -38,6 +38,13 @@ fn blocked_stdout_respects_the_deadline() -> Result<(), Box<dyn std::error::Erro
         vec!["help", "query"],
         vec!["--version"],
         vec!["capabilities", "--command", "query", "--detail", "runtime"],
+        vec![
+            "capabilities",
+            "--command",
+            "query",
+            "--detail",
+            "resources",
+        ],
     ] {
         let (reader, writer) = create_full_pipe()?;
         let started = Instant::now();

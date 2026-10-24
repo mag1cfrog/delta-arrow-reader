@@ -3,6 +3,7 @@
 import http.server
 import json
 from pathlib import Path
+import socketserver
 import ssl
 import subprocess
 import sys
@@ -106,6 +107,13 @@ class CredentialProxyHandler(CredentialEndpointHandler):
             CredentialEndpointHandler(connection, self.client_address, self.server)
 
 
+class CredentialProxyServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        # Loopback fixtures must not wait for reverse DNS during startup.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address
+
+
 def main():
     directory = Path(sys.argv[1])
     key = Path(__file__).with_name("test-key.pem")
@@ -115,7 +123,7 @@ def main():
          "-subj", "/CN=accounts.google.com", "-out", str(certificate)],
         check=True, capture_output=True, timeout=10,
     )
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), CredentialProxyHandler)
+    server = CredentialProxyServer(("127.0.0.1", 0), CredentialProxyHandler)
     server.directory = directory
     server.service = sys.argv[2]
     assert server.service in {"gcs", "sts", "container"}

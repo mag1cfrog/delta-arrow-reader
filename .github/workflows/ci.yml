@@ -102,7 +102,7 @@ jobs:
   platform-tests:
     name: Platform Tests / ${{ matrix.name }}
     needs: changes
-    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tooling == 'true'
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tooling == 'true' || needs.changes.outputs.cli == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -146,6 +146,9 @@ jobs:
       - name: Test core
         if: needs.changes.outputs.code == 'true'
         run: cargo test --locked --all-features
+      - name: Test CLI
+        if: needs.changes.outputs.cli == 'true'
+        run: cargo test --locked -p delta-arrow-reader-cli
       - name: Test offline Unity Catalog validation
         if: needs.changes.outputs.tooling == 'true'
         shell: bash
@@ -561,7 +564,8 @@ jobs:
           fi
 
           if [ "${{ needs.changes.outputs.code }}" = "true" ] || \
-             [ "${{ needs.changes.outputs.tooling }}" = "true" ]; then
+             [ "${{ needs.changes.outputs.tooling }}" = "true" ] || \
+             [ "${{ needs.changes.outputs.cli }}" = "true" ]; then
             if [ "${{ needs.platform-tests.result }}" != "success" ]; then
               echo "Platform Tests did not pass: ${{ needs.platform-tests.result }}"
               exit 1

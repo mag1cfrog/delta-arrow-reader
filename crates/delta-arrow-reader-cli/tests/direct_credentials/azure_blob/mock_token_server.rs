@@ -37,6 +37,8 @@ impl MockAzureTokenServer {
                     thread::sleep(Duration::from_millis(5));
                     continue;
                 };
+                // Accepted sockets inherit nonblocking mode on macOS.
+                socket.set_nonblocking(false).unwrap();
                 socket
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();

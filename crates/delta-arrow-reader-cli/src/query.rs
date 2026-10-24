@@ -1,17 +1,16 @@
 //! Read-only SQL admission and planning over named, immutable Core snapshots.
 
+pub(crate) mod resources;
 pub(crate) mod tables_manifest;
 
-use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
+use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, path::PathBuf, sync::Arc};
 
 use clap::{Args, ValueEnum};
 use datafusion::{
     common::DataFusionError,
     execution::{
         context::{SQLOptions, SessionContext},
-        disk_manager::{DiskManagerBuilder, DiskManagerMode},
-        memory_pool::FairSpillPool,
-        runtime_env::RuntimeEnvBuilder,
+        runtime_env::RuntimeEnv,
     },
     physical_plan::SendableRecordBatchStream,
     prelude::SessionConfig,
@@ -78,9 +77,17 @@ pub(crate) struct QueryArgs {
     /// Whole-response byte ceiling, including schema and framing. JSON defaults to 8192; excess fails.
     #[arg(long, default_value = "1073741824", default_value_if("output_format", "json", "8192"), value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) max_output_bytes: NonZeroUsize,
-    /// DataFusion memory-pool ceiling in bytes; not a process RSS limit. Disk spill is disabled.
+    /// DataFusion memory-pool ceiling in bytes; reader/metadata buffers and process RSS are outside it.
     #[arg(long, default_value = "268435456", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) memory_limit_bytes: NonZeroUsize,
+    /// DataFusion spill budget in bytes. Zero disables spill; positive values require --spill-dir.
+    /// Checked after writes, so temporary usage can exceed this budget before failure.
+    #[arg(long, default_value = "0", value_name = "BYTES", value_parser = parse_unsigned_decimal::<u64>)]
+    pub(crate) spill_limit_bytes: u64,
+    /// Existing writable directory for query temporary files; requires a positive spill budget.
+    /// Files may contain table data. On Windows, choose a directory with a private inherited ACL.
+    #[arg(long, value_name = "PATH")]
+    spill_dir: Option<PathBuf>,
     /// Whole-command deadline in milliseconds, including inputs, planning and output.
     #[arg(long, default_value = "300000", value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) deadline_ms: NonZeroUsize,
@@ -91,6 +98,7 @@ impl QueryArgs {
     /// Returns whether UC cancellation reporting applies, followed by the pending execution.
     pub(crate) fn prepare_execution(
         &self,
+        spill_directory: &mut Option<tempfile::TempDir>,
     ) -> Result<(bool, LocalBoxFuture<'_, Result<Value, Error>>), Error> {
         let requests = if let Some(path) = &self.tables_file {
             tables_manifest::read_table_requests(path)?
@@ -108,6 +116,8 @@ impl QueryArgs {
             )]
         };
         let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
+        let (runtime, directory) = resources::build_query_runtime(self)?;
+        *spill_directory = directory;
         let uses_unity_catalog = requests
             .iter()
             .any(|(_, request)| matches!(request, TableLoadRequest::UnityCatalog { .. }));
@@ -125,7 +135,7 @@ impl QueryArgs {
                 .collect();
             let query_result = async {
                 let stream = sql_query
-                    .execute_stream(tables, self.memory_limit_bytes.get())
+                    .execute_stream(tables, runtime)
                     .await?;
                 let schema = stream.schema();
                 let stream = stream.map_err(|source| Error::Query {
@@ -186,6 +196,10 @@ pub(crate) enum QueryError {
         "Invalid SQL input (reason={reason}). Use one read-only query over the selected tables."
     ))]
     Input { reason: &'static str },
+    #[snafu(display("Could not create private temporary storage in --spill-dir."))]
+    SpillDirectory { source: std::io::Error },
+    #[snafu(display("Could not remove the query's temporary spill files."))]
+    SpillCleanup { source: std::io::Error },
     #[snafu(display("Could not initialize the SQL runtime."))]
     Initialization { source: DataFusionError },
     #[snafu(display("Could not plan the SQL query."))]
@@ -209,6 +223,19 @@ impl QueryError {
                 reason,
                 source_kind: None,
             },
+            Self::SpillDirectory { source } | Self::SpillCleanup { source } => {
+                let (phase, code) = if matches!(self, Self::SpillDirectory { .. }) {
+                    ("configuration", "spill_directory")
+                } else {
+                    ("datafusion", "spill_cleanup")
+                };
+                ErrorClassification {
+                    phase,
+                    code,
+                    reason: code,
+                    source_kind: Some(error_source_kind(source)),
+                }
+            }
             Self::Initialization { source }
             | Self::Planning { source }
             | Self::Execution { source } => {
@@ -223,10 +250,21 @@ impl QueryError {
                     } else {
                         error_source_kind(source)
                     };
+                // DataFusion 54 uses one string variant for both budgets. Unknown messages stay unclassified.
+                let reason = match source.find_root() {
+                    DataFusionError::ResourcesExhausted(message)
+                        if message.starts_with("The used disk space during the spilling process has exceeded the allowable limit of ") => "spill_limit_exceeded",
+                    DataFusionError::ResourcesExhausted(message)
+                        if message.starts_with("Memory Exhausted while ")
+                            && message.ends_with("(DiskManager is disabled)") => "spill_disabled",
+                    DataFusionError::ResourcesExhausted(message)
+                        if message.starts_with("Failed to allocate additional ") => "memory_limit_exceeded",
+                    _ => code,
+                };
                 ErrorClassification {
                     phase: "datafusion",
                     code,
-                    reason: code,
+                    reason,
                     source_kind: Some(source_kind),
                 }
             }
@@ -235,7 +273,7 @@ impl QueryError {
 
     pub(crate) fn exit_status(&self) -> u8 {
         match self {
-            Self::Input { .. } => 2,
+            Self::Input { .. } | Self::SpillDirectory { .. } => 2,
             _ => 1,
         }
     }
@@ -305,16 +343,8 @@ impl ReadOnlySqlQuery {
     pub(crate) async fn execute_stream(
         self,
         tables: impl IntoIterator<Item = (String, DeltaTable)>,
-        memory_limit_bytes: usize,
+        runtime: Arc<RuntimeEnv>,
     ) -> Result<SendableRecordBatchStream, crate::Error> {
-        let runtime = RuntimeEnvBuilder::new()
-            .with_memory_pool(Arc::new(FairSpillPool::new(memory_limit_bytes)))
-            .with_disk_manager_builder(
-                DiskManagerBuilder::default().with_mode(DiskManagerMode::Disabled),
-            )
-            .build_arc()
-            .context(InitializationSnafu)
-            .context(QuerySnafu)?;
         let context = SessionContext::new_with_config_rt(SessionConfig::new(), runtime);
         for (alias, table) in tables {
             register_table(&context, alias, table, ScanOptions::default())
@@ -452,7 +482,8 @@ mod tests {
              FROM partitioned AS p LEFT JOIN deletion_vectors AS d ON p.id = d.id
              WHERE p.id <= 12 ORDER BY p.id",
         )?;
-        let stream = query.execute_stream(tables, 16 * 1024 * 1024).await?;
+        let runtime = datafusion::execution::runtime_env::RuntimeEnvBuilder::new().build_arc()?;
+        let stream = query.execute_stream(tables, runtime).await?;
         let schema = stream.schema();
         let batches = stream.try_collect::<Vec<_>>().await?;
         let actual = concat_batches(&schema, &batches)?;
@@ -534,5 +565,11 @@ mod tests {
             Some("resource_exhausted")
         );
         assert!(!format!("{error} {error:?}").contains("secret"));
+        assert_eq!(error.classification().reason, "sql_execution");
+        assert!(Error::Query { source: error }.input_correction().is_none());
+        let unrelated = QueryError::Execution {
+            source: DataFusionError::Execution("Failed to allocate additional secret".into()),
+        };
+        assert_eq!(unrelated.classification().reason, "sql_execution");
     }
 }
