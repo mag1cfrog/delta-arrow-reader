@@ -23,14 +23,18 @@ pub(crate) enum DiscoverySchema {
     Diagnostic,
     Completion,
     Rows,
+    QueryPlan,
     ResultArtifact,
     ResultManifest,
 }
 
 impl DiscoverySchema {
     pub(super) fn build_schema_guide(self, detail: Option<&str>) -> Result<Value, Error> {
-        if matches!(self, Self::ResultArtifact | Self::ResultManifest) {
-            return self.build_artifact_schema_guide(detail);
+        if matches!(
+            self,
+            Self::ResultArtifact | Self::ResultManifest | Self::QueryPlan
+        ) {
+            return self.build_nested_output_guide(detail);
         }
         let document = self.schema_document();
         let schema = &document["schema"];
@@ -116,7 +120,7 @@ impl DiscoverySchema {
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "v1/v2 only; --output v3 keeps bindings in the result manifest. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "v1/v2 only; v3 keeps bindings in the result manifest (--output) or query_plan stdout (explain). Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {
@@ -297,7 +301,7 @@ impl DiscoverySchema {
         Ok(guide)
     }
 
-    fn build_artifact_schema_guide(self, detail: Option<&str>) -> Result<Value, Error> {
+    fn build_nested_output_guide(self, detail: Option<&str>) -> Result<Value, Error> {
         let document = self.schema_document();
         let mut selected = &document["schema"];
         if let Some(path) = detail {
@@ -341,6 +345,7 @@ impl DiscoverySchema {
             Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
             Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
             Self::Rows => (output_schemas::rows_schema(), "stdout"),
+            Self::QueryPlan => (output_schemas::query_plan::query_plan_schema(), "stdout"),
             Self::ResultArtifact => (
                 output_schemas::artifacts::result_artifact_schema(),
                 "stdout",
@@ -755,7 +760,8 @@ mod tests {
             .build_schema_guide(Some("bindings"))
             .unwrap();
         let description = bindings["definition"]["description"].as_str().unwrap();
-        assert!(description.contains("v1/v2 only; --output v3"));
+        assert!(description.contains("v1/v2 only"));
+        assert!(description.contains("query_plan stdout (explain)"));
         assert!(description.contains("bindings in the result manifest"));
         assert!(description.contains("query has at least one binding"));
         assert!(description.contains("inspect/scan/preview have one binding named t"));

@@ -1,5 +1,6 @@
 //! Read-only SQL admission and planning over named, immutable Core snapshots.
 
+pub(crate) mod explain;
 pub(crate) mod resources;
 pub(crate) mod tables_manifest;
 
@@ -9,6 +10,7 @@ use crate::output::RowOutputFormat;
 use clap::Args;
 use datafusion::{
     common::DataFusionError,
+    dataframe::DataFrame,
     execution::{
         context::{SQLOptions, SessionContext},
         runtime_env::RuntimeEnv,
@@ -43,10 +45,10 @@ use crate::{
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
 pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 
-/// Selects positional table t or a manifest of named tables, with result resource ceilings.
+/// SQL and snapshot declarations shared by query execution and plan inspection.
 #[derive(Args, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct QueryArgs {
+pub(crate) struct QueryInputArgs {
     /// UTF-8 local path or storage URL, registered as t. Relative paths use the working directory.
     /// UC targets use uc://catalog.schema.table and require --databricks-profile.
     /// Use '--' before a table path beginning with '-'.
@@ -65,6 +67,48 @@ pub(crate) struct QueryArgs {
     /// UTF-8 file containing one read-only SQL query over the selected aliases; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
+}
+
+impl QueryInputArgs {
+    /// Validates all bindings and SQL before loading any snapshot.
+    pub(crate) fn prepare_inputs(
+        &self,
+        artifact: &mut Option<output::artifact::StagedResult>,
+    ) -> Result<(Vec<(String, TableLoadRequest)>, ReadOnlySqlQuery), Error> {
+        let requests = if let Some(path) = &self.tables_file {
+            tables_manifest::read_table_requests(path, artifact)?
+        } else {
+            let location = self.table.as_deref().ok_or(Error::Argument {
+                kind: clap::error::ErrorKind::MissingRequiredArgument,
+                correction: None,
+            })?;
+            let uc_target =
+                UnityCatalogTableTarget::parse(location, self.databricks_profile.as_deref())
+                    .context(UnityCatalogSnafu)?;
+            vec![(
+                "t".to_owned(),
+                self.table_options.prepare_load(location, uc_target, None)?,
+            )]
+        };
+        let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
+        if let Some(artifact) = artifact {
+            artifact.record_input_digest(
+                "--sql-file",
+                &self.sql_file,
+                sql_query.input_sha256.clone(),
+            );
+        }
+        Ok((requests, sql_query))
+    }
+}
+
+/// Executes a declared query within explicit result and runtime resource ceilings.
+#[derive(Args, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct QueryArgs {
+    #[command(flatten)]
+    #[serde(flatten)]
+    pub(crate) input: QueryInputArgs,
     /// Arrow IPC stream or typed JSON; redirect stdout for Arrow unless using --output.
     #[arg(long = "format", value_enum, default_value = "arrow")]
     #[serde(rename = "format")]
@@ -130,30 +174,12 @@ impl QueryArgs {
                 )
             })
             .transpose()?;
-        let requests = if let Some(path) = &self.tables_file {
-            tables_manifest::read_table_requests(path, &mut artifact)?
-        } else {
-            let location = self.table.as_deref().ok_or(Error::Argument {
-                kind: clap::error::ErrorKind::MissingRequiredArgument,
-                correction: None,
-            })?;
-            let uc_target =
-                UnityCatalogTableTarget::parse(location, self.databricks_profile.as_deref())
-                    .context(UnityCatalogSnafu)?;
-            vec![(
-                "t".to_owned(),
-                self.table_options.prepare_load(location, uc_target, None)?,
-            )]
-        };
-        let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
-        if let Some(artifact) = &mut artifact {
-            artifact.record_input_digest(
-                "--sql-file",
-                &self.sql_file,
-                sql_query.input_sha256.clone(),
-            );
-        }
-        let (runtime, directory) = resources::build_query_runtime(self)?;
+        let (requests, sql_query) = self.input.prepare_inputs(&mut artifact)?;
+        let (runtime, directory) = resources::build_query_runtime(
+            self.memory_limit_bytes,
+            self.spill_limit_bytes,
+            self.spill_dir.as_deref(),
+        )?;
         *spill_directory = directory;
         let uses_unity_catalog = requests
             .iter()
@@ -394,11 +420,11 @@ impl ReadOnlySqlQuery {
     }
 
     /// Registers only the supplied names and snapshots. URL-based table discovery stays disabled.
-    pub(crate) async fn execute_stream(
+    pub(crate) async fn plan(
         self,
         tables: impl IntoIterator<Item = (String, DeltaTable)>,
         runtime: Arc<RuntimeEnv>,
-    ) -> Result<SendableRecordBatchStream, crate::Error> {
+    ) -> Result<DataFrame, crate::Error> {
         let context = SessionContext::new_with_config_rt(SessionConfig::new(), runtime);
         for (alias, table) in tables {
             register_table(&context, alias, table, ScanOptions::default())
@@ -417,12 +443,20 @@ impl ReadOnlySqlQuery {
             .verify_plan(&plan)
             .context(PlanningSnafu)
             .context(QuerySnafu)?;
-        let data_frame = context
+        context
             .execute_logical_plan(plan)
             .await
             .context(PlanningSnafu)
-            .context(QuerySnafu)?;
-        data_frame
+            .context(QuerySnafu)
+    }
+
+    pub(crate) async fn execute_stream(
+        self,
+        tables: impl IntoIterator<Item = (String, DeltaTable)>,
+        runtime: Arc<RuntimeEnv>,
+    ) -> Result<SendableRecordBatchStream, crate::Error> {
+        self.plan(tables, runtime)
+            .await?
             .execute_stream()
             .await
             .context(ExecutionSnafu)

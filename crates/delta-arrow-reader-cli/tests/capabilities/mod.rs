@@ -23,6 +23,8 @@ pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
         LazyLock::new(|| load_cli_output_schema_validator("result-artifact"));
     static MANIFEST_VALIDATOR: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| load_cli_output_schema_validator("result-manifest"));
+    static PLAN_VALIDATOR: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| load_cli_output_schema_validator("query-plan"));
     let validator = match name {
         "inspection" => &*INSPECTION_VALIDATOR,
         "inspection-summary" => &*INSPECTION_SUMMARY_VALIDATOR,
@@ -31,6 +33,7 @@ pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
         "rows" => &*ROWS_VALIDATOR,
         "result-artifact" => &*ARTIFACT_VALIDATOR,
         "result-manifest" => &*MANIFEST_VALIDATOR,
+        "query-plan" => &*PLAN_VALIDATOR,
         _ => panic!("unknown output schema: {name}"),
     };
     validator.validate(output).unwrap();
@@ -81,6 +84,7 @@ fn discovered_completion_versions_match_each_command_and_query_format()
             2,
         ),
         ("query", vec![table, "--sql-file", sql], None, 1),
+        ("explain", vec![table, "--sql-file", sql], None, 3),
         (
             "query",
             vec![table, "--sql-file", sql, "--format", "arrow"],
@@ -159,6 +163,7 @@ fn discovered_completion_versions_match_each_command_and_query_format()
             metadata["diagnostics"]["json"]["completion_format_versions"],
             match name {
                 "preview" => serde_json::json!([2]),
+                "explain" => serde_json::json!([3]),
                 "query" => serde_json::json!([1, 2, 3]),
                 "scan" => serde_json::json!([1, 3]),
                 _ => serde_json::json!([1]),
@@ -182,6 +187,7 @@ fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
         ("diagnostic", "output_schema"),
         ("completion", "output_schema"),
         ("rows", "output_schema"),
+        ("query-plan", "output_schema"),
     ] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
         command
@@ -593,7 +599,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     .all(|key| key == name)
             );
             let expected_sources = match name {
-                "inspect" | "scan" | "preview" | "query" => {
+                "inspect" | "scan" | "preview" | "query" | "explain" => {
                     vec!["direct_storage", "local", "unity_catalog"]
                 }
                 _ => vec![],
@@ -622,7 +628,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             let expected_inputs = match name {
                 "scan" | "preview" => vec!["storage-options", "predicate", "execution-options"],
                 "inspect" => vec!["storage-options"],
-                "query" => vec!["storage-options", "tables"],
+                "query" | "explain" => vec!["storage-options", "tables"],
                 _ => vec![],
             };
             assert_eq!(input_names, expected_inputs);
@@ -647,6 +653,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "result-manifest",
                 ],
                 "preview" => vec!["diagnostic", "completion", "rows"],
+                "explain" => vec!["diagnostic", "completion", "query-plan"],
                 "scan" => vec![
                     "diagnostic",
                     "completion",
@@ -685,7 +692,10 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             }
             let full = run_advertised(&guide["full_command"])?;
             assert_eq!(&full["name"], name);
-            if matches!(name.as_str(), Some("result-artifact" | "result-manifest")) {
+            if matches!(
+                name.as_str(),
+                Some("result-artifact" | "result-manifest" | "query-plan")
+            ) {
                 assert_eq!(
                     guide["fields"],
                     serde_json::json!(
