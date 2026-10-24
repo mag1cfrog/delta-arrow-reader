@@ -118,6 +118,32 @@ fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestRes
 }
 
 #[test]
+fn queries_accept_discarded_stdout_and_stderr() -> TestResult {
+    use std::{process::Stdio, time::Duration};
+
+    let fixture = SqlCommandFixture::new(
+        fixture_path("partitioned").join("table"),
+        "SELECT id FROM t LIMIT 1",
+    )?;
+    for format in ["arrow", "json"] {
+        let output =
+            crate::run_with_stdout(fixture.command().args(["--format", format]), Stdio::null())?;
+        assert!(output.status.success(), "{output:?}");
+        let completion = assert_single_terminal_record(&output.stderr, "completion");
+        assert_eq!(completion["rows"], "1");
+
+        let mut child = fixture
+            .command()
+            .args(["--format", format])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        assert!(crate::wait_for_exit_or_kill(&mut child, Duration::from_secs(15))?.success());
+    }
+    Ok(())
+}
+
+#[test]
 fn sql_preserves_values_nulls_deletion_vectors_ordering_and_empty_results() -> TestResult {
     for name in ["partitioned", "deletion_vectors", "nested_mapping"] {
         let expected = read_expected_rows(name)?;
