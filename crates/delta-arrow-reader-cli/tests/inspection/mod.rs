@@ -5,7 +5,10 @@ use serde_json::json;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn table_with_fields(fields: Vec<Value>, unsupported_protocol: bool) -> tempfile::TempDir {
+pub(super) fn table_with_fields(
+    fields: Vec<Value>,
+    unsupported_protocol: bool,
+) -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     fs::create_dir(directory.path().join("_delta_log")).unwrap();
     let protocol = if unsupported_protocol {
@@ -25,7 +28,7 @@ fn table_with_fields(fields: Vec<Value>, unsupported_protocol: bool) -> tempfile
     directory
 }
 
-fn column(name: &str, data_type: Value, metadata: Value) -> Value {
+pub(super) fn column(name: &str, data_type: Value, metadata: Value) -> Value {
     json!({"name": name, "type": data_type, "nullable": true, "metadata": metadata})
 }
 

@@ -30,6 +30,53 @@ use crate::{
 };
 
 #[test]
+fn plan_inspection_uses_vended_credentials_without_fetching_data_files() -> TestResult {
+    for kind in [
+        StorageCredentialKind::S3,
+        StorageCredentialKind::R2,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
+        StorageCredentialKind::Gcs,
+    ] {
+        let fixture = DatabricksCliFixture::new(kind)?;
+        let objects = partitioned_objects()?
+            .into_iter()
+            .filter(|(path, _)| path.contains("/_delta_log/"))
+            .collect();
+        let server =
+            MockCloudStorageServer::with_objects(kind.storage_protocol(), objects, |_, _| {})?;
+        fixture.use_storage_endpoint(kind, &server.endpoint)?;
+        let sql = fixture.directory.path().join("plan.sql");
+        fs::write(&sql, "SELECT id FROM t WHERE id > 0")?;
+        let output = run_with_timeout(
+            fixture
+                .table_command("explain")
+                .arg("--sql-file")
+                .arg(sql)
+                .args(["--diagnostics=json", "--table-version", "0", "--field", "0"]),
+        )?;
+        assert!(output.status.success(), "{output:?}");
+        let plan: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(
+            plan["bindings"],
+            json!([{"alias":"t", "table_version":"0"}])
+        );
+        assert_eq!(plan["node"]["fields"][0]["data_type"], "Int32");
+        assert_eq!(plan["execution"], "not_started");
+        assert_single_terminal_record(&output.stderr, "completion");
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("secret"));
+        let requests = server.requests.lock().unwrap();
+        assert!(!requests.is_empty());
+        assert!(
+            requests
+                .iter()
+                .all(|r| !requested_object_path(r).ends_with(".parquet"))
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn json_queries_preserve_uc_and_local_bindings_with_complete_receipts() -> TestResult {
     let kind = StorageCredentialKind::S3;
     let fixture = DatabricksCliFixture::new(kind)?;

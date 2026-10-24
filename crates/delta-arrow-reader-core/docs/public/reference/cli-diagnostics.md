@@ -153,8 +153,8 @@ A successful command emits `kind: "completion"` after stdout has been flushed.
 It includes `command` and `output_bytes`. For stdout data, inspect, scan, preview, and query include the actual snapshot
 in `bindings`, for example
 `[{"alias":"t","table_version":"42"}]`. Queries using `--tables-file` include
-each manifest alias and its resolved version in declaration order. Other commands
-use an empty array.
+each manifest alias and its resolved version in declaration order. Other version 1
+commands use an empty array. Explain keeps its bindings in stdout.
 Stdout scan, preview, and query also report `rows`. Versions and counts are decimal strings.
 
 `preview` and `query --format json` to stdout use completion `format_version: 2`, containing only the
@@ -170,6 +170,9 @@ receipt. Read result counts and bindings from the referenced manifest. A receipt
 failure can leave a complete pair; [verify it](../cli.md#save-a-result-with-a-manifest)
 before retrying. `artifact_io` diagnostics identify failed staging, writes or
 publication, without printing paths or OS messages. Existing files are preserved.
+
+`explain` also uses completion version 3. Its byte count covers the query-plan
+document on stdout; check bindings there. There are no result row counts.
 
 Other commands and Arrow stdout queries use version 1, which also includes
 `terminal: true`, `completion: "complete"`, `scope`, `stop_reason`, and `has_more`,
@@ -246,7 +249,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `configuration` | `invalid_sql_input` | SQL file is malformed, oversized, or contains a disallowed statement |
 | `datafusion` | `sql_initialization`, `sql_planning`, `sql_execution` | SQL runtime, planning, or execution failed |
 | `execution` | `output_limit` | A configured output ceiling was exceeded; includes a preview schema or first row that cannot fit |
-| `execution` | `command_cancelled` | A command was interrupted; prepared UC inspect/scan/query requests use `uc_cancelled` |
+| `execution` | `command_cancelled` | A command was interrupted; prepared UC inspect/scan/query/explain requests use `uc_cancelled` |
 | `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
 | `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
 | `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
@@ -255,7 +258,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
 | `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
 | `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
-| `execution` | `uc_cancelled` | A UC inspect, scan, or query command was interrupted |
+| `execution` | `uc_cancelled` | A UC inspect, scan, query, or explain command was interrupted |
 
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
@@ -304,13 +307,13 @@ All commands handle Unix SIGINT/SIGTERM and exit 130/143, including at Linux PID
 On Windows, Ctrl+C exits 130. Table commands remain cancellable from input loading
 through completion reporting, including synchronous credential reads and blocked
 output. Cancellation normally uses code `command_cancelled`; UC inspect, scan,
-and query retain `uc_cancelled` once their UC requests are prepared. In text mode,
+query and explain retain `uc_cancelled` once their UC requests are prepared. In text mode,
 these are INFO `cli.cancelled` events, visible with `RUST_LOG=info`. Machine mode
 emits the terminal diagnostic even with `RUST_LOG=off`.
 
 `--deadline-ms N` sets a positive whole-command budget in milliseconds, covering
 input files, authorization, snapshot loading, planning, execution, stdout, and
-completion reporting. Preview and summary inspection default to 30000 ms; query
+completion reporting. Preview, explain and summary inspection default to 30000 ms; query
 and file-output scans default to 300000 ms. Full inspection and stdout scan retain no default deadline.
 Set one explicitly for unattended use. Expiry exits 1 with `deadline_exceeded`.
 Help, version, and every capabilities view instead have a fixed 5000 ms deadline

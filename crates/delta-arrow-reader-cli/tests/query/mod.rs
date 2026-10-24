@@ -2,6 +2,7 @@
 
 #[cfg(target_os = "linux")]
 mod completion;
+mod explain;
 pub(super) mod json;
 mod resources;
 mod tables_manifest;

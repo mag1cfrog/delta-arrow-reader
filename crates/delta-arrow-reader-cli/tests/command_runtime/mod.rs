@@ -15,7 +15,7 @@ use crate::{
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
-const TABLE_COMMANDS: [&str; 5] = ["inspect", "summary", "scan", "preview", "query"];
+const TABLE_COMMANDS: [&str; 6] = ["inspect", "summary", "scan", "preview", "query", "explain"];
 
 fn table_command(name: &str, directory: &Path, table: &Path) -> TestResult<Command> {
     let executable = std::env::var_os("DAR_TEST_RUNTIME_BINARY")
@@ -27,7 +27,7 @@ fn table_command(name: &str, directory: &Path, table: &Path) -> TestResult<Comma
     } else {
         cmd.arg(name);
     }
-    if name == "query" {
+    if matches!(name, "query" | "explain") {
         let sql = directory.join("query.sql");
         fs::write(&sql, "SELECT COUNT(*) AS n FROM t")?;
         cmd.arg("--sql-file").arg(sql);
@@ -77,7 +77,7 @@ fn deadline_includes_blocked_inputs_and_synchronous_credential_reads() -> TestRe
             "aws-token",
             "azure-token",
         ] {
-            if matches!(name, "inspect" | "summary" | "query")
+            if matches!(name, "inspect" | "summary" | "query" | "explain")
                 && matches!(option, "--predicate-file" | "--execution-options-file")
             {
                 continue;
@@ -135,15 +135,18 @@ fn query_deadline_includes_sql_and_manifest_reads() -> TestResult {
     let directory = tempfile::tempdir()?;
     let fifo = directory.path().join("secret-input");
     assert!(Command::new("mkfifo").arg(&fifo).status()?.success());
-    for option in ["--sql-file", "--tables-file"] {
+    for (name, option) in ["query", "explain"]
+        .into_iter()
+        .flat_map(|name| ["--sql-file", "--tables-file"].map(|option| (name, option)))
+    {
         let mut cmd = if option == "--sql-file" {
             let mut cmd = Command::new(env!("CARGO_BIN_EXE_dar"));
-            cmd.args(["query", "unused-table"]);
+            cmd.args([name, "unused-table"]);
             cmd
         } else {
             fs::write(directory.path().join("query.sql"), "SELECT 1")?;
             let mut cmd = Command::new(env!("CARGO_BIN_EXE_dar"));
-            cmd.args(["query", "--sql-file"])
+            cmd.args([name, "--sql-file"])
                 .arg(directory.path().join("query.sql"));
             cmd
         };
@@ -228,7 +231,7 @@ fn deadlines_close_stalled_metadata_and_parquet_reads() -> TestResult {
         .chain([("scan", true), ("query", true)])
     {
         for parquet in [false, true] {
-            if parquet && matches!(name, "inspect" | "summary") {
+            if parquet && matches!(name, "inspect" | "summary" | "explain") {
                 continue;
             }
             let (reached, observed) = mpsc::channel();
@@ -288,7 +291,7 @@ fn deadlines_close_stalled_metadata_and_parquet_reads() -> TestResult {
                 }));
             }
             assert!(!output.stdout.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]));
-            if matches!(name, "inspect" | "summary" | "preview") {
+            if matches!(name, "inspect" | "summary" | "preview" | "explain") {
                 assert!(output.stdout.is_empty());
             }
         }

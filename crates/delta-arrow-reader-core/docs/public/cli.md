@@ -10,6 +10,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | See a small typed JSON sample | [`dar preview`](#preview-rows) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
+| Inspect planned work without reading rows | [`dar explain`](#plan-a-query) |
 | Join named table snapshots | [Tables manifest](#join-table-snapshots) |
 | Save and verify a complete result | [Result files](#save-a-result-with-a-manifest) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
@@ -166,6 +167,7 @@ selected command. A `completion_format_version` in `stdout_formats` overrides
 that default for its command or format choice. For example, preview uses version
 2; query's Arrow stdout uses version 1 and its JSON stdout uses version 2.
 Scan/query with `--output` use version 3, advertised in `stdout_formats.NAME.output_file`.
+Explain also uses version 3; its bindings are in stdout and it has no row counts.
 `completion_format_versions` lists all versions available in the selected scope.
 In the full inventory, the default is version 1; use each command's format entry
 to select its completion version.
@@ -236,6 +238,7 @@ result appears. The schema response itself always goes to stdout.
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
 | `rows` | stdout | Typed preview or query JSON with ordered fields and positional rows. |
+| `query-plan` | stdout | Summary or selected plan node, output types, scan pushdown, or planner statistics. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
 | `completion` | stderr | A terminal success record with `--diagnostics=json`. Stdout mode includes snapshots and counts; file mode counts receipt bytes and keeps result metadata in the manifest. |
 
@@ -573,6 +576,62 @@ use `--output PATH` with an explicit byte budget when needed. Keep the same SQL,
 snapshot versions when recovering the same result. Selecting fewer columns,
 aggregating, or adding SQL `LIMIT` changes the requested result. `--max-rows`
 never truncates a successful result.
+
+## Plan a query
+
+Use `explain` with the same SQL file and table inputs as `query`. It loads and
+authorizes snapshots, then builds the optimized plan without executing result
+rows. Metadata IO is required. Success does not establish access to Parquet or
+deletion-vector payloads, or guarantee that execution will fit its resource limits.
+
+```sh
+dar --diagnostics=json explain /data/orders --sql-file query.sql
+dar --diagnostics=json explain /data/orders --sql-file query.sql --table-version 42 \
+  --node 0 --field 0 --statistics --scan 0
+```
+
+The first command returns actual `bindings`, `node_count`, `scan_count`, and the
+root's `column_count`. Replace `42` with its reported snapshot version. For
+multiple tables, use `--tables-file` and pin each entry's `table_version`.
+Keep SQL and options unchanged for subsequent selections.
+
+| Selection | Returned detail |
+| --- | --- |
+| `--node N` | Physical operator, child IDs and output column count. Root is 0. |
+| `--field N` | Exact output type at that column position; repeat for multiple fields. Uses the selected node, or root by default. |
+| `--statistics` | Planner rows and relation bytes for the selected node, or root. |
+| `--scan N` | Logical scan's binding, source projection positions and pushdown counts. Can combine with node selections. |
+
+Node IDs and scan IDs are separate zero-based preorder lists. A self-join can
+have several scans of one binding. Projection `null` means all source columns;
+`[]` means zero columns. Pushdown counts distinguish exact filters from inexact
+filters requiring a residual check. Other filters remain in the physical plan.
+
+Statistics mark values as `exact`, `estimated`, or `unknown`. These describe
+planner knowledge, not observed query costs. `relation_bytes` is not storage IO.
+On Delta scan nodes, `selected_files` reports metadata-derived planned files and
+input row/byte estimates before row filters or deletion vectors. Missing estimates
+are null, not zero. No execution time or IO cost is invented.
+
+Names, SQL expressions and metadata are omitted from plan output. Selected types
+retain their Arrow encoding. A type containing arbitrary nested names or timezone
+text fails before stdout because that text could come from a SQL literal. Only
+fixed structural child names and UTC or absent timezones are disclosed. Select
+another field or omit `--field`; a larger budget cannot resolve this restriction.
+Use `capabilities --schema query-plan --detail node.fields` for the exact rule.
+
+The complete response, including its newline, defaults to 4096 bytes. Oversized
+requests fail with empty stdout: select fewer fields or explicitly increase
+`--max-output-bytes`. Even the summary must include every binding. The deadline
+defaults to 30000 ms and covers input, authorization, planning and output.
+`--memory-limit-bytes` defaults to 256 MiB for the DataFusion pool; metadata,
+planning buffers and process RSS are outside that limit. No spill is enabled.
+SQL admission and credential-file rules are the same as for `query`.
+
+With `--diagnostics=json`, require exit 0 and a v3 completion whose `command` is
+`explain` and whose `output_bytes` matches stdout, then check the stdout bindings.
+Focused format lookups accept paths such as
+`capabilities --schema query-plan --detail node.statistics.selected_files`.
 
 ## Save a result with a manifest
 

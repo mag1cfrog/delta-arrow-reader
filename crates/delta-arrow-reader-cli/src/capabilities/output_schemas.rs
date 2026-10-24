@@ -10,6 +10,7 @@
 //! those types.
 
 pub(super) mod artifacts;
+pub(super) mod query_plan;
 
 use serde_json::{Value, json};
 
@@ -217,14 +218,14 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "With --diagnostics=json, require exit 0, valid stdout and one stderr completion. Match command and output_bytes to the request and stdout length. Counts are decimal strings. File output uses v3: stdout is a result_artifact receipt; verify counts, snapshots and completion in its manifest. Otherwise match bindings and decoded rows/batches when present. For query/preview JSON stdout, compare row_count; query requires completion=complete and scope=query, preview uses completion=sample with stop_reason/has_more.",
+        "description": "With --diagnostics=json, require exit 0, valid stdout and one stderr completion. Match command and output_bytes to the request and stdout length. Counts are decimal strings. File output uses v3: stdout is a result_artifact receipt; verify counts, snapshots and completion in its manifest. Explain also uses v3; verify bindings in query_plan stdout. Otherwise match bindings and decoded rows/batches when present. For query/preview JSON stdout, compare row_count; query requires completion=complete and scope=query, preview uses completion=sample with stop_reason/has_more.",
         "type": "object",
         "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {
-            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output, only command and stdout receipt byte count. Version 2: preview/query JSON stdout. Other stdout uses version 1. File counts and bindings belong to the manifest."},
+            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output or explain; command and stdout byte count only. Version 2: preview/query JSON stdout. Other stdout uses version 1. File counts and bindings belong to the manifest; explain bindings are in stdout."},
             "kind": {"const": "completion", "description": "Terminal success for the requested command, emitted after stdout is flushed. Also require exit 0 and valid stdout."},
             "terminal": {"const": true},
-            "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "help", "version"]},
+            "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "explain", "help", "version"]},
             "completion": {"const": "complete", "description": "Success also requires exit status 0 and valid stdout."},
             "scope": {
                 "enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"],
@@ -245,13 +246,13 @@ pub(super) fn completion_schema() -> Value {
             "then": {"required": ["bindings"]},
         }, {
             "if": {"properties": {"format_version": {"const": 1}}},
-            "then": {"required": ["terminal", "completion", "scope", "stop_reason", "has_more"], "properties": {"command": {"not": {"const": "preview"}}}},
+            "then": {"required": ["terminal", "completion", "scope", "stop_reason", "has_more"], "properties": {"command": {"not": {"enum": ["preview", "explain"]}}}},
         }, {
             "if": {"properties": {"format_version": {"const": 2}}},
             "then": {"properties": {"command": {"enum": ["query", "preview"]}}},
         }, {
             "if": {"properties": {"format_version": {"const": 3}}},
-            "then": {"properties": {"command": {"enum": ["query", "scan"]}}},
+            "then": {"properties": {"command": {"enum": ["query", "scan", "explain"]}}},
         }, {
             "if": {"properties": {"format_version": {"const": 1}, "command": {"enum": ["scan", "query"]}}},
             "then": {"required": ["batches"]},

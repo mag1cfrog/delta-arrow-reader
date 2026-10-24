@@ -129,6 +129,7 @@ rows.
 
 - [Diagnose a failed command](cli.md#errors-and-process-status) or save a log for investigation.
 - [Filter rows](cli.md#filter-rows) when you only need rows matching a condition.
+- [Plan a SQL query](cli.md#plan-a-query) before reading its result rows.
 - [Read a Unity Catalog table](unity-catalog.md) with a Databricks profile, including local SQL.
 - [Read a table from storage such as S3](cli.md#inspect-a-snapshot), with
   [storage options](cli.md#storage-options-file) when your environment needs them.

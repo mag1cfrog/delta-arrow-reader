@@ -158,11 +158,11 @@ impl AuthorizationService {
 pub(super) fn build_authorization_capabilities() -> Value {
     json!({
         "local": {
-            "commands": ["inspect", "scan", "preview", "query"],
+            "commands": ["inspect", "scan", "preview", "query", "explain"],
             "credentials_required": false,
         },
         "direct_storage": {
-            "commands": ["inspect", "scan", "preview", "query"],
+            "commands": ["inspect", "scan", "preview", "query", "explain"],
             "storage_options_argument": "--storage-options-file",
             "storage_options_schema": "storage-options",
             "credential_selection": "explicit_source_or_storage_backend_default",
@@ -275,7 +275,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             },
         },
         "unity_catalog": {
-            "commands": ["inspect", "scan", "preview", "query"],
+            "commands": ["inspect", "scan", "preview", "query", "explain"],
             "target": "uc://catalog.schema.table",
             "profile_argument": "--databricks-profile",
             "profile_required": true,
@@ -340,6 +340,17 @@ pub(super) fn command_read_support() -> Value {
             "deadline_argument": "--deadline-ms",
             "cleanup_grace_ms": 1000,
             "failure_reporting_grace_ms": crate::diagnostics::FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
+            "requires_redirected_stdout": false,
+        },
+        "explain": {
+            "authorization": ["local", "direct_storage", "unity_catalog"],
+            "scope": "query_plan", "reads_data_files": false, "executes_result_rows": false,
+            "metadata_io": true, "positional_alias": "t",
+            "max_output_bytes": query::explain::DEFAULT_PLAN_BYTES,
+            "byte_limit_argument": "--max-output-bytes",
+            "deadline_ms": 30000, "deadline_argument": "--deadline-ms",
+            "selection_arguments": ["--node", "--field", "--statistics", "--scan"],
+            "snapshot_selection": QUERY_SNAPSHOT_SELECTION,
             "requires_redirected_stdout": false,
         },
         "query": {
@@ -610,11 +621,11 @@ mod tests {
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
-            ["inspect", "preview", "query", "scan"]
+            ["explain", "inspect", "preview", "query", "scan"]
         );
         for (name, command) in support.as_object().unwrap() {
             let mut args = vec!["dar", name, "local-table"];
-            if name == "query" {
+            if name == "query" || name == "explain" {
                 args.extend(["--sql-file", "query.sql"]);
             }
             assert!(Cli::try_parse_from(&args).is_ok());
@@ -694,15 +705,15 @@ mod tests {
             installed_sources.iter().map(String::as_str).collect()
         );
         let support = command_read_support();
-        for name in ["inspect", "scan", "preview", "query"] {
+        for name in ["inspect", "scan", "preview", "query", "explain"] {
             match name {
-                "preview" => assert_eq!(support[name]["deadline_ms"], 30000),
+                "preview" | "explain" => assert_eq!(support[name]["deadline_ms"], 30000),
                 "query" => assert_eq!(support[name]["deadline_ms"], 300000),
                 _ => assert!(support[name]["deadline_ms"].is_null()),
             }
             for source in &advertised_sources {
                 let mut args = vec!["dar", name, "s3://bucket/table", "--auth-source", source];
-                if name == "query" {
+                if name == "query" || name == "explain" {
                     args.extend(["--sql-file", "query.sql"]);
                 }
                 assert!(Cli::try_parse_from(args).is_ok());
@@ -716,7 +727,7 @@ mod tests {
                     .unwrap(),
                 "credentials.env",
             ];
-            if name == "query" {
+            if name == "query" || name == "explain" {
                 args.extend(["--sql-file", "query.sql"]);
             }
             assert!(Cli::try_parse_from(args).is_ok());
@@ -727,7 +738,7 @@ mod tests {
                     continue;
                 }
                 let mut args = vec!["dar", name, "table"];
-                if name == "query" {
+                if name == "query" || name == "explain" {
                     args.extend(["--sql-file", "query.sql"]);
                 }
                 args.extend([option, value]);
