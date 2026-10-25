@@ -63,17 +63,17 @@ snapshot metadata; it does not prove that every data file is readable. Set
 version=42
 ```
 
-Replace `42` with your result. List column names at that version with an empty
-prefix:
+Replace `42` with your result. If you do not know the needed column's exact
+name, search at that version with a likely prefix:
 
 ```sh
 dar inspect "$table" --view summary --databricks-profile "$profile" \
-  --table-version "$version" --column-prefix ''
+  --table-version "$version" --column-prefix customer
 ```
 
-If the list exceeds the response budget, narrow the prefix or increase
-`--max-output-bytes` for this lookup. To inspect a column's type, replace
-`--column-prefix ''` with `--column COLUMN_NAME`, using a returned name.
+Replace `customer` with a prefix relevant to your table. If too many names
+match, narrow the prefix. To inspect a column's type, replace
+`--column-prefix customer` with `--column COLUMN_NAME`, using a returned name.
 
 ## Read a small sample
 
@@ -94,13 +94,14 @@ deadline. Select only the columns and rows you need; see
 
 ```sh
 dar scan "$table" --databricks-profile "$profile" --table-version "$version" \
-  --limit 10 > orders.arrow
+  --column customer_id --limit 10 --output orders.arrow
 ```
 
-This saves at most ten rows, with all columns, as a binary Arrow IPC stream.
-Row order is unspecified. [Read the saved file with PyArrow](cli-quickstart.md#read-the-saved-result),
-using `orders.arrow` as the filename. Only use the file if the command exits
-successfully; discard it after any failure.
+This saves at most ten values of the selected column as a binary Arrow IPC
+stream, with a completion manifest. Row order is unspecified. Choose an unused
+output name, then [verify the saved file with PyArrow](cli-automation.md#verify-an-arrow-result),
+using `orders.arrow.manifest.json` as the manifest. A limited scan covers the
+requested prefix, not the whole table.
 
 To select columns or filter rows, use the ordinary [scan options](cli.md#scan-rows)
 and [predicates](cli.md#filter-rows) with the same table, profile, and version.
@@ -147,14 +148,15 @@ ORDER BY o.customer_id;
 ```
 
 ```sh
-dar query --tables-file tables.json --sql-file join.sql > joined.arrow
+dar query --tables-file tables.json --sql-file join.sql --format json --output joined.json
 ```
 
 Authorization now belongs to each manifest entry, so omit the command-line
 `--databricks-profile`. For S3-backed UC tables, add
 `"storage_options_file":"./storage.json"` inside that entry's `authorization`.
 Each table stays on its selected snapshot; the versions do not form a transaction
-across tables. See the [manifest reference](cli.md#join-table-snapshots) for
+across tables. [Verify the saved result](cli-automation.md#verify-before-accepting-or-retrying)
+before accepting it. See the [manifest reference](cli.md#join-table-snapshots) for
 direct-storage tables, additional fields, and path rules.
 
 ## If a command fails
@@ -167,7 +169,7 @@ direct-storage tables, additional fields, and path rules.
 | `uc_s3_region_required` | Supply the [S3 region file](reference/unity-catalog.md#s3-region). |
 | `unsupported_uc_table` | Check the [supported tables](reference/unity-catalog.md#table-access) and [credential forms](reference/unity-catalog.md#storage-backends-and-credentials). |
 | `uc_credentials_expired` | Check the system clock and [renew user OAuth](#user-oauth-login) if needed, then retry. |
-| Failure after rows were written | Discard partial output. Correct the cause, then rerun the whole command at the same version. |
+| Failure after output was written | Discard failed stdout results. In file mode, verify any complete result/manifest pair before accepting it or retrying with unused names at the same version. |
 
 DAR renews storage credentials during a command. If renewal fails, the command
 fails; it never switches to another identity. See the

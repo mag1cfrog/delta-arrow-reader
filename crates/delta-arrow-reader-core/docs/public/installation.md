@@ -4,7 +4,7 @@ Choose the interface you want to use. You only need the installation steps for
 that interface:
 
 - [Python](#python): read with PyArrow or run SQL.
-- [Command line](#cli-binaries-and-container-images): inspect a table or save rows to a file.
+- [Command line](#cli-binaries-and-container-images): inspect, preview, and query tables.
 - [Rust](#streaming-reader): read batches in an application, with optional SQL support.
 
 ## Python
@@ -34,7 +34,7 @@ The second command prints the installed version. Installation also downloads a
 compatible PyArrow wheel; neither package is compiled from source. For a project
 managed by uv, use `uv add delta-arrow-reader` instead.
 
-Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
+Continue with the [Python quickstart](python.md)
 to read your first rows.
 
 <details markdown="1">
@@ -83,6 +83,11 @@ python -m pip install ./crates/delta-arrow-reader-python
 
 ## CLI binaries and container images
 
+The v0.7.0 release provides `inspect` and `scan`. The preview, SQL, discovery,
+and saved-manifest workflows on these pages require a build with those features.
+If your command's `--help` lists only `inspect` and `scan`, use a
+[source build](#build-cli-from-source) to follow those workflows.
+
 If you installed the Python package above, you already have the CLI:
 
 ```console
@@ -90,7 +95,7 @@ delta-arrow-reader --version
 ```
 
 Use `delta-arrow-reader` in place of `dar` in the
-[CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
+[CLI quickstart](cli-quickstart.md).
 Both names accept the same arguments. The wheel does not install a `dar` alias.
 
 Standalone `dar` binaries and container images are available from
@@ -98,9 +103,13 @@ Standalone `dar` binaries and container images are available from
 Choose a version whose CLI section reports successful download verification.
 
 <details markdown="1">
-<summary>Install just the command with uv</summary>
+<summary id="install-cli-with-uv">Install just the command with uv</summary>
 
-Install the command from PyPI in a separate tool environment:
+[Install uv](https://docs.astral.sh/uv/getting-started/installation/) if needed,
+then install the command from PyPI in a separate tool environment. This uses
+the [wheel platforms listed above](#python), including Windows x86_64 and
+Apple silicon macOS. Check the command availability note above before using
+the newer workflows:
 
 ```console
 uv tool install --no-build delta-arrow-reader
@@ -158,7 +167,7 @@ its absolute path. Keep `LICENSE` and `NOTICE` beside it when redistributing it.
 The binaries require Linux amd64 or arm64, glibc 2.36 or newer, libgcc, and CA
 certificates for HTTPS. They do not need Rust or Python. They do not run on
 Alpine's musl runtime, `scratch`, macOS, or Windows; Python wheels have their own
-platform requirements. See [Linux runtime details](https://mag1cfrog.github.io/delta-arrow-reader/cli/#use-a-linux-binary)
+platform requirements. See [Linux runtime details](cli.md#use-a-linux-binary)
 for supported distributions and packages.
 
 `cli-artifacts.json` records the tested source commit, toolchain, runtime
@@ -183,7 +192,7 @@ no GitHub login. There are no `latest`, major-version, or minor-version aliases.
 
 For a digest pin, copy the index digest from the Release's CLI section and use
 `ghcr.io/mag1cfrog/delta-arrow-reader@sha256:<index-hash>`. See
-[container usage](https://mag1cfrog.github.io/delta-arrow-reader/cli/#use-a-container-or-a-go-service)
+[container usage](cli.md#use-a-container-or-a-go-service)
 for mounting a table or integrating the CLI with a Go service.
 
 </details>
@@ -192,8 +201,14 @@ for mounting a table or integrating the CLI with a Go service.
 <summary id="build-cli-from-source">Build the CLI from source</summary>
 
 Use a source build when you need a feature that your installed release does not
-provide. Install Rust 1.94 or newer and the [native build prerequisites](#https-and-build-prerequisites),
-then run these Bash commands:
+provide. Install [Git](https://git-scm.com/install/),
+[Rust 1.94 or newer with rustup](https://rust-lang.org/tools/install/), and the
+[native build prerequisites](#https-and-build-prerequisites). Rustup also
+installs Cargo, the build command used below. Restart your terminal after
+installation if `cargo` is not found. On Windows, use Git Bash for these Bash
+examples and install the MSVC prerequisites linked below.
+
+Then run:
 
 ```sh
 git clone https://github.com/mag1cfrog/delta-arrow-reader.git
@@ -222,7 +237,7 @@ cargo add delta-arrow-reader
 cargo add tokio --features macros,rt-multi-thread
 ```
 
-Continue with the [Rust quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
+Continue with the [Rust quickstart](streaming-reader.md)
 to read your first batch. It uses `next_batch()`, so no separate stream utility
 dependency is needed.
 
@@ -237,7 +252,7 @@ cargo add tokio --features macros,rt-multi-thread
 ```
 
 The adapter uses DataFusion 54. Your direct DataFusion dependency must use the
-same major version. Continue with the [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
+same major version. Continue with the [DataFusion quickstart](datafusion.md).
 
 <details markdown="1">
 <summary id="optional-cargo-feature">Optional Cargo feature</summary>
@@ -245,14 +260,23 @@ same major version. Continue with the [DataFusion quickstart](https://mag1cfrog.
 The streaming API and both Parquet backends are always available. The optional
 `datafusion` feature adds SQL integration. The direct Parquet backend is the
 default; choosing the Delta Kernel backend does not require another feature.
-See [execution options](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/)
+See [execution options](reference/execution-options.md)
 when you need to change read settings.
 
 </details>
 
 ## HTTPS and build prerequisites
 
-When building from source, install a Rust toolchain and native build tools.
+When building from source, follow the
+[Rust installation instructions](https://doc.rust-lang.org/book/ch01-01-installation.html)
+for your operating system, including its compiler/linker prerequisites:
+
+| System | Native tools |
+| --- | --- |
+| Ubuntu/Debian | Install the `build-essential` package. Other Linux distributions provide GCC or Clang through their package manager. |
+| macOS | Run `xcode-select --install` to install the command-line developer tools. |
+| Windows | Follow the [rustup MSVC setup](https://rust-lang.github.io/rustup/installation/windows-msvc.html) for C++ build tools and the Windows SDK. |
+
 OpenSSL development libraries are not required. When using HTTPS storage,
 ensure your system or container has a CA certificate bundle, such as Linux's
 `ca-certificates` package.

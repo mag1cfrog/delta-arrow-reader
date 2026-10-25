@@ -56,14 +56,18 @@ nav:
       - Installation: installation.md
       - Command-line quickstart: cli-quickstart.md
       - Read Unity Catalog tables: unity-catalog.md
-      - Rust quickstart: streaming-reader.md
-      - DataFusion in Rust: datafusion.md
-      - Rust diagnostics: diagnostics.md
-      - Storage and configuration: configuration.md
+  - Command line:
+      - Everyday tasks:
+          - Filter, group, and join: cli-workflows.md
+          - Connect to storage: cli-storage.md
+          - Fix a failed command: cli-recovery.md
+      - Advanced workflows:
+          - Automation and saved results: cli-automation.md
   - Python:
       - Overview: python-api/index.md
       - Quickstart: python.md
       - Common tasks:
+          - Connect to storage: configuration.md
           - Handle errors: python-api/errors.md
           - Enable logging: python-api/logging.md
       - API reference:
@@ -73,6 +77,10 @@ nav:
       - Advanced integration:
           - Arrow stream interface: python-api/streams-and-errors.md
           - Log records and handlers: reference/python-logging.md
+  - Rust:
+      - Quickstart: streaming-reader.md
+      - DataFusion integration: datafusion.md
+      - Diagnose a read: diagnostics.md
   - How it works:
       - How a read works: architecture.md
       - Reusing a loaded table: delta-metadata-lifecycle.md
