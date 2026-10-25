@@ -722,34 +722,9 @@ dar capabilities --schema result-manifest --full > manifest-schema.json
 
 <span id="verify-a-json-result"></span>
 
-For a JSON result, this verification prints only the verified row count:
-
-```sh
-python - totals.json.manifest.json <<'PY'
-import hashlib, json, pathlib, sys
-
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
-assert manifest['format_version'] == 1 and manifest['kind'] == 'result_manifest'
-assert manifest['completion'] == 'complete' and manifest['result']['format'] == 'json'
-result = pathlib.Path(manifest['result']['path'])
-digest = hashlib.sha256()
-with result.open('rb') as source:
-    for chunk in iter(lambda: source.read(65536), b''):
-        digest.update(chunk)
-assert digest.hexdigest() == manifest['result']['sha256']
-assert result.stat().st_size == int(manifest['output_bytes'])
-with result.open() as source:
-    rows = json.load(source)
-assert rows['completion'] == 'complete' and rows['scope'] == 'query'
-assert rows['bindings'] == manifest['bindings']
-assert len(rows['rows']) == int(rows['row_count']) == int(manifest['rows'])
-print(json.dumps({'verified_rows': manifest['rows']}))
-PY
-```
-
-For Arrow, use an IPC stream reader, require its end marker, and compare decoded
-row and batch counts as well as the byte count and hash. Do not print the full
-result or manifest merely to verify it.
+Use the [JSON verification example](cli-verify-json.md) or
+[Arrow verification example](cli-verify-arrow.md) to check the actual file
+without printing the full result or manifest.
 
 Write, serialization, budget, or publication failures never fall back to rows
 on stdout. Existing destinations are preserved, including files created during

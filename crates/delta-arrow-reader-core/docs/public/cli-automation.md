@@ -50,7 +50,7 @@ ran the command. Check that:
 - When request provenance matters, input hashes, effective options, and working
   directory match `replay.inputs`, `replay.options`, and `replay.working_directory`.
 
-Use the [JSON verification example](cli.md#verify-a-json-result),
+Use the [JSON verification example](cli-verify-json.md),
 adding the task's expected bindings and value checks. Print the verification
 outcome or the requested answer, not the full manifest or result. Fetch
 `dar capabilities --command query --detail artifacts` if you need the installed
@@ -64,44 +64,9 @@ stdout. A complete pair can be accepted only after the integrity, binding, and
 request checks above pass. Otherwise, correct the failure and rerun with unused
 names. Do not overwrite or trust a lone result file.
 
-<details markdown="1">
-<summary id="verify-an-arrow-result">Verify an Arrow result with PyArrow</summary>
+<span id="verify-an-arrow-result"></span>
 
-Use an environment with PyArrow installed. For `totals.arrow`, the following
-checks the manifest against the actual Arrow stream and prints only its row count:
-
-```sh
-python - totals.arrow.manifest.json <<'PY'
-import hashlib, json, pathlib, sys
-import pyarrow.ipc as ipc
-
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
-assert manifest['format_version'] == 1 and manifest['kind'] == 'result_manifest'
-assert manifest['completion'] == 'complete' and manifest['result']['format'] == 'arrow'
-path = pathlib.Path(manifest['result']['path'])
-digest = hashlib.sha256()
-with path.open('rb') as source:
-    for chunk in iter(lambda: source.read(65536), b''):
-        digest.update(chunk)
-    source.seek(-8, 2)
-    assert source.read() == bytes([255, 255, 255, 255, 0, 0, 0, 0])
-assert digest.hexdigest() == manifest['result']['sha256']
-assert path.stat().st_size == int(manifest['output_bytes'])
-rows = batches = 0
-with ipc.open_stream(path) as reader:
-    for batch in reader:
-        rows += batch.num_rows
-        batches += 1
-assert rows == int(manifest['rows']) and batches == int(manifest['batches'])
-print(json.dumps({'verified_rows': str(rows)}))
-PY
-```
-
-Also compare the manifest's scope and bindings with your intended request, and
-check any exact values the task requires. This script checks the saved file's
-integrity; it does not decide whether you asked the right query.
-
-</details>
+For Arrow files, use the [PyArrow verification example](cli-verify-arrow.md).
 
 ## Check a query before running it
 

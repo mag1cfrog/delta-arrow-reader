@@ -99,7 +99,7 @@ dar scan "$table" --databricks-profile "$profile" --table-version "$version" \
 
 This saves at most ten values of the selected column as a binary Arrow IPC
 stream, with a completion manifest. Row order is unspecified. Choose an unused
-output name, then [verify the saved file with PyArrow](cli-automation.md#verify-an-arrow-result),
+output name, then [verify the saved file with PyArrow](cli-verify-arrow.md),
 using `orders.arrow.manifest.json` as the manifest. A limited scan covers the
 requested prefix, not the whole table.
 

@@ -19,20 +19,27 @@ profile, use [Read Unity Catalog tables](unity-catalog.md).
 <span id="inspect-the-snapshot"></span>
 <span id="see-the-tables-columns"></span>
 
-Replace the path with your table's directory:
+Set `table` to your table's directory:
 
 ```sh
 table=/path/to/table
+```
+
+If your task supplies a snapshot version, use it for `version` below and skip
+inspection. Otherwise, discover a version:
+
+```sh
 dar inspect "$table" --view summary
 ```
 
-The response gives `table_version`. Set `version` to that number, replacing
-`0` below. Later commands will read the same snapshot even if new data arrives.
-Inspection checks table metadata; it does not test access to every data file.
+Replace `0` with the supplied version or the inspection's `table_version`:
 
 ```sh
 version=0
 ```
+
+Later commands read the same snapshot even if new data arrives. Inspection
+checks table metadata; it does not test access to every data file.
 
 Choose a column relevant to your question. If you already know its name, skip
 the name search. Otherwise, search by a likely prefix, replacing `id` below:
@@ -90,7 +97,7 @@ Only use results from a command that exits successfully. If it fails, follow
 - [Connect to storage](cli-storage.md) using a provisioned credential file.
 - [Save and verify a complete result](cli-automation.md#save-a-complete-result)
   when the rows should stay in a file.
-- [Read an Arrow result](cli-automation.md#verify-an-arrow-result) when another
+- [Read an Arrow result](cli-verify-arrow.md) when another
   application needs Arrow IPC.
 
 For one command's flags, use `dar preview --help` or its
