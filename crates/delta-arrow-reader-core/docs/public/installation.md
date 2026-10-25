@@ -17,7 +17,9 @@ Use CPython 3.10 or newer on one of these platforms:
 | Windows | x86_64 |
 | macOS | Apple silicon, macOS 12.0 or newer |
 
-The package includes PyArrow support, SQL, and the `delta-arrow-reader` command.
+The Python API includes PyArrow support and SQL. The package also installs the
+`delta-arrow-reader` command; its available commands depend on the package version,
+as described under [CLI installation](#cli-binaries-and-container-images).
 You do not need Rust or the separate Python `datafusion` package to install a
 wheel.
 
@@ -88,10 +90,11 @@ and saved-manifest workflows on these pages require a build with those features.
 If your command's `--help` lists only `inspect` and `scan`, use a
 [source build](#build-cli-from-source) to follow those workflows.
 
-If you installed the Python package above, you already have the CLI:
+If you installed the Python package above, you already have the CLI. The same
+command-availability check applies to the bundled command:
 
 ```console
-delta-arrow-reader --version
+delta-arrow-reader --help
 ```
 
 Use `delta-arrow-reader` in place of `dar` in the

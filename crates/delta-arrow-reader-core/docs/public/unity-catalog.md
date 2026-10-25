@@ -41,7 +41,9 @@ service principal or PAT, follow
 
 </details>
 
-## Inspect and pin the table
+<span id="inspect-and-pin-the-table"></span>
+
+## Choose a snapshot
 
 Replace the table name and profile below with yours. The name has three parts:
 `uc://catalog.schema.table`.
@@ -52,18 +54,23 @@ with `--storage-options-file storage.json` on each inspect, preview, scan, or qu
 ```sh
 table=uc://main.sales.orders
 profile=work
+```
+
+Use your task's snapshot version. If none was supplied, discover one:
+
+```sh
 dar inspect "$table" --view summary --databricks-profile "$profile"
 ```
 
 Inspection prints JSON containing `table_version` and read checks. It loads
 snapshot metadata; it does not prove that every data file is readable. Set
-`version` to the reported version so later reads use that same snapshot:
+`version` to the supplied version or returned `table_version`:
 
 ```sh
 version=42
 ```
 
-Replace `42` with your result. If you do not know the needed column's exact
+Replace `42` with your chosen version. If you do not know the needed column's exact
 name, search at that version with a likely prefix:
 
 ```sh
@@ -77,7 +84,7 @@ match, narrow the prefix. To inspect a column's type, replace
 
 ## Read a small sample
 
-Choose a column from inspection, replacing `customer_id` below:
+Choose a column relevant to your question, replacing `customer_id` below:
 
 ```sh
 dar preview "$table" --databricks-profile "$profile" --table-version "$version" \
@@ -127,8 +134,8 @@ for the response format.
 ### Join with a local Delta table
 
 Declare each table and its authorization in `tables.json`. Replace the UC name,
-profile, and both versions with your own. Inspect the local table separately
-to get its version. Here, `customers` is a Delta directory beside the manifest:
+profile, and both versions with your own. Inspect the local table only if its
+version was not supplied. Here, `customers` is a Delta directory beside the manifest:
 
 ```json
 {"format_version":1,"tables":[

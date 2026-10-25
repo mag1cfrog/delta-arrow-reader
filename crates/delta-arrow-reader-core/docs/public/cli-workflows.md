@@ -1,7 +1,7 @@
 # Analyze a table with SQL
 
-Start here after [reading your first rows](cli-quickstart.md). Use the table
-path and snapshot version from inspection. The examples assume columns named
+Start here after [reading your first rows](cli-quickstart.md). Keep the table
+path and chosen snapshot version. The examples assume columns named
 `id`, `amount`, and `day`; substitute names from your table. The standalone
 command is `dar`; Python package users run `delta-arrow-reader` instead.
 
@@ -62,9 +62,10 @@ Keep the SQL and versions unchanged when you still need the same answer.
 
 ## Join two snapshots
 
-Inspect each table separately and record its version. For two tables with an
+Use the supplied version for each table; inspect only tables whose version you
+still need to discover. For two tables with an
 `id` column, put this `tables.json` beside the `orders/` and `customers/` Delta
-directories. Replace both versions with the values you inspected:
+directories. Replace both versions with your chosen values:
 
 ```json
 {"format_version":1,"tables":[

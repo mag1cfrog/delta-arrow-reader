@@ -19,14 +19,20 @@ For S3, replace the table URL and file path below:
 ```sh
 table=s3://example-bucket/orders
 credentials=/run/secrets/orders.env
-dar inspect "$table" --view summary --env-file "$credentials"
 ```
 
 The file must already contain the credentials and connection settings needed
 for that service. If you were also given a noncredential endpoint/region JSON
 file, add `--storage-options-file /path/to/connection.json` on every command.
 
-Set `version` to the returned `table_version`, then select a column you need:
+Use your task's snapshot version. If none was supplied, discover one:
+
+```sh
+dar inspect "$table" --view summary --env-file "$credentials"
+```
+
+Set `version` to the supplied version or returned `table_version`, then select
+a column you need:
 
 ```sh
 version=0
@@ -46,7 +52,8 @@ from another identity.
 ## Use a provisioned JSON file
 
 Choose this alternative when your administrator supplies a JSON storage-options
-file containing credentials or references to them:
+file containing credentials or references to them. Use `--auth-source json`
+and `--storage-options-file` on your reads. To discover a missing snapshot version:
 
 ```sh
 dar inspect s3://example-bucket/orders --view summary \

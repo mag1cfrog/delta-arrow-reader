@@ -444,8 +444,8 @@ Choose the columns and sample size needed for the task:
 dar --diagnostics=json preview /data/orders --table-version 42 --column id --limit 3
 ```
 
-Use the version from the inspection summary and a name from a
-[column lookup](#inspect-a-snapshot).
+Keep your chosen version and known column name. Use
+[inspection](#inspect-a-snapshot) only to discover either value when it is missing.
 Preview uses scan's projection, predicate, snapshot, execution options, and
 storage authorization, including Databricks profiles. Row order is unspecified.
 It returns [typed JSON](#read-a-small-result-as-typed-json) and can write to a terminal.
