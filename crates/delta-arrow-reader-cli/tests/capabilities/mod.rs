@@ -730,10 +730,6 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             }
             if name == "completion" {
                 assert_eq!(guide["example"]["format_version"], 2);
-                let description = guide["description"].as_str().unwrap();
-                assert!(description.contains("File output uses v3"));
-                assert!(description.contains("result_artifact receipt"));
-                assert!(description.contains("JSON stdout"));
                 assert!(guide.get("other_fields").is_none());
                 let legacy_fields = guide["version_1_fields"].as_array().unwrap();
                 assert_eq!(legacy_fields.len(), 6);

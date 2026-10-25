@@ -477,6 +477,11 @@ establish these results for a new artifact.
    it. Balance variant order and keep evaluative labels out of consumer prompts.
    Human rescue is a recorded failure of unaided completion, not a successful
    retry. A continuation keeps its own context; a new B trial does not.
+   For batching and file-readback recipe trials, publish and freeze this task
+   guidance: "Batch independent discovery calls in one tool request. Verify saved
+   data by reopening the file from disk; this may be in the same script that saves
+   it." Include an uncoached condition and report this guidance separately from
+   CLI changes.
 4. **Capture what was returned and what was seen.** Save chronological requests,
    arguments or scripts, exits, raw stdout/stderr, tool errors, artifact reads,
    projections, generated code, retries, and the exact content delivered to the

@@ -38,6 +38,8 @@ fn complete_workspace_sdist(repository: &Path, source: &Path, destination: &Path
         "crates/delta-arrow-reader-cli/release",
         "xtask/Cargo.toml",
         "xtask/src",
+        // xtask imports these shared request types when it compiles from the source package.
+        "benches/selective_read/runners/contract.rs",
     ] {
         collect_sources(repository, Path::new(relative), &mut sources)?;
     }

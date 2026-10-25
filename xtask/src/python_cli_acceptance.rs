@@ -1,7 +1,7 @@
 //! Process checks against the executable installed by a wheel, on every wheel platform.
 
 use std::{
-    env, fs,
+    fs,
     io::{Read, Seek},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -44,27 +44,24 @@ pub(crate) struct Arguments {
 impl Arguments {
     fn command(&self, directory: &Path) -> Result<Command> {
         let mut command = Command::new(&self.binary);
-        command.current_dir(directory).stdin(Stdio::null());
-        for (key, _) in env::vars_os() {
-            let name = key.to_string_lossy();
-            if name.starts_with("LD_") || name.starts_with("DYLD_") || name == "RUST_LOG" {
-                command.env_remove(key);
-            }
-        }
+        command
+            .current_dir(directory)
+            .stdin(Stdio::null())
+            .env_clear();
         #[cfg(windows)]
         {
-            let windows = PathBuf::from(env::var_os("SystemRoot").ok_or("missing SystemRoot")?);
+            let windows =
+                PathBuf::from(std::env::var_os("SystemRoot").ok_or("missing SystemRoot")?);
+            command.env("SystemRoot", &windows);
             command.env(
                 "PATH",
-                env::join_paths([
+                std::env::join_paths([
                     windows.join("System32"),
                     windows,
                     self.python_base_prefix.clone(),
                 ])?,
             );
         }
-        #[cfg(not(windows))]
-        command.env("PATH", "/usr/bin:/bin");
         Ok(command)
     }
 
@@ -102,6 +99,15 @@ impl Arguments {
         }
         let table = self.fixture.join("table");
         self.check_reads(root, &table)?;
+        let agent_checks = self.output_directory.join("agent-workflow");
+        fs::create_dir(&agent_checks)?;
+        crate::packaged_cli::check_agent_workflow(
+            &|| self.command(&agent_checks),
+            &|| self.command(&agent_checks),
+            &agent_checks,
+            "delta-arrow-reader",
+            &self.expected_version,
+        )?;
         let malformed = root.join("secret-options.json");
         fs::write(&malformed, b"{\"token\": \"secret-value\",")?;
         for action in ["inspect", "scan"] {

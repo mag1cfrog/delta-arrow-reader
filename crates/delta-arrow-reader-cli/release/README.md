@@ -689,6 +689,38 @@ smoke output, use the same mounts and environment:
 The command checks the archive and executable again after both test suites pass.
 Test output goes to stderr; stdout contains the acceptance result.
 
+## Check the installed agent workflow
+
+Archive runtime validation, installed wheel tests, and image runtime validation
+run the same checks from `xtask::packaged_cli`. The archive uses `dar`; wheel
+tests use the installed `delta-arrow-reader` executable. The suite follows all
+advertised discovery details, then checks pinned inspection, typed preview,
+predicate repair, SQL joins, plans, and complete JSON/Arrow result files.
+Fixtures include 1,000 columns, nested fields, large metadata, an oversized
+cell, and integers above JavaScript's safe integer range. A local S3 fixture
+checks JSON and env-file authorization references and denied access.
+
+To retain the original stdout/stderr and per-invocation byte counts for an
+installed binary, choose a new output directory:
+
+```sh
+cargo xtask cli test-agent-workflow /path/to/installed/dar \
+  --expected-version 0.7.0 --output-directory /tmp/dar-agent-check
+```
+
+Use the artifact's actual version. The command prints its executable name,
+version, host platform, and record directory. It clears inherited credentials
+and dynamic-library overrides; Windows retains `SystemRoot`. Wheel acceptance
+also includes CPython's base directory in the Windows DLL search path.
+Set `DELTA_ARROW_READER_ACCEPTANCE_RECORDS` to a persistent directory when the
+caller uses temporary fixtures. Each run writes its records into a new child
+directory there, including failed and timed-out calls. The existing archive,
+wheel, and image CI jobs upload these records even when acceptance fails.
+Discovery traversal and explicit full expansions have separate records from
+the read/repair workflow. Byte ceilings are regression checks, not evidence
+that every response contains the minimum useful information. Agent evaluation
+uses the installed artifacts separately and retains its task-level traces.
+
 ## Generate dependency notices
 
 Use the same checkout and installed Rust toolchain as the binary build. Install
@@ -861,7 +893,10 @@ Use the same image ID for the OCI export below and for the Go consumer build.
 The test command also accepts a local tag, resolves it once to an immutable
 image ID, and checks its platform before running it. It does not pull images.
 
-Every container uses a read-only root filesystem and read-only fixture mounts.
+Every container uses a read-only root filesystem. Read fixtures are mounted
+read-only; the agent workflow has one writable temporary mount for saved
+results, with the container user set to the mount owner's UID/GID so the host
+can verify private result files. Default-user checks run separately.
 Checks cover the default user and working directory, help/version, inspection,
 redacted errors, and Arrow IPC results against the Spark corpus. The binary and
 image suites share the projection, limit, typed predicate, execution-options,
@@ -872,7 +907,7 @@ CA by default, accept it through `SSL_CERT_FILE`/`SSL_CERT_DIR`, and reject a
 certificate issued by another CA. Certificates and options are generated at
 runtime; no external storage or credentials are required. The suite also closes
 the CLI's output pipe inside the container to avoid Docker buffering hiding a
-write failure. Only this pipe fixture gets a small writable `/tmp` tmpfs.
+write failure. This pipe fixture gets a small writable `/tmp` tmpfs.
 
 Signal checks hold a table request open, verify that `dar` is PID 1, and send
 SIGINT and SIGTERM. Both inspection and scan must exit promptly with status 130

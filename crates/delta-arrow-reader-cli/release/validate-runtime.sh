@@ -28,6 +28,8 @@ test ! -s scan.stderr
 /package/dar query --help >query-help.txt
 printf 'SELECT COUNT(*) AS n FROM t\n' >query.sql
 /package/dar query "$cli_fixture" --table-version 0 --sql-file query.sql --diagnostics=json >query.arrow 2>query.stderr
+/tools/xtask cli test-agent-workflow /package/dar \
+  --expected-version "$CLI_VERSION" --output-directory /tmp/cli-runtime-checks/agent-workflow
 
 case "$ID" in
   debian|ubuntu) apt-get install -y --no-install-recommends binutils build-essential openssl ;;

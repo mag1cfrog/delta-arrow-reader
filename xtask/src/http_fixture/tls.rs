@@ -18,6 +18,9 @@ use crate::{
     error::{FileSnafu, InvalidInputSnafu, PemSnafu, Result, TlsSnafu},
 };
 
+// Connection retry backoff can total 55.5s before a certificate failure is reported.
+pub(crate) const TLS_TRUST_CHECK_TIMEOUT: Duration = Duration::from_secs(75);
+
 pub(crate) fn create_certificates(directory: &Path) -> Result<()> {
     let extensions = directory.join("extensions");
     fs::write(

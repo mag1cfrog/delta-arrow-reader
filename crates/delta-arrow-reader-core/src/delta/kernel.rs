@@ -56,6 +56,28 @@ pub(crate) struct KernelProtocolMetadata {
 }
 
 pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaResult<Url> {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Path, Prefix};
+
+        let path = Path::new(table_location);
+        if let Some(Component::Prefix(prefix)) = path.components().next()
+            && matches!(prefix.kind(), Prefix::VerbatimDisk(_))
+        {
+            // Kernel appends '/', which Windows verbatim paths cannot contain.
+            let canonical_url =
+                Url::from_directory_path(std::fs::canonicalize(path)?).map_err(|()| {
+                    delta_kernel::Error::invalid_table_location("invalid local directory")
+                })?;
+            let resolved_url = try_parse_uri(canonical_url.as_str())?;
+            if resolved_url != canonical_url {
+                return Err(delta_kernel::Error::invalid_table_location(
+                    "file URL resolves to a different local directory",
+                ));
+            }
+            return Ok(resolved_url);
+        }
+    }
     try_parse_uri(table_location)
 }
 

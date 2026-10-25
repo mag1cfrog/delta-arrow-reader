@@ -71,13 +71,20 @@ impl HttpTable {
                     }
                     .build()
                 })?;
-                let url =
-                    url::Url::from_file_path(Path::new("/").join(relative)).map_err(|()| {
+                let mut url = url::Url::parse("http://fixture/").map_err(|error| {
+                    InvalidInputSnafu {
+                        message: error.to_string(),
+                    }
+                    .build()
+                })?;
+                url.path_segments_mut()
+                    .map_err(|()| {
                         InvalidInputSnafu {
-                            message: format!("cannot encode HTTP fixture path: {}", path.display()),
+                            message: "fixture URL cannot hold a path",
                         }
                         .build()
-                    })?;
+                    })?
+                    .extend(relative.iter().map(|component| component.to_string_lossy()));
                 files.insert(
                     url.path().to_owned(),
                     Bytes::from(fs::read(&path).context(FileSnafu { path })?),

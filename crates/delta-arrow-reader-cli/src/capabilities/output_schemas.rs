@@ -218,7 +218,7 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "With --diagnostics=json, require exit 0, valid stdout and one stderr completion. Match command and output_bytes to the request and stdout length. Counts are decimal strings. File output uses v3: stdout is a result_artifact receipt; verify counts, snapshots and completion in its manifest. Explain also uses v3; verify bindings in query_plan stdout. Otherwise match bindings and decoded rows/batches when present. For query/preview JSON stdout, compare row_count; query requires completion=complete and scope=query, preview uses completion=sample with stop_reason/has_more.",
+        "description": "Require exit 0 and valid stdout. With --diagnostics=json, check one stderr completion: command matches the request; output_bytes matches stdout length; counts are decimal strings. v1: Validate terminal=true, completion=complete, scope/stop_reason/has_more and applicable bindings/rows/batches in stderr. v2 (JSON preview/query): Match stderr bindings/rows to stdout bindings/row_count. Read result semantics from stdout: preview has completion=sample plus stop_reason/has_more; query has completion=complete plus scope=query. In the JSON rows object, scope is query-only; stop_reason/has_more are preview-only. v3 (--output/explain): Stderr has command/output_bytes. Read saved-result counts/bindings/completion from the manifest, or explain bindings from query_plan stdout.",
         "type": "object",
         "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {

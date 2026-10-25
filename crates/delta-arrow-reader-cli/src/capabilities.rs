@@ -313,7 +313,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         "runtime"
     ]);
     guide["success"] = json!(
-        "Require exit 0; with --diagnostics=json, also require a complete completion record. Otherwise discard stdout."
+        "Require exit 0; with --diagnostics=json, also validate the stderr completion for its command and format_version. Otherwise discard stdout."
     );
     guide["shutdown"] = json!(format!(
         "After the deadline: at most {} ms cleanup + {} ms failure reporting.",
@@ -335,8 +335,8 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
             "authorization": "Local: none. UC: Databricks profile. Remote: --auth-source or --env-file; a storage-options file alone selects json. Each remote tables-file binding needs authorization.",
             "publication": "Publishes PATH, then PATH.manifest.json; never overwrites either. Without a matching complete manifest, the result is uncommitted. Failures never stream rows to stdout. Before retrying, verify any existing pair; otherwise choose unused names.",
             "receipt": "Stdout: result_artifact v1, absolute result/manifest paths, at most 8192 bytes. --diagnostics=json: completion v3 with command/output_bytes (receipt bytes). Result counts are in the manifest.",
-            "verify": "Use one verification script: require manifest completion=complete and result.path=receipt.result; check result.sha256, output_bytes, framing and row count using result.format (Arrow also batch count), plus bindings/scope. For requested JSON value checks, read schema.fields and decode only the needed columns in that script. Assert exact types only when task-required; look up unfamiliar encodings as needed. Print check results, not complete artifacts.",
-            "replay": "Match replay.inputs hashes; use replay.options in replay.working_directory with a new --output. Pin every alias from bindings. With --tables-file, copy it beside the original tables file and set each table_version. Keep authorization/limits. SQL order or volatile values may vary.",
+            "verify": "Use one verification script: require manifest completion=complete and result.path=receipt.result; check result.sha256, output_bytes, framing and row count using result.format (Arrow also batch count), plus bindings/scope. To verify request provenance, match replay.inputs hashes to the supplied files, replay.options to the effective request, and replay.working_directory to the invocation directory. For requested JSON value checks, read schema.fields and decode only needed columns in that script. Assert exact types only when task-required; look up unfamiliar encodings as needed. Print check results, not complete artifacts.",
+            "replay": "After verification, rerun with replay.options in replay.working_directory and a new --output. Pin every alias from bindings. With --tables-file, copy it beside the original tables file and set each table_version. Keep authorization/limits. SQL order or volatile values may vary.",
             "storage": "Temporary files: owner-only on Unix; Windows needs a private inherited directory ACL. Crashes/uninterruptible IO may leave temps; no power-loss durability guarantee.",
             "manifest_schema": [crate::command_name(), "capabilities", "--schema", "result-manifest"],
         }));
@@ -377,7 +377,7 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
         "cleanup_ms": if is_table_command { crate::command_runtime::CLEANUP_GRACE.as_millis() } else { 0 },
         "failure_reporting_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
         "signals": "Unix SIGINT exits 130; SIGTERM exits 143, including Linux PID 1. Windows Ctrl+C exits 130.",
-        "output": "Require exit 0; with --diagnostics=json, also require a complete completion record. Otherwise discard stdout, even if it looks complete.",
+        "output": "Require exit 0; with --diagnostics=json, also validate the stderr completion for its command and format_version. Otherwise discard stdout, even if it looks complete.",
         "retry": if is_table_command { "Retry only if intended. Preserve the request, pinned snapshots, authorization and other limits; choose any larger deadline explicitly." } else { "Drain stdout and stderr before retrying the same discovery request." },
         "termination_limits": "SIGKILL and OS-uninterruptible IO cannot guarantee cleanup. Closed or blocked stderr can prevent a complete diagnostic.",
         "broken_pipe": if is_table_command { "Exit 3. Unix detects a closed stdout pipe during work; other platforms detect it on the next write, with the selected deadline still applying." } else { "Exit 3 when an output write fails." },
