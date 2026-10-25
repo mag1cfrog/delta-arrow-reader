@@ -11,16 +11,16 @@ Use this page to connect to [S3](#read-from-s3) or [Azure](#read-from-azure),
 [reduce work before the first query](#want-less-work-before-the-first-query),
 or [limit parallel reads](#adjust-queries-when-needed).
 
-The examples use Python. See [Rust configuration](#configure-rust) for Rust; CLI
-users can pass the same storage keys in a
-[storage options file](cli.md#storage-options-file).
+The examples use Python. See [Rust configuration](#configure-rust) for Rust.
+For command-line reads with a provisioned file, use
+[Connect the CLI to storage](cli-storage.md).
 For a Databricks profile instead of storage credentials, use the
 [Unity Catalog CLI guide](unity-catalog.md). For a Rust application that already
 has a renewing provider, see [renewable storage credentials](reference/storage-credentials.md).
 
 ## Start with the defaults
 
-After [installing the Python package](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python),
+After [installing the Python package](installation.md#python),
 open a table using its path:
 
 ```python
@@ -129,7 +129,7 @@ Concurrent queries share the retry. If it also fails, queries use normal reads
 without another attempt.
 
 The check makes real requests and downloads data. It requires the default
-`direct` backend and a [supported S3 connection](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/).
+`direct` backend and a [supported S3 connection](partial-page-reads.md).
 
 </details>
 
@@ -163,7 +163,7 @@ query then builds the file information it needs. Repeated queries may spend
 more time doing that work.
 
 Both options skip the connection check, including any later retry. Queries can
-still skip unwanted data, but [partial-page reads](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/)
+still skip unwanted data, but [partial-page reads](partial-page-reads.md)
 stay off. That optimization needs the connection measurements to decide when
 to download selected values within a block of data.
 
@@ -262,7 +262,7 @@ currently supports the three named modes without a custom time limit.
 
 For Rust read limits, use `DeltaScanExecutionOptions` on the table builder or
 one scan. SQL uses `datafusion::ScanOptions.execution_options` when
-[registering the table](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
+[registering the table](datafusion.md).
 Changing read settings later does not undo preparation already performed.
 
 ### Renew temporary storage credentials
@@ -276,4 +276,4 @@ for an example, supported clouds, and configuration rules.
 
 For the complete Python settings and defaults, see
 [ScanExecutionOptions](python-api/options.md). Rust callers can use the
-[execution options reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/).
+[execution options reference](reference/execution-options.md).

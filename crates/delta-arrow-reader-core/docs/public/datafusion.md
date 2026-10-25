@@ -7,7 +7,7 @@ For SQL from Python, use the [Python quickstart](https://mag1cfrog.github.io/del
 
 ## Before you start
 
-Add the [DataFusion dependencies](https://mag1cfrog.github.io/delta-arrow-reader/installation/#datafusion-adapter)
+Add the [DataFusion dependencies](installation.md#datafusion-adapter)
 to your Rust application. You also need an existing Delta table. Use its
 directory, which contains `_delta_log`, rather than a single Parquet file.
 
@@ -153,6 +153,6 @@ The returned DataFusion error retains the reader error and its sources.
 
 ## Where to go next
 
-- [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/): prepare a table for repeated queries or limit concurrent file reads.
+- [Configuration](configuration.md): prepare a table for repeated queries or limit concurrent file reads.
 - [Metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/): understand which work queries can reuse.
 - [Rust API reference](https://docs.rs/delta-arrow-reader): look up the adapter and scan options.

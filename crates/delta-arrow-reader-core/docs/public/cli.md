@@ -1,7 +1,9 @@
 # Command-line reference
 
 Look up command arguments, input formats, and process behavior here. For a first
-read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
+read, use the [CLI quickstart](cli-quickstart.md). For task recipes, use
+[Filter, group, and join](cli-workflows.md), [Connect to storage](cli-storage.md),
+or [Fix a failed command](cli-recovery.md). The shell examples use Bash.
 
 | Task | Command or section |
 | --- | --- |
@@ -32,18 +34,16 @@ For packages and runtime requirements, see [Installation](installation.md).
 ```sh
 dar capabilities
 dar capabilities --command query
-dar capabilities --schema predicate
-dar capabilities --schema predicate --detail timestamp_us
-dar capabilities --schema completion
-dar capabilities --authorization s3
-dar capabilities --authorization s3 --detail env-file
-dar capabilities --authorization s3 --detail env-file-grammar
-dar capabilities --authorization s3 --full
-dar capabilities --schema completion --full > completion-schema.json
-dar capabilities --all --diagnostics=json > capabilities.json
 ```
 
-Start with `dar capabilities` to choose a command. It returns a JSON directory
+Use the first command if you do not know which operation you need; use the
+second if you already chose `query` and need its argument rules. These are
+lookup alternatives, not a required sequence. A known command needs no prior
+discovery call. For one input type or credential source, select its guide
+directly, such as `--schema predicate --detail timestamp_us` or
+`--authorization s3 --detail env-file`.
+
+`dar capabilities` returns a JSON directory
 of at most 2 KiB, with command names, short descriptions, and schema names.
 Each command's `details` field gives the invocation for
 its usage guide. `schema_command` gives the invocation for a format guide;
@@ -193,7 +193,7 @@ registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest
 UC SQL accepts a positional table with an explicit Databricks profile, or
 manifest entries with per-table profile references. A manifest can mix local,
 direct-storage, and UC tables. The memory ceiling
-applies to DataFusion's execution pool, and disk spill is disabled. The SQL examples that use `id`
+applies to DataFusion's execution pool, and disk spill is disabled by default. The SQL examples that use `id`
 assume the selected table has that column. A null limit or deadline means that
 the command has no ceiling for that resource; it does not mean zero.
 
@@ -255,6 +255,14 @@ command's stderr record against its `schema` field. Also check exit status 0
 and decode stdout: a matching completion record alone does not establish that
 the result was received intact.
 
+For a validator or inventory consumer that explicitly needs complete definitions,
+save the chosen expansion to a file:
+
+```sh
+dar capabilities --schema completion --full > completion-schema.json
+dar capabilities --all --diagnostics=json > capabilities.json
+```
+
 Discovery needs no table, input file, credentials, Databricks executable, or
 network access. The directory, runtime details, schema guides, schema details, authorization
 guides, and authorization details are limited to 2 KiB each; command guides are
@@ -293,7 +301,6 @@ protocol.
 
 ```sh
 dar inspect /data/orders --view summary
-dar inspect /data/orders --view summary --table-version 0 --column-prefix ''
 dar inspect /data/orders --view summary --table-version 0 --column-prefix ord
 dar inspect /data/orders --view summary --table-version 0 --column order_id
 dar inspect --view summary --auth-source json --storage-options-file ./storage.json s3://example-bucket/orders
@@ -437,8 +444,8 @@ Choose the columns and sample size needed for the task:
 dar --diagnostics=json preview /data/orders --table-version 42 --column id --limit 3
 ```
 
-Use the version from the inspection summary and a name from a
-[column lookup](#inspect-a-snapshot).
+Keep your chosen version and known column name. Use
+[inspection](#inspect-a-snapshot) only to discover either value when it is missing.
 Preview uses scan's projection, predicate, snapshot, execution options, and
 storage authorization, including Databricks profiles. Row order is unspecified.
 It returns [typed JSON](#read-a-small-result-as-typed-json) and can write to a terminal.
@@ -489,8 +496,7 @@ GROUP BY customer_id
 ORDER BY total DESC
 LIMIT 100
 SQL
-dar query /data/orders --sql-file query.sql > totals.arrow
-dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
+dar query /data/orders --table-version 0 --sql-file query.sql --format json
 ```
 
 ```text
@@ -498,7 +504,8 @@ dar query [--table-version N] [--storage-options-file PATH]
           [--auth-source SOURCE | --env-file PATH | --databricks-profile PROFILE]
           [--format arrow|json] [--output PATH]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
-          [--memory-limit-bytes BYTES] [--deadline-ms N] [--] TABLE
+          [--memory-limit-bytes BYTES] [--spill-limit-bytes BYTES --spill-dir PATH]
+          [--deadline-ms N] [--] TABLE
 ```
 
 The SQL file must contain one read-only query in UTF-8, at most 64 KiB, with
@@ -520,16 +527,45 @@ snapshot selection and storage options as `inspect`. All queries skip table warm
 | --- | --- | --- |
 | `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
 | `--max-output-bytes` | Arrow: `1073741824` (1 GiB); JSON stdout: `8192` (8 KiB); JSON file: `16777216` (16 MiB) | Fail if the complete result, including schema, framing, and final newline for JSON, exceeds this many bytes |
-| `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
+| `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory |
+| `--spill-limit-bytes` | `0` | DataFusion spill budget; a positive value requires `--spill-dir` |
+| `--spill-dir` | Unset | Existing writable directory for query temporary files; requires a positive spill budget |
 | `--deadline-ms` | `300000` (5 minutes) | Limit total time, including input files, authorization, planning, execution, stdout, and completion |
 
-These options accept unsigned decimal digits in the platform's `usize` range.
-Byte, memory, and time limits must be positive. The memory pool does not cap total
+Row, output-byte, memory, and deadline options accept unsigned decimal digits
+in the platform's `usize` range. The spill budget accepts a `u64` decimal value.
+Output-byte, memory, and time limits must be positive. The memory pool does not cap total
 process RSS: Core read buffers, SQL planning, and output encoding allocate outside
 it. Sorting and grouping can require memory before producing output.
 
-Exceeding a ceiling fails with status 1. JSON stdout stays buffered until the full result
-fits; resource and execution failures leave stdout empty. File output streams
+<details markdown="1">
+<summary id="sql-spill">Enable bounded disk spill</summary>
+
+Spill is disabled unless both a positive budget and an existing directory are
+provided. To allow intermediate query data in a private directory:
+
+```sh
+dar query /data/orders --table-version 0 --sql-file query.sql --format json \
+  --spill-limit-bytes 67108864 --spill-dir /private/query-scratch
+```
+
+The CLI creates a child directory for this invocation and attempts to remove it
+after completion or handled failure/cancellation. A cleanup error fails the
+command and can leave temporary files behind. The parent directory and its
+existing contents remain. Files can contain table data; on Windows, use a
+directory with a private inherited ACL. Crashes or uninterruptible IO can also
+leave temporary files behind.
+
+DataFusion checks disk usage after writes. Usage can temporarily exceed the
+budget before the command fails; this is not an operating-system disk quota.
+Spilling does not cap process memory or remove output and deadline limits.
+
+</details>
+
+Exceeding a ceiling fails with status 1. JSON stdout stays buffered until the full
+result fits; failures before publication leave it empty. A later cleanup or
+completion-reporting failure can leave complete JSON with a nonzero exit status;
+discard that stdout result. File output streams
 both formats into temporary storage. Arrow stdout may leave partial
 output without an IPC end marker. Discard incomplete stdout after failure; for
 file output, follow the [publication checks](#save-a-result-with-a-manifest).
@@ -684,34 +720,11 @@ dar capabilities --schema result-manifest --detail replay.inputs
 dar capabilities --schema result-manifest --full > manifest-schema.json
 ```
 
-For a JSON result, this verification prints only the verified row count:
+<span id="verify-a-json-result"></span>
 
-```sh
-python - totals.json.manifest.json <<'PY'
-import hashlib, json, pathlib, sys
-
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
-assert manifest['format_version'] == 1 and manifest['kind'] == 'result_manifest'
-assert manifest['completion'] == 'complete' and manifest['result']['format'] == 'json'
-result = pathlib.Path(manifest['result']['path'])
-digest = hashlib.sha256()
-with result.open('rb') as source:
-    for chunk in iter(lambda: source.read(65536), b''):
-        digest.update(chunk)
-assert digest.hexdigest() == manifest['result']['sha256']
-assert result.stat().st_size == int(manifest['output_bytes'])
-with result.open() as source:
-    rows = json.load(source)
-assert rows['completion'] == 'complete' and rows['scope'] == 'query'
-assert rows['bindings'] == manifest['bindings']
-assert len(rows['rows']) == int(rows['row_count']) == int(manifest['rows'])
-print(json.dumps({'verified_rows': manifest['rows']}))
-PY
-```
-
-For Arrow, use an IPC stream reader, require its end marker, and compare decoded
-row and batch counts as well as the byte count and hash. Do not print the full
-result or manifest merely to verify it.
+Use the [JSON verification example](cli-verify-json.md) or
+[Arrow verification example](cli-verify-arrow.md) to check the actual file
+without printing the full result or manifest.
 
 Write, serialization, budget, or publication failures never fall back to rows
 on stdout. Existing destinations are preserved, including files created during
@@ -1490,7 +1503,8 @@ Omit these options to use the reader's defaults. `--target-partitions` changes
 how many groups of files can work in parallel. `--execution-options-file` supplies
 a JSON object for file-read limits, buffering, and backend selection.
 
-See [Configuration](configuration.md) to understand the tradeoffs. The CLI's
+See [Configuration](configuration.md#adjust-queries-when-needed) for the shared
+reader tradeoffs; its examples use Python. The CLI's
 accepted fields and validation rules are listed below.
 
 <details markdown="1">

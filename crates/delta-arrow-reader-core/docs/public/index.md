@@ -22,16 +22,18 @@ Choose how you want to read your table. Each quickstart links to the installatio
 steps for that interface:
 
 - [Python](python.md): read rows with PyArrow or query them with SQL.
-- [Command line](cli-quickstart.md): inspect a table or save rows to a file.
+- [Command line](cli-quickstart.md): preview selected values and count rows with SQL.
 - [Unity Catalog](unity-catalog.md): use a Databricks profile to read tables and run SQL locally.
 - [Rust](streaming-reader.md): process Arrow batches in your application.
 - [DataFusion in Rust](datafusion.md): register a table and query it with SQL.
 
 ## After your first read
 
+- [Filter, group, and join with CLI SQL](cli-workflows.md).
+- Connect to cloud storage with the [CLI](cli-storage.md) or [Python](configuration.md).
 - Troubleshoot a failed read in [Python](python-api/errors.md),
-  [the command line](cli.md#errors-and-process-status), or [Rust](diagnostics.md).
-- Connect to [S3 or Azure](configuration.md), or adjust opening time and resource use.
+  [the command line](cli-recovery.md), or [Rust](diagnostics.md).
+- [Save, verify, and resume CLI work](cli-automation.md) for scripts and agents.
 - Learn [how the reader works](architecture.md).
 - Review the [performance reports](benchmarks.md) and their test conditions.
 - Look up a type or method in the [Python API reference](python-api/index.md#api-reference) or
