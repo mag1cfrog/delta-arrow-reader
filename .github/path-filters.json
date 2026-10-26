@@ -114,6 +114,7 @@
     "xtask/src/main.rs",
     "xtask/src/python_cli.rs",
     "xtask/src/python_cli_acceptance.rs",
+    "xtask/src/agent_fixtures.rs",
     "xtask/src/packaged_cli.rs",
     "xtask/src/packaged_cli/**",
     "xtask/src/http_fixture.rs",

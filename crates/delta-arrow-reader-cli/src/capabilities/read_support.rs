@@ -14,6 +14,8 @@ use crate::{query, unity_catalog};
 
 const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
+const S3_AUTHORIZATION_LIMITS: &str =
+    "AWS profiles/SSO are unsupported. Stdout without source selectors uses backend defaults.";
 pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. Actual versions are decimal strings in declaration order: stderr bindings for stdout results or SQL/result failures with --diagnostics=json; manifest bindings for saved results. Pin every alias on retry. Snapshots are not a cross-table transaction.";
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
@@ -47,22 +49,17 @@ impl AuthorizationService {
             }
             _ => {
                 let storage = &capabilities["direct_storage"];
-                let keys: Vec<_> = storage["credential_option_aliases"][self.name()]
-                    .as_object()
-                    .into_iter()
-                    .flat_map(|keys| keys.keys())
-                    .filter(|key| {
-                        !matches!(self, Self::Gcs) || *key == "google_application_credentials"
-                    })
-                    .collect();
                 json!({
                     "commands": storage["commands"],
                     "source_argument": storage["source_argument"],
                     "sources": storage["sources"][self.name()],
                     "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "env-file"],
                     "storage_options_argument": storage["storage_options_argument"],
-                    "credential_keys": keys,
-                    "notes": storage["backend_notes"][self.name()],
+                    "notes": if matches!(self, Self::S3) {
+                        json!([S3_AUTHORIZATION_LIMITS])
+                    } else {
+                        storage["backend_notes"][self.name()].clone()
+                    },
                     "schema_command": [crate::command_name(), "capabilities", "--schema", "storage-options"],
                 })
             }
@@ -262,7 +259,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             "backend_notes": {
                 "s3": [
                     "json/env require an access key and secret key; a session token is optional. env uses AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN, AWS_REGION and AWS_DEFAULT_REGION.",
-                    "Workload sources use provisioned role/token-file or container endpoint references. AWS profiles/SSO are unsupported. Stdout without source selectors uses backend defaults.",
+                    format!("Workload sources use provisioned role/token-file or container endpoint references. {S3_AUTHORIZATION_LIMITS}"),
                 ],
                 "azure-blob": [
                     "json/env require exactly one complete credential family. env accepts AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_SAS_KEY or AZURE_STORAGE_TOKEN, or AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID. If the URL omits the account, supply azure_storage_account_name in JSON or AZURE_STORAGE_ACCOUNT_NAME with env.",
@@ -463,7 +460,7 @@ mod tests {
     }
 
     #[test]
-    fn authorization_guides_defer_aliases_and_keep_selected_credential_rules() {
+    fn authorization_guides_defer_credential_configuration_and_keep_selection_rules() {
         let credential_keys = [
             "aws_access_key_id",
             "azure_storage_account_key",
@@ -506,18 +503,29 @@ mod tests {
             assert!(handling.contains("never fall back to another identity"));
             assert!(handling.contains("--output requires an explicit source"));
             assert!(handling.contains("a storage-options file alone selects json"));
-            assert!(
-                selected["credential_keys"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!(expected_key))
-            );
+            assert!(selected.get("credential_keys").is_none());
             assert!(selected.get("credential_option_aliases").is_none());
-            assert_eq!(
-                selected["notes"],
-                build_authorization_capabilities()["direct_storage"]["backend_notes"]
-                    [service.name()]
-            );
+            if matches!(service, AuthorizationService::S3) {
+                let selected_text = selected.to_string();
+                assert!(selected_text.contains("AWS profiles/SSO are unsupported"));
+                assert!(
+                    selected_text.contains("Stdout without source selectors uses backend defaults")
+                );
+                assert!(!selected_text.contains("AWS_ACCESS_KEY_ID"));
+                assert!(!selected_text.contains("Workload sources use provisioned"));
+                assert!(authorization.to_string().contains("AWS_ACCESS_KEY_ID"));
+                assert!(
+                    authorization
+                        .to_string()
+                        .contains("Workload sources use provisioned")
+                );
+            } else {
+                assert_eq!(
+                    selected["notes"],
+                    build_authorization_capabilities()["direct_storage"]["backend_notes"]
+                        [service.name()]
+                );
+            }
             assert_eq!(
                 concise["full_command"],
                 json!([
@@ -533,12 +541,6 @@ mod tests {
                 .filter(|key| *key != expected_key)
             {
                 assert!(!aliases.contains_key(other));
-                assert!(
-                    !selected["credential_keys"]
-                        .as_array()
-                        .unwrap()
-                        .contains(&json!(other))
-                );
             }
             assert!(authorization.get("backend_notes").is_none());
             assert!(authorization.get("profile_argument").is_none());

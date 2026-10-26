@@ -35,6 +35,28 @@ use arrow::{
 use delta_arrow_reader::{DeltaSnapshotSelection, DeltaTableBuilder, TryStreamExt, WarmupMode};
 use serde_json::Value;
 
+#[cfg(unix)]
+#[test]
+fn agent_workflow_storage_fixture_checks_signed_reads_and_failure_cleanup()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = run_with_process_timeout(
+        Command::new("python3")
+            .arg("-I")
+            .arg(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/agent_workflows/storage_test.py"),
+            )
+            .arg(env!("CARGO_BIN_EXE_dar")),
+        Stdio::piped(),
+        Duration::from_secs(120),
+    )?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
 #[test]
 fn executable_names_preserve_help_version_and_redacted_errors()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -540,6 +562,14 @@ fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
 }
 
 fn run_with_stdout(command: &mut Command, stdout: Stdio) -> io::Result<Output> {
+    run_with_process_timeout(command, stdout, Duration::from_secs(15))
+}
+
+fn run_with_process_timeout(
+    command: &mut Command,
+    stdout: Stdio,
+    timeout: Duration,
+) -> io::Result<Output> {
     // Shell logging settings must not change a fixture's expected stderr.
     if !command.get_envs().any(|(key, _)| key == "RUST_LOG") {
         command.env_remove("RUST_LOG");
@@ -560,7 +590,7 @@ fn run_with_stdout(command: &mut Command, stdout: Stdio) -> io::Result<Output> {
             let mut bytes = Vec::new();
             stderr.read_to_end(&mut bytes).map(|_| bytes)
         });
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + timeout;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break Ok(status),

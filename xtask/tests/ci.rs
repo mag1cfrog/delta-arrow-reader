@@ -86,6 +86,7 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         (".cargo/config.toml", true),
         ("xtask/Cargo.toml", true),
         ("xtask/src/main.rs", true),
+        ("xtask/src/agent_fixtures.rs", true),
         ("xtask/Cargo.lock", false),
         ("xtask/src/python_wheel_build.rs", true),
         ("xtask/src/python_cli/tests.rs", true),

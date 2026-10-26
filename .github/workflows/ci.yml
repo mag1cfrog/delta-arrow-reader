@@ -288,17 +288,7 @@ jobs:
       - name: Test CI workflows, Python, and cache tasks
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
-          cargo test --locked --package xtask --bin xtask cache_tests::
-          cargo test --locked --package xtask --bin xtask validation_record::
-          cargo test --locked --package xtask --bin xtask python_cli::
-          cargo test --locked --package xtask --bin xtask python_cli_audit::
-          cargo test --locked --package xtask --bin xtask binary::tests::
-          cargo test --locked --package xtask --bin xtask python_sdist::
-          cargo test --locked --package xtask --bin xtask python_wheel_build::
-          cargo test --locked --package xtask --bin xtask scan_scheduling::
-          cargo test --locked --package xtask --bin xtask selective_read_chart::
-          cargo test --locked --package xtask --bin xtask selective_read::
-          cargo test --locked --package xtask --bin xtask notices::
+          cargo test --locked --package xtask --bin xtask
           cargo test --locked --package xtask --test notices
           cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
             --test cli_release_request --test cli_release_notes --test cli_release_workflow

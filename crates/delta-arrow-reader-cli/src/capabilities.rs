@@ -315,15 +315,6 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     guide["success"] = json!(
         "Require exit 0; with --diagnostics=json, also validate the stderr completion for its command and format_version. Otherwise discard stdout."
     );
-    guide["shutdown"] = json!(format!(
-        "After the deadline: at most {} ms cleanup + {} ms failure reporting.",
-        if matches!(name, "inspect" | "scan" | "preview" | "query" | "explain") {
-            crate::command_runtime::CLEANUP_GRACE.as_millis()
-        } else {
-            0
-        },
-        FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
-    ));
     Ok(guide)
 }
 
@@ -715,6 +706,7 @@ mod tests {
         cli.build();
         for command in cli.get_subcommands() {
             let guide = build_command_guide(command.get_name()).unwrap();
+            assert!(guide.get("shutdown").is_none());
             let runtime_request: Vec<_> = guide["runtime_details_command"]
                 .as_array()
                 .unwrap()
@@ -726,6 +718,7 @@ mod tests {
             serialize_discovery_response(&runtime, MAX_COMMAND_DETAIL_BYTES).unwrap();
             assert!(runtime.get("options").is_none());
             assert!(runtime.get("schema").is_none());
+            assert_eq!(runtime["failure_reporting_ms"], 1000);
             assert_eq!(
                 runtime["cleanup_ms"],
                 if matches!(

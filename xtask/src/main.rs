@@ -3,6 +3,7 @@
 #![cfg_attr(test, allow(clippy::panic))]
 
 mod acceptance;
+mod agent_fixtures;
 mod artifacts;
 mod binary;
 mod build;
@@ -181,6 +182,8 @@ enum CliTask {
     TestArchive(acceptance::TestArchiveArgs),
     /// Check agent discovery, pinned reads, repair, and saved results in an installed CLI.
     TestAgentWorkflow(packaged_cli::TestAgentWorkflowArgs),
+    /// Prepare wide and lookup tables for independent CLI workflow consumers.
+    PrepareAgentFixtures(agent_fixtures::PrepareAgentFixturesArgs),
     /// Check a local container's read-only execution, TLS, IPC, and process lifecycle.
     TestImage(image_runtime::TestImageArgs),
     /// Record an approved release PR's validated binary and image artifact identities.
@@ -299,6 +302,7 @@ impl CliTask {
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
             Self::TestAgentWorkflow(args) => args.run(),
+            Self::PrepareAgentFixtures(args) => args.run(),
             Self::TestImage(args) => args.run(),
             Self::RecordValidation(args) => args.run(),
             Self::SelectReleaseArtifacts(args) => args.run(),
