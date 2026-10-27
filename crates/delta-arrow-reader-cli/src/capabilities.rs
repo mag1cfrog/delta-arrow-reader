@@ -121,7 +121,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "stdout": "json",
             "notes": [
                 "Pin lookups with --table-version N: --column-prefix PREFIX finds names; --column NAME returns only selected types.",
-                "Summary checks scan protocol support, not Parquet or deletion-vector access. Names/types lookups omit checks; metadata is opt-in with --include-metadata.",
+                "Summary checks scan protocol support, not Parquet or deletion-vector access. Names/types lookups omit checks; --include-metadata requires --column.",
                 "Summary defaults to 4096 stdout bytes and 30000 ms; adjust --max-output-bytes or --deadline-ms explicitly. Full inspection has neither default; redirect it and select a deadline.",
             ],
         }),
