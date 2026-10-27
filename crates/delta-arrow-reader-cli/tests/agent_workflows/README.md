@@ -74,6 +74,17 @@ For agent evaluation, freeze the executable, fixture and prompt hashes before
 formal attempts. Preserve all calls, original stdout/stderr, delivered tool text,
 saved artifacts and provider usage, including failed attempts. A smaller individual
 response is useful only when the complete task remains correct and avoids extra
-lookups or repairs. The [agent contract](../../../../docs/content/cli-agent-contract.md)
+lookups or repairs.
+
+Give the consumer a business outcome, such as saving the region report with row
+counts, amount sums and latest dates. An independent evaluator checks the actual
+answers, types, manifests and file integrity against this fixture. Ordinary
+analysis does not require the consumer to build a general verifier or recompute
+every file hash. It still must handle actual failure and incomplete results.
+Report deliberate recovery scenarios separately from ordinary analysis, and keep
+their full costs. Use explicit artifact verification tasks when that is the user
+workflow being evaluated.
+
+The [agent contract](../../../../docs/content/cli-agent-contract.md)
 defines the output and recovery semantics. The [first comparison report](https://github.com/mag1cfrog/delta-arrow-reader/issues/543#issuecomment-6408591665)
 records the tested consumers, failed attempts, comparisons and limits.

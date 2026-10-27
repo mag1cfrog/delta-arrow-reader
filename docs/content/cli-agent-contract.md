@@ -365,16 +365,40 @@ path, row/batch/byte counts, result SHA-256, build versions, limits, and executi
 overrides. Keep replay input references/hashes and safe locations; never embed
 SQL literals, tokens, provider responses, or credential contents/hashes. Stdout
 returns the least receipt information needed to identify and verify publication,
-with usable result and manifest references, within its 8 KiB ceiling. Verify
-manifest, hash, framing, and counts before acceptance. Replay uses the recorded
-inputs and explicit actual versions;
+with usable result and manifest references, within its 8 KiB ceiling. The
+independent evaluator checks manifest, hash, framing, and counts before
+acceptance. Agent checks follow the declared task and completion requirements.
+Replay uses the recorded inputs and explicit actual versions;
 input hashes must still match and snapshot/data/DV files must remain available.
-Result rows, full schemas, and complete manifests stay in artifacts. Ordinary
-verification reads the required values without printing entire artifacts into
-agent context. Long paths or many bindings must not make the receipt exceed its
-budget; receipt overflow is a bounded failure under the same publication policy.
+Result rows, full schemas, and complete manifests stay in artifacts. The CLI
+provides focused references and completion information so ordinary verification
+can read required values without printing entire artifacts into agent context.
+Measure actual excess printing; attribute it to a CLI defect only when the trace
+shows interface requirements or guidance caused it. Record evaluator-added and
+discretionary printing separately. Long paths or many bindings must not make the
+receipt exceed its budget; receipt overflow is a bounded failure under the same
+publication policy.
 
 ## Acceptance evidence
+
+The independent evaluator judges business answers and saved artifacts against
+its oracle, including exact values/types, integrity, and actual completeness.
+The agent performs checks naturally required by the declared user task, including
+recognizing actual partial failure and completing requested recovery or replay.
+Ordinary CLI use does not require developing a general verifier. A correct
+requested result does not fail solely because temporary agent verification code
+could accept fabricated corruption or lacks exhaustive schema/byte assertions.
+CLI security, authorization, completion semantics, recovery, and limits remain
+required; independent evaluation does not excuse actual errors or unsafe actions.
+
+Consumer prompts specify the business deliverables and operating constraints.
+For example, ask for a saved region report with matching row counts, amount sums,
+and latest dates. The evaluator checks the report and artifact integrity against
+the fixture; the consumer need not write a hash/schema verifier to complete that
+analysis. Keep integrity verification in tasks that explicitly need it, such as
+checking a transferred artifact. Label deliberate failure/recovery scenarios
+separately when reporting costs. Apply this division to prompts, handoffs, final
+answer fields, reviewer guidance, and pass/fail logic together.
 
 Every criterion needs success, boundary, and failure evidence through installed
 artifacts. Untested or blocked cases do not pass. Use local tables and controlled
@@ -477,11 +501,12 @@ establish these results for a new artifact.
    it. Balance variant order and keep evaluative labels out of consumer prompts.
    Human rescue is a recorded failure of unaided completion, not a successful
    retry. A continuation keeps its own context; a new B trial does not.
-   For batching and file-readback recipe trials, publish and freeze this task
-   guidance: "Batch independent discovery calls in one tool request. Verify saved
-   data by reopening the file from disk; this may be in the same script that saves
-   it." Include an uncoached condition and report this guidance separately from
-   CLI changes.
+   Only for explicitly selected batching and file-readback recipe trials,
+   publish and freeze this task guidance: "Batch independent discovery calls in
+   one tool request. Verify saved data by reopening the file from disk; this may
+   be in the same script that saves it." Include an uncoached condition and report
+   this guidance separately from CLI changes; ordinary CLI tasks do not inherit
+   recipe instructions.
 4. **Capture what was returned and what was seen.** Save chronological requests,
    arguments or scripts, exits, raw stdout/stderr, tool errors, artifact reads,
    projections, generated code, retries, and the exact content delivered to the
@@ -536,6 +561,17 @@ reconcile their sum with cumulative thread usage. Do not sum cumulative snapshot
 Missing telemetry is unknown, not zero; missing delivery records prevent a full
 context review. A simulated handoff is not an actual compaction trial.
 
+Retain whole-task provider totals and distinguish direct CLI output,
+interface-induced work supported by request/result traces, evaluator-added
+demands, discretionary agent work, and mixed or unattributable work. Work outside
+the CLI process, including scripts and artifact reads, can be interface-induced;
+process identity alone does not establish attribution. Record the supporting
+trace and uncertainty. One trajectory, conjecture about model reasoning, or a
+comparison of model-effort settings cannot establish interface cost causality.
+Use comparisons with the same model/settings and task conditions to test an
+interface's effect. Token categories describe the observed run; subtracting them
+does not produce a counterfactual total for a prompt without extra demands.
+
 Validate the review method itself against retained regression and control traces.
 It must flag a known increase in cumulative CLI or delivered-tool text even when
 model totals decrease, and must not report that increase as a model-token
@@ -552,6 +588,17 @@ Publish the run manifest, raw-record references, ledger, counterfactual results,
 and verdict table in the evaluation comment or linked artifacts. Keep the PR
 description focused on behavior and examples. Historical runs retain their
 original conditions; replay or a newly completed ledger is not a fresh trial.
+
+A retrospective re-audit is supplementary evidence. Preserve the original
+prompts, raw evidence, conditions, and ratings alongside separately labeled
+revised judgments with supporting record references. Complete retained evidence
+can satisfy a revised observable-result criterion; applicable repetition and
+safety requirements still hold, and untested cases remain untested. Do not
+silently overwrite original ratings or relabel historical runs as fresh trials.
+A workflow or cost claim for tasks without extra verification instructions needs
+fresh comparisons with revised prompts frozen in advance only when the original
+prompt demands confound that inference. Rerun claims the retained evidence cannot
+support.
 
 When editing this contract, check local links and examples, then run the
 [strict documentation build](../README.md#site-content).
