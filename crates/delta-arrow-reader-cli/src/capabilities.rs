@@ -158,7 +158,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "notes": [
                 "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file.",
                 "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
-                "For larger results, use --output PATH; stdout returns a small receipt. JSON files default to 16 MiB; Arrow to 1 GiB. Omit --format for Arrow IPC.",
+                "With --output PATH, --max-output-bytes limits the saved file; the stdout receipt is at most 8192 bytes. Defaults: 16 MiB for JSON files, 1 GiB for Arrow. Omit --format for Arrow IPC.",
                 "The deadline includes inputs, planning and output. Memory is limited to the DataFusion pool, not process RSS; spill defaults to disabled.",
                 read_support::QUERY_SNAPSHOT_SELECTION,
                 read_support::QUERY_ROW_ORDERING,
