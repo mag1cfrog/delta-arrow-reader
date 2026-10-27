@@ -499,6 +499,16 @@ impl Error {
             Self::Query { source } => {
                 let classification = source.classification();
                 let (argument, expected, hint) = match classification.reason {
+                    "column_not_found" => (
+                        "--sql-file",
+                        "an existing SQL column reference",
+                        "Check column names and aliases; inspect the selected table only if its columns are unknown.",
+                    ),
+                    "ambiguous_column" => (
+                        "--sql-file",
+                        "an unambiguous SQL column reference",
+                        "Qualify the column reference with its table or subquery alias.",
+                    ),
                     "spill_disabled" => (
                         "--spill-limit-bytes",
                         "a positive byte budget together with --spill-dir PATH",
@@ -787,7 +797,9 @@ impl Error {
             Some("timeout" | "connection_reset" | "connection_aborted") => ("retry", Some(true)),
             Some("unsupported") => ("change_request", Some(false)),
             _ if phase == "configuration"
-                || matches!(code, "invalid_projection" | "unsupported_predicate") =>
+                || matches!(code, "invalid_projection" | "unsupported_predicate")
+                || (code == "sql_planning"
+                    && matches!(reason, "column_not_found" | "ambiguous_column")) =>
             {
                 ("fix_input", Some(false))
             }

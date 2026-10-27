@@ -327,6 +327,63 @@ fn sql_input_is_bounded_read_only_and_validated_before_table_io() -> TestResult 
 }
 
 #[test]
+fn sql_column_errors_guide_repairs_in_query_and_explain() -> TestResult {
+    let fixture = SqlCommandFixture::new(fixture_path("partitioned").join("table"), "")?;
+    let expected_row_count = read_expected_rows("partitioned")?.num_rows();
+    let sql_path = fixture.directory.path().join("query.sql");
+    for (sql, reason, hint_fragment) in [
+        (
+            "SELECT d.id, COUNT(*), SUM(r.secret_missing_column), MAX(r.id) \
+             FROM t r JOIN t d ON r.id = d.id GROUP BY d.id ORDER BY d.id",
+            "column_not_found",
+            "Check column names and aliases",
+        ),
+        (
+            "SELECT id FROM t r JOIN t d ON r.id = d.id",
+            "ambiguous_column",
+            "Qualify the column reference",
+        ),
+    ] {
+        fs::write(&sql_path, sql)?;
+        for command in ["query", "explain"] {
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .arg(command)
+                    .arg(&fixture.table)
+                    .arg("--sql-file")
+                    .arg(&sql_path)
+                    .args(["--table-version", "0", "--diagnostics=json"]),
+            )?;
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let diagnostic = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(diagnostic["code"], "sql_planning");
+            assert_eq!(diagnostic["reason"], reason);
+            assert_eq!(diagnostic["recovery"], "fix_input");
+            assert_eq!(diagnostic["retryable"], false);
+            assert_eq!(diagnostic["argument"], "--sql-file");
+            assert!(diagnostic["hint"].as_str().unwrap().contains(hint_fragment));
+            assert_eq!(
+                diagnostic["bindings"],
+                serde_json::json!([{"alias": "t", "table_version": "0"}]),
+            );
+        }
+        let corrected = if reason == "column_not_found" {
+            sql.replace("r.secret_missing_column", "r.id")
+        } else {
+            sql.replace("SELECT id", "SELECT r.id")
+        };
+        fs::write(&sql_path, corrected)?;
+        assert_eq!(
+            assert_query_success_and_decode_arrow(&run_with_timeout(&mut fixture.command())?)?
+                .num_rows(),
+            expected_row_count,
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn query_ceilings_fail_instead_of_returning_a_successful_sample() -> TestResult {
     let fixture = SqlCommandFixture::new(
         fixture_path("partitioned").join("table"),
