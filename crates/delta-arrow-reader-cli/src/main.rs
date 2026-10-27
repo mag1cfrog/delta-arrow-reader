@@ -385,12 +385,12 @@ impl Error {
             Self::ArtifactPublicationInterrupted { source } => {
                 let mut correction = source.input_correction().unwrap_or(InputCorrection {
                     argument: "--output".into(),
-                    expected: "a verified complete artifact pair".into(),
+                    expected: "a result with a matching complete manifest".into(),
                     field_path: None,
                     supplied: None,
                     hint: "",
                 });
-                correction.hint = "Check PATH and PATH.manifest.json before retrying; a verified complete pair may already exist. Otherwise choose unused names and preserve the pinned request and authorization; adjust only the reported budget.";
+                correction.hint = "Check PATH and PATH.manifest.json before retrying; a matching manifest with completion=complete may already exist. Otherwise choose unused names and preserve the pinned request and authorization; adjust only the reported budget.";
                 return Some(correction);
             }
             Self::WithResolvedBindings { source, .. } => return source.input_correction(),
@@ -452,7 +452,7 @@ impl Error {
                     expected: "unused result and manifest names in a writable directory".into(),
                     field_path: None,
                     supplied: None,
-                    hint: "Check PATH and PATH.manifest.json; verify a complete pair before accepting it. Otherwise retry with unused names, preserving inputs, snapshots and limits.",
+                    hint: "Check PATH and PATH.manifest.json for a matching result.path and completion=complete. Otherwise retry with unused names, preserving inputs, snapshots and limits.",
                 });
             }
             Self::OutputLimit {
@@ -567,7 +567,7 @@ impl Error {
                     expected: "enough bytes for the complete JSON result".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "For a large complete result, use --output PATH; if already saving a file, increase --max-output-bytes explicitly. Preserve SQL, authorization, bindings and actual versions; verify the saved manifest before acceptance.",
+                    hint: "For a large complete result, use --output PATH; if already saving a file, increase --max-output-bytes explicitly. Preserve SQL, authorization, bindings and actual versions; require a matching manifest with completion=complete.",
                 });
             }
             Self::OutputLimit {

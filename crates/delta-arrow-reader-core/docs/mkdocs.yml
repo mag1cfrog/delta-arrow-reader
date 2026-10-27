@@ -63,8 +63,8 @@ nav:
           - Fix a failed command: cli-recovery.md
       - Advanced workflows:
           - Automation and saved results: cli-automation.md
-          - Verify JSON results: cli-verify-json.md
-          - Verify Arrow results: cli-verify-arrow.md
+          - Audit JSON integrity: cli-verify-json.md
+          - Audit Arrow integrity: cli-verify-arrow.md
   - Python:
       - Overview: python-api/index.md
       - Quickstart: python.md

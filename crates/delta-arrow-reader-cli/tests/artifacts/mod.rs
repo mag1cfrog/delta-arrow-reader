@@ -465,7 +465,7 @@ fn cancelled_receipt_can_leave_a_verifiable_complete_pair() -> TestResult {
         assert_single_terminal_record(&output.stderr, "diagnostic")["hint"]
             .as_str()
             .unwrap()
-            .contains("complete pair may already exist")
+            .contains("matching manifest with completion=complete may already exist")
     );
     let manifest: Value =
         serde_json::from_slice(&fs::read(directory.path().join("rows.manifest.json"))?)?;

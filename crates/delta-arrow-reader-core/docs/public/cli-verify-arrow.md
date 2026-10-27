@@ -1,9 +1,10 @@
-# Verify a saved Arrow result
+# Audit a saved Arrow result
 
-Use these examples after [saving a complete result](cli-automation.md#save-a-complete-result).
-The script checks integrity and counts;
-also compare the output path, scope, snapshot bindings, and request provenance
-with your intended request before accepting the result.
+Use this example for an integrity audit, such as checking a transferred file
+against its manifest. For ordinary analysis, [read the saved result](cli-automation.md#read-a-saved-result)
+with an Arrow IPC stream reader. The audit script checks integrity and counts;
+compare scope, snapshot bindings and request provenance when they are part of
+the audit.
 
 Use an environment with PyArrow installed. For `totals.arrow`, check the
 manifest against the actual Arrow stream and its end marker:

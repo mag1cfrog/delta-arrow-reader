@@ -81,9 +81,22 @@ counts, amount sums and latest dates. An independent evaluator checks the actual
 answers, types, manifests and file integrity against this fixture. Ordinary
 analysis does not require the consumer to build a general verifier or recompute
 every file hash. It still must handle actual failure and incomplete results.
+Apply that boundary to the CLI's guides, schema descriptions and recovery hints
+as well as the task prompt. Integrity metadata remains available to the evaluator;
+ordinary business guidance must not request generic verification scripts.
 Report deliberate recovery scenarios separately from ordinary analysis, and keep
 their full costs. Use explicit artifact verification tasks when that is the user
 workflow being evaluated.
+
+Test saving, reopening and using results in complete business tasks. For a
+disclosure comparison, run A alone, fresh B, and A followed by B in the same
+context. Forced compaction and reference-only handoffs are separate experiments
+for explicit cross-context requirements, not ordinary CLI acceptance conditions.
+Calibrate time, model-token and capture-storage safeguards for each complete
+scenario before freezing both variants. Record shell calls and retries as costs;
+do not stop ordinary tasks at a fixed call count. Keep interrupted attempts and
+their observed costs, without treating them as evidence of a CLI failure or a
+cheaper completed workflow. Historical trials retain their original conditions.
 
 The [agent contract](../../../../docs/content/cli-agent-contract.md)
 defines the output and recovery semantics. The [first comparison report](https://github.com/mag1cfrog/delta-arrow-reader/issues/543#issuecomment-6408591665)

@@ -14,7 +14,7 @@ or [Fix a failed command](cli-recovery.md). The shell examples use Bash.
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Inspect planned work without reading rows | [`dar explain`](#plan-a-query) |
 | Join named table snapshots | [Tables manifest](#join-table-snapshots) |
-| Save and verify a complete result | [Result files](#save-a-result-with-a-manifest) |
+| Save and read a complete result | [Result files](#save-a-result-with-a-manifest) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Pass a provisioned credential env file | [Credential env files](#credential-env-files) |
@@ -79,8 +79,8 @@ fields absent from the example; it is omitted when the example shows them all.
 The completion guide instead uses `version_1_fields` for the v1 fields absent
 from its v2 example.
 The `result-artifact` and `result-manifest` guides list fields without expanding
-their contents. Nested fields use dots, such as `--detail result.sha256` or
-`--detail replay.inputs`. A selected object lists its child fields.
+their contents. Nested fields use dots, such as `--detail result.format` or
+`--detail replay.options`. A selected object lists its child fields.
 
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
@@ -574,8 +574,7 @@ the command, each alias and its actual snapshot version, and row and output-byte
 This option controls stderr diagnostics independently of the result format.
 Arrow keeps completion v1. JSON uses v2, whose completion kind marks terminal
 success for the requested query. Check `completion: "complete"` and `scope: "query"`
-in stdout. Verify the completion's rows against both `row_count` and the length
-of the `rows` array, and its bytes against saved stdout.
+in stdout, then read the values needed by the task.
 
 ### Read a small result as typed JSON
 
@@ -665,7 +664,7 @@ planning buffers and process RSS are outside that limit. No spill is enabled.
 SQL admission and credential-file rules are the same as for `query`.
 
 With `--diagnostics=json`, require exit 0 and a v3 completion whose `command` is
-`explain` and whose `output_bytes` matches stdout, then check the stdout bindings.
+`explain`, then read the plan and bindings from stdout.
 Focused format lookups accept paths such as
 `capabilities --schema query-plan --detail node.statistics.selected_files`.
 
@@ -696,9 +695,9 @@ transaction, and power-loss durability is not promised.
 The manifest records the result path/format/SHA-256, rows, source batches, byte
 count, completion/scope, actual binding versions, build versions, and replay
 inputs. `limited_scan` covers a requested prefix; a query covers its SQL result.
-JSON preserves rows but not source batch boundaries. For replay, verify the
-input hashes, use `replay.options` in `replay.working_directory`, and select a new
-`--output`. Pin every alias using `bindings`; for `--tables-file`, copy the
+JSON preserves rows but not source batch boundaries. For replay, reuse the
+original input files with `replay.options` in `replay.working_directory`, and
+select a new `--output`. Pin every alias using `bindings`; for `--tables-file`, copy the
 referenced declarations beside the original tables file, preserving relative paths,
 and set each `table_version` to its recorded version. Numeric replay options are
 decimal strings; omit null/false options and repeat `--column` for each value.
@@ -711,7 +710,7 @@ The manifest can contain local paths, profile names, columns, and resource
 settings. Treat it and the result as local data. Temporary files are owner-only
 on Unix; on Windows use a destination directory with a private inherited ACL.
 
-Inspect only the fields needed for the next check:
+Inspect only the fields needed for the next read or replay step:
 
 ```sh
 dar capabilities --command query --detail artifacts
@@ -722,16 +721,17 @@ dar capabilities --schema result-manifest --full > manifest-schema.json
 
 <span id="verify-a-json-result"></span>
 
-Use the [JSON verification example](cli-verify-json.md) or
-[Arrow verification example](cli-verify-arrow.md) to check the actual file
-without printing the full result or manifest.
+To read the saved result, require manifest `completion: "complete"` and
+`result.path` matching the receipt, then use `result.format` to choose the reader.
+Decode only the columns the task needs. For a separate integrity audit, use the
+[JSON](cli-verify-json.md) or [Arrow](cli-verify-arrow.md) audit example.
 
 Write, serialization, budget, or publication failures never fall back to rows
 on stdout. Existing destinations are preserved, including files created during
 the read. If publication has started, cancellation or a failed receipt can leave
-a complete pair despite a nonzero exit status. Verify that pair before deciding
-whether to accept it or retry with unused names. Crashes and uninterruptible IO
-can leave temporary files. Receipts are capped at 8 KiB and manifests at 1 MiB;
+a complete pair despite a nonzero exit status. Check its completion, output path
+and requested bindings before using it or retrying with unused names. Crashes
+and uninterruptible IO can leave temporary files. Receipts are capped at 8 KiB and manifests at 1 MiB;
 paths or provenance that exceed those limits fail before publication.
 
 ## Join table snapshots

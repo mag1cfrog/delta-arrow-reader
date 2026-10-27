@@ -1,8 +1,8 @@
 //! Saved scan/query results and the manifests that commit them.
 //!
 //! `--output rows.arrow` publishes `rows.arrow` before `rows.arrow.manifest.json`.
-//! A result without a matching completion manifest is uncommitted. Consumers check
-//! the manifest's hash, framing and counts before accepting or replaying a result.
+//! A result without a matching completion manifest is uncommitted. The manifest
+//! records the format, pinned inputs and integrity metadata alongside the result.
 
 use std::{
     fs,

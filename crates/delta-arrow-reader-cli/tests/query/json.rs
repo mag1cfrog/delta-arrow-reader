@@ -156,7 +156,7 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
             assert!(hint.contains("--output PATH"));
             assert!(hint.contains("increase --max-output-bytes explicitly"));
             assert!(hint.contains("Preserve SQL, authorization, bindings and actual versions"));
-            assert!(hint.contains("verify the saved manifest"));
+            assert!(hint.contains("matching manifest with completion=complete"));
             assert!(!hint.contains("aggregate"));
         } else {
             let hint = diagnostic["hint"].as_str().unwrap();

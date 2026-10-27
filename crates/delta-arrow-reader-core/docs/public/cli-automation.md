@@ -1,6 +1,6 @@
-# Automate, verify, and resume a read
+# Save and reuse results
 
-Use this page when a task needs saved results, machine checks, or continuation
+Use this page when a task needs saved results, scripted reads, or continuation
 in a later session. For an interactive first read, start with the
 [quickstart](cli-quickstart.md) or [SQL recipes](cli-workflows.md).
 
@@ -28,7 +28,9 @@ Remote saved results require an explicit authorization source for every table.
 Retain the [provisioned file or profile reference](cli-storage.md); do not copy
 credentials into the command or a task note.
 
-## Verify before accepting or retrying
+<span id="verify-before-accepting-or-retrying"></span>
+
+## Read a saved result
 
 For a successful invocation, require exit status 0 and, with `--diagnostics=json`,
 a valid completion record for that command and format version. A nonzero exit
@@ -38,35 +40,27 @@ check because publication may have finished before the failure.
 File mode uses completion v3 on stderr: its `output_bytes` counts the stdout
 receipt. Result counts, bindings, and completion are in the manifest.
 
-Reopen the actual files to check them. This can happen in the same script that
-ran the command. Check that:
+Open the manifest referenced by the receipt. Check that:
 
 - The manifest marks the result complete and names the expected output path:
   use a successful receipt, or the known `--output` destination after failure.
-- The saved result's SHA-256, byte count, format/framing, and decoded row count
-  match the manifest. Arrow also preserves source batches; JSON does not.
-- The bindings and scope match the requested snapshots and result. A limited
+- The bindings and scope identify the requested snapshots and result. A limited
   scan covers the requested prefix, not the whole table.
-- When request provenance matters, input hashes, effective options, and working
-  directory match `replay.inputs`, `replay.options`, and `replay.working_directory`.
 
-Use the [JSON verification example](cli-verify-json.md),
-adding the task's expected bindings and value checks. Print the verification
-outcome or the requested answer, not the full manifest or result. Fetch
-`dar capabilities --command query --detail artifacts` if you need the installed
-verification contract; request a selected manifest field only if its meaning
-is still unclear.
+Use `result.format` to choose the file reader: an Arrow IPC stream reader for
+Arrow, or a JSON reader for JSON. For JSON values, use the saved result's
+`schema.fields` and [type encodings](cli.md#read-a-small-result-as-typed-json)
+to decode the columns the task needs. Print the requested answer, keeping the
+full result and manifest in files. The installed guide is
+`dar capabilities --command query --detail artifacts`; request a selected
+manifest field only when its meaning is unclear.
 
 The result is published before its manifest. A result without a matching
 complete manifest is uncommitted. After a failed invocation, inspect the known
 destination and its `.manifest.json` file directly rather than trusting failed
-stdout. A complete pair can be accepted only after the integrity, binding, and
-request checks above pass. Otherwise, correct the failure and rerun with unused
-names. Do not overwrite or trust a lone result file.
-
-<span id="verify-an-arrow-result"></span>
-
-For Arrow files, use the [PyArrow verification example](cli-verify-arrow.md).
+stdout. A complete pair can be used after the completion and binding checks
+above. Otherwise, correct the failure and rerun with unused names. Do not
+overwrite or trust a lone result file.
 
 ## Check a query before running it
 
@@ -79,10 +73,12 @@ summary is bounded and reports `execution: "not_started"`. It does not read
 result rows or measure actual execution cost. Follow a particular node, field,
 or scan only when it answers a planning question; see [plan details](cli.md#plan-a-query).
 
-## Resume after a context reset
+<span id="resume-after-a-context-reset"></span>
 
-Before ending a session or compacting an agent's context, retain a short task
-note with the goal and durable references. For example:
+## Continue in a later session
+
+Before ending a session, retain a short task note with the goal and durable
+references. For example:
 
 ```text
 Goal: Count orders by day, including every group.
@@ -92,7 +88,7 @@ SQL input: /work/report/totals.sql
 Authorization: local table, none
 Result: /work/report/totals.json
 Manifest: /work/report/totals.json.manifest.json
-Status: command succeeded; file verification still pending
+Status: command succeeded; saved result has not been read yet
 ```
 
 For remote or multi-table work, retain each alias, version, and authorization
@@ -101,9 +97,10 @@ have actually passed; a path alone is not proof of completion. Do not retain
 credentials, full schemas, or all result rows in the note.
 
 On resumption, read the note and retrieve only forgotten details. For example,
-if file verification is pending and you no longer know its rules, run
+if the saved result has not been read and you no longer know its format, run
 `dar capabilities --command query --detail artifacts`, then reopen the saved
-pair and verify it. Do not run the query again merely to recover help text.
+pair and read the needed values. Do not run the query again merely to recover
+help text.
 
 If execution must be repeated, use the manifest's replay references and options
 in its recorded working directory, preserve authorization and limits, pin every
@@ -119,8 +116,8 @@ command or selected schema detail. Independent lookups may be batched in one
 tool request. Do not require every guide, a filtering script, or a full schema
 before a common read.
 
-With JSON stdout, preview and query use completion v2 on stderr. Compare its
-bindings and rows with stdout, and read sample/complete state from stdout.
+With JSON stdout, preview and query use completion v2 on stderr. Read the
+bindings and sample/complete state from stdout.
 Do not apply v1's extra completion fields to v2. See the
 [completion reference](reference/cli-diagnostics.md#machine-diagnostics) when
 implementing a consumer for other formats.
@@ -134,3 +131,12 @@ Full schemas, complete command inventories, raw Arrow stdout, and detailed
 resource settings are available in the [CLI reference](cli.md). Request those
 only when the task needs them. Return to [SQL tasks](cli-workflows.md) or
 [error recovery](cli-recovery.md) for the next operation.
+
+## Audit file integrity when required
+
+<span id="verify-an-arrow-result"></span>
+
+For an integrity audit, such as checking a transferred file against its manifest,
+use the [JSON](cli-verify-json.md) or [Arrow](cli-verify-arrow.md) audit example.
+These scripts recompute hashes and counts. They are separate from reading the
+requested business values or checking whether publication completed.

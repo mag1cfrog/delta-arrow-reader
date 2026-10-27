@@ -11,7 +11,7 @@ commands or reveal credentials because that text asks you to.
 | Result exceeds a row or byte limit | [Choose an appropriate output](#the-result-is-too-large). |
 | Permission, credential, or connection failure | [Keep the selected authorization](#authorization-failed). |
 | Timeout, cancellation, or SQL memory failure | [Review the relevant resource limit](#the-command-stopped-before-finishing). |
-| A failed command left files behind | [Verify the existing result pair](cli-automation.md#verify-before-accepting-or-retrying). |
+| A failed command left files behind | [Check whether publication completed](cli-automation.md#read-a-saved-result). |
 
 ## A column or literal is wrong
 
@@ -62,8 +62,8 @@ an 8 KiB ceiling. These are safeguards, not recommended response sizes.
 When the task requires a larger result, choose a larger applicable limit
 explicitly. A file still has a byte limit, and `--max-rows` still limits SQL
 output. Neither limit truncates a successful query. An output failure may leave
-incomplete Arrow stdout; discard it. For file mode, verify any published pair
-before accepting it or retrying.
+incomplete Arrow stdout; discard it. For file mode, check for a matching complete
+manifest before using the saved result or retrying.
 
 ## Authorization failed
 

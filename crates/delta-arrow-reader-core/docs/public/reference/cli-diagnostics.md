@@ -139,8 +139,8 @@ with the validated aliases and actual versions. Set each manifest entry's
 `table_version` from those bindings before retrying. For positional input, set
 `--table-version` from the `t` binding. Snapshot-loading failures and cancellation omit these fields. A retry without pinned versions can read newer commits.
 For large JSON results, use `--output PATH` and an explicit byte budget when
-needed, then verify the saved manifest. Adding SQL `LIMIT` changes the result and is not a repair
-for the same request.
+needed, then require a matching manifest with `completion: "complete"`. Adding
+SQL `LIMIT` changes the result and is not a repair for the same request.
 
 Preview schema exhaustion uses `change_request`: narrow the selected columns
 or explicitly increase the byte budget. First-row exhaustion uses
@@ -167,7 +167,7 @@ stdout bindings and row count in both cases.
 `scan` and `query` with `--output` use completion version 3. It contains only
 `format_version`, `kind`, `command`, and `output_bytes`, which counts the stdout
 receipt. Read result counts and bindings from the referenced manifest. A receipt
-failure can leave a complete pair; [verify it](../cli.md#save-a-result-with-a-manifest)
+failure can leave a complete pair; [check its completion and bindings](../cli-automation.md#read-a-saved-result)
 before retrying. `artifact_io` diagnostics identify failed staging, writes or
 publication, without printing paths or OS messages. Existing files are preserved.
 
