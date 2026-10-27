@@ -341,6 +341,29 @@ impl DiscoverySchema {
         } else {
             guide["definition"] = selected.clone();
         }
+        // Routine reading and replay need file references; full_command retains the validation schema.
+        if matches!(self, Self::ResultManifest) {
+            match detail {
+                Some("result") => {
+                    guide["fields"] = json!(["format", "path"]);
+                    guide["description"] = json!(
+                        "Absolute path and encoding of the saved file. JSON uses the rows schema."
+                    );
+                }
+                Some("replay.inputs") => {
+                    guide["definition"]["description"] = json!(
+                        "Input files parsed by this command. Paths use working_directory; credential files are excluded."
+                    );
+                    let input = &mut guide["definition"]["items"];
+                    input["properties"] = json!({
+                        "argument": input["properties"]["argument"],
+                        "path": input["properties"]["path"],
+                    });
+                    input["required"] = json!(["argument", "path"]);
+                }
+                _ => {}
+            }
+        }
         Ok(guide)
     }
 
@@ -459,6 +482,66 @@ fn describe_predicate_references(
 mod tests {
     use super::*;
     use crate::input::{PredicateInput, parse_json};
+
+    #[test]
+    fn manifest_file_guides_defer_integrity_metadata_to_the_full_schema() {
+        let format = DiscoverySchema::ResultManifest;
+        for field in [None, Some("result"), Some("replay"), Some("replay.inputs")] {
+            let guide = format.build_schema_guide(field).unwrap();
+            let text = guide.to_string().to_ascii_lowercase();
+            for term in [
+                "hash",
+                "sha256",
+                "sha-256",
+                "digest",
+                "checksum",
+                "integrity",
+            ] {
+                assert!(!text.contains(term), "{field:?}: {term}");
+            }
+            assert_eq!(guide["full_command"][4], "--full");
+        }
+        let result = format.build_schema_guide(Some("result")).unwrap();
+        assert_eq!(result["fields"], json!(["format", "path"]));
+        for field in ["result.path", "result.format"] {
+            assert!(format.build_schema_guide(Some(field)).is_ok());
+        }
+        let inputs = format.build_schema_guide(Some("replay.inputs")).unwrap();
+        let properties = &inputs["definition"]["items"]["properties"];
+        assert_eq!(properties["path"]["type"], "string");
+        assert!(
+            properties["argument"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("--sql-file"))
+        );
+        assert_eq!(
+            inputs["definition"]["items"]["required"],
+            json!(["argument", "path"])
+        );
+
+        let full = format.schema_document();
+        for definition in [
+            &full["schema"]["properties"]["result"],
+            &full["schema"]["properties"]["replay"]["properties"]["inputs"]["items"],
+        ] {
+            assert!(
+                definition["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("sha256"))
+            );
+            assert_eq!(
+                definition["properties"]["sha256"]["pattern"],
+                "^[a-f0-9]{64}$"
+            );
+        }
+        let requested = format.build_schema_guide(Some("result.sha256")).unwrap();
+        assert_eq!(
+            requested["definition"],
+            full["schema"]["properties"]["result"]["properties"]["sha256"]
+        );
+    }
 
     #[test]
     fn row_value_encodings_are_disclosed_only_when_selected() {
