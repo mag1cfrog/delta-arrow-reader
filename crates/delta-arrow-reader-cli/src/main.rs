@@ -556,7 +556,7 @@ impl Error {
                         .to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                    hint: "For types only, omit --include-metadata. Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
                 });
             }
             Self::OutputLimit {

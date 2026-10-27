@@ -61,9 +61,17 @@ impl DiscoverySchema {
                         argument: "--detail".to_owned(),
                         field_path: None,
                         supplied: None,
-                        expected: "a field, operator, or scalar type listed by the selected schema"
-                            .to_owned(),
-                        hint: "Run capabilities --schema NAME to list available details.",
+                        expected: if matches!(self, Self::Rows) {
+                            "a result field or value encoding"
+                        } else {
+                            "a field, operator, or scalar type listed by the selected schema"
+                        }
+                        .to_owned(),
+                        hint: if matches!(self, Self::Rows) {
+                            "Run capabilities --schema rows --detail rows for value encodings; omit --detail for result fields."
+                        } else {
+                            "Run capabilities --schema NAME to list available details."
+                        },
                     }),
                 })?;
             guide["detail"] = json!(name);

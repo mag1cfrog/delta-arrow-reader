@@ -38,7 +38,7 @@ pub(crate) struct InspectionArgs {
     /// With --view summary: matching top-level names only (case-sensitive prefix).
     #[arg(long, value_name = "PREFIX")]
     column_prefix: Option<String>,
-    /// Include nonempty metadata, including nested fields; requires --column.
+    /// Include nonempty metadata for every selected column and its nested fields; requires --column.
     #[arg(long, requires = "columns")]
     include_metadata: bool,
     /// Summary stdout ceiling in bytes, including newline; default: 4096.

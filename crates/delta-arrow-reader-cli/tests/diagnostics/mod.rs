@@ -64,6 +64,19 @@ fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::
             "Run capabilities --schema NAME to list available details.",
         ),
         (
+            vec![
+                "capabilities",
+                "--schema",
+                "rows",
+                "--detail",
+                "secret-detail",
+            ],
+            "InvalidValue",
+            "--detail",
+            "a result field or value encoding",
+            "Run capabilities --schema rows --detail rows for value encodings; omit --detail for result fields.",
+        ),
+        (
             vec!["inspect", "secret-table", "--column"],
             "InvalidValue",
             "--column",
