@@ -39,6 +39,7 @@ pub(crate) struct InspectionArgs {
     #[arg(long, value_name = "PREFIX")]
     column_prefix: Option<String>,
     /// Include nonempty metadata for every selected column and its nested fields; requires --column.
+    /// Select only columns whose metadata you need; get other columns' types separately.
     #[arg(long, requires = "columns")]
     include_metadata: bool,
     /// Summary stdout ceiling in bytes, including newline; default: 4096.
