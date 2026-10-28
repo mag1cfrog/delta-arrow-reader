@@ -145,8 +145,8 @@ complete definition.
 
 `--schema completion` explains how to verify a terminal success record.
 Its v2 example applies to JSON query stdout: compare snapshots and counts with
-stdout, which carries sample/completion state. File output uses v3 and records
-result counts, snapshots, and completion state in the result manifest.
+stdout, which carries sample/completion state. File output uses v3; optional
+`--manifest` records result counts, snapshots, and completion state in a sidecar.
 Use `--detail FIELD` for a field's type and meaning, including fields used in
 v1 scan and Arrow receipts. `--schema rows --detail has_more` explains the three
 preview stopping states without repeating conditional validation blocks;
@@ -238,9 +238,11 @@ result appears. The schema response itself always goes to stdout.
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
 | `rows` | stdout | Typed preview or query JSON with ordered fields and positional rows. |
+| `result-artifact` | stdout | A saved-result receipt: v2 names the result; opt-in v1 also names its manifest. |
+| `result-manifest` | file | Sources, completion, counts and replay settings saved with `--manifest`. |
 | `query-plan` | stdout | Summary or selected plan node, output types, scan pushdown, or planner statistics. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
-| `completion` | stderr | A terminal success record with `--diagnostics=json`. Stdout mode includes snapshots and counts; file mode counts receipt bytes and keeps result metadata in the manifest. |
+| `completion` | stderr | A terminal success record with `--diagnostics=json`. Stdout mode includes snapshots and counts; file mode counts receipt bytes; `--manifest` optionally saves result metadata. |
 
 Output schemas allow additional object fields. Version and count strings use
 unsigned decimal notation; consumers must check the u64 range when converting
@@ -668,11 +670,14 @@ With `--diagnostics=json`, require exit 0 and a v3 completion whose `command` is
 Focused format lookups accept paths such as
 `capabilities --schema query-plan --detail node.statistics.selected_files`.
 
-## Save a result with a manifest
+<span id="save-a-result-with-a-manifest"></span>
 
-Use `--output PATH` on `scan` or `query` to save a complete result without
-printing its rows. The directory must exist, and neither `PATH` nor
-`PATH.manifest.json` may exist. There is no overwrite option.
+## Save a result
+
+Use `--output PATH` on `scan` or `query` to save one complete result without
+printing its rows. The directory must exist and `PATH` must be unused.
+There is no overwrite option. An unrelated `PATH.manifest.json` does not block
+ordinary export.
 
 ```sh
 dar --diagnostics=json query /data/orders --table-version 42 \
@@ -681,16 +686,33 @@ dar --diagnostics=json scan /data/orders --table-version 42 \
   --column customer_id --column total --output orders.arrow
 ```
 
-Stdout returns a JSON receipt with `format_version: 1`, `kind: "result_artifact"`,
-and absolute `result` and `manifest` paths. It contains no rows or schema.
-With `--diagnostics=json`, stderr completion v3 reports the command and receipt
-byte count. Result counts and snapshot bindings are in the manifest.
+Stdout returns a JSON receipt with `format_version: 2`, `kind: "result_artifact"`,
+and the absolute `result` path. It contains no rows or schema. With
+`--diagnostics=json`, stderr completion v3 reports the command and receipt byte
+count. Require exit 0 and the completion record before accepting success.
 
-The CLI stages both files on the destination filesystem. After the read and
-temporary-query cleanup succeed, it publishes the result without replacing an
-existing name, then publishes the manifest. A result without a matching
-completion manifest is uncommitted. The two publications are not one atomic
-transaction, and power-loss durability is not promised.
+The CLI stages the result on the destination filesystem. After the read and
+temporary-query cleanup succeed, it publishes the complete file without replacing
+an existing name. A failure after publication may leave a complete result;
+preserve it and choose an unused path if completion is uncertain. Crashes and
+uninterruptible IO can leave temporary files; power-loss durability is not promised.
+
+Read the result using the selected `--format` (default Arrow IPC), regardless
+of the filename extension. JSON uses the result's `schema.fields` to decode
+values. The result file can be read or moved on its own. Default export creates
+no sidecar and computes no result or replay-input hashes.
+
+### Record provenance with --manifest
+
+Add `--manifest` to save `PATH.manifest.json` with the sources and options needed
+for replay. This flag requires `--output`; both destinations must be unused.
+The receipt uses `format_version: 1` and includes absolute `result` and `manifest`
+paths.
+
+This mode stages both files and publishes the manifest after the result. The two
+publications are not one atomic transaction. This pair requires a matching
+manifest with `completion: "complete"`; a lone result does not establish that
+the requested provenance was saved.
 
 The manifest records the result path/format/SHA-256, rows, source batches, byte
 count, completion/scope, actual binding versions, build versions, and replay
@@ -721,7 +743,7 @@ dar capabilities --schema result-manifest --full > manifest-schema.json
 
 <span id="verify-a-json-result"></span>
 
-To read the saved result, require manifest `completion: "complete"` and
+For `--manifest` output, require manifest `completion: "complete"` and
 `result.path` matching the receipt, then use `result.format` to choose the reader.
 Decode only the columns the task needs. For a separate integrity audit, use the
 [JSON](cli-verify-json.md) or [Arrow](cli-verify-arrow.md) audit example.

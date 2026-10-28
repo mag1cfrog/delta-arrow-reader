@@ -104,7 +104,7 @@ fn saved_results_record_credential_references_without_values_or_hashes() -> Test
                 .command(operation)
                 .arg("--env-file")
                 .arg(&path)
-                .arg("--output")
+                .args(["--manifest", "--output"])
                 .arg(&destination)
                 .arg("--diagnostics=json"),
         )?;

@@ -26,6 +26,11 @@ pub(crate) const CLEANUP_GRACE: Duration = Duration::from_secs(1);
 
 pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticFormat) -> ExitCode {
     let started = Instant::now();
+    let manifest_requested = match &command {
+        Command::Query(args) => args.manifest,
+        Command::Scan { manifest, .. } => *manifest,
+        _ => false,
+    };
     let deadline_ms = match &command {
         Command::Inspect { deadline_ms, .. } | Command::Scan { deadline_ms, .. } => *deadline_ms,
         Command::Preview(args) => Some(args.deadline_ms),
@@ -162,7 +167,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
                 && matches!(error, Error::Cancelled { .. } | Error::DeadlineExceeded | Error::Output { .. }
                     | Error::UnityCatalog { source: crate::unity_catalog::Error::Cancelled { .. } })
             {
-                Error::ArtifactPublicationInterrupted { source: Box::new(error) }
+                Error::ArtifactPublicationInterrupted { source: Box::new(error), manifest_requested }
             } else { error }
         })
     });

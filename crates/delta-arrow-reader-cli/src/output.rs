@@ -1,7 +1,7 @@
 //! Row output formats and their resource ceilings.
 //!
 //! Stdout supports incremental Arrow or bounded, complete JSON. File outputs
-//! stream into temporary storage and become usable only with a matching manifest.
+//! stage a complete result before publication; provenance is optional via --manifest.
 
 pub(crate) mod arrow;
 pub(crate) mod artifact;

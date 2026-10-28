@@ -100,7 +100,10 @@ class WorkflowStorageTests(unittest.TestCase):
         result = json.loads((self.directory / "result.json").read_text())
         self.assertEqual([int(row[0]) for row in result["rows"]], [1, 3, 4, 6, 7, 8, 9, 10, 11])
         self.assertEqual(result["completion"], "complete")
-        self.check_no_credential_output((self.directory / "result.json.manifest.json").read_bytes())
+        receipt = json.loads(output.stdout)
+        self.assertEqual(receipt, {"format_version": 2, "kind": "result_artifact",
+                                   "result": str(self.directory / "result.json")})
+        self.assertFalse((self.directory / "result.json.manifest.json").exists())
         self.assertEqual({r["identity"] for r in self.storage_events() if r["event"] == "request"}, {"selected"})
 
     def test_env_file_selects_the_same_identity(self):

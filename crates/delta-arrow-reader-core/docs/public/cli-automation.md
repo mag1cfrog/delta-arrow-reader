@@ -14,12 +14,13 @@ dar query /path/to/table --table-version 0 --sql-file totals.sql \
 ```
 
 Replace the table and version with yours. Keep the SQL and authorization
-unchanged. The destination directory must exist, and neither `totals.json` nor
-`totals.json.manifest.json` may already exist. Choose new names for a new run.
+unchanged. The destination directory must exist and `totals.json` must not
+already exist. Choose a new name for a new run.
 For multiple tables, keep `--tables-file` and its pinned versions instead of a
 positional table and `--table-version`.
 
-Stdout returns a small receipt containing the result and manifest paths.
+Stdout returns a v2 receipt containing the absolute result path. The command
+saves one file that can be read on its own.
 It does not print result rows. JSON file output defaults to a 16 MiB limit;
 choose a larger byte budget explicitly if the same result needs one. For Arrow
 consumers, use `--format arrow` and an `.arrow` filename instead.
@@ -38,29 +39,21 @@ means the invocation failed; discard its stdout. Saved files need a separate
 check because publication may have finished before the failure.
 
 File mode uses completion v3 on stderr: its `output_bytes` counts the stdout
-receipt. Result counts, bindings, and completion are in the manifest.
+receipt. Open the receipt's `result` path using the format you selected:
+an Arrow IPC stream reader for Arrow, or a JSON reader for JSON. The filename
+extension does not select the format; the default is Arrow.
 
-Open the manifest referenced by the receipt. Check that:
+For JSON values, use the saved result's `schema.fields` and
+[type encodings](cli.md#read-a-small-result-as-typed-json) to decode the columns
+the task needs. Print the requested answer and keep the full result in its
+file. The file can be copied or moved on its own. The installed guide is
+`dar capabilities --command query --detail artifacts`.
 
-- The manifest marks the result complete and names the expected output path:
-  use a successful receipt, or the known `--output` destination after failure.
-- The bindings and scope identify the requested snapshots and result. A limited
-  scan covers the requested prefix, not the whole table.
-
-Use `result.format` to choose the file reader: an Arrow IPC stream reader for
-Arrow, or a JSON reader for JSON. For JSON values, use the saved result's
-`schema.fields` and [type encodings](cli.md#read-a-small-result-as-typed-json)
-to decode the columns the task needs. Print the requested answer, keeping the
-full result and manifest in files. The installed guide is
-`dar capabilities --command query --detail artifacts`; request a selected
-manifest field only when its meaning is unclear.
-
-The result is published before its manifest. A result without a matching
-complete manifest is uncommitted. After a failed invocation, inspect the known
-destination and its `.manifest.json` file directly rather than trusting failed
-stdout. A complete pair can be used after the completion and binding checks
-above. Otherwise, correct the failure and rerun with unused names. Do not
-overwrite or trust a lone result file.
+After a failed invocation, a complete file may already exist at the output
+path. Preserve it. If completion is uncertain, correct the failure and rerun
+with a new output name and the same inputs, versions and authorization.
+For explicitly requested provenance, follow the
+[manifest checks below](#save-provenance-for-replay).
 
 ## Check a query before running it
 
@@ -87,7 +80,7 @@ Table: /data/orders, snapshot version 42
 SQL input: /work/report/totals.sql
 Authorization: local table, none
 Result: /work/report/totals.json
-Manifest: /work/report/totals.json.manifest.json
+Encoding: JSON
 Status: command succeeded; saved result has not been read yet
 ```
 
@@ -97,16 +90,13 @@ have actually passed; a path alone is not proof of completion. Do not retain
 credentials, full schemas, or all result rows in the note.
 
 On resumption, read the note and retrieve only forgotten details. For example,
-if the saved result has not been read and you no longer know its format, run
-`dar capabilities --command query --detail artifacts`, then reopen the saved
-pair and read the needed values. Do not run the query again merely to recover
+use the recorded encoding to open the saved result and read the needed values.
+If a JSON type is unfamiliar, request its focused type guide. Do not run the query again merely to recover
 help text.
 
-If execution must be repeated, use the manifest's replay references and options
-in its recorded working directory, preserve authorization and limits, pin every
-alias to its recorded version, and choose a new output name. The input files and
-snapshot data must still exist. Ordering and volatile SQL expressions can
-affect repeatability; see [replay rules](cli.md#save-a-result-with-a-manifest).
+If execution must be repeated, use the retained SQL, inputs, versions and
+options with a new output name. To have the CLI record these references during
+export, use the optional manifest described below.
 
 ## Discover only what the task lacks
 
@@ -132,11 +122,42 @@ resource settings are available in the [CLI reference](cli.md). Request those
 only when the task needs them. Return to [SQL tasks](cli-workflows.md) or
 [error recovery](cli-recovery.md) for the next operation.
 
+## Save provenance for replay
+
+Add `--manifest` when the result needs a record of its sources and settings:
+
+```sh
+dar query /path/to/table --table-version 0 --sql-file totals.sql \
+  --format json --output totals.json --manifest --diagnostics=json
+```
+
+This also saves `totals.json.manifest.json`. Both destinations must be unused.
+Stdout uses the v1 receipt with absolute `result` and `manifest` paths. The
+manifest records actual bindings, counts, format, completion and replay inputs.
+
+For this mode, open the referenced manifest and check `completion: "complete"`
+and `result.path` against the receipt. Check bindings and scope when the task
+requires a particular snapshot or full-table result. A limited scan covers only
+the requested prefix. Read only fields needed for the next step; their meanings
+are available through `dar capabilities --schema result-manifest --detail FIELD`.
+
+The result is published before the manifest. A failure can leave the pair
+incomplete. After an interrupted invocation, inspect the known output and
+manifest paths rather than trusting failed stdout. Use the pair only when the
+manifest matches the result and requested bindings; otherwise retry with unused
+names. Preserve existing files.
+
+For replay, use `replay.options` in `replay.working_directory`, preserve
+authorization and limits, pin every alias to its recorded version, and choose
+a new output name. The input files and snapshot data must still exist. Ordering
+and volatile SQL expressions can affect repeatability; see
+[replay rules](cli.md#save-a-result-with-a-manifest).
+
 ## Audit file integrity when required
 
 <span id="verify-an-arrow-result"></span>
 
-For an integrity audit, such as checking a transferred file against its manifest,
-use the [JSON](cli-verify-json.md) or [Arrow](cli-verify-arrow.md) audit example.
-These scripts recompute hashes and counts. They are separate from reading the
-requested business values or checking whether publication completed.
+When a result was saved with `--manifest`, a separate integrity audit can compare
+it with the recorded digests and counts. Use the [JSON](cli-verify-json.md) or
+[Arrow](cli-verify-arrow.md) audit example for that task. Ordinary reading and
+publication checks do not require these scripts.

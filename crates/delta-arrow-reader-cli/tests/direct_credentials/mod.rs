@@ -49,21 +49,34 @@ fn file_output_selects_only_the_supplied_json_identity() -> TestResult {
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     fixture.write_options(json!({"aws_region": "eu-west-1", "aws_access_key_id": "test-key", "aws_secret_access_key": "secret-file-password"}))?;
     for operation in ["scan", "query"] {
-        let output = run_with_timeout(
-            fixture
-                .command(operation)
-                .arg("--diagnostics=json")
-                .arg("--output")
-                .arg(fixture.directory.path().join(operation)),
-        )?;
-        assert!(output.status.success(), "{output:?}");
-        let receipt: Value = serde_json::from_slice(&output.stdout)?;
-        let manifest = fs::read_to_string(receipt["manifest"].as_str().unwrap())?;
-        assert!(!manifest.contains("secret-file-password"));
-        assert_eq!(
-            serde_json::from_str::<Value>(&manifest)?["replay"]["options"]["auth-source"],
-            "json"
-        );
+        for manifest_requested in [false, true] {
+            let destination = fixture
+                .directory
+                .path()
+                .join(format!("{operation}-{manifest_requested}"));
+            let output = run_with_timeout(
+                fixture
+                    .command(operation)
+                    .arg("--diagnostics=json")
+                    .arg("--output")
+                    .arg(&destination)
+                    .args(manifest_requested.then_some("--manifest")),
+            )?;
+            assert!(output.status.success(), "{output:?}");
+            let receipt: Value = serde_json::from_slice(&output.stdout)?;
+            if manifest_requested {
+                let manifest = fs::read_to_string(receipt["manifest"].as_str().unwrap())?;
+                assert!(!manifest.contains("secret-file-password"));
+                assert_eq!(
+                    serde_json::from_str::<Value>(&manifest)?["replay"]["options"]["auth-source"],
+                    "json"
+                );
+            } else {
+                assert_eq!(receipt["format_version"], 2);
+                assert!(receipt.get("manifest").is_none());
+                assert!(!destination.with_extension("manifest.json").exists());
+            }
+        }
     }
     fixture.assert_signed_s3_requests("test-key", "secret-file-password", None, "eu-west-1")?;
     Ok(())

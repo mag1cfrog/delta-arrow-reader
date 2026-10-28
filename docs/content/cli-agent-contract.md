@@ -46,7 +46,7 @@ are documented separately. Writes are outside this contract.
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
 | Join | `dar query --tables-file PATH --sql-file PATH`; bind each table explicitly. |
 | Plan | `dar explain` with the same query inputs; report bounded structured plan information without executing rows. |
-| Save | `scan` or `query` with `--output PATH`; publish a result and completion manifest. |
+| Save | `scan` or `query` with `--output PATH`; save one result file. Add `--manifest` for provenance and replay. |
 
 The wheel executable is `delta-arrow-reader`, with the same arguments.
 Capabilities reports only installed commands, options, schemas, auth mechanisms,
@@ -106,8 +106,8 @@ and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
 failure message. Preview and stdout query JSON completions use version 2, retaining command,
 bindings, rows, and output bytes alongside kind and version. File-output
-completion v3 reports command and receipt bytes; result counts and bindings
-belong to the manifest. Explain uses v3 with stdout document bytes and keeps
+completion v3 reports command and receipt bytes. With `--manifest`, result counts
+and bindings are also saved in that optional file. Explain uses v3 with stdout document bytes and keeps
 bindings in the query-plan document. Other completions and discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
@@ -199,7 +199,7 @@ Machine mode attempts one terminal failure or completion record, independent of
 `RUST_LOG`. The completion kind marks terminal success for the requested command.
 For stdout row reads, completion includes actual bindings and result-byte counts;
 scan, preview, and query add row counts. File mode's v3 completion counts the
-stdout receipt bytes; its manifest carries result counts and actual bindings. Version 1 also reports scope, exhaustion, and Arrow batch counts.
+stdout receipt bytes; an explicitly requested manifest carries result counts and actual bindings. Version 1 also reports scope, exhaustion, and Arrow batch counts.
 Data-sized quantities are decimal strings. Query JSON to stdout reports
 complete status and query scope. Preview reports sample status and its
 stop_reason/has_more pair in stdout. Read the fields needed to interpret the
@@ -354,23 +354,47 @@ was requested. Refresh cannot retarget it. Pinned tables are independent
 snapshots, not a cross-table transaction. Repeatable ordering needs ORDER BY
 with ties resolved; volatile functions/float aggregation can still vary.
 
-`--output PATH` stages on the destination filesystem, then atomically publishes
-without clobbering. V1 has no overwrite mode. Publish `PATH.manifest.json` only
-after the complete result. Two-file publication is not atomic: a result lacking
-its completion manifest is uncommitted. Receipt failure/cancellation after both
-publications can leave a complete pair despite nonzero process status.
+`--output PATH` saves one complete result file. It stages on the destination
+filesystem, then publishes without replacing an existing file. The default
+creates no sidecar and computes no result or replay-input hashes. An unrelated
+`PATH.manifest.json` does not block ordinary export. Encoding follows `--format`
+(default Arrow IPC), not the filename extension. For example:
 
-The versioned manifest records completion/scope, actual bindings, format, result
-path, row/batch/byte counts, result SHA-256, build versions, limits, and execution
+```bash
+dar query /data/orders --sql-file report.sql --format json --output report.json
+```
+
+Stdout returns a `result_artifact` v2 receipt with `format_version`, `kind`, and
+the absolute `result` path. Require exit 0 and, with `--diagnostics=json`, a
+completion record. A failure after publication can leave a complete result;
+preserve existing files and choose a new path when retrying. Moving the result
+file alone is enough to read it with a reader for its encoding.
+
+Add `--manifest` when provenance or replay is needed:
+
+```bash
+dar query /data/orders --table-version 42 --sql-file report.sql --output report.arrow --manifest
+```
+
+This opt-in mode retains the `result_artifact` v1 receipt with result and manifest
+paths. It publishes `PATH.manifest.json` only after the complete result, without
+replacing either destination. Two-file publication is not atomic: this mode
+requires a matching manifest with `completion=complete`. Receipt failure or
+cancellation after both publications can leave a complete pair despite nonzero
+process status.
+
+The manifest records completion/scope, actual bindings, format, result path,
+row/batch/byte counts, result SHA-256, build versions, limits, and execution
 overrides. Keep replay input references/hashes and safe locations; never embed
-SQL literals, tokens, provider responses, or credential contents/hashes. Stdout
-returns the least receipt information needed to identify and verify publication,
-with usable result and manifest references, within its 8 KiB ceiling. The
-independent evaluator checks manifest, hash, framing, and counts before
-acceptance. The agent checks completion and reads the requested values, without
-recomputing file hashes, counts or provenance. Replay reuses the original input
-files and explicit actual versions; snapshot/data/DV files must remain available.
-Independent replay tests check input hashes and result equivalence.
+SQL literals, tokens, provider responses, or credential contents/hashes. Replay
+reuses the original input files and explicit actual versions; snapshot/data/DV
+files must remain available. Independent tests check input hashes and result
+equivalence for this opt-in mode.
+
+Both receipt versions stay within 8 KiB including framing and newline. The
+independent evaluator checks saved data, framing and completeness; manifest and
+digest checks apply when `--manifest` was requested. Ordinary users read the
+requested values without recomputing hashes, counts or provenance.
 Result rows, full schemas, and complete manifests stay in artifacts. The CLI
 provides focused references and completion information so ordinary tasks
 can read required values without printing entire artifacts into agent context.
@@ -419,7 +443,7 @@ storage/provider fixtures; a live cloud account is not required.
 | Confidentiality | Reference reaches intended identity | Malicious data/provider errors | Credential loading/refresh failure | Secret canaries absent from calls, diagnostics, manifests, child args |
 | Auth predictability | Each advertised source authenticates | Aliases/partial families/two identities | Selected-source failure | Signed-request/provider assertions; zero fallback |
 | Automation | Non-TTY/piped/file use | Blocked output, PID 1, platform signals | Broken pipe/hung child/cancellation | Deadline-plus-grace, reaping, temp cleanup |
-| Integrity/replay | Save, reopen and replay a pinned result from a minimal receipt and focused artifact reads | Concurrent updates/order ties/destination races | Midstream/disk/publication/hash failure | Independent checks of exact versions/rows/digest/counts; no-clobber; no full manifest/result in context |
+| Integrity/replay | Save and reopen a result file; opt into `--manifest` for pinned replay | Concurrent updates/order ties/destination races | Midstream/disk/publication failure; manifest failure in opt-in mode | Independent checks of exact rows/types/framing and no-clobber; versions/digests/counts for opt-in manifests; no full manifest/result in context |
 
 Run eight agent tasks: first read from discovery/auth reference; repair predicate
 and SQL input; multi-table analysis; expiry/denial recovery; large/long-cell

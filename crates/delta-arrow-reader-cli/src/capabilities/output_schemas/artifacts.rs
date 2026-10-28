@@ -7,14 +7,17 @@ use super::{snapshot_bindings_schema, unsigned_integer_string_schema};
 pub(in crate::capabilities) fn result_artifact_schema() -> Value {
     json!({
         "title": "Saved result receipt", "type": "object",
-        "description": "File output only. These references locate the saved result and its completion manifest.",
-        "required": ["format_version", "kind", "result", "manifest"],
+        "description": "Successful --output receipt: v2 locates the result file; --manifest selects v1 with an additional provenance file.",
+        "required": ["format_version", "kind", "result"],
+        "if": {"properties": {"format_version": {"const": 1}}},
+        "then": {"required": ["manifest"]},
+        "else": {"not": {"required": ["manifest"]}},
         "properties": {
-            "format_version": {"const": 1}, "kind": {"const": "result_artifact"},
-            "result": {"type": "string", "description": "Absolute local result path. Use the manifest's format to decode it."},
-            "manifest": {"type": "string", "description": "Absolute local completion-manifest path. Check completion=complete and result.path against the receipt; read other fields as needed for the task."},
+            "format_version": {"enum": [1, 2]}, "kind": {"const": "result_artifact"},
+            "result": {"type": "string", "description": "Absolute local result path. Encoding follows --format (default arrow), regardless of filename extension."},
+            "manifest": {"type": "string", "description": "With --manifest only (v1): absolute provenance-file path. Check completion=complete and result.path against the receipt; read other fields as needed."},
         },
-        "examples": [{"format_version": 1, "kind": "result_artifact", "result": "/work/rows.arrow", "manifest": "/work/rows.arrow.manifest.json"}],
+        "examples": [{"format_version": 2, "kind": "result_artifact", "result": "/work/rows.arrow"}],
     })
 }
 
@@ -23,7 +26,7 @@ pub(in crate::capabilities) fn result_manifest_schema() -> Value {
     let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, lowercase hexadecimal."});
     json!({
         "title": "Result completion manifest", "type": "object",
-        "description": "Completion and replay information for a saved result. A result without a matching complete manifest is uncommitted; publication is not a two-file transaction.",
+        "description": "Optional provenance from --output PATH --manifest. Only this mode requires a matching complete manifest; publication is not a two-file transaction.",
         "required": ["format_version", "kind", "command", "completion", "scope", "stop_reason", "has_more", "bindings", "rows", "batches", "output_bytes", "result", "build", "replay"],
         "properties": {
             "format_version": {"const": 1}, "kind": {"const": "result_manifest"},
@@ -79,4 +82,25 @@ fn replay_options_schema() -> Value {
             "format": {"enum": ["arrow", "json"]},
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receipt_versions_distinguish_optional_provenance() {
+        let validator = jsonschema::validator_for(&result_artifact_schema()).unwrap();
+        let mut receipt =
+            json!({"format_version": 2, "kind": "result_artifact", "result": "/work/rows"});
+        assert!(validator.is_valid(&receipt));
+        receipt["format_version"] = json!(1);
+        assert!(!validator.is_valid(&receipt));
+        receipt["manifest"] = json!("/work/rows.manifest.json");
+        assert!(validator.is_valid(&receipt));
+        for version in [0, 2, 3] {
+            receipt["format_version"] = json!(version);
+            assert!(!validator.is_valid(&receipt));
+        }
+    }
 }

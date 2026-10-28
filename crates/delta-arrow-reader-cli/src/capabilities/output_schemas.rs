@@ -218,11 +218,11 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "Require exit 0 and valid stdout. With --diagnostics=json, also require a stderr completion for the requested command. v1: Read completion, scope, stop_reason and has_more from stderr. v2 (JSON preview/query): Read result semantics from stdout: preview is a sample with stop_reason/has_more; query is complete with scope=query. v3 (--output/explain): Read saved-result completion and format from the manifest, or plan details from query_plan stdout. Counts and output_bytes are decimal strings.",
+        "description": "Require exit 0 and valid stdout. With --diagnostics=json, also require a stderr completion for the requested command. v1: Read completion, scope, stop_reason and has_more from stderr. v2 (JSON preview/query): Read result semantics from stdout: preview is a sample with stop_reason/has_more; query is complete with scope=query. v3 (--output/explain): Read the saved-result path from the receipt, or plan details from query_plan stdout. File encoding follows --format; --manifest optionally records provenance. Counts and output_bytes are decimal strings.",
         "type": "object",
         "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {
-            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output or explain; command and stdout byte count only. Version 2: preview/query JSON stdout. Other stdout uses version 1. File counts and bindings belong to the manifest; explain bindings are in stdout."},
+            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output or explain; command and stdout byte count only. Version 2: preview/query JSON stdout. Other stdout uses version 1. With --manifest, file counts and bindings belong to that optional file; explain bindings are in stdout."},
             "kind": {"const": "completion", "description": "Terminal success for the requested command, emitted after stdout is flushed. Also require exit 0 and valid stdout."},
             "terminal": {"const": true},
             "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "explain", "help", "version"]},

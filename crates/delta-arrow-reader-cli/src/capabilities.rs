@@ -130,7 +130,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "example": [executable, "--diagnostics=json", "scan", "./table", "--limit", "1", "--deadline-ms", "30000"],
             "stdout": "arrow_ipc_stream",
             "notes": [
-                "Use --output PATH to save a complete result with a manifest and return a JSON receipt. Otherwise redirect Arrow stdout to a file or pipe.",
+                "Use --output PATH to save a complete result and return a JSON receipt. Add --manifest for provenance and replay. Otherwise redirect Arrow stdout to a file or pipe.",
                 "--limit selects a sample. Files default to 1000000 rows, 1 GiB and 300000 ms; --max-rows/--max-output-bytes are failure ceilings. Legacy stdout has no byte ceiling or default deadline.",
             ],
         }),
@@ -325,10 +325,11 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
             "format_version": 1, "kind": "command_detail", "command": name, "detail": "artifacts",
             "option": "--output PATH",
             "authorization": "Local: none. UC: Databricks profile. Remote: --auth-source or --env-file; a storage-options file alone selects json. Each remote tables-file binding needs authorization.",
-            "publication": "Publishes PATH, then PATH.manifest.json; never overwrites either. Without a matching complete manifest, the result is uncommitted. Failures never stream rows to stdout. Before retrying, check whether a complete pair already exists; otherwise choose unused names.",
-            "receipt": "Stdout: result_artifact v1, absolute result/manifest paths, at most 8192 bytes. --diagnostics=json: completion v3 with command/output_bytes (receipt bytes). Result counts are in the manifest.",
-            "read_result": "Require manifest completion=complete and result.path=receipt.result. Use manifest result.format to read the saved file; for JSON, use the result's schema.fields to decode needed columns. Read needed manifest fields locally and print only the task's results; keep complete files for reuse.",
-            "replay": "Reuse the original input files with replay.options in replay.working_directory and a new --output. Pin every alias from bindings. With --tables-file, copy it beside the original tables file and set each table_version. Keep authorization/limits. SQL order or volatile values may vary.",
+            "publication": "Publishes one complete file at PATH; never overwrites it. Require exit 0. A failure after publication may leave a complete result; preserve it and choose an unused path if retrying.",
+            "receipt": "Stdout: result_artifact v2 with the absolute result path, at most 8192 bytes. --diagnostics=json: completion v3 with command/output_bytes (receipt bytes).",
+            "read_result": "Read the file using --format (default arrow), regardless of its extension. JSON uses schema.fields to decode columns. Read needed values locally and print only task results; keep complete files for reuse.",
+            "manifest": "Optional --manifest saves PATH.manifest.json after PATH and returns the v1 result/manifest receipt. Neither path is overwritten. This pair requires matching result.path and completion=complete; publication is not a two-file transaction.",
+            "replay": "With --manifest: reuse input files with replay.options in replay.working_directory and a new --output. Pin every alias from bindings. With --tables-file, copy it beside the original and set each table_version. Keep authorization/limits. SQL order or volatile values may vary.",
             "storage": "Temporary files: owner-only on Unix; Windows needs a private inherited directory ACL. Crashes/uninterruptible IO may leave temps; no power-loss durability guarantee.",
             "manifest_schema": [crate::command_name(), "capabilities", "--schema", "result-manifest"],
         }));
@@ -798,7 +799,8 @@ mod tests {
         assert_eq!(guide["completion_format_version"], 2);
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), guide["sql"]["example"].as_str().unwrap()).unwrap();
-        crate::query::ReadOnlySqlQuery::read_file(file.path().to_str().unwrap()).unwrap();
+        crate::query::ReadOnlySqlQuery::read_file_with_bytes(file.path().to_str().unwrap())
+            .unwrap();
         let parsed = Cli::try_parse_from([
             "dar",
             "query",

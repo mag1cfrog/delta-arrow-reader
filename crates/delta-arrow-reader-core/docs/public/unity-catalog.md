@@ -105,9 +105,9 @@ dar scan "$table" --databricks-profile "$profile" --table-version "$version" \
 ```
 
 This saves at most ten values of the selected column as a binary Arrow IPC
-stream, with a completion manifest. Row order is unspecified. Choose an unused
-output name, then [read the saved result](cli-automation.md#read-a-saved-result),
-using `orders.arrow.manifest.json` as the manifest and an Arrow IPC stream reader.
+stream. Row order is unspecified. Choose an unused output name, then
+[read the saved result](cli-automation.md#read-a-saved-result) with an Arrow IPC
+stream reader. Add `--manifest` only when provenance or replay is needed.
 A limited scan covers the requested prefix, not the whole table.
 
 To select columns or filter rows, use the ordinary [scan options](cli.md#scan-rows)
@@ -163,7 +163,7 @@ Authorization now belongs to each manifest entry, so omit the command-line
 `"storage_options_file":"./storage.json"` inside that entry's `authorization`.
 Each table stays on its selected snapshot; the versions do not form a transaction
 across tables. [Read the saved result](cli-automation.md#read-a-saved-result)
-after checking its completion manifest. See the [manifest reference](cli.md#join-table-snapshots)
+after exit 0 and command completion. See the [manifest reference](cli.md#join-table-snapshots)
 for direct-storage tables, additional fields, and path rules.
 
 ## If a command fails
@@ -176,7 +176,7 @@ for direct-storage tables, additional fields, and path rules.
 | `uc_s3_region_required` | Supply the [S3 region file](reference/unity-catalog.md#s3-region). |
 | `unsupported_uc_table` | Check the [supported tables](reference/unity-catalog.md#table-access) and [credential forms](reference/unity-catalog.md#storage-backends-and-credentials). |
 | `uc_credentials_expired` | Check the system clock and [renew user OAuth](#user-oauth-login) if needed, then retry. |
-| Failure after output was written | Discard failed stdout results. In file mode, check for a manifest with `completion: "complete"`, the expected result path and requested bindings before using the result or retrying with unused names at the same version. |
+| Failure after output was written | Discard failed stdout results. In file mode, preserve existing output and retry with an unused path at the same version if completion is uncertain. With `--manifest`, follow the [manifest checks](cli-automation.md#save-provenance-for-replay). |
 
 DAR renews storage credentials during a command. If renewal fails, the command
 fails; it never switches to another identity. See the

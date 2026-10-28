@@ -78,7 +78,8 @@ lookups or repairs.
 
 Give the consumer a business outcome, such as saving the region report with row
 counts, amount sums and latest dates. An independent evaluator checks the actual
-answers, types, manifests and file integrity against this fixture. Ordinary
+answers, types and saved-file integrity against this fixture. Manifest checks
+apply only when the task requests `--manifest`. Ordinary
 analysis does not require the consumer to build a general verifier or recompute
 every file hash. It still must handle actual failure and incomplete results.
 Apply that boundary to the CLI's guides, schema descriptions and recovery hints

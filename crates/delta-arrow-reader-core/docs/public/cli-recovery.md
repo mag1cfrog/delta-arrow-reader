@@ -62,8 +62,10 @@ an 8 KiB ceiling. These are safeguards, not recommended response sizes.
 When the task requires a larger result, choose a larger applicable limit
 explicitly. A file still has a byte limit, and `--max-rows` still limits SQL
 output. Neither limit truncates a successful query. An output failure may leave
-incomplete Arrow stdout; discard it. For file mode, check for a matching complete
-manifest before using the saved result or retrying.
+incomplete Arrow stdout; discard it. A complete file may remain after a failed
+receipt. Preserve it and retry with an unused output path if completion is
+uncertain. With `--manifest`, also follow the
+[manifest checks](cli-automation.md#save-provenance-for-replay).
 
 ## Authorization failed
 

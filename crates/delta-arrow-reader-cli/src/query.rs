@@ -90,13 +90,9 @@ impl QueryInputArgs {
                 self.table_options.prepare_load(location, uc_target, None)?,
             )]
         };
-        let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
+        let (sql_query, bytes) = ReadOnlySqlQuery::read_file_with_bytes(&self.sql_file)?;
         if let Some(artifact) = artifact {
-            artifact.record_input_digest(
-                "--sql-file",
-                &self.sql_file,
-                sql_query.input_sha256.clone(),
-            );
+            artifact.record_replay_input("--sql-file", &self.sql_file, &bytes);
         }
         Ok((requests, sql_query))
     }
@@ -113,11 +109,15 @@ pub(crate) struct QueryArgs {
     #[arg(long = "format", value_enum, default_value = "arrow")]
     #[serde(rename = "format")]
     pub(crate) output_format: RowOutputFormat,
-    /// Save a complete result and PATH.manifest.json without replacing existing files.
+    /// Save one complete result without replacing an existing file.
     /// Stdout returns a small JSON receipt. Windows staging inherits the directory ACL.
     #[arg(long, value_name = "PATH")]
     #[serde(skip)]
     pub(crate) output: Option<PathBuf>,
+    /// Also save PATH.manifest.json with the sources and options needed for replay.
+    #[arg(long, requires = "output")]
+    #[serde(skip)]
+    pub(crate) manifest: bool,
     /// Maximum result rows. Exceeding this ceiling fails; SQL LIMIT selects a smaller result.
     #[arg(long, default_value = "1000000", value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
     pub(crate) max_rows: usize,
@@ -163,9 +163,14 @@ impl QueryArgs {
             .output
             .as_ref()
             .map(|path| {
-                let mut options =
-                    serde_json::to_value(self).map_err(|source| Error::JsonOutput { source })?;
-                options["max-output-bytes"] = json!(self.output_byte_limit());
+                let options = if self.manifest {
+                    let mut options = serde_json::to_value(self)
+                        .map_err(|source| Error::JsonOutput { source })?;
+                    options["max-output-bytes"] = json!(self.output_byte_limit());
+                    Some(options)
+                } else {
+                    None
+                };
                 output::artifact::StagedResult::new(
                     path,
                     self.output_format,
@@ -244,7 +249,7 @@ impl QueryArgs {
             if let Some(staged) = artifact {
                 let mut completion = build_completion_record("query", None, result_stats, None);
                 completion["bindings"] = bindings.into();
-                *pending_artifact = Some(staged.stage_manifest(&completion).map_err(|source| Error::WithResolvedBindings {
+                *pending_artifact = Some(staged.prepare_publication(&completion).map_err(|source| Error::WithResolvedBindings {
                     source: Box::new(source), bindings: completion["bindings"].as_array().cloned().unwrap_or_default(),
                 })?);
                 return Ok(completion);
@@ -367,12 +372,11 @@ impl QueryError {
 /// Parsed and admitted SQL. The AST is kept private because it contains user literals.
 pub(crate) struct ReadOnlySqlQuery {
     statement: Statement,
-    input_sha256: String,
 }
 
 impl ReadOnlySqlQuery {
     /// Rejects malformed or disallowed SQL before opening the requested Delta table.
-    pub(crate) fn read_file(path: &str) -> Result<Self, crate::Error> {
+    pub(crate) fn read_file_with_bytes(path: &str) -> Result<(Self, Vec<u8>), crate::Error> {
         let file = File::open(path).context(InputIoSnafu {
             argument: "--sql-file",
         })?;
@@ -393,7 +397,8 @@ impl ReadOnlySqlQuery {
                 reason: "sql_not_utf8",
             })
             .context(QuerySnafu)?;
-        Self::parse(sql).context(QuerySnafu)
+        let query = Self::parse(sql).context(QuerySnafu)?;
+        Ok((query, bytes))
     }
 
     fn parse(sql: &str) -> Result<Self, QueryError> {
@@ -422,10 +427,7 @@ impl ReadOnlySqlQuery {
         {
             return Err(QueryError::Input { reason });
         }
-        Ok(Self {
-            statement,
-            input_sha256: output::artifact::sha256(sql.as_bytes()),
-        })
+        Ok(Self { statement })
     }
 
     /// Registers only the supplied names and snapshots. URL-based table discovery stays disabled.

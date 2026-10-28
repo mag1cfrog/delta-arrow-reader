@@ -128,7 +128,7 @@ impl DiscoverySchema {
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "v1/v2 only; v3 keeps bindings in the result manifest (--output) or query_plan stdout (explain). Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "v1/v2 only; v3 omits bindings from stderr. Optional --manifest saves bindings in the result manifest; query_plan stdout (explain) keeps them. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {

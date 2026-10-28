@@ -25,7 +25,7 @@ pub(crate) fn tables_manifest_schema() -> Value {
             "tables": {
                 "type": "array", "minItems": 1, "maxItems": super::MAX_TABLES,
                 "items": {"$ref": "#/$defs/table"},
-                "description": "Unique aliases in declaration order. Actual versions appear in that order in stderr completion for stdout results, or the result manifest with --output.",
+                "description": "Unique aliases in declaration order. Actual versions appear in that order in stderr completion for stdout results, or the optional result manifest with --output --manifest.",
             },
         },
         "$defs": {
