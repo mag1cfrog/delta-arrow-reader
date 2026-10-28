@@ -1,6 +1,7 @@
 use snafu::ResultExt;
 
 use super::*;
+use crate::input;
 
 #[test]
 fn uc_cancellation_is_informational_and_keeps_signal_exit_status() {
