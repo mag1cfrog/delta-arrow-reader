@@ -9,10 +9,7 @@ Python wheel, use `delta-arrow-reader` instead.
 
 ## Before you start
 
-- [Install DAR](installation.md#cli-binaries-and-container-images) with Unity
-  Catalog support. The v0.7.0 release predates this feature; use a
-  [source build](installation.md#build-cli-from-source) if your installed command
-  does not recognize `dar capabilities --authorization unity-catalog`.
+- [Install DAR 0.8 or newer](installation.md#cli-binaries-and-container-images).
 - Install the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install)
   and have a working workspace profile. Its `databricks` executable must be on
   `PATH` in the same environment as DAR. DAR packages do not include it.
