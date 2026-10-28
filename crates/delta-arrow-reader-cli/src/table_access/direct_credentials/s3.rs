@@ -1,6 +1,9 @@
 //! Explicit S3 access keys and identity providers without ambient fallback.
 
 mod container_credentials;
+mod options;
+
+pub(super) use options::validate_storage_option;
 
 use std::sync::Arc;
 
@@ -11,9 +14,7 @@ use object_store::{
 };
 use snafu::{OptionExt, ensure};
 
-use super::{
-    CredentialSource, normalize_storage_options, read_environment_value, validate_auth_source_value,
-};
+use super::{CredentialSource, normalize_storage_options, read_environment_value};
 use crate::diagnostics::{Error, StorageAuthorizationSnafu};
 
 pub(super) const CREDENTIAL_ENVIRONMENT_VARIABLES: &[(&str, AmazonS3ConfigKey)] = &[
@@ -133,67 +134,6 @@ fn configure_refreshing_credentials(
         .with_credential_provider(DeltaStorageCredentialProvider::Aws(Arc::clone(
             storage.credentials(),
         ))))
-}
-
-pub(super) fn validate_storage_option(
-    key: &AmazonS3ConfigKey,
-    value: &str,
-    source: CredentialSource,
-) -> Result<(), Error> {
-    match key {
-        AmazonS3ConfigKey::AccessKeyId
-        | AmazonS3ConfigKey::SecretAccessKey
-        | AmazonS3ConfigKey::Token => {
-            ensure!(
-                matches!(source, CredentialSource::Json),
-                StorageAuthorizationSnafu {
-                    reason: "auth_source_conflicting_credentials"
-                }
-            );
-            validate_auth_source_value(value)?;
-        }
-        AmazonS3ConfigKey::RoleArn
-        | AmazonS3ConfigKey::WebIdentityTokenFile
-        | AmazonS3ConfigKey::RoleSessionName
-        | AmazonS3ConfigKey::StsEndpoint => {
-            ensure!(
-                matches!(source, CredentialSource::AwsWebIdentity),
-                StorageAuthorizationSnafu {
-                    reason: "auth_source_unsupported_option"
-                }
-            );
-            validate_auth_source_value(value)?;
-        }
-        AmazonS3ConfigKey::ContainerCredentialsRelativeUri
-        | AmazonS3ConfigKey::ContainerCredentialsFullUri
-        | AmazonS3ConfigKey::ContainerAuthorizationTokenFile => {
-            ensure!(
-                matches!(source, CredentialSource::AwsContainer),
-                StorageAuthorizationSnafu {
-                    reason: "auth_source_unsupported_option"
-                }
-            );
-            validate_auth_source_value(value)?;
-        }
-        AmazonS3ConfigKey::Region | AmazonS3ConfigKey::DefaultRegion => {
-            // The native signer embeds the region in an HTTP header without validation.
-            validate_auth_source_value(value)?;
-        }
-        AmazonS3ConfigKey::Endpoint
-        | AmazonS3ConfigKey::S3Endpoint
-        | AmazonS3ConfigKey::VirtualHostedStyleRequest
-        | AmazonS3ConfigKey::UnsignedPayload
-        | AmazonS3ConfigKey::Checksum
-        | AmazonS3ConfigKey::RequestPayer
-        | AmazonS3ConfigKey::Client(_) => {}
-        _ => {
-            return StorageAuthorizationSnafu {
-                reason: "auth_source_unsupported_option",
-            }
-            .fail();
-        }
-    }
-    Ok(())
 }
 
 fn take_required_credential(options: &mut DeltaStorageOptions, key: &str) -> Result<String, Error> {
