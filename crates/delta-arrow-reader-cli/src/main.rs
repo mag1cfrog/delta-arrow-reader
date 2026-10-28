@@ -22,37 +22,33 @@ mod capabilities;
 mod command_runtime;
 mod diagnostics;
 mod input;
-mod inspection;
 mod output;
 mod output_capacity;
-mod preview;
 mod query;
+mod read;
 mod signals;
 mod stdout_monitor;
 mod table_access;
 
 use std::{
-    io::{self, IsTerminal, Write},
+    io::{self, Write},
     num::NonZeroUsize,
     path::{Path, PathBuf},
     process::ExitCode,
     str::FromStr,
-    sync::atomic::{AtomicBool, Ordering},
 };
 
-use arrow_schema::Schema;
-use clap::{Args, Parser, Subcommand, error::ErrorKind};
+use clap::{Parser, Subcommand, error::ErrorKind};
 use diagnostics::{
     ArgumentSnafu, ArtifactIoSnafu, ConfigurationSnafu, DiagnosticFormat, Error, InputCorrection,
     InputIoSnafu, InputValidationSnafu, OutputSnafu, QuerySnafu, ReaderSnafu, RuntimeSnafu,
     StorageAuthorizationSnafu, TerminalOutputSnafu, UnityCatalogSnafu,
 };
-use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
-use input::JsonInputKind;
 use output::OutputStats;
+use read::{RowReadArgs, inspect, preview};
 use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
-use table_access::{TableArgs, unity_catalog};
+use table_access::TableArgs;
 
 /// Read Delta Lake snapshots as JSON or Arrow IPC streams.
 #[derive(Parser)]
@@ -83,7 +79,7 @@ enum Command {
         #[arg(long, value_name = "PROFILE")]
         databricks_profile: Option<String>,
         #[command(flatten)]
-        inspection: inspection::InspectionArgs,
+        inspection: inspect::InspectionArgs,
         /// Whole-command deadline in milliseconds. Summary defaults to 30000; full has no default.
         #[arg(long, value_name = "N", default_value_if("view", "summary", "30000"), value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
         deadline_ms: Option<NonZeroUsize>,
@@ -124,36 +120,6 @@ enum Command {
     },
 }
 
-/// Snapshot, projection, predicate, and execution choices shared by scan and preview.
-#[derive(Args, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-struct RowReadArgs {
-    #[command(flatten)]
-    #[serde(flatten)]
-    table: TableArgs,
-    /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
-    #[arg(long, value_name = "PROFILE")]
-    databricks_profile: Option<String>,
-    /// Logical column name; repeat to select columns in argument order. Default: all columns.
-    #[arg(long = "column", value_name = "NAME")]
-    #[serde(rename = "column")]
-    columns: Vec<String>,
-    /// Read zero columns while preserving row counts.
-    #[arg(long, conflicts_with = "columns")]
-    no_columns: bool,
-    /// Positive execution partition target; default: native automatic selection.
-    #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
-    target_partitions: Option<NonZeroUsize>,
-    /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
-    /// Match literal types to inspected column types; integer values are strings.
-    /// Format: capabilities --schema predicate.
-    #[arg(long, value_name = "PATH")]
-    predicate_file: Option<String>,
-    /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
-    #[arg(long, value_name = "PATH")]
-    execution_options_file: Option<String>,
-}
-
 fn command_name() -> &'static str {
     let executable = std::env::args_os().next().unwrap_or_default();
     match Path::new(&executable).file_name() {
@@ -179,20 +145,6 @@ fn parse_unsigned_decimal<T: FromStr>(value: &str) -> Result<T, Error> {
         }
         .build()
     })
-}
-
-fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
-    // Arrow Schema's Serde representation contains only JSON-compatible types.
-    // Keep upstream serialization, including metadata and nested field order.
-    let mut output = json!({
-        "format_version": 1,
-        "table_version": version.to_string(),
-        "schema": schema,
-    })
-    .to_string()
-    .into_bytes();
-    output.push(b'\n');
-    output
 }
 
 fn build_completion_record(
@@ -234,273 +186,6 @@ fn build_json_read_completion(
         "rows": output_stats.rows_written.to_string(),
         "output_bytes": output_stats.bytes_written.to_string(),
     })
-}
-
-async fn execute_table_command(
-    mut command: Command,
-    report_uc_cancellation: &AtomicBool,
-    spill_directory: &mut Option<tempfile::TempDir>,
-    pending_artifact: &mut Option<output::artifact::PendingArtifactPublication>,
-    cancellation: &futures_util::future::AbortHandle,
-) -> Result<Value, Error> {
-    match &mut command {
-        Command::Scan {
-            read,
-            output: Some(_),
-            ..
-        } => {
-            read.table
-                .options
-                .select_file_output_credentials(&read.table.table)?;
-        }
-        Command::Query(args) if args.output.is_some() => {
-            if let Some(location) = &args.input.table {
-                args.input
-                    .table_options
-                    .select_file_output_credentials(location)?;
-            }
-        }
-        _ => {}
-    }
-    let arrow_stdout = match &command {
-        Command::Scan { output, .. } => output.is_none(),
-        Command::Query(args) => {
-            args.output.is_none() && args.output_format == output::RowOutputFormat::Arrow
-        }
-        _ => false,
-    };
-    if arrow_stdout {
-        ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
-    }
-    if let Command::Inspect { inspection, .. } = &command {
-        inspection.validate_view_options()?;
-    }
-    let uc_target = match &command {
-        Command::Capabilities(_) => {
-            unreachable!("main handles discovery and its terminal reporting separately")
-        }
-        Command::Inspect {
-            table,
-            databricks_profile,
-            ..
-        } => unity_catalog::UnityCatalogTableTarget::parse(
-            &table.table,
-            databricks_profile.as_deref(),
-        )
-        .context(UnityCatalogSnafu)?,
-        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
-            unity_catalog::UnityCatalogTableTarget::parse(
-                &read.table.table,
-                read.databricks_profile.as_deref(),
-            )
-            .context(UnityCatalogSnafu)?
-        }
-        Command::Query(_) | Command::Explain(_) => None,
-    };
-    report_uc_cancellation.store(
-        uc_target.is_some() && !matches!(command, Command::Preview(_)),
-        Ordering::Relaxed,
-    );
-    let row_read = match &command {
-        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
-            Some(read)
-        }
-        _ => None,
-    };
-    let mut artifact = match &command {
-        Command::Scan {
-            read,
-            output: Some(path),
-            manifest,
-            limit,
-            deadline_ms,
-            max_rows,
-            max_output_bytes,
-        } => {
-            let options = if *manifest {
-                let mut options =
-                    serde_json::to_value(read).map_err(|source| Error::JsonOutput { source })?;
-                options["limit"] = json!(limit);
-                options["deadline-ms"] = json!(deadline_ms);
-                options["max-rows"] = json!(max_rows);
-                options["max-output-bytes"] = json!(max_output_bytes);
-                Some(options)
-            } else {
-                None
-            };
-            Some(output::artifact::StagedResult::new(
-                path,
-                output::RowOutputFormat::Arrow,
-                options,
-                cancellation.clone(),
-            )?)
-        }
-        _ => None,
-    };
-    let predicate = match row_read.and_then(|read| read.predicate_file.as_deref()) {
-        Some(path) => {
-            let (value, bytes) = input::read_json_file_with_bytes::<input::PredicateInput>(
-                path,
-                JsonInputKind::Predicate,
-            )?;
-            if let Some(artifact) = &mut artifact {
-                artifact.record_replay_input("--predicate-file", path, &bytes);
-            }
-            Some(value.into_predicate()?)
-        }
-        _ => None,
-    };
-    let execution_options = match row_read.and_then(|read| read.execution_options_file.as_deref()) {
-        Some(path) => {
-            let (input::JsonObject(options), bytes) = input::read_json_file_with_bytes::<
-                input::JsonObject<input::ExecutionOptionsInput>,
-            >(
-                path, JsonInputKind::ExecutionOptions
-            )?;
-            if let Some(artifact) = &mut artifact {
-                artifact.record_replay_input("--execution-options-file", path, &bytes);
-            }
-            Some(
-                options
-                    .into_execution_options()
-                    .context(ConfigurationSnafu)?,
-            )
-        }
-        _ => None,
-    };
-    let command_output: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
-        Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
-        Command::Explain(args) => {
-            let (uses_unity_catalog, planning) = args.prepare_planning()?;
-            report_uc_cancellation.store(uses_unity_catalog, Ordering::Relaxed);
-            planning
-        }
-        Command::Query(args) => {
-            let (query_uses_unity_catalog, execution) =
-                args.prepare_execution(spill_directory, pending_artifact, cancellation)?;
-            report_uc_cancellation.store(query_uses_unity_catalog, Ordering::Relaxed);
-            execution
-        }
-        Command::Inspect {
-            table, inspection, ..
-        } => async move {
-            let (table, _authorized_access) = table.load_table(uc_target).await?;
-            let version = table.version();
-            let output = inspection.encode_json(&table)?;
-            let output_stats = OutputStats {
-                bytes_written: output.len() as u64,
-                ..Default::default()
-            };
-            write_stdout(&output)?;
-            Ok(build_completion_record(
-                "inspect",
-                Some(version),
-                output_stats,
-                None,
-            ))
-        }
-        .boxed_local(),
-        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => async {
-            let (table, authorized_access) = read.table.load_table(uc_target).await?;
-            let version = table.version();
-            let limit = match &command {
-                Command::Scan { limit, .. } => *limit,
-                Command::Preview(args) => Some(args.limit),
-                _ => unreachable!("row reader command"),
-            };
-            let mut builder = table.scan();
-            if read.no_columns || !read.columns.is_empty() {
-                builder = builder.with_projection(read.columns.iter().cloned());
-            }
-            if let Some(limit) = limit {
-                builder = builder.with_limit(limit);
-            }
-            if let Some(predicate) = predicate {
-                builder = builder.with_predicate(predicate);
-            }
-            if let Some(execution_options) = execution_options {
-                builder = builder.with_execution_options(execution_options);
-            }
-            if let Some(target_partitions) = read.target_partitions {
-                builder = builder
-                    .with_target_partitions(target_partitions.get())
-                    .context(ConfigurationSnafu)?;
-            }
-            let scan_result = async {
-                let scan = builder.build().await.context(ReaderSnafu)?;
-                let schema = scan.schema();
-                let stream = scan
-                    .into_stream()
-                    .map_err(|source| Error::Reader { source });
-                if let Command::Preview(args) = &command {
-                    let stats = output::json::write_preview_to_stdout(
-                        schema,
-                        stream,
-                        version,
-                        output::OutputLimits {
-                            max_rows: args.limit as u64,
-                            max_bytes: args.max_output_bytes.get() as u64,
-                        },
-                    )
-                    .await?;
-                    Ok(build_json_read_completion(
-                        "preview",
-                        vec![json!({"alias": "t", "table_version": version.to_string()})],
-                        stats,
-                    ))
-                } else if let Some(staged) = artifact.take() {
-                    let (staged, stats) = staged
-                        .write_rows(
-                            schema,
-                            stream,
-                            Vec::new(),
-                            match &command {
-                                Command::Scan {
-                                    max_rows: Some(rows),
-                                    max_output_bytes: Some(bytes),
-                                    ..
-                                } => Some(output::OutputLimits {
-                                    max_rows: *rows as u64,
-                                    max_bytes: bytes.get() as u64,
-                                }),
-                                _ => None,
-                            },
-                        )
-                        .await?;
-                    let completion = build_completion_record("scan", Some(version), stats, limit);
-                    *pending_artifact = Some(staged.prepare_publication(&completion)?);
-                    Ok(completion)
-                } else {
-                    let stats =
-                        output::arrow::write_arrow_stream_to_stdout(schema, stream, None).await?;
-                    Ok(build_completion_record("scan", Some(version), stats, limit))
-                }
-            }
-            .await;
-            let result = match (scan_result, &authorized_access) {
-                (Err(error @ Error::Reader { .. }), Some(access)) => {
-                    Err(access.map_read_error(error).await)
-                }
-                (result, _) => result,
-            };
-            if matches!(
-                &command,
-                Command::Scan {
-                    output: Some(_),
-                    ..
-                }
-            ) {
-                result.map_err(|source| Error::WithResolvedBindings {
-                    source: Box::new(source),
-                    bindings: vec![json!({"alias": "t", "table_version": version.to_string()})],
-                })
-            } else {
-                result
-            }
-        }
-        .boxed_local(),
-    };
-    command_output.await
 }
 
 fn write_stdout(output: &[u8]) -> Result<(), Error> {
@@ -576,11 +261,6 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
-
-    use arrow_schema::{DataType, Field, TimeUnit};
-    use serde_json::Value;
-
     use super::*;
 
     #[test]
@@ -680,63 +360,6 @@ mod tests {
         for flag in ["--max-rows", "--max-output-bytes"] {
             assert!(Cli::try_parse_from(["dar", "scan", "table", flag, "1"]).is_err());
         }
-    }
-
-    #[test]
-    fn inspection_format_preserves_nested_schema_and_all_metadata() {
-        let schema = Schema::new_with_metadata(
-            vec![
-                Field::new(
-                    "profile",
-                    DataType::Struct(
-                        vec![
-                            Field::new("amount", DataType::Decimal128(20, 4), false).with_metadata(
-                                HashMap::from([("comment".into(), "secret user metadata".into())]),
-                            ),
-                        ]
-                        .into(),
-                    ),
-                    true,
-                ),
-                Field::new(
-                    "times",
-                    DataType::List(Arc::new(Field::new(
-                        "element",
-                        DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
-                        false,
-                    ))),
-                    false,
-                ),
-            ],
-            HashMap::from([("owner".into(), "table author".into())]),
-        );
-        let encoded = encode_inspection_json(u64::MAX, &schema);
-        assert_eq!(encoded.last(), Some(&b'\n'));
-        assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
-        let actual: Value = serde_json::from_slice(&encoded).unwrap();
-        let schema_document = capabilities::DiscoverySchema::Inspection.schema_document();
-        jsonschema::validate(&schema_document["schema"], &actual).unwrap();
-        // This literal freezes the upstream Arrow encoding within format version 1.
-        assert_eq!(
-            actual,
-            json!({
-                "format_version": 1, "table_version": "18446744073709551615",
-                "schema": {"fields": [
-                    {"name": "profile", "nullable": true, "dict_id": 0, "dict_is_ordered": false, "metadata": {},
-                     "data_type": {"Struct": [
-                         {"name": "amount", "data_type": {"Decimal128": [20, 4]}, "nullable": false,
-                          "dict_id": 0, "dict_is_ordered": false, "metadata": {"comment": "secret user metadata"}}
-                     ]}},
-                    {"name": "times", "nullable": false, "dict_id": 0, "dict_is_ordered": false, "metadata": {},
-                     "data_type": {"List": {
-                         "name": "element", "data_type": {"Timestamp": ["Microsecond", "UTC"]}, "nullable": false,
-                         "dict_id": 0, "dict_is_ordered": false, "metadata": {}
-                     }}}
-                ], "metadata": {"owner": "table author"}}
-            })
-        );
-        let decoded: Schema = serde_json::from_value(actual["schema"].clone()).unwrap();
-        assert_eq!(decoded, schema);
     }
 
     #[test]

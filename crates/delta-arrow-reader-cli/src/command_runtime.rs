@@ -5,7 +5,7 @@
 //! worker finishes; cancellation first gives owned credential children time to exit.
 
 use std::{
-    io,
+    io::{self, IsTerminal},
     process::ExitCode,
     sync::{
         Arc,
@@ -15,11 +15,12 @@ use std::{
 };
 
 use futures_util::future::{AbortHandle, Abortable};
-use snafu::ResultExt;
+use serde_json::Value;
+use snafu::{ResultExt, ensure};
 
 use crate::{
-    Command, Error, OutputSnafu, RuntimeSnafu, diagnostics, diagnostics::DiagnosticFormat,
-    execute_table_command, signals, stdout_monitor,
+    Command, Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu, diagnostics,
+    diagnostics::DiagnosticFormat, output, read, signals, stdout_monitor,
 };
 
 pub(crate) const CLEANUP_GRACE: Duration = Duration::from_secs(1);
@@ -175,5 +176,49 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => diagnostic_format.report_failure_with_timeout(error),
+    }
+}
+
+async fn execute_table_command(
+    command: Command,
+    report_uc_cancellation: &AtomicBool,
+    spill_directory: &mut Option<tempfile::TempDir>,
+    pending_artifact: &mut Option<output::artifact::PendingArtifactPublication>,
+    cancellation: &AbortHandle,
+) -> Result<Value, Error> {
+    match command {
+        Command::Query(mut args) => {
+            if args.output.is_some()
+                && let Some(location) = &args.input.table
+            {
+                args.input
+                    .table_options
+                    .select_file_output_credentials(location)?;
+            }
+            if args.output.is_none() && args.output_format == output::RowOutputFormat::Arrow {
+                ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
+            }
+            let (uses_unity_catalog, execution) =
+                args.prepare_execution(spill_directory, pending_artifact, cancellation)?;
+            report_uc_cancellation.store(uses_unity_catalog, Ordering::Relaxed);
+            execution.await
+        }
+        Command::Explain(args) => {
+            let (uses_unity_catalog, planning) = args.prepare_planning()?;
+            report_uc_cancellation.store(uses_unity_catalog, Ordering::Relaxed);
+            planning.await
+        }
+        command @ (Command::Inspect { .. } | Command::Scan { .. } | Command::Preview(_)) => {
+            read::execute(
+                command,
+                report_uc_cancellation,
+                pending_artifact,
+                cancellation,
+            )
+            .await
+        }
+        Command::Capabilities(_) => {
+            unreachable!("main handles discovery and its terminal reporting separately")
+        }
     }
 }

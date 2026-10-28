@@ -397,7 +397,7 @@ pub(super) fn command_read_support() -> Value {
             "reads_data_files": false,
             "requires_supported_read_protocol": {"direct_storage": false, "unity_catalog": true},
             "max_output_bytes": null,
-            "summary_max_output_bytes": crate::inspection::DEFAULT_SUMMARY_BYTES,
+            "summary_max_output_bytes": crate::read::inspect::DEFAULT_SUMMARY_BYTES,
             "summary_budget_argument": "--max-output-bytes",
             "summary_only_options": ["--column", "--column-prefix", "--include-metadata", "--max-output-bytes"],
             "deadline_ms": null,

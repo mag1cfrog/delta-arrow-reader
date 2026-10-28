@@ -315,7 +315,7 @@ mod tests {
     use super::*;
     use crate::{
         Error, OutputStats, build_completion_record, capabilities::DiscoverySchema,
-        encode_inspection_json,
+        read::inspect::encode_inspection_json,
     };
 
     #[test]

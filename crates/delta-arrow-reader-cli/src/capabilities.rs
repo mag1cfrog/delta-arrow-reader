@@ -1083,7 +1083,7 @@ mod tests {
         ])
         .unwrap();
         let crate::Command::Scan {
-            read: crate::RowReadArgs { columns, .. },
+            read: crate::read::RowReadArgs { columns, .. },
             ..
         } = cli.command
         else {
