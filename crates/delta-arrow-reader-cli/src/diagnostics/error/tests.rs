@@ -1,7 +1,8 @@
+use serde_json::json;
 use snafu::ResultExt;
 
 use super::*;
-use crate::input;
+use crate::{diagnostics, input};
 
 #[test]
 fn uc_cancellation_is_informational_and_keeps_signal_exit_status() {
