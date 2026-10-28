@@ -57,7 +57,7 @@ jobs:
       RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       AWS_LC_SYS_USE_SYSTEM: "0"
-      CI_TARGET_CACHE_VERSION: "2"
+      CI_TARGET_CACHE_VERSION: "3"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       SCCACHE_LOG: sccache::server=debug
@@ -145,9 +145,9 @@ jobs:
           cargo test --locked --all-features --no-run
           cargo test --locked --no-run
           cargo test --locked --package xtask --bin xtask --test unity_catalog_live --no-run
+          cargo test --locked -p delta-arrow-reader-cli --no-run
           if [ "$RUNNER_OS" = "Linux" ]; then
             cargo test --locked -p delta-arrow-reader-python --no-run
-            cargo test --locked -p delta-arrow-reader-cli --no-run
             cargo clippy --locked --all-targets --all-features -- -D warnings
             cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
             cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
