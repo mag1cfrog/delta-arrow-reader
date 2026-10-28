@@ -8,11 +8,7 @@
 //! authorization.
 
 mod authorization;
-mod catalog;
-mod command_guides;
-mod env_file_guides;
-mod output_schemas;
-mod read_support;
+mod commands;
 mod schemas;
 
 pub(crate) use schemas::DiscoverySchema;
@@ -40,7 +36,7 @@ const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
 #[command(group(ArgGroup::new("detail_target").args(["command", "schema", "authorization"])))]
 pub(crate) struct CapabilitiesArgs {
     /// Show usage and limits for one command.
-    #[arg(long, value_name = "NAME", value_parser = catalog::parse_command_name, conflicts_with_all = ["schema", "authorization", "all"])]
+    #[arg(long, value_name = "NAME", value_parser = commands::parse_command_name, conflicts_with_all = ["schema", "authorization", "all"])]
     command: Option<String>,
     /// Show an example and available fields or types for one JSON format.
     #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
@@ -119,17 +115,17 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<OutputStats, Er
     } else if let Some(name) = options.command {
         if let Some(detail) = options.detail.as_deref() {
             (
-                command_guides::build_command_detail(&name, detail)?,
+                commands::build_command_detail(&name, detail)?,
                 MAX_COMMAND_DETAIL_BYTES,
             )
         } else if options.full {
             (
-                catalog::build_capability_details(Some(&name))?,
+                commands::build_capability_details(Some(&name))?,
                 MAX_FULL_RESPONSE_BYTES,
             )
         } else {
             (
-                command_guides::build_command_guide(&name)?,
+                commands::build_command_guide(&name)?,
                 MAX_COMMAND_GUIDE_BYTES,
             )
         }
@@ -152,11 +148,11 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<OutputStats, Er
         }
     } else if options.all {
         (
-            catalog::build_capability_details(None)?,
+            commands::build_capability_details(None)?,
             MAX_FULL_RESPONSE_BYTES,
         )
     } else {
-        (catalog::build_capability_index(), MAX_INDEX_BYTES)
+        (commands::build_capability_index(), MAX_INDEX_BYTES)
     };
     let output = serialize_discovery_response(&document, max_output_bytes)?;
     write_stdout(&output)?;

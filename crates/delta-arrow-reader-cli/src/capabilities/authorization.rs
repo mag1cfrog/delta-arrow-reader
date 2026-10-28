@@ -3,7 +3,9 @@
 //! Discovery describes these rules without checking credentials, installed
 //! provider tools, or access to any particular table.
 
-use super::env_file_guides::build_env_file_guide;
+mod env_file;
+
+use env_file::build_env_file_guide;
 
 use clap::ValueEnum;
 use serde::Serialize;

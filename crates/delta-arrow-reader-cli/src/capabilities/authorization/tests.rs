@@ -2,7 +2,7 @@ use clap::Parser;
 use object_store::{aws::AmazonS3ConfigKey, azure::AzureConfigKey, gcp::GoogleConfigKey};
 
 use super::*;
-use crate::capabilities::read_support::command_read_support;
+use crate::capabilities::commands::command_read_support;
 use crate::{cli::Cli, table_access::unity_catalog::UnityCatalogTableTarget};
 
 #[test]

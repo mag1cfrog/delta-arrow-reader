@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::{snapshot_bindings_schema, unsigned_integer_string_schema};
 
-pub(in crate::capabilities) fn result_artifact_schema() -> Value {
+pub(in crate::capabilities::schemas) fn result_artifact_schema() -> Value {
     json!({
         "title": "Saved result receipt", "type": "object",
         "description": "Successful --output receipt: v2 locates the result file; --manifest selects v1 with an additional provenance file.",
@@ -21,7 +21,7 @@ pub(in crate::capabilities) fn result_artifact_schema() -> Value {
     })
 }
 
-pub(in crate::capabilities) fn result_manifest_schema() -> Value {
+pub(in crate::capabilities::schemas) fn result_manifest_schema() -> Value {
     let integer = unsigned_integer_string_schema();
     let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, 64 lowercase hexadecimal characters."});
     json!({

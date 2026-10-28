@@ -7,7 +7,7 @@ use crate::cli::Cli;
 
 #[test]
 fn discovery_selectors_are_mutually_exclusive_and_describe_their_conflicts() {
-    let details = catalog::build_capability_details(Some("capabilities")).unwrap();
+    let details = commands::build_capability_details(Some("capabilities")).unwrap();
     let arguments = details["command"]["arguments"].as_array().unwrap();
     let selectors = [
         vec!["--command", "query"],
@@ -42,7 +42,7 @@ fn discovery_selectors_are_mutually_exclusive_and_describe_their_conflicts() {
     }
     for name in ["unknown", "analyze", "query --help", "", "QUERY"] {
         assert!(Cli::try_parse_from(["dar", "capabilities", "--command", name]).is_err());
-        assert!(catalog::build_capability_details(Some(name)).is_err());
+        assert!(commands::build_capability_details(Some(name)).is_err());
     }
     for invalid in [
         vec!["--full"],
@@ -73,9 +73,9 @@ fn discovery_selectors_are_mutually_exclusive_and_describe_their_conflicts() {
     ] {
         assert!(Cli::try_parse_from(["dar", "capabilities"].into_iter().chain(valid)).is_ok());
     }
-    assert!(command_guides::build_command_detail("scan", "rows").is_err());
-    assert!(command_guides::build_command_detail("scan", "resources").is_err());
-    let resources = command_guides::build_command_detail("query", "resources").unwrap();
+    assert!(commands::build_command_detail("scan", "rows").is_err());
+    assert!(commands::build_command_detail("scan", "resources").is_err());
+    let resources = commands::build_command_detail("query", "resources").unwrap();
     assert!(resources.to_string().len() < MAX_COMMAND_DETAIL_BYTES);
 }
 

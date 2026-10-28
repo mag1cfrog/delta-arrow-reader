@@ -130,7 +130,7 @@ fn row_field_guides_explain_states_without_validation_branches() {
     for state in ["end_of_input", "row_limit", "byte_limit"] {
         assert!(description.contains(state));
     }
-    let schema = output_schemas::rows_schema();
+    let schema = output::rows_schema();
     let validator = jsonschema::validator_for(&schema).unwrap();
     let mut sample = json!({
         "format_version": 1, "kind": "rows",
@@ -263,7 +263,7 @@ fn selected_completion_conditions_omit_unrelated_constraints() {
 
 #[test]
 fn full_completion_schema_enforces_command_binding_rules() {
-    let schema = output_schemas::completion_schema();
+    let schema = output::completion_schema();
     let validator = jsonschema::validator_for(&schema).unwrap();
     for (command, aliases, valid) in [
         ("capabilities", vec![], true),

@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use super::{snapshot_bindings_schema, unsigned_integer_string_schema};
 
-pub(in crate::capabilities) fn query_plan_schema() -> Value {
+pub(in crate::capabilities::schemas) fn query_plan_schema() -> Value {
     let position = json!({"type": "integer", "minimum": 0});
     let precision = json!({
         "type": "object", "required": ["precision"],

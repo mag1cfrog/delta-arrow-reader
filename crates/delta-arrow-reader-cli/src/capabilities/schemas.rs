@@ -5,12 +5,12 @@
 //! literal's fields. `--full` returns the complete validation document.
 
 mod guides;
+mod output;
 
 use clap::ValueEnum;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use super::output_schemas;
 use crate::input::JsonInputKind;
 
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
@@ -37,17 +37,14 @@ impl DiscoverySchema {
             Self::Predicate => return JsonInputKind::Predicate.schema_document(),
             Self::ExecutionOptions => return JsonInputKind::ExecutionOptions.schema_document(),
             Self::Tables => return JsonInputKind::Tables.schema_document(),
-            Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
-            Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
-            Self::Rows => (output_schemas::rows_schema(), "stdout"),
-            Self::QueryPlan => (output_schemas::query_plan::query_plan_schema(), "stdout"),
-            Self::ResultArtifact => (
-                output_schemas::artifacts::result_artifact_schema(),
-                "stdout",
-            ),
-            Self::ResultManifest => (output_schemas::artifacts::result_manifest_schema(), "file"),
-            Self::Diagnostic => (output_schemas::diagnostic_schema(), "stderr"),
-            Self::Completion => (output_schemas::completion_schema(), "stderr"),
+            Self::Inspection => (output::inspection_schema(), "stdout"),
+            Self::InspectionSummary => (output::inspection_summary_schema(), "stdout"),
+            Self::Rows => (output::rows_schema(), "stdout"),
+            Self::QueryPlan => (output::query_plan::query_plan_schema(), "stdout"),
+            Self::ResultArtifact => (output::artifacts::result_artifact_schema(), "stdout"),
+            Self::ResultManifest => (output::artifacts::result_manifest_schema(), "file"),
+            Self::Diagnostic => (output::diagnostic_schema(), "stderr"),
+            Self::Completion => (output::completion_schema(), "stderr"),
         };
         schema["$schema"] = json!("https://json-schema.org/draft/2020-12/schema");
         json!({

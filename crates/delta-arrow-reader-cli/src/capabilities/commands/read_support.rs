@@ -12,7 +12,7 @@ pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. JSON r
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
 
-pub(super) fn command_read_support() -> Value {
+pub(in crate::capabilities) fn command_read_support() -> Value {
     json!({
         "inspect": {
             "authorization": ["local", "direct_storage", "unity_catalog"],

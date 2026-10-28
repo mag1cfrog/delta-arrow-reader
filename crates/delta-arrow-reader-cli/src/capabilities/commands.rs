@@ -1,11 +1,15 @@
 //! Command inventory and argument metadata derived from the CLI parser.
 
+mod guides;
+mod read_support;
+
+pub(super) use guides::{build_command_detail, build_command_guide};
+pub(super) use read_support::command_read_support;
+
 use clap::{Arg, ArgAction, Command, CommandFactory, ValueEnum, error::ErrorKind};
 use serde_json::{Value, json};
 
-use super::{
-    DiscoverySchema, MAX_FULL_RESPONSE_BYTES, authorization, discovery_limits, read_support,
-};
+use super::{DiscoverySchema, MAX_FULL_RESPONSE_BYTES, authorization, discovery_limits};
 use crate::{cli::Cli, diagnostics::Error, input::JsonInputKind};
 
 pub(super) fn parse_command_name(name: &str) -> Result<String, &'static str> {
@@ -90,7 +94,7 @@ pub(super) fn build_capability_details(selected_command: Option<&str>) -> Result
         ]);
     }
     let mut authorization = authorization::build_authorization_capabilities();
-    let mut read_support = read_support::command_read_support();
+    let mut read_support = command_read_support();
     let mut stdout_formats = json!({
         "capabilities": {"format": "json", "format_version": 1},
         "inspect": {
@@ -224,7 +228,7 @@ fn describe_argument(command: &Command, argument: &Arg) -> Value {
     })
 }
 
-pub(super) fn argument_name(argument: &Arg) -> String {
+fn argument_name(argument: &Arg) -> String {
     argument
         .get_long()
         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}"))

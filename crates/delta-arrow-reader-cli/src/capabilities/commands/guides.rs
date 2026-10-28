@@ -3,14 +3,14 @@
 use clap::{CommandFactory, ValueEnum, error::ErrorKind};
 use serde_json::{Value, json};
 
-use super::{DiscoverySchema, catalog, read_support};
+use super::{DiscoverySchema, read_support};
 use crate::{
     cli::Cli,
     diagnostics::{Error, FAILURE_DIAGNOSTIC_TIMEOUT},
     input::JsonInputKind,
 };
 
-pub(super) fn build_command_guide(name: &str) -> Result<Value, Error> {
+pub(in crate::capabilities) fn build_command_guide(name: &str) -> Result<Value, Error> {
     let mut cli = Cli::command();
     cli.build();
     let executable = cli.get_name();
@@ -91,7 +91,7 @@ pub(super) fn build_command_guide(name: &str) -> Result<Value, Error> {
         })
         .map(|argument| {
             (
-                catalog::argument_name(argument),
+                super::argument_name(argument),
                 json!(argument.get_help().map(ToString::to_string)),
             )
         })
@@ -122,7 +122,7 @@ pub(super) fn build_command_guide(name: &str) -> Result<Value, Error> {
             .filter_map(|argument| {
                 argument.get_default_values().first().map(|value| {
                     (
-                        catalog::argument_name(argument),
+                        super::argument_name(argument),
                         json!(value.to_string_lossy()),
                     )
                 })
@@ -139,7 +139,7 @@ pub(super) fn build_command_guide(name: &str) -> Result<Value, Error> {
         .filter(|kind| {
             command
                 .get_arguments()
-                .any(|argument| catalog::argument_name(argument) == kind.argument())
+                .any(|argument| super::argument_name(argument) == kind.argument())
         })
         .map(|kind| json!({"name": kind, "argument": kind.argument()}))
         .collect();
@@ -214,7 +214,10 @@ pub(super) fn build_command_guide(name: &str) -> Result<Value, Error> {
     Ok(guide)
 }
 
-pub(super) fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
+pub(in crate::capabilities) fn build_command_detail(
+    name: &str,
+    detail: &str,
+) -> Result<Value, Error> {
     if matches!(name, "scan" | "query") && detail == "artifacts" {
         return Ok(json!({
             "format_version": 1, "kind": "command_detail", "command": name, "detail": "artifacts",

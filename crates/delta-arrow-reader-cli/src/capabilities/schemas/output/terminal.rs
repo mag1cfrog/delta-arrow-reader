@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::{snapshot_bindings_schema, unsigned_integer_string_schema};
 use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 
-pub(in crate::capabilities) fn diagnostic_schema() -> Value {
+pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
     json!({
         "title": "Terminal failure diagnostic",
         "description": "One JSON line on stderr with --diagnostics=json. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; correction text is guidance, not an identifier.",
@@ -47,7 +47,7 @@ pub(in crate::capabilities) fn diagnostic_schema() -> Value {
     })
 }
 
-pub(in crate::capabilities) fn completion_schema() -> Value {
+pub(in crate::capabilities::schemas) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
         "description": "Require exit 0 and valid stdout. With --diagnostics=json, also require a stderr completion for the requested command. v1: Read completion, scope, stop_reason and has_more from stderr. v2 (JSON preview/query): Read result semantics from stdout: preview is a sample with stop_reason/has_more; query is complete with scope=query. v3 (--output/explain): Read the saved-result path from the receipt, or plan details from query_plan stdout. Counts and output_bytes are decimal strings.",

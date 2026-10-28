@@ -7,13 +7,13 @@
 use clap::error::ErrorKind;
 use serde_json::{Value, json};
 
-use super::authorization::AuthorizationService;
+use super::AuthorizationService;
 use crate::{
     diagnostics::{Error, InputCorrection},
     input,
 };
 
-pub(super) fn build_env_file_guide(
+pub(in crate::capabilities) fn build_env_file_guide(
     service: AuthorizationService,
     detail: &str,
 ) -> Result<Value, Error> {
