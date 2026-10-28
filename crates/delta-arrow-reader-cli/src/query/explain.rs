@@ -22,7 +22,7 @@ use snafu::ResultExt;
 
 use super::{PlanningSnafu, QueryInputArgs, resources};
 use crate::{
-    Error, QuerySnafu, diagnostics::InputCorrection, parse_unsigned_decimal,
+    Error, QuerySnafu, cli::parse_unsigned_decimal, diagnostics::InputCorrection,
     table_access::TableLoadRequest, write_stdout,
 };
 

@@ -57,16 +57,16 @@ impl AuthorizationService {
                     "commands": storage["commands"],
                     "source_argument": storage["source_argument"],
                     "sources": storage["sources"][self.name()],
-                    "source_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "SOURCE"],
-                    "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "env-file"],
-                    "storage_connection_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "connection"],
+                    "source_details_command": [crate::cli::command_name(), "capabilities", "--authorization", self, "--detail", "SOURCE"],
+                    "env_file_details_command": [crate::cli::command_name(), "capabilities", "--authorization", self, "--detail", "env-file"],
+                    "storage_connection_details_command": [crate::cli::command_name(), "capabilities", "--authorization", self, "--detail", "connection"],
                     "storage_options_argument": storage["storage_options_argument"],
                     "notes": if matches!(self, Self::S3) {
                         json!([S3_AUTHORIZATION_LIMITS])
                     } else {
                         json!(["Stdout without source selectors uses backend defaults."])
                     },
-                    "schema_command": [crate::command_name(), "capabilities", "--schema", "storage-options"],
+                    "schema_command": [crate::cli::command_name(), "capabilities", "--schema", "storage-options"],
                 })
             }
         };
@@ -76,7 +76,7 @@ impl AuthorizationService {
             "kind": "authorization_guide",
             "name": self,
             "authorization": authorization,
-            "full_command": [crate::command_name(), "capabilities", "--authorization", self, "--full"],
+            "full_command": [crate::cli::command_name(), "capabilities", "--authorization", self, "--full"],
         })
     }
 
@@ -193,7 +193,7 @@ impl AuthorizationService {
             let name = self.name();
             let mut storage = capabilities["direct_storage"].clone();
             storage["env_file_details_command"] = json!([
-                crate::command_name(),
+                crate::cli::command_name(),
                 "capabilities",
                 "--authorization",
                 self,
@@ -202,7 +202,7 @@ impl AuthorizationService {
             ]);
             storage["sources"] = storage["sources"][name].clone();
             storage["schema_command"] = json!([
-                crate::command_name(),
+                crate::cli::command_name(),
                 "capabilities",
                 "--schema",
                 "storage-options"
@@ -319,7 +319,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             },
             "env_file_input": true,
             "env_file_argument": "--env-file",
-            "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", "NAME", "--detail", "env-file"],
+            "env_file_details_command": [crate::cli::command_name(), "capabilities", "--authorization", "NAME", "--detail", "env-file"],
             "imports_storage_options_from_environment": true,
             "option_names_case_sensitive": false,
             "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend", "without_auth_source_scope": "stdout_only", "with_env_file": "rejected"},
@@ -498,7 +498,7 @@ mod tests {
     use object_store::{aws::AmazonS3ConfigKey, azure::AzureConfigKey, gcp::GoogleConfigKey};
 
     use super::*;
-    use crate::{Cli, table_access::unity_catalog::UnityCatalogTableTarget};
+    use crate::{cli::Cli, table_access::unity_catalog::UnityCatalogTableTarget};
 
     #[test]
     fn selected_authorization_details_keep_configuration_and_exclude_other_providers() {
@@ -709,7 +709,7 @@ mod tests {
             assert_eq!(
                 concise["full_command"],
                 json!([
-                    crate::command_name(),
+                    crate::cli::command_name(),
                     "capabilities",
                     "--authorization",
                     service,
@@ -729,7 +729,7 @@ mod tests {
             assert_eq!(
                 selected["env_file_details_command"],
                 json!([
-                    crate::command_name(),
+                    crate::cli::command_name(),
                     "capabilities",
                     "--authorization",
                     service,
@@ -933,7 +933,7 @@ mod tests {
             }
         }
         let cli = Cli::try_parse_from(["dar", "scan", "table"]).unwrap();
-        let crate::Command::Scan { limit, .. } = cli.command else {
+        let crate::cli::Command::Scan { limit, .. } = cli.command else {
             panic!("expected scan")
         };
         assert_eq!(support["scan"]["default_row_limit"], json!(limit));

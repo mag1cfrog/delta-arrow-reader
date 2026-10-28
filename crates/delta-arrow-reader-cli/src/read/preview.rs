@@ -8,7 +8,7 @@ use std::num::NonZeroUsize;
 use clap::Args;
 
 use super::RowReadArgs;
-use crate::parse_unsigned_decimal;
+use crate::cli::parse_unsigned_decimal;
 
 #[derive(Args)]
 pub(crate) struct PreviewArgs {

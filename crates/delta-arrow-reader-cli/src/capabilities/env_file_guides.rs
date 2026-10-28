@@ -40,7 +40,7 @@ pub(super) fn build_env_file_guide(
                 "Quoted whitespace is preserved. Reject empty or whitespace-only values, duplicate names and control characters including NUL.",
                 "No escapes, multiline values, inline comments, export, interpolation or execution. Dollar signs, backticks, # and backslashes inside values are literal.",
             ],
-            "variables_command": [crate::command_name(), "capabilities", "--authorization", service, "--detail", "env-file"],
+            "variables_command": [crate::cli::command_name(), "capabilities", "--authorization", service, "--detail", "env-file"],
         })
     } else {
         let mut variables = match service {
@@ -76,7 +76,7 @@ pub(super) fn build_env_file_guide(
             "usage": "Pass a provisioned file without reading or expanding its values. Failures never select another identity. With --tables-file, set tables[].authorization.env_file and source=env-file instead of command-level authorization flags.",
             "variables": variables,
             "values": "Literal text: dollar signs and backticks do not expand or execute.",
-            "grammar_command": [crate::command_name(), "capabilities", "--authorization", service, "--detail", "env-file-grammar"],
+            "grammar_command": [crate::cli::command_name(), "capabilities", "--authorization", service, "--detail", "env-file-grammar"],
         })
     };
     guide["format_version"] = json!(1);

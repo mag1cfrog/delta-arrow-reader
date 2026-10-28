@@ -6,8 +6,8 @@ use snafu::ResultExt;
 
 use super::preview::PreviewArgs;
 use crate::{
-    Command, ConfigurationSnafu, Error, ReaderSnafu, build_completion_record,
-    build_json_read_completion,
+    ConfigurationSnafu, Error, ReaderSnafu, build_completion_record, build_json_read_completion,
+    cli::Command,
     input::{self, JsonInputKind},
     output,
     table_access::unity_catalog::UnityCatalogTableTarget,

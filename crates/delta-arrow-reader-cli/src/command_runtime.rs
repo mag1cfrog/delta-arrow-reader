@@ -19,7 +19,7 @@ use serde_json::Value;
 use snafu::{ResultExt, ensure};
 
 use crate::{
-    Command, Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu, diagnostics,
+    Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu, cli::Command, diagnostics,
     diagnostics::DiagnosticFormat, output, read, signals, stdout_monitor,
 };
 

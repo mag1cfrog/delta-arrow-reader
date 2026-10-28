@@ -21,7 +21,8 @@ use serde_json::{Value, json};
 use snafu::ResultExt;
 
 use crate::{
-    Cli, Error, OutputSnafu, OutputStats, RuntimeSnafu, build_completion_record,
+    Error, OutputSnafu, OutputStats, RuntimeSnafu, build_completion_record,
+    cli::Cli,
     diagnostics::{self, DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT},
     input::JsonInputKind,
     signals, write_stdout,
@@ -806,7 +807,7 @@ mod tests {
             "json",
         ])
         .unwrap();
-        let crate::Command::Query(args) = parsed.command else {
+        let crate::cli::Command::Query(args) = parsed.command else {
             panic!("query expected")
         };
         assert_eq!(
@@ -1082,7 +1083,7 @@ mod tests {
             "--diagnostics=json",
         ])
         .unwrap();
-        let crate::Command::Scan {
+        let crate::cli::Command::Scan {
             read: crate::read::RowReadArgs { columns, .. },
             ..
         } = cli.command
@@ -1101,7 +1102,7 @@ mod tests {
 
         let cli =
             Cli::try_parse_from(["dar", "query", "table", "--sql-file", "query.sql"]).unwrap();
-        let crate::Command::Query(query) = cli.command else {
+        let crate::cli::Command::Query(query) = cli.command else {
             panic!("expected query")
         };
         let advertised = commands
@@ -1169,7 +1170,7 @@ mod tests {
         for schema in input_catalog.iter().chain(output_catalog) {
             let name = schema["name"].as_str().unwrap();
             let cli = Cli::try_parse_from(["dar", "capabilities", "--schema", name]).unwrap();
-            let crate::Command::Capabilities(CapabilitiesArgs {
+            let crate::cli::Command::Capabilities(CapabilitiesArgs {
                 schema: Some(kind), ..
             }) = cli.command
             else {

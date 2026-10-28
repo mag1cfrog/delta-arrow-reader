@@ -17,8 +17,8 @@ use unity_catalog::{AuthorizedTableAccess, UnityCatalogTableTarget};
 
 use crate::{
     Error, ReaderSnafu, StorageAuthorizationSnafu, UnityCatalogSnafu,
+    cli::parse_unsigned_decimal,
     input::{self, JsonInputKind},
-    parse_unsigned_decimal,
 };
 
 /// Captured input for one table load, validated before any query binding starts table IO.

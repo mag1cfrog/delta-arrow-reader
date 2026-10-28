@@ -201,7 +201,7 @@ impl InputCorrection {
         ) {
             return None;
         }
-        let mut command = crate::Cli::command();
+        let mut command = crate::cli::Cli::command();
         command.build();
         match error.get(ContextKind::InvalidArg)? {
             ContextValue::String(argument) => {

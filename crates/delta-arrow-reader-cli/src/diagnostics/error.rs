@@ -10,7 +10,7 @@ use snafu::Snafu;
 
 use super::{self as diagnostics, ErrorClassification, InputCorrection};
 use crate::{
-    command_name,
+    cli::command_name,
     input::{self, JsonInputKind},
     output, query,
     table_access::unity_catalog,

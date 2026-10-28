@@ -16,9 +16,9 @@ use serde_json::{Value, json};
 
 use crate::{
     Error, OutputStats, build_completion_record,
+    cli::parse_unsigned_decimal,
     diagnostics::InputCorrection,
     output::field_descriptions::field_details,
-    parse_unsigned_decimal,
     table_access::{TableArgs, unity_catalog::UnityCatalogTableTarget},
     write_stdout,
 };

@@ -240,3 +240,19 @@ impl<'de> Deserialize<'de> for StorageOptionsInput {
         deserializer.deserialize_map(StorageOptionsVisitor)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::StorageOptionsInput;
+
+    #[test]
+    fn storage_options_preserve_strings() {
+        let options: StorageOptionsInput = serde_json::from_str(
+            r#"{"AWS_ACCESS_KEY_ID":" secret, value ","MixedCase":"unchanged"}"#,
+        )
+        .unwrap();
+        assert_eq!(options.0["AWS_ACCESS_KEY_ID"], " secret, value ");
+        assert_eq!(options.0["MixedCase"], "unchanged");
+        assert_eq!(options.0.len(), 2);
+    }
+}

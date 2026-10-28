@@ -36,8 +36,9 @@ use snafu::{ResultExt, Snafu};
 use crate::{
     Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu, build_completion_record,
     build_json_read_completion,
+    cli::parse_unsigned_decimal,
     diagnostics::ErrorClassification,
-    output, parse_unsigned_decimal,
+    output,
     table_access::{TableLoadRequest, TableOptions, unity_catalog::UnityCatalogTableTarget},
 };
 
