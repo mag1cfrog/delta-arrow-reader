@@ -24,17 +24,12 @@ use std::{
 
 use clap::{Args, FromArgMatches, ValueEnum};
 use serde_json::Value;
-use tracing::Subscriber;
-use tracing_subscriber::{
-    filter::{LevelFilter, Targets, filter_fn},
-    fmt::MakeWriter,
-    prelude::*,
-};
 
 mod completion;
 mod correction;
 mod error;
 mod fallback;
+mod logging;
 
 pub(crate) use completion::{build_completion_record, build_json_read_completion};
 pub(crate) use correction::{InputCorrection, argument_error_hint};
@@ -43,6 +38,10 @@ pub(crate) use error::{
     OutputSnafu, QuerySnafu, ReaderSnafu, RuntimeSnafu, StorageAuthorizationSnafu,
     TerminalOutputSnafu, UnityCatalogSnafu,
 };
+
+#[cfg(test)]
+pub(crate) use logging::capture_tracing_output;
+pub(crate) use logging::init_tracing;
 
 pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
 pub(crate) const DIAGNOSTIC_FORMAT_VERSION: u8 = 2;
@@ -185,84 +184,6 @@ impl DiagnosticFormat {
     }
 }
 
-pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
-    if let DiagnosticFormat::Json = diagnostic_format {
-        // Machine mode emits terminal records directly, never formatted trace fields.
-        return;
-    }
-    let (targets, invalid) = log_targets();
-    // Failure reporting can reach this after command setup already installed tracing.
-    if build_subscriber(targets, io::stderr).try_init().is_ok() && invalid {
-        tracing::warn!(target: "delta_arrow_reader_cli",
-            event = "cli.log_filter.invalid",
-            reason = "invalid_rust_log",
-            "Invalid RUST_LOG; using WARN"
-        );
-    }
-}
-
-fn log_targets() -> (Targets, bool) {
-    match std::env::var("RUST_LOG") {
-        Ok(value) if !value.trim().is_empty() => match value.parse::<Targets>() {
-            Ok(targets) => (targets, false),
-            Err(_) => (Targets::new(), true),
-        },
-        Err(std::env::VarError::NotUnicode(_)) => (Targets::new(), true),
-        _ => (Targets::new(), false),
-    }
-}
-
-fn build_subscriber<W>(targets: Targets, writer: W) -> impl Subscriber + Send + Sync
-where
-    W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
-{
-    let targets = if targets.default_level().is_some() {
-        targets
-    } else {
-        targets.with_default(LevelFilter::WARN)
-    };
-    tracing_subscriber::registry()
-        .with(targets)
-        // Dependency logs have not been audited for credentials or data.
-        .with(filter_fn(|metadata| {
-            let target = metadata.target();
-            target == "delta_arrow_reader"
-                || target.starts_with("delta_arrow_reader::")
-                || target == "delta_arrow_reader_cli"
-                || target.starts_with("delta_arrow_reader_cli::")
-        }))
-        .with(
-            tracing_subscriber::fmt::layer()
-                .without_time()
-                .with_ansi(false)
-                // Retrying a failed diagnostic through stderr could block the fallback writer.
-                .log_internal_errors(false)
-                .with_writer(writer),
-        )
-}
-
-#[cfg(test)]
-pub(crate) fn capture_tracing_output(filter: &str, emit: impl FnOnce()) -> String {
-    use std::io::{Read, Seek};
-
-    let mut file = tempfile::tempfile().unwrap();
-    tracing::subscriber::with_default(
-        build_subscriber(
-            if filter.is_empty() {
-                Targets::new()
-            } else {
-                filter.parse().unwrap()
-            },
-            file.try_clone().unwrap(),
-        ),
-        emit,
-    );
-    file.rewind().unwrap();
-    let mut text = String::new();
-    file.read_to_string(&mut text).unwrap();
-    text
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -275,7 +196,7 @@ mod tests {
     use arrow_schema::ArrowError;
     use serde_json::Value;
 
-    use super::{DiagnosticFormat, Error, capture_tracing_output};
+    use super::{DiagnosticFormat, Error};
 
     struct PanicOnFormatError;
 
@@ -404,67 +325,6 @@ mod tests {
                 assert_eq!(record["recovery"], "unknown");
                 assert_eq!(record["retryable"], Value::Null);
             }
-        }
-    }
-
-    fn emit_levels() {
-        tracing::error!(target: "delta_arrow_reader", "error marker");
-        tracing::warn!(target: "delta_arrow_reader", "warn marker");
-        tracing::info!(target: "delta_arrow_reader", "info marker");
-        tracing::debug!(target: "delta_arrow_reader::profile", "debug marker");
-        tracing::trace!(target: "delta_arrow_reader::profile", "trace marker");
-        tracing::error!(target: "delta_arrow_reader_cli", "CLI marker");
-    }
-
-    #[test]
-    fn native_filter_preserves_levels_and_target_overrides() {
-        for (filter, expected) in [
-            ("", vec!["ERROR", "WARN", "ERROR"]),
-            ("info", vec!["ERROR", "WARN", "INFO", "ERROR"]),
-            ("debug", vec!["ERROR", "WARN", "INFO", "DEBUG", "ERROR"]),
-            (
-                "trace",
-                vec!["ERROR", "WARN", "INFO", "DEBUG", "TRACE", "ERROR"],
-            ),
-            ("off", vec![]),
-            ("delta_arrow_reader=off", vec![]),
-            (
-                "delta_arrow_reader=off,delta_arrow_reader_cli=error",
-                vec!["ERROR"],
-            ),
-            (
-                "off,delta_arrow_reader::profile=trace",
-                vec!["DEBUG", "TRACE"],
-            ),
-        ] {
-            let text = capture_tracing_output(filter, emit_levels);
-            assert_eq!(
-                text.lines()
-                    .map(|line| line.split_whitespace().next().unwrap())
-                    .collect::<Vec<_>>(),
-                expected,
-                "{filter}: {text}"
-            );
-            assert!(!text.contains('\x1b'));
-        }
-    }
-
-    #[test]
-    fn dependency_targets_stay_disabled_even_with_explicit_overrides() {
-        for filter in [
-            "trace",
-            "reqwest=trace,object_store=trace,delta_arrow_reader_extra=trace",
-            "off,reqwest=error",
-        ] {
-            let text = capture_tracing_output(filter, || {
-                tracing::error!(target: "reqwest", token = "secret-token", "secret HTTP error");
-                tracing::warn!(target: "object_store", "secret storage error");
-                tracing::trace!(target: "reqwest", "secret HTTP body");
-                tracing::error!(target: "delta_arrow_reader_extra", "secret prefix collision");
-                tracing::error!(target: "delta_arrow_reader_cli_extra", "secret prefix collision");
-                tracing::error!(target: "delta_kernel", "secret log path");
-            });
-            assert!(text.is_empty(), "{filter}: {text}");
         }
     }
 }

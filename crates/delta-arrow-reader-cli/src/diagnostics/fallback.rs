@@ -11,7 +11,10 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::os::windows::io::AsHandle;
 
-use super::{DiagnosticFormat, Error, TERMINAL_RECORD_STARTED, build_subscriber, log_targets};
+use super::{
+    DiagnosticFormat, Error, TERMINAL_RECORD_STARTED,
+    logging::{build_subscriber, log_targets},
+};
 
 impl DiagnosticFormat {
     pub(super) fn report_failure_without_thread(self, error: &Error) {
