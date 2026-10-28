@@ -71,7 +71,7 @@ pub(super) fn command_read_support() -> Value {
             "positional_alias": "t",
             "required_table_input": {"one_of": ["TABLE", "--tables-file"]},
             "tables_file_argument": "--tables-file",
-            "max_table_bindings": query::tables_manifest::MAX_TABLES,
+            "max_table_bindings": crate::input::MAX_TABLES,
             "snapshot_selection": QUERY_SNAPSHOT_SELECTION,
             "ordering": QUERY_ROW_ORDERING,
             "self_joins": true,

@@ -1,8 +1,10 @@
 //! Bounded table declarations. Validation and path resolution finish before snapshot loading.
 
 mod json_schema;
+mod schema_errors;
 
-pub(crate) use json_schema::tables_manifest_schema;
+pub(super) use json_schema::tables_manifest_schema;
+pub(super) use schema_errors::diagnose_schema_error;
 
 use std::{collections::HashSet, path::Path};
 
@@ -29,7 +31,7 @@ pub(crate) const MAX_TABLES: usize = 64;
 /// On-disk declarations, never credentials or already loaded snapshots.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct TablesManifest {
+struct TablesManifest {
     format_version: u8,
     tables: Vec<JsonObject<ManifestTable>>,
 }
@@ -37,7 +39,7 @@ pub(crate) struct TablesManifest {
 /// One SQL alias and its requested snapshot; relative locations belong to the manifest directory.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ManifestTable {
+struct ManifestTable {
     alias: String,
     location: String,
     #[serde(default, deserialize_with = "deserialize_table_version")]
@@ -49,7 +51,7 @@ pub(crate) struct ManifestTable {
 /// Selects the existing credential provider using references, never credential values in the manifest.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ManifestAuthorization {
+struct ManifestAuthorization {
     source: String,
     #[serde(default, deserialize_with = "input::deserialize_present_field")]
     storage_options_file: Option<String>,

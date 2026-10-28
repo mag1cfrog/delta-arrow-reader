@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use crate::table_access::direct_credentials::CredentialSource;
 
-pub(crate) fn tables_manifest_schema() -> Value {
+pub(in crate::input) fn tables_manifest_schema() -> Value {
     let mut sources: Vec<_> = CredentialSource::value_variants()
         .iter()
         .filter_map(|source| source.to_possible_value())

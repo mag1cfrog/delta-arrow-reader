@@ -31,10 +31,12 @@ mod execution_options;
 mod predicate;
 mod schema_errors;
 mod schemas;
+mod tables;
 
 pub(crate) use env_file::{MAX_ENV_FILE_RECORDS, read_env_file};
 pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_correction};
 pub(crate) use predicate::{PredicateInput, predicate_type_mismatch_correction};
+pub(crate) use tables::{MAX_TABLES, read_table_requests};
 
 pub(crate) const MAX_INPUT_BYTES: u64 = 1024 * 1024;
 

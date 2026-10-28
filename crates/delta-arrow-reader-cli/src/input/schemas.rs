@@ -9,7 +9,7 @@
 use delta_arrow_reader::{DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde_json::{Value, json};
 
-use super::{JsonInputKind, MAX_INPUT_BYTES, predicate};
+use super::{JsonInputKind, MAX_INPUT_BYTES, predicate, tables};
 
 impl JsonInputKind {
     pub(crate) fn schema_document(self) -> Value {
@@ -23,7 +23,7 @@ impl JsonInputKind {
             }),
             Self::ExecutionOptions => execution_options_schema(),
             Self::Predicate => predicate::predicate_schema(),
-            Self::Tables => crate::query::tables_manifest::tables_manifest_schema(),
+            Self::Tables => tables::tables_manifest_schema(),
         };
         schema["$schema"] = json!("https://json-schema.org/draft/2020-12/schema");
         let mut parser_constraints = json!({

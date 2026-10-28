@@ -4,7 +4,6 @@ mod error;
 pub(crate) mod explain;
 pub(crate) mod resources;
 mod sql;
-pub(crate) mod tables_manifest;
 
 use std::{num::NonZeroUsize, path::PathBuf};
 
@@ -55,7 +54,7 @@ impl QueryInputArgs {
         artifact: &mut Option<output::artifact::StagedResult>,
     ) -> Result<(Vec<(String, TableLoadRequest)>, ReadOnlySqlQuery), Error> {
         let requests = if let Some(path) = &self.tables_file {
-            tables_manifest::read_table_requests(path, artifact)?
+            crate::input::read_table_requests(path, artifact)?
         } else {
             let location = self.table.as_deref().ok_or(Error::Argument {
                 kind: clap::error::ErrorKind::MissingRequiredArgument,

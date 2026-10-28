@@ -20,8 +20,7 @@ fn accepts_input(kind: JsonInputKind, text: &str) -> bool {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join("tables.json");
             std::fs::write(&path, text).unwrap();
-            crate::query::tables_manifest::read_table_requests(path.to_str().unwrap(), &mut None)
-                .is_ok()
+            crate::input::read_table_requests(path.to_str().unwrap(), &mut None).is_ok()
         }
     }
 }

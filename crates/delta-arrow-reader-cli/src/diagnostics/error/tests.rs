@@ -174,7 +174,7 @@ fn failed_query_bindings_fit_the_terminal_record_limit() {
         reason: "json_output_limit_exceeded",
     };
     let expected = source.to_json_diagnostic();
-    let bindings: Vec<_> = (0..query::tables_manifest::MAX_TABLES)
+    let bindings: Vec<_> = (0..input::MAX_TABLES)
         .map(|index| {
             json!({
                 "alias": format!("table_{index:057}"),

@@ -176,7 +176,7 @@ pub(super) fn inspection_summary_schema() -> Value {
 
 fn snapshot_bindings_schema(min_items: usize, description: &str) -> Value {
     json!({
-        "type": "array", "minItems": min_items, "maxItems": crate::query::tables_manifest::MAX_TABLES,
+        "type": "array", "minItems": min_items, "maxItems": crate::input::MAX_TABLES,
         "description": description,
         "items": {
             "type": "object", "required": ["alias", "table_version"],
