@@ -4,8 +4,10 @@
 //! stop the deadline or signal listener. Completion is published only after that
 //! worker finishes; cancellation first gives owned credential children time to exit.
 
+mod worker;
+
 use std::{
-    io::{self, IsTerminal},
+    io,
     process::ExitCode,
     sync::{
         Arc,
@@ -14,15 +16,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures_util::future::{AbortHandle, Abortable};
-use serde_json::Value;
-use snafu::{ResultExt, ensure};
+use futures_util::future::AbortHandle;
+use snafu::ResultExt;
 
 use super::{signals, stdout_monitor};
 use crate::{
     cli::Command,
-    diagnostics::{self, DiagnosticFormat, Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu},
-    output, read,
+    diagnostics::{DiagnosticFormat, Error, OutputSnafu, RuntimeSnafu},
 };
 
 pub(crate) const CLEANUP_GRACE: Duration = Duration::from_secs(1);
@@ -88,57 +88,14 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
             result = async {
                 // This branch starts only after the signal listener has been polled.
                 std::thread::Builder::new().name("dar-command".into()).spawn(move || {
-                    let mut spill_directory = None;
-                    let mut pending_artifact = None;
-                    let result = (|| {
-                        diagnostics::init_tracing(diagnostic_format);
-                        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()
-                            .context(RuntimeSnafu { reason: "runtime_build_failed" })?;
-                        let result = runtime.block_on(async {
-                            let result = Abortable::new(
-                                execute_table_command(command, &worker_report_uc_cancellation, &mut spill_directory, &mut pending_artifact, &worker_cancellation), registration,
-                            ).await;
-                            // A read/output error can finish the command while a renewal is still pending.
-                            let _ = tokio::time::timeout(CLEANUP_GRACE, crate::table_access::unity_catalog::cancel_pending_requests()).await;
-                            result
-                        });
-                        runtime.shutdown_background();
-                        result.map_err(|_| Error::Cancelled { status: 1 })?
-                    })();
-                    let result = if let Some(directory) = spill_directory {
-                        match crate::query::resources::remove_spill_files(directory) {
-                            Ok(()) => result,
-                            Err(source) => {
-                                let bindings = match result {
-                                    Ok(completion) => completion["bindings"].as_array().cloned(),
-                                    Err(Error::WithResolvedBindings { bindings, .. }) => Some(bindings),
-                                    _ => None,
-                                };
-                                Err(match bindings {
-                                    Some(bindings) => Error::WithResolvedBindings { source: Box::new(source), bindings },
-                                    None => source,
-                                })
-                            }
-                        }
-                    } else { result };
-                    let result = result.and_then(|completion| {
-                        if let Some(artifact) = pending_artifact {
-                            (|| {
-                                worker_publication_started.store(true, Ordering::Release);
-                                let receipt = artifact.publish(&worker_cancellation)?;
-                                crate::output::write_stdout(&receipt).map_err(|error| match error {
-                                    Error::Output { source } => Error::ArtifactIo { source, reason: "artifact_receipt_write_failed" },
-                                    error => error,
-                                })?;
-                                Ok(serde_json::json!({
-                                    "format_version": 3, "kind": "completion", "command": completion["command"],
-                                    "output_bytes": receipt.len().to_string(),
-                                }))
-                            })().map_err(|source| Error::WithResolvedBindings {
-                                source: Box::new(source), bindings: completion["bindings"].as_array().cloned().unwrap_or_default(),
-                            })
-                        } else { Ok(completion) }
-                    });
+                    let result = worker::run(
+                        command,
+                        diagnostic_format,
+                        &worker_report_uc_cancellation,
+                        &worker_publication_started,
+                        &worker_cancellation,
+                        registration,
+                    );
                     let _ = sender.send(result);
                 }).context(RuntimeSnafu { reason: spawn_failure })?;
                 let result = (&mut receiver).await;
@@ -178,49 +135,5 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => diagnostic_format.report_failure_with_timeout(error),
-    }
-}
-
-async fn execute_table_command(
-    command: Command,
-    report_uc_cancellation: &AtomicBool,
-    spill_directory: &mut Option<tempfile::TempDir>,
-    pending_artifact: &mut Option<output::artifact::PendingArtifactPublication>,
-    cancellation: &AbortHandle,
-) -> Result<Value, Error> {
-    match command {
-        Command::Query(mut args) => {
-            if args.output.is_some()
-                && let Some(location) = &args.input.table
-            {
-                args.input
-                    .table_options
-                    .select_file_output_credentials(location)?;
-            }
-            if args.output.is_none() && args.output_format == output::RowOutputFormat::Arrow {
-                ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
-            }
-            let (uses_unity_catalog, execution) =
-                args.prepare_execution(spill_directory, pending_artifact, cancellation)?;
-            report_uc_cancellation.store(uses_unity_catalog, Ordering::Relaxed);
-            execution.await
-        }
-        Command::Explain(args) => {
-            let (uses_unity_catalog, planning) = args.prepare_planning()?;
-            report_uc_cancellation.store(uses_unity_catalog, Ordering::Relaxed);
-            planning.await
-        }
-        command @ (Command::Inspect { .. } | Command::Scan { .. } | Command::Preview(_)) => {
-            read::execute(
-                command,
-                report_uc_cancellation,
-                pending_artifact,
-                cancellation,
-            )
-            .await
-        }
-        Command::Capabilities(_) => {
-            unreachable!("main handles discovery and its terminal reporting separately")
-        }
     }
 }
