@@ -143,8 +143,8 @@ configured profile, storage options, and snapshot versions. All SQL execution
 uses DAR's local compute. Reference preparation is a separate administrator step.
 
 Paths inside the configuration are relative to that file. `predicate_file` uses
-the [CLI predicate format](../../crates/delta-arrow-reader-core/docs/public/cli.md#filter-rows);
-`storage_options_file` uses the [storage options format](../../crates/delta-arrow-reader-core/docs/public/cli.md#storage-options-file).
+the [CLI predicate format](../../crates/delta-arrow-reader-core/docs/public/reference/cli-inputs.md#filter-rows);
+`storage_options_file` uses the [storage options format](../../crates/delta-arrow-reader-core/docs/public/reference/cli-authorization.md#storage-options-file).
 For an S3 fixture, add
 `"storage_options_file":"storage.json"` to the configuration,
 and put `{"aws_region":"us-west-2"}` in that file. Omit the option when no

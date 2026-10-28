@@ -57,7 +57,7 @@ If `day` is a `Date32`, its JSON values are integer strings counting days since
 `row_count` counts groups; each row's `n` counts records in that group.
 
 JSON stdout is intended for small answers and defaults to an 8 KiB ceiling.
-If the complete result is larger, [save the same query to a file](cli-automation.md#save-a-complete-result).
+If the complete result is larger, [save the same query to a file](cli-results.md#save-a-complete-result).
 Keep the SQL and versions unchanged when you still need the same answer.
 
 ## Join two snapshots
@@ -87,7 +87,7 @@ dar query --tables-file tables.json --sql-file matched.sql --format json
 Each alias keeps its own snapshot. These versions do not form a transaction
 across tables. With `--tables-file`, put remote authorization references in each
 table entry and omit positional `TABLE`, `--table-version`, and command-level
-authorization flags. See [table manifest fields](cli.md#join-table-snapshots)
+authorization flags. See [table manifest fields](reference/cli-inputs.md#join-table-snapshots)
 when adding a remote binding.
 
 ## Filter a preview without SQL
@@ -135,5 +135,6 @@ explains this input; the `rows --detail decimal` lookup explains the output.
 </details>
 
 For a rejected name, type, SQL statement, or resource limit, use
-[Fix a failed command](cli-recovery.md). For query planning, saved results, or
-resuming a task later, continue to [Automation and saved results](cli-automation.md).
+[Fix a failed command](cli-recovery.md). To keep a complete answer, see
+[Save and read results](cli-results.md).
+For query planning or resuming a task later, see [Automation and replay](cli-automation.md).

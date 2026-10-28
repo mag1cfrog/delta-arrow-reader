@@ -36,7 +36,7 @@ The second command prints the installed version. Installation also downloads a
 compatible PyArrow wheel; neither package is compiled from source. For a project
 managed by uv, use `uv add delta-arrow-reader` instead.
 
-Continue with the [Python quickstart](python.md)
+Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
 to read your first rows.
 
 <details markdown="1">
@@ -55,13 +55,9 @@ wheel on CPython 3.10 with PyArrow 18.0.0 and CPython 3.14 with the current
 compatible PyArrow release. Intermediate Python versions are not separately
 tested. Free-threaded CPython, PyPy, and other platform targets are not covered.
 
-All three platforms check the installed package, Python Arrow streams, SQL
-queries and CLI behavior, including scan output, errors, closed stdout, and
-process termination.
-Linux also runs the full Python suite and repeats the installed checks in a fresh
-glibc 2.28 container. Windows checks run on Windows Server 2022 and use the
-CPython/MSVC runtime libraries. The macOS deployment target is 12.0, but runtime
-checks use newer macOS runners. Your Python and PyArrow distributions must also
+The Linux wheel is tested in a glibc 2.28 container. Windows checks run on
+Windows Server 2022 and use the CPython/MSVC runtime libraries. The macOS
+deployment target is 12.0, but runtime checks use newer macOS runners. Your Python and PyArrow distributions must also
 support your OS.
 
 </details>
@@ -98,7 +94,7 @@ delta-arrow-reader --help
 ```
 
 Use `delta-arrow-reader` in place of `dar` in the
-[CLI quickstart](cli-quickstart.md).
+[CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
 Both names accept the same arguments. The wheel does not install a `dar` alias.
 
 Standalone `dar` binaries and container images are available from
@@ -167,11 +163,24 @@ The final command adds `dar` to `PATH` for this shell. For later use, add the
 extracted `cli` directory to your application's executable search path or use
 its absolute path. Keep `LICENSE` and `NOTICE` beside it when redistributing it.
 
-The binaries require Linux amd64 or arm64, glibc 2.36 or newer, libgcc, and CA
-certificates for HTTPS. They do not need Rust or Python. They do not run on
-Alpine's musl runtime, `scratch`, macOS, or Windows; Python wheels have their own
-platform requirements. See [Linux runtime details](cli.md#use-a-linux-binary)
-for supported distributions and packages.
+<span id="standalone-linux-runtime"></span>
+
+CLI releases provide validated archives for these platforms:
+
+| Platform | Rust target | Minimum runtime |
+| --- | --- | --- |
+| Linux amd64 | `x86_64-unknown-linux-gnu` | glibc 2.36, baseline x86-64 CPU |
+| Linux arm64 | `aarch64-unknown-linux-gnu` | glibc 2.36, baseline ARMv8-A CPU |
+
+Both targets are built on Debian 12. The same binaries are tested on Debian 12,
+Ubuntu 24.04, and Fedora 44. They use glibc and libgcc shared libraries. On Debian
+or Ubuntu, install `libc6`, `libgcc-s1`, and `ca-certificates`; on Fedora, install
+`glibc`, `libgcc`, and `ca-certificates`. The certificate bundle is needed for
+HTTPS storage. The archives do not support Alpine Linux's musl runtime or a
+`scratch` container. Other platforms can build from source.
+
+The binaries do not need Rust or Python. macOS and Windows users can use
+[Python wheels](#python) or a [source build](#build-cli-from-source).
 
 `cli-artifacts.json` records the tested source commit, toolchain, runtime
 libraries, and hashes. The Release's CLI section lists the final release commit
@@ -195,7 +204,7 @@ no GitHub login. There are no `latest`, major-version, or minor-version aliases.
 
 For a digest pin, copy the index digest from the Release's CLI section and use
 `ghcr.io/mag1cfrog/delta-arrow-reader@sha256:<index-hash>`. See
-[container usage](cli.md#use-a-container-or-a-go-service)
+[container usage](https://mag1cfrog.github.io/delta-arrow-reader/cli-integration/#run-in-a-container)
 for mounting a table or integrating the CLI with a Go service.
 
 </details>
@@ -226,6 +235,14 @@ If you already have a checkout, run the build there. The executable is
 shell; for later runs, use the executable's path or add its directory to `PATH`.
 This builds for the host platform and does not install the Databricks CLI.
 
+To install `dar` into Cargo's binary directory, usually `~/.cargo/bin`, run:
+
+```sh
+cargo install --locked --path crates/delta-arrow-reader-cli
+```
+
+The CLI crate is not published to crates.io.
+
 </details>
 
 ## Rust
@@ -240,7 +257,7 @@ cargo add delta-arrow-reader
 cargo add tokio --features macros,rt-multi-thread
 ```
 
-Continue with the [Rust quickstart](streaming-reader.md)
+Continue with the [Rust quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 to read your first batch. It uses `next_batch()`, so no separate stream utility
 dependency is needed.
 
@@ -255,7 +272,7 @@ cargo add tokio --features macros,rt-multi-thread
 ```
 
 The adapter uses DataFusion 54. Your direct DataFusion dependency must use the
-same major version. Continue with the [DataFusion quickstart](datafusion.md).
+same major version. Continue with the [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 
 <details markdown="1">
 <summary id="optional-cargo-feature">Optional Cargo feature</summary>
@@ -263,7 +280,7 @@ same major version. Continue with the [DataFusion quickstart](datafusion.md).
 The streaming API and both Parquet backends are always available. The optional
 `datafusion` feature adds SQL integration. The direct Parquet backend is the
 default; choosing the Delta Kernel backend does not require another feature.
-See [execution options](reference/execution-options.md)
+See [execution options](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/)
 when you need to change read settings.
 
 </details>

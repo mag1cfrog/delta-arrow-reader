@@ -11,6 +11,7 @@ Contributor instructions and development records are kept in this repository:
 - [Cumulative partial-page comparison](content/benchmarks/intra-page-types-cumulative.md)
 - [Python wheel publication and recovery](content/python-releases.md)
 - [CLI release approval, publication, and recovery](content/cli-release.md)
+- [Diagnostic maintenance and validation](content/diagnostic-validation.md)
 - [CLI agent workflow contract](content/cli-agent-contract.md)
 - [Unity Catalog validation](content/unity-catalog-validation.md)
 - [Azure Unity Catalog validation record](../crates/delta-arrow-reader-cli/release/uc-azure-validation-2026-10-22.md)

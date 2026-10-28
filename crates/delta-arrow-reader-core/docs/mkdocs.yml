@@ -59,10 +59,12 @@ nav:
   - Command line:
       - Everyday tasks:
           - Filter, group, and join: cli-workflows.md
+          - Save and read results: cli-results.md
           - Connect to storage: cli-storage.md
           - Fix a failed command: cli-recovery.md
       - Advanced workflows:
-          - Automation and saved results: cli-automation.md
+          - Automation and replay: cli-automation.md
+          - Run in a service: cli-integration.md
           - Audit JSON integrity: cli-verify-json.md
           - Audit Arrow integrity: cli-verify-arrow.md
   - Python:
@@ -98,7 +100,14 @@ nav:
       - Combining read requests: benchmarks/range-planning.md
   - Reference:
       - Command line:
-          - Command-line reference: cli.md
+          - Commands: cli.md
+          - Input files: reference/cli-inputs.md
+          - Output formats: reference/cli-output.md
+          - Authorization: reference/cli-authorization.md
+          - S3 credentials: reference/cli-s3.md
+          - Azure credentials: reference/cli-azure.md
+          - GCS credentials: reference/cli-gcs.md
+          - Capability discovery: reference/cli-discovery.md
           - Unity Catalog access: reference/unity-catalog.md
           - CLI diagnostics reference: reference/cli-diagnostics.md
       - Rust:

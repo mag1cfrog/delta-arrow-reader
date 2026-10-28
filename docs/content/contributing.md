@@ -100,8 +100,8 @@ argument validation and process errors. The xtask suites read the IPC output and
 exercise backpressure, partial results, broken pipes, signals, HTTPS, and shutdown
 with pending blocking reads. They use checked-in fixtures, local servers, and
 Linux process controls; no cloud credentials are needed. The CLI Source job runs
-formatting, Clippy, and unit tests on relevant feature PRs. The process and scan
-acceptance suites run after approval on release-plz PRs or through a manual
+formatting, Clippy, and unit and integration tests on relevant feature PRs.
+The process and scan acceptance suites run after approval on release-plz PRs or through a manual
 release validation run. See the
 [CLI release tools](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/README.md#validate-a-cli-release)
 for approval and artifact details.
