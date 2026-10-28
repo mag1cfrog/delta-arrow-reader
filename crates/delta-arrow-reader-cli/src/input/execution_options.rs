@@ -17,6 +17,10 @@
 //! This sets prefetch to zero and clears the metadata size hint. Omitting
 //! `parquet_metadata_size_hint_bytes` instead keeps the reader's default hint.
 
+mod json_schema;
+
+pub(super) use json_schema::execution_options_schema;
+
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};
 

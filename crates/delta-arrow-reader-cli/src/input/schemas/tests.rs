@@ -1,4 +1,5 @@
 use clap::ValueEnum;
+use delta_arrow_reader::DeltaScanExecutionOptions;
 
 use super::*;
 use crate::input::{
