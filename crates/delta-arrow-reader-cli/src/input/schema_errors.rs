@@ -183,11 +183,11 @@ fn invalid_value_correction(
         }
         .to_owned()
     };
-    let hint = if serde_expected.starts_with(super::CANONICAL_INTEGER_EXPECTATION_PREFIX)
+    let hint = if serde_expected.starts_with(super::json::CANONICAL_INTEGER_EXPECTATION_PREFIX)
         && matches!(location.input_kind, JsonInputKind::Tables)
     {
         "Use a decimal string within the stated range, with no '+', leading zeros, or negative zero."
-    } else if serde_expected.starts_with(super::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
+    } else if serde_expected.starts_with(super::json::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
         "Match the literal type to the inspected column (e.g. Int32 uses int32); encode the value as a decimal string within that type's range, with no '+', leading zeros, or negative zero."
     } else if serde_expected == predicate::TIMEZONE_EXPECTATION {
         "Supply null or a nonempty timezone string matching the column's timezone."
