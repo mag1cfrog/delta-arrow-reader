@@ -176,8 +176,24 @@ impl PackagedCli<'_> {
         )?;
         assert!(detail.to_string().contains("Int64"));
         assert!(!detail.to_string().contains("private-metadata"));
+        let default_receipt = self.read_json(
+            &[query.as_slice(), &["--output", "plain.json"]].concat(),
+            8192,
+        )?;
+        assert_eq!(
+            default_receipt,
+            json!({
+                "format_version": 2, "kind": "result_artifact",
+                "result": fs::canonicalize(self.directory)?.join("plain.json"),
+            })
+        );
+        assert!(!self.directory.join("plain.json.manifest.json").exists());
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(self.directory.join("plain.json"))?)?,
+            rows
+        );
         let saved = self.read_json(
-            &[query.as_slice(), &["--output", "result.json"]].concat(),
+            &[query.as_slice(), &["--manifest", "--output", "result.json"]].concat(),
             8192,
         )?;
         let manifest = self.read_verified_manifest(&saved)?;
@@ -190,7 +206,7 @@ impl PackagedCli<'_> {
         let original = fs::read(self.directory.join("result.json"))?;
         let original_manifest = fs::read(self.directory.join("result.json.manifest.json"))?;
         self.check_failure(
-            &[query.as_slice(), &["--output", "result.json"]].concat(),
+            &[query.as_slice(), &["--manifest", "--output", "result.json"]].concat(),
             3,
             "artifact_io",
         )?;
@@ -320,7 +336,7 @@ impl PackagedCli<'_> {
             json!([{"alias": "t", "table_version": "0"}])
         );
         let receipt = self.read_json(
-            &[query.as_slice(), &["--output", "large.json"]].concat(),
+            &[query.as_slice(), &["--manifest", "--output", "large.json"]].concat(),
             8192,
         )?;
         let manifest = self.read_verified_manifest(&receipt)?;
@@ -364,12 +380,12 @@ impl PackagedCli<'_> {
             ],
             8192,
         )?;
-        let manifest = self.read_verified_manifest(&receipt)?;
+        assert_eq!(receipt["format_version"], 2);
+        assert!(receipt.get("manifest").is_none());
+        assert!(!self.directory.join("complete.arrow.manifest.json").exists());
         let bytes = fs::read(self.directory.join("complete.arrow"))?;
         let arrow = IpcTable::read_stream(&bytes, &self.directory.join("complete.arrow"))?;
         arrow.check_matches(&self.expected_table, None)?;
-        assert_eq!(manifest["scope"], "scan");
-        assert_eq!(manifest["has_more"], false);
         for (option, value, code) in [
             ("--max-rows", "1", "output_limit"),
             ("--max-output-bytes", "1", "output_limit"),

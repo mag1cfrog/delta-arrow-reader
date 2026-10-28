@@ -6,7 +6,6 @@
 
 mod authorization;
 mod discovery;
-mod fixtures;
 mod workflow;
 
 use std::{
@@ -108,7 +107,7 @@ pub(crate) fn check_agent_workflow(
         fs::set_permissions(&records, fs::Permissions::from_mode(0o755))?;
     }
     eprintln!("Packaged CLI invocation records: {}", records.display());
-    let expected_table = fixtures::write_table(&directory.join("table"))?;
+    let expected_table = crate::agent_fixtures::write_wide_table(&directory.join("table"), None)?;
     fs::write(
         directory.join("query.sql"),
         "SELECT count(*) AS row_count FROM t",

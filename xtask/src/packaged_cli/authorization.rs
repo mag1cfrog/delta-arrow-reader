@@ -131,7 +131,7 @@ impl PackagedCli<'_> {
                 "remote-json.json"
             };
             let receipt = self.read_json(
-                &[query.as_slice(), &["--output", destination]].concat(),
+                &[query.as_slice(), &["--manifest", "--output", destination]].concat(),
                 8192,
             )?;
             assert_eq!(self.read_verified_manifest(&receipt)?["rows"], "2");

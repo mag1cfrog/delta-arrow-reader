@@ -67,11 +67,7 @@ pub(crate) fn read_table_requests(
         JsonObject<TablesManifest>,
     >(path, JsonInputKind::Tables)?;
     if let Some(artifact) = artifact {
-        artifact.record_input_digest(
-            "--tables-file",
-            path,
-            crate::output::artifact::sha256(&bytes),
-        );
+        artifact.record_replay_input("--tables-file", path, &bytes);
     }
     if manifest.format_version != 1 {
         return Err(manifest_error(

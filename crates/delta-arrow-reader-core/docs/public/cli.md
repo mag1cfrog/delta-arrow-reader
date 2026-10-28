@@ -14,7 +14,7 @@ or [Fix a failed command](cli-recovery.md). The shell examples use Bash.
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Inspect planned work without reading rows | [`dar explain`](#plan-a-query) |
 | Join named table snapshots | [Tables manifest](#join-table-snapshots) |
-| Save and verify a complete result | [Result files](#save-a-result-with-a-manifest) |
+| Save and read a complete result | [Result files](#save-a-result-with-a-manifest) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Pass a provisioned credential env file | [Credential env files](#credential-env-files) |
@@ -55,9 +55,11 @@ command-line arguments, starting with the installed executable's name.
 | --- | --- | --- |
 | `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
 | `dar capabilities --command query` | `command_guide` | A usable example, essential options and limits, output format, and related lookups. |
-| `dar capabilities --authorization s3` | `authorization_guide` | Canonical credential keys and necessary access rules for one service. |
+| `dar capabilities --authorization s3` | `authorization_guide` | Credential source choices and access rules for one service. |
 | `dar capabilities --authorization s3 --detail env-file` | `authorization_detail` | Accepted env-file variables for one storage service. |
 | `dar capabilities --authorization s3 --detail env-file-grammar` | `authorization_detail` | Shared env-file syntax and limits. |
+| `dar capabilities --authorization s3 --detail aws-web-identity` | `authorization_detail` | Configuration for the selected credential source. |
+| `dar capabilities --authorization s3 --detail connection` | `authorization_detail` | Common noncredential connection settings. |
 | `dar capabilities --schema NAME` | `schema_guide` | One example, format notes, file size limit, and available fields or types. |
 | `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
 | `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
@@ -79,8 +81,8 @@ fields absent from the example; it is omitted when the example shows them all.
 The completion guide instead uses `version_1_fields` for the v1 fields absent
 from its v2 example.
 The `result-artifact` and `result-manifest` guides list fields without expanding
-their contents. Nested fields use dots, such as `--detail result.sha256` or
-`--detail replay.inputs`. A selected object lists its child fields.
+their contents. Nested fields use dots, such as `--detail result.format` or
+`--detail replay.options`. A selected object lists its child fields.
 
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
@@ -113,16 +115,17 @@ names in `authorization.guides`; the storage-options guide lists
 `authorization_guides`. Each authorization response identifies its guide in
 `name`. For example, use `dar capabilities --authorization azure-blob`
 for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
-The default guide lists canonical JSON credential keys. Its `full_command`
-supplies alternate spellings and complete service metadata when needed.
-For AWS and Azure identity providers, `--full` includes JSON reference examples,
-environment variable names, precedence, and renewal rules in `provider_configuration`.
+The default guide lists sources and the commands for their details. Select a
+source with `--detail`, such as `json`, `env`, or `aws-web-identity`, for its
+configuration. Provider details include JSON reference examples, environment
+names, precedence, and renewal rules. Use `--detail connection` for common
+connection settings. `full_command` supplies alternate spellings and complete
+service metadata when needed.
 These responses contain no credential values and do not check the caller's access.
 
-For a provisioned credential env file, a read command's guide gives the
-`--env-file PATH` arguments and conflicts in `authorization.env_file`. Pass
-the path directly; reading or expanding its values is unnecessary. To prepare
-or correct the contents, follow the service guide's `env_file_details_command`.
+For a provisioned credential env file, pass `--env-file PATH` directly;
+reading or expanding its values is unnecessary. For its arguments, conflicts,
+or contents, follow the service guide's `env_file_details_command`.
 This selects `--detail env-file`, with the service's accepted variable names
 and credential combinations. Its `grammar_command` selects
 `--detail env-file-grammar` for syntax and limits. These two details apply to
@@ -138,15 +141,17 @@ setting's default and bounds. `--schema predicate --detail timestamp_us` gives
 the timestamp unit, integer encoding, and required timezone field. Selected
 details retain the units and constraints needed for that field or type.
 
-These guides describe how to use a format. Recursive predicate references lead
+These guides describe how to use a format. Output field details retain types,
+units, ranges, and null meanings; full schemas include validation expressions.
+Recursive predicate references lead
 to another operator or scalar choice through `detail_command`. Use a guide's
 `full_command` when a JSON Schema validator or a metadata consumer needs the
 complete definition.
 
 `--schema completion` explains how to verify a terminal success record.
 Its v2 example applies to JSON query stdout: compare snapshots and counts with
-stdout, which carries sample/completion state. File output uses v3 and records
-result counts, snapshots, and completion state in the result manifest.
+stdout, which carries sample/completion state. File output uses v3 and reports
+the receipt's byte count. Read JSON result counts and snapshots from the saved file.
 Use `--detail FIELD` for a field's type and meaning, including fields used in
 v1 scan and Arrow receipts. `--schema rows --detail has_more` explains the three
 preview stopping states without repeating conditional validation blocks;
@@ -238,9 +243,11 @@ result appears. The schema response itself always goes to stdout.
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
 | `rows` | stdout | Typed preview or query JSON with ordered fields and positional rows. |
+| `result-artifact` | stdout | A saved-result receipt: v2 names the result; opt-in v1 also names its manifest. |
+| `result-manifest` | file | Sources, completion, counts and replay settings saved with `--manifest`. |
 | `query-plan` | stdout | Summary or selected plan node, output types, scan pushdown, or planner statistics. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
-| `completion` | stderr | A terminal success record with `--diagnostics=json`. Stdout mode includes snapshots and counts; file mode counts receipt bytes and keeps result metadata in the manifest. |
+| `completion` | stderr | A terminal success record with `--diagnostics=json`. Stdout mode includes snapshots and counts; file mode counts receipt bytes; `--manifest` optionally saves result metadata. |
 
 Output schemas allow additional object fields. Version and count strings use
 unsigned decimal notation; consumers must check the u64 range when converting
@@ -574,8 +581,7 @@ the command, each alias and its actual snapshot version, and row and output-byte
 This option controls stderr diagnostics independently of the result format.
 Arrow keeps completion v1. JSON uses v2, whose completion kind marks terminal
 success for the requested query. Check `completion: "complete"` and `scope: "query"`
-in stdout. Verify the completion's rows against both `row_count` and the length
-of the `rows` array, and its bytes against saved stdout.
+in stdout, then read the values needed by the task.
 
 ### Read a small result as typed JSON
 
@@ -602,10 +608,11 @@ use native JSON. Finite floats round-trip at their Arrow precision; `-0`, `NaN`,
 `Infinity`, and `-Infinity` are strings. Unions, intervals, and run-end encoded
 types fail with `unsupported_json_type`; use Arrow for these or for NaN payloads.
 
-Look up the envelope with `dar capabilities --schema rows`. `--detail rows`
-gives the date/time units, timestamp epoch and timezone rules, and native JSON
-and null encodings together. It lists further encodings to request individually,
-such as `--detail decimal` or `--detail binary`. These lookups do not read the table.
+`dar capabilities --schema rows` describes the envelope and common value rules,
+including decimal scale, date/time units, timestamp epoch and timezone, and
+JSON nulls. Select further encodings such as `--detail binary` from its encoding
+list. Individual field and encoding lookups remain available, including
+`--detail rows` and `--detail decimal`. These lookups do not read the table.
 
 The default 8 KiB stdout budget covers the entire response. For larger results,
 use `--output PATH` with an explicit byte budget when needed. Keep the same SQL, authorization, table bindings, and
@@ -665,15 +672,18 @@ planning buffers and process RSS are outside that limit. No spill is enabled.
 SQL admission and credential-file rules are the same as for `query`.
 
 With `--diagnostics=json`, require exit 0 and a v3 completion whose `command` is
-`explain` and whose `output_bytes` matches stdout, then check the stdout bindings.
+`explain`, then read the plan and bindings from stdout.
 Focused format lookups accept paths such as
 `capabilities --schema query-plan --detail node.statistics.selected_files`.
 
-## Save a result with a manifest
+<span id="save-a-result-with-a-manifest"></span>
 
-Use `--output PATH` on `scan` or `query` to save a complete result without
-printing its rows. The directory must exist, and neither `PATH` nor
-`PATH.manifest.json` may exist. There is no overwrite option.
+## Save a result
+
+Use `--output PATH` on `scan` or `query` to save one complete result without
+printing its rows. The directory must exist and `PATH` must be unused.
+There is no overwrite option. An unrelated `PATH.manifest.json` does not block
+ordinary export.
 
 ```sh
 dar --diagnostics=json query /data/orders --table-version 42 \
@@ -682,23 +692,40 @@ dar --diagnostics=json scan /data/orders --table-version 42 \
   --column customer_id --column total --output orders.arrow
 ```
 
-Stdout returns a JSON receipt with `format_version: 1`, `kind: "result_artifact"`,
-and absolute `result` and `manifest` paths. It contains no rows or schema.
-With `--diagnostics=json`, stderr completion v3 reports the command and receipt
-byte count. Result counts and snapshot bindings are in the manifest.
+Stdout returns a JSON receipt with `format_version: 2`, `kind: "result_artifact"`,
+and the absolute `result` path. It contains no rows or schema. With
+`--diagnostics=json`, stderr completion v3 reports the command and receipt byte
+count. Require exit 0 and the completion record before accepting success.
 
-The CLI stages both files on the destination filesystem. After the read and
-temporary-query cleanup succeed, it publishes the result without replacing an
-existing name, then publishes the manifest. A result without a matching
-completion manifest is uncommitted. The two publications are not one atomic
-transaction, and power-loss durability is not promised.
+The CLI stages the result on the destination filesystem. After the read and
+temporary-query cleanup succeed, it publishes the complete file without replacing
+an existing name. A failure after publication may leave a complete result;
+preserve it and choose an unused path if completion is uncertain. Crashes and
+uninterruptible IO can leave temporary files; power-loss durability is not promised.
+
+Read the result using the selected `--format` (default Arrow IPC), regardless
+of the filename extension. JSON uses the result's `schema.fields` to decode
+values. The result file can be read or moved on its own. Default export creates
+no sidecar and computes no result or replay-input hashes.
+
+### Record provenance with --manifest
+
+Add `--manifest` to save `PATH.manifest.json` with the sources and options needed
+for replay. This flag requires `--output`; both destinations must be unused.
+The receipt uses `format_version: 1` and includes absolute `result` and `manifest`
+paths.
+
+This mode stages both files and publishes the manifest after the result. The two
+publications are not one atomic transaction. This pair requires a matching
+manifest with `completion: "complete"`; a lone result does not establish that
+the requested provenance was saved.
 
 The manifest records the result path/format/SHA-256, rows, source batches, byte
 count, completion/scope, actual binding versions, build versions, and replay
 inputs. `limited_scan` covers a requested prefix; a query covers its SQL result.
-JSON preserves rows but not source batch boundaries. For replay, verify the
-input hashes, use `replay.options` in `replay.working_directory`, and select a new
-`--output`. Pin every alias using `bindings`; for `--tables-file`, copy the
+JSON preserves rows but not source batch boundaries. For replay, reuse the
+original input files with `replay.options` in `replay.working_directory`, and
+select a new `--output`. Pin every alias using `bindings`; for `--tables-file`, copy the
 referenced declarations beside the original tables file, preserving relative paths,
 and set each `table_version` to its recorded version. Numeric replay options are
 decimal strings; omit null/false options and repeat `--column` for each value.
@@ -711,27 +738,29 @@ The manifest can contain local paths, profile names, columns, and resource
 settings. Treat it and the result as local data. Temporary files are owner-only
 on Unix; on Windows use a destination directory with a private inherited ACL.
 
-Inspect only the fields needed for the next check:
+Inspect only the fields needed for the next read or replay step:
 
 ```sh
-dar capabilities --command query --detail artifacts
 dar capabilities --schema result-manifest --detail result
 dar capabilities --schema result-manifest --detail replay.inputs
-dar capabilities --schema result-manifest --full > manifest-schema.json
 ```
+
+For a JSON Schema validator, save the full definition with
+`dar capabilities --schema result-manifest --full > manifest-schema.json`.
 
 <span id="verify-a-json-result"></span>
 
-Use the [JSON verification example](cli-verify-json.md) or
-[Arrow verification example](cli-verify-arrow.md) to check the actual file
-without printing the full result or manifest.
+For `--manifest` output, require manifest `completion: "complete"` and
+`result.path` matching the receipt, then use `result.format` to choose the reader.
+Decode only the columns the task needs. For a separate integrity audit, use the
+[JSON](cli-verify-json.md) or [Arrow](cli-verify-arrow.md) audit example.
 
 Write, serialization, budget, or publication failures never fall back to rows
 on stdout. Existing destinations are preserved, including files created during
 the read. If publication has started, cancellation or a failed receipt can leave
-a complete pair despite a nonzero exit status. Verify that pair before deciding
-whether to accept it or retry with unused names. Crashes and uninterruptible IO
-can leave temporary files. Receipts are capped at 8 KiB and manifests at 1 MiB;
+a complete pair despite a nonzero exit status. Check its completion, output path
+and requested bindings before using it or retrying with unused names. Crashes
+and uninterruptible IO can leave temporary files. Receipts are capped at 8 KiB and manifests at 1 MiB;
 paths or provenance that exceed those limits fail before publication.
 
 ## Join table snapshots

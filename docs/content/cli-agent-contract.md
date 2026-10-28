@@ -46,7 +46,7 @@ are documented separately. Writes are outside this contract.
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
 | Join | `dar query --tables-file PATH --sql-file PATH`; bind each table explicitly. |
 | Plan | `dar explain` with the same query inputs; report bounded structured plan information without executing rows. |
-| Save | `scan` or `query` with `--output PATH`; publish a result and completion manifest. |
+| Save | `scan` or `query` with `--output PATH`; save one result file. |
 
 The wheel executable is `delta-arrow-reader`, with the same arguments.
 Capabilities reports only installed commands, options, schemas, auth mechanisms,
@@ -69,8 +69,8 @@ Recursive inputs expose the next choice without expanding every variant.
 
 Every level provides the invocation for its next useful lookup. Complete
 metadata and validation documents remain available explicitly. Discovery is
-stateless, so forgotten details can be retrieved after compaction. Callers can
-skip discovery they do not need. Byte limits count complete UTF-8 framing and
+stateless, so each view can be retrieved without earlier discovery calls.
+Callers can skip discovery they do not need. Byte limits count complete UTF-8 framing and
 the final newline; oversized responses fail before stdout is written.
 
 Summary inspection reports the actual version and scoped checks: `passed`,
@@ -106,8 +106,8 @@ and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
 failure message. Preview and stdout query JSON completions use version 2, retaining command,
 bindings, rows, and output bytes alongside kind and version. File-output
-completion v3 reports command and receipt bytes; result counts and bindings
-belong to the manifest. Explain uses v3 with stdout document bytes and keeps
+completion v3 reports command and receipt bytes. With `--manifest`, result counts
+and bindings are also saved in that optional file. Explain uses v3 with stdout document bytes and keeps
 bindings in the query-plan document. Other completions and discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
@@ -199,11 +199,11 @@ Machine mode attempts one terminal failure or completion record, independent of
 `RUST_LOG`. The completion kind marks terminal success for the requested command.
 For stdout row reads, completion includes actual bindings and result-byte counts;
 scan, preview, and query add row counts. File mode's v3 completion counts the
-stdout receipt bytes; its manifest carries result counts and actual bindings. Version 1 also reports scope, exhaustion, and Arrow batch counts.
-Data-sized quantities are decimal strings. For query JSON to stdout, verify the
-envelope's complete status and query scope, then compare its bindings and row
-count with the terminal record. For preview, check sample status and its
-stop_reason/has_more pair in stdout, then compare bindings and row count.
+stdout receipt bytes; an explicitly requested manifest carries result counts and actual bindings. Version 1 also reports scope, exhaustion, and Arrow batch counts.
+Data-sized quantities are decimal strings. Query JSON to stdout reports
+complete status and query scope. Preview reports sample status and its
+stop_reason/has_more pair in stdout. Read the fields needed to interpret the
+requested result; independent tests check repeated bindings, counts and bytes.
 Consumers require exit 0, valid framing, and the terminal record in machine
 mode. IPC decoding or a JSON prefix alone cannot prove success. Failed streams
 must not write a success marker. Results themselves are not secret-filtered.
@@ -354,27 +354,79 @@ was requested. Refresh cannot retarget it. Pinned tables are independent
 snapshots, not a cross-table transaction. Repeatable ordering needs ORDER BY
 with ties resolved; volatile functions/float aggregation can still vary.
 
-`--output PATH` stages on the destination filesystem, then atomically publishes
-without clobbering. V1 has no overwrite mode. Publish `PATH.manifest.json` only
-after the complete result. Two-file publication is not atomic: a result lacking
-its completion manifest is uncommitted. Receipt failure/cancellation after both
-publications can leave a complete pair despite nonzero process status.
+`--output PATH` saves one complete result file. It stages on the destination
+filesystem, then publishes without replacing an existing file. The default
+creates no sidecar and computes no result or replay-input hashes. An unrelated
+`PATH.manifest.json` does not block ordinary export. Encoding follows `--format`
+(default Arrow IPC), not the filename extension. For example:
 
-The versioned manifest records completion/scope, actual bindings, format, result
-path, row/batch/byte counts, result SHA-256, build versions, limits, and execution
+```bash
+dar query /data/orders --sql-file report.sql --format json --output report.json
+```
+
+Stdout returns a `result_artifact` v2 receipt with `format_version`, `kind`, and
+the absolute `result` path. Require exit 0 and, with `--diagnostics=json`, a
+completion record. A failure after publication can leave a complete result;
+preserve existing files and choose a new path when retrying. Moving the result
+file alone is enough to read it with a reader for its encoding.
+
+Add `--manifest` when provenance or replay is needed:
+
+```bash
+dar query /data/orders --table-version 42 --sql-file report.sql --output report.arrow --manifest
+```
+
+This opt-in mode retains the `result_artifact` v1 receipt with result and manifest
+paths. It publishes `PATH.manifest.json` only after the complete result, without
+replacing either destination. Two-file publication is not atomic: this mode
+requires a matching manifest with `completion=complete`. Receipt failure or
+cancellation after both publications can leave a complete pair despite nonzero
+process status.
+
+The manifest records completion/scope, actual bindings, format, result path,
+row/batch/byte counts, result SHA-256, build versions, limits, and execution
 overrides. Keep replay input references/hashes and safe locations; never embed
-SQL literals, tokens, provider responses, or credential contents/hashes. Stdout
-returns the least receipt information needed to identify and verify publication,
-with usable result and manifest references, within its 8 KiB ceiling. Verify
-manifest, hash, framing, and counts before acceptance. Replay uses the recorded
-inputs and explicit actual versions;
-input hashes must still match and snapshot/data/DV files must remain available.
-Result rows, full schemas, and complete manifests stay in artifacts. Ordinary
-verification reads the required values without printing entire artifacts into
-agent context. Long paths or many bindings must not make the receipt exceed its
-budget; receipt overflow is a bounded failure under the same publication policy.
+SQL literals, tokens, provider responses, or credential contents/hashes. Replay
+reuses the original input files and explicit actual versions; snapshot/data/DV
+files must remain available. Independent tests check input hashes and result
+equivalence for this opt-in mode.
+
+Both receipt versions stay within 8 KiB including framing and newline. The
+independent evaluator checks saved data, framing and completeness; manifest and
+digest checks apply when `--manifest` was requested. Ordinary users read the
+requested values without recomputing hashes, counts or provenance.
+Result rows, full schemas, and complete manifests stay in artifacts. The CLI
+provides focused references and completion information so ordinary tasks
+can read required values without printing entire artifacts into agent context.
+Measure actual excess printing; attribute it to a CLI defect only when the trace
+shows interface requirements or guidance caused it. Record evaluator-added and
+discretionary printing separately. Long paths or many bindings must not make the
+receipt exceed its budget; receipt overflow is a bounded failure under the same
+publication policy.
 
 ## Acceptance evidence
+
+The independent evaluator judges business answers and saved artifacts against
+its oracle, including exact values/types, integrity, and actual completeness.
+The agent performs checks naturally required by the declared user task, including
+recognizing actual partial failure and completing requested recovery or replay.
+Ordinary CLI use does not require developing a general verifier. A correct
+requested result does not fail solely because temporary agent verification code
+could accept fabricated corruption or lacks exhaustive schema/byte assertions.
+CLI security, authorization, completion semantics, recovery, and limits remain
+required; independent evaluation does not excuse actual errors or unsafe actions.
+
+Consumer prompts specify the business deliverables and operating constraints.
+For example, ask for a saved region report with matching row counts, amount sums,
+and latest dates. The evaluator checks the report and artifact integrity against
+the fixture; the consumer need not write a hash/schema verifier to complete that
+analysis. Keep integrity verification in tasks that explicitly need it, such as
+checking a transferred artifact. Label deliberate failure/recovery scenarios
+separately when reporting costs. Apply this division to CLI guides, schema
+descriptions, recovery hints, prompts, handoffs, final answer fields, reviewer
+guidance, and pass/fail logic together. Retain integrity metadata for independent
+evaluation and explicitly requested audits; ordinary business guidance must not
+instruct the agent to write a general verifier or recompute hashes and counts.
 
 Every criterion needs success, boundary, and failure evidence through installed
 artifacts. Untested or blocked cases do not pass. Use local tables and controlled
@@ -391,7 +443,7 @@ storage/provider fixtures; a live cloud account is not required.
 | Confidentiality | Reference reaches intended identity | Malicious data/provider errors | Credential loading/refresh failure | Secret canaries absent from calls, diagnostics, manifests, child args |
 | Auth predictability | Each advertised source authenticates | Aliases/partial families/two identities | Selected-source failure | Signed-request/provider assertions; zero fallback |
 | Automation | Non-TTY/piped/file use | Blocked output, PID 1, platform signals | Broken pipe/hung child/cancellation | Deadline-plus-grace, reaping, temp cleanup |
-| Integrity/replay | Verify and replay pinned result from a minimal receipt and focused artifact reads | Concurrent updates/order ties/destination races | Midstream/disk/publication/hash failure | Exact versions/rows/digest/counts; no-clobber; no full manifest/result in context |
+| Integrity/replay | Save and reopen a result file; opt into `--manifest` for pinned replay | Concurrent updates/order ties/destination races | Midstream/disk/publication failure; manifest failure in opt-in mode | Independent checks of exact rows/types/framing and no-clobber; versions/digests/counts for opt-in manifests; no full manifest/result in context |
 
 Run eight agent tasks: first read from discovery/auth reference; repair predicate
 and SQL input; multi-table analysis; expiry/denial recovery; large/long-cell
@@ -401,7 +453,7 @@ artifact/fixture hashes, and prompts before running. Use fresh context/workspace
 for five attempts per task. Do not choose a model after seeing scores.
 
 Give the operator the active shell, available readers, required evidence paths,
-and every budget below, including cumulative model tokens across calls. State
+and the declared safeguards, including cumulative model tokens across calls. State
 which outputs the harness saves automatically, so the operator need not create
 duplicate reports. Shell and artifact-handling instructions may explain the
 environment; they must not supply complete CLI commands, corrected inputs, or
@@ -411,10 +463,13 @@ report the changed conditions.
 
 Pass requires 5/5 for every task, with zero credential leaks, instruction
 execution from data, broader-identity fallback, or partial/sample false success.
-Each task retains safeguards of 600 seconds, 20 shell calls, 256 KiB captured
-output, 500,000 total model tokens (input plus output, including cached input),
-and at most two repair retries per failed request. These are ceilings, not
-efficiency targets. Acceptance
+Calibrate elapsed-time, model-token and capture-storage safeguards against the
+complete baseline workflow, with headroom for ordinary variation. Freeze them
+before comparing versions. Count shell calls and repair retries as costs, not as
+universal task cutoffs. A runner safeguard protects evaluation resources; an
+interrupted attempt remains incomplete with all observed costs retained. It does
+not establish a CLI defect or the cost of finishing the task. CLI operation limits
+and task-specific authorization and resource constraints still apply. Acceptance
 requires token accounting; exploratory runs without it cannot establish a pass.
 Record all outcomes, calls, bytes, tokens, CLI/provider/corrective retries,
 latency, and artifacts. Separate deterministic guarantees from the observed
@@ -422,9 +477,9 @@ agent results; do not claim all models/deployments behave alike.
 The wide-data task includes at least 1,000 columns, deep nesting, large metadata,
 a long UTF-8 value, and repair of a wrong column or literal type. Record stdout
 and stderr bytes for every invocation through discovery, execution, recovery,
-artifact verification, and post-compaction continuation. Identify each response
+saved-result use, and applicable continuation. Identify each response
 kind, its applicable limit, and any explicit full expansion or budget increase.
-Check both individual limits and the cumulative 256 KiB task budget, including
+Check both individual limits and the declared cumulative safeguards, including
 failed attempts and retries. Count bytes before harness truncation; clipping a
 tool response cannot establish a pass. Ordinary tasks must be achievable without
 full-schema retrieval or printing complete results/manifests into context.
@@ -434,9 +489,13 @@ Compare proposed responses with the current bounded interface on tasks both
 support. Fix both artifact versions, the model/settings, prompts, fixtures, and
 safeguards before evaluation. The full inventory is a secondary comparison;
 beating it alone does not establish an improvement. Let the agent choose its
-calls without supplied finished commands or manual repair. Include continuation
-after compaction, retaining task, snapshot, and artifact references while
-omitting command details.
+calls without supplied finished commands or manual repair. Include saving,
+reopening and reusing results when the business task needs them. Ordinary CLI
+acceptance does not require a forced context reset or a restricted handoff that
+discards otherwise available task information. Test actual compaction separately
+only for an explicit cross-context requirement, declaring what is retained and
+how that experiment answers the requirement. A compaction experiment does not
+gate unrelated CLI business or disclosure acceptance.
 
 This follows Anthropic's
 [task-level tool evaluation guidance](https://www.anthropic.com/research/writing-tools-for-agents).
@@ -446,8 +505,9 @@ for these agent trials.
 ## Agent trajectory review protocol
 
 Apply this protocol to the feature's affected success, interpretation, and
-recovery paths. Broader workflow and actual-compaction acceptance still require
-their own runs. An earlier issue's closure or a passing code review does not
+recovery paths. Broader business workflows need their own runs. A separately
+scoped compaction experiment is required only for a cross-context claim.
+An earlier issue's closure or a passing code review does not
 establish these results for a new artifact.
 
 1. **Freeze the comparison before running.** Save a run manifest with baseline
@@ -457,19 +517,22 @@ establish these results for a new artifact.
    a regression; beating only the regressed version is insufficient. Use five
    attempts per variant and scenario for acceptance. Keep all attempts; a changed
    prompt or executable starts a new comparison, preserving the old records.
-   Check the safeguards against a completed baseline calibration under this
-   harness before freezing the comparison. Any revised ceiling applies equally
-   to new runs of both variants; it cannot regrade an earlier budget failure.
+   Calibrate resource safeguards on the complete baseline scenario before
+   freezing, including both parts of A+B. Allow ordinary variation; count calls
+   and retries without imposing a shared fixed call ceiling on different tasks.
+   Any revised safeguard applies equally to new runs of both variants; it cannot
+   regrade an earlier interrupted attempt.
 2. **Cover isolated and continued work.** For a disclosure change, define a
    focused task A and a task B that needs the deferred information. Run A alone,
    B with fresh context, and A followed by B with context retained. Report each
    scenario separately; do not count A and its continuation as independent runs.
    These are complete tasks, not prescribed command sequences. Add applicable
    failure repair and boundary cases. Use independent expected-result checks,
-   including exact values, authorization, and completion state. Each scenario
-   has the same safeguards: 600 seconds, 20 shell calls, 256 KiB captured output,
-   500,000 total model tokens, and two repair retries per failed request. A+B is
-   one budgeted run: cumulative counters do not reset at B.
+   including exact values, authorization, and completion state. Compare each
+   scenario under the same declared safeguards for both variants. A+B needs
+   calibration for the whole workflow; it does not inherit A's single-task
+   allowance. Keep its complete cost and cumulative counters across both parts.
+   Do not add forced compaction to ordinary business tasks.
 3. **Let fresh consumers choose the route.** Give each variant the same task,
    executable and fixture references, tools, and safeguards. Exclude source,
    implementation discussion, other trials, expected answers, and suggested
@@ -477,11 +540,12 @@ establish these results for a new artifact.
    it. Balance variant order and keep evaluative labels out of consumer prompts.
    Human rescue is a recorded failure of unaided completion, not a successful
    retry. A continuation keeps its own context; a new B trial does not.
-   For batching and file-readback recipe trials, publish and freeze this task
-   guidance: "Batch independent discovery calls in one tool request. Verify saved
-   data by reopening the file from disk; this may be in the same script that saves
-   it." Include an uncoached condition and report this guidance separately from
-   CLI changes.
+   Only for explicitly selected batching and file-readback recipe trials,
+   publish and freeze this task guidance: "Batch independent discovery calls in
+   one tool request. Read task-required values from the saved file; this may
+   be in the same script that saves it." Include an uncoached condition and report
+   this guidance separately from CLI changes; ordinary CLI tasks do not inherit
+   recipe instructions.
 4. **Capture what was returned and what was seen.** Save chronological requests,
    arguments or scripts, exits, raw stdout/stderr, tool errors, artifact reads,
    projections, generated code, retries, and the exact content delivered to the
@@ -536,6 +600,17 @@ reconcile their sum with cumulative thread usage. Do not sum cumulative snapshot
 Missing telemetry is unknown, not zero; missing delivery records prevent a full
 context review. A simulated handoff is not an actual compaction trial.
 
+Retain whole-task provider totals and distinguish direct CLI output,
+interface-induced work supported by request/result traces, evaluator-added
+demands, discretionary agent work, and mixed or unattributable work. Work outside
+the CLI process, including scripts and artifact reads, can be interface-induced;
+process identity alone does not establish attribution. Record the supporting
+trace and uncertainty. One trajectory, conjecture about model reasoning, or a
+comparison of model-effort settings cannot establish interface cost causality.
+Use comparisons with the same model/settings and task conditions to test an
+interface's effect. Token categories describe the observed run; subtracting them
+does not produce a counterfactual total for a prompt without extra demands.
+
 Validate the review method itself against retained regression and control traces.
 It must flag a known increase in cumulative CLI or delivered-tool text even when
 model totals decrease, and must not report that increase as a model-token
@@ -552,6 +627,17 @@ Publish the run manifest, raw-record references, ledger, counterfactual results,
 and verdict table in the evaluation comment or linked artifacts. Keep the PR
 description focused on behavior and examples. Historical runs retain their
 original conditions; replay or a newly completed ledger is not a fresh trial.
+
+A retrospective re-audit is supplementary evidence. Preserve the original
+prompts, raw evidence, conditions, and ratings alongside separately labeled
+revised judgments with supporting record references. Complete retained evidence
+can satisfy a revised observable-result criterion; applicable repetition and
+safety requirements still hold, and untested cases remain untested. Do not
+silently overwrite original ratings or relabel historical runs as fresh trials.
+A workflow or cost claim for tasks without extra verification instructions needs
+fresh comparisons with revised prompts frozen in advance only when the original
+prompt demands confound that inference. Rerun claims the retained evidence cannot
+support.
 
 When editing this contract, check local links and examples, then run the
 [strict documentation build](../README.md#site-content).

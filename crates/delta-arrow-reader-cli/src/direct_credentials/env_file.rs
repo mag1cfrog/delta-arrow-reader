@@ -44,9 +44,9 @@ pub(crate) fn configure_credentials_from_env_file(
             "Remove credential fields from --storage-options-file; --env-file supplies the complete identity."
         } else {
             match scheme {
-                ObjectStoreScheme::AmazonS3 => "Check connection settings with capabilities --authorization s3 --full; keep credentials only in --env-file.",
-                ObjectStoreScheme::MicrosoftAzure => "Check connection settings with capabilities --authorization azure-blob --full; keep credentials only in --env-file.",
-                ObjectStoreScheme::GoogleCloudStorage => "Check connection settings with capabilities --authorization gcs --full; keep credentials only in --env-file.",
+                ObjectStoreScheme::AmazonS3 => "Check connection settings with capabilities --authorization s3 --detail connection; keep credentials only in --env-file.",
+                ObjectStoreScheme::MicrosoftAzure => "Check connection settings with capabilities --authorization azure-blob --detail connection; keep credentials only in --env-file.",
+                ObjectStoreScheme::GoogleCloudStorage => "Check connection settings with capabilities --authorization gcs --detail connection; keep credentials only in --env-file.",
                 _ => unreachable!("validated cloud backend"),
             }
         };

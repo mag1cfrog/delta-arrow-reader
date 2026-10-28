@@ -97,17 +97,22 @@ enum Command {
     Explain(query::explain::ExplainArgs),
     /// Export a Delta snapshot's rows as Arrow IPC.
     ///
-    /// Use --output PATH to save with a completion manifest, or redirect stdout.
+    /// Use --output PATH to save a complete file, or redirect stdout.
     Scan {
         #[command(flatten)]
         read: RowReadArgs,
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
-        /// Save a complete result and PATH.manifest.json without replacing existing files.
+        /// Save one complete result without replacing an existing file.
         /// Stdout returns a small JSON receipt. Windows staging inherits the directory ACL.
         #[arg(long, value_name = "PATH")]
         output: Option<PathBuf>,
+        /// Also save PATH.manifest.json with the sources and options needed for replay.
+        ///
+        /// Replay details: capabilities --schema result-manifest --detail replay.
+        #[arg(long, requires = "output")]
+        manifest: bool,
         /// File result row ceiling; defaults to 1000000. Exceeding it fails, unlike --limit.
         #[arg(long, requires = "output", default_value_if("output", clap::builder::ArgPredicate::IsPresent, "1000000"), value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         max_rows: Option<usize>,
@@ -228,7 +233,10 @@ enum Error {
         bindings: Vec<Value>,
     },
     #[snafu(display("{source}"))]
-    ArtifactPublicationInterrupted { source: Box<Error> },
+    ArtifactPublicationInterrupted {
+        source: Box<Error>,
+        manifest_requested: bool,
+    },
     #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
     OutputLimit { reason: &'static str },
     #[snafu(display("Command exceeded its time budget."))]
@@ -266,7 +274,7 @@ impl Error {
         match self {
             Self::ManifestAuthorizationInput { source, .. }
             | Self::CredentialFileValidation { source, .. }
-            | Self::ArtifactPublicationInterrupted { source }
+            | Self::ArtifactPublicationInterrupted { source, .. }
             | Self::WithResolvedBindings { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
@@ -382,15 +390,22 @@ impl Error {
 
     fn input_correction(&self) -> Option<InputCorrection> {
         let (input_kind, hint) = match self {
-            Self::ArtifactPublicationInterrupted { source } => {
+            Self::ArtifactPublicationInterrupted {
+                source,
+                manifest_requested,
+            } => {
                 let mut correction = source.input_correction().unwrap_or(InputCorrection {
                     argument: "--output".into(),
-                    expected: "a verified complete artifact pair".into(),
+                    expected: "an unused output path".into(),
                     field_path: None,
                     supplied: None,
                     hint: "",
                 });
-                correction.hint = "Check PATH and PATH.manifest.json before retrying; a verified complete pair may already exist. Otherwise choose unused names and preserve the pinned request and authorization; adjust only the reported budget.";
+                correction.hint = if *manifest_requested {
+                    "Check PATH and PATH.manifest.json before retrying; a matching manifest with completion=complete may already exist. Otherwise choose unused names and preserve the pinned request and authorization; adjust only the reported budget."
+                } else {
+                    "A complete result may already exist at PATH. Preserve it; retry with an unused output path if completion is uncertain. Keep the pinned request and authorization; adjust only the reported budget."
+                };
                 return Some(correction);
             }
             Self::WithResolvedBindings { source, .. } => return source.input_correction(),
@@ -446,13 +461,25 @@ impl Error {
                     hint: "Select --auth-source, --env-file, or a credential JSON --storage-options-file. For --tables-file, set authorization for every remote binding.",
                 });
             }
-            Self::ArtifactIo { .. } => {
+            Self::ArtifactIo {
+                reason: "artifact_manifest_destination_exists" | "artifact_manifest_publish_failed",
+                ..
+            } => {
                 return Some(InputCorrection {
                     argument: "--output".into(),
                     expected: "unused result and manifest names in a writable directory".into(),
                     field_path: None,
                     supplied: None,
-                    hint: "Check PATH and PATH.manifest.json; verify a complete pair before accepting it. Otherwise retry with unused names, preserving inputs, snapshots and limits.",
+                    hint: "Check PATH and PATH.manifest.json for a matching result.path and completion=complete. Otherwise retry with unused names, preserving inputs, snapshots and limits.",
+                });
+            }
+            Self::ArtifactIo { .. } => {
+                return Some(InputCorrection {
+                    argument: "--output".into(),
+                    expected: "an unused output path in a writable directory".into(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Check the output directory and preserve any existing result. If completion is uncertain, retry with an unused path; keep inputs, snapshots and limits.",
                 });
             }
             Self::OutputLimit {
@@ -499,6 +526,16 @@ impl Error {
             Self::Query { source } => {
                 let classification = source.classification();
                 let (argument, expected, hint) = match classification.reason {
+                    "column_not_found" => (
+                        "--sql-file",
+                        "an existing SQL column reference",
+                        "Check column names and aliases; inspect the selected table only if its columns are unknown.",
+                    ),
+                    "ambiguous_column" => (
+                        "--sql-file",
+                        "an unambiguous SQL column reference",
+                        "Qualify the column reference with its table or subquery alias.",
+                    ),
                     "spill_disabled" => (
                         "--spill-limit-bytes",
                         "a positive byte budget together with --spill-dir PATH",
@@ -556,7 +593,7 @@ impl Error {
                         .to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                    hint: "For types only, omit --include-metadata. Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
                 });
             }
             Self::OutputLimit {
@@ -567,7 +604,7 @@ impl Error {
                     expected: "enough bytes for the complete JSON result".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "For a large complete result, use --output PATH; if already saving a file, increase --max-output-bytes explicitly. Preserve SQL, authorization, bindings and actual versions; verify the saved manifest before acceptance.",
+                    hint: "For a large complete result, use --output PATH; if already saving a file, increase --max-output-bytes explicitly. Preserve SQL, authorization, bindings and actual versions.",
                 });
             }
             Self::OutputLimit {
@@ -656,7 +693,7 @@ impl Error {
                     manifest_field_path = Some(field_path.as_str());
                 }
                 Self::WithResolvedBindings { source, .. }
-                | Self::ArtifactPublicationInterrupted { source }
+                | Self::ArtifactPublicationInterrupted { source, .. }
                 | Self::CredentialFileValidation { source, .. } => source_error = source,
                 _ => break,
             }
@@ -787,7 +824,9 @@ impl Error {
             Some("timeout" | "connection_reset" | "connection_aborted") => ("retry", Some(true)),
             Some("unsupported") => ("change_request", Some(false)),
             _ if phase == "configuration"
-                || matches!(code, "invalid_projection" | "unsupported_predicate") =>
+                || matches!(code, "invalid_projection" | "unsupported_predicate")
+                || (code == "sql_planning"
+                    && matches!(reason, "column_not_found" | "ambiguous_column")) =>
             {
                 ("fix_input", Some(false))
             }
@@ -807,7 +846,7 @@ impl Error {
         });
         match self {
             Self::CredentialFileValidation { source, .. }
-            | Self::ArtifactPublicationInterrupted { source } => {
+            | Self::ArtifactPublicationInterrupted { source, .. } => {
                 record = source.to_json_diagnostic()
             }
             Self::Query { .. } if source_kind == Some("resource_exhausted") => {
@@ -889,7 +928,7 @@ impl Error {
         ExitCode::from(match self {
             Self::ManifestAuthorizationInput { source, .. }
             | Self::CredentialFileValidation { source, .. }
-            | Self::ArtifactPublicationInterrupted { source }
+            | Self::ArtifactPublicationInterrupted { source, .. }
             | Self::WithResolvedBindings { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput
@@ -1070,17 +1109,23 @@ async fn execute_table_command(
         Command::Scan {
             read,
             output: Some(path),
+            manifest,
             limit,
             deadline_ms,
             max_rows,
             max_output_bytes,
         } => {
-            let mut options =
-                serde_json::to_value(read).map_err(|source| Error::JsonOutput { source })?;
-            options["limit"] = json!(limit);
-            options["deadline-ms"] = json!(deadline_ms);
-            options["max-rows"] = json!(max_rows);
-            options["max-output-bytes"] = json!(max_output_bytes);
+            let options = if *manifest {
+                let mut options =
+                    serde_json::to_value(read).map_err(|source| Error::JsonOutput { source })?;
+                options["limit"] = json!(limit);
+                options["deadline-ms"] = json!(deadline_ms);
+                options["max-rows"] = json!(max_rows);
+                options["max-output-bytes"] = json!(max_output_bytes);
+                Some(options)
+            } else {
+                None
+            };
             Some(output::artifact::StagedResult::new(
                 path,
                 output::RowOutputFormat::Arrow,
@@ -1097,11 +1142,7 @@ async fn execute_table_command(
                 JsonInputKind::Predicate,
             )?;
             if let Some(artifact) = &mut artifact {
-                artifact.record_input_digest(
-                    "--predicate-file",
-                    path,
-                    output::artifact::sha256(&bytes),
-                );
+                artifact.record_replay_input("--predicate-file", path, &bytes);
             }
             Some(value.into_predicate()?)
         }
@@ -1115,11 +1156,7 @@ async fn execute_table_command(
                 path, JsonInputKind::ExecutionOptions
             )?;
             if let Some(artifact) = &mut artifact {
-                artifact.record_input_digest(
-                    "--execution-options-file",
-                    path,
-                    output::artifact::sha256(&bytes),
-                );
+                artifact.record_replay_input("--execution-options-file", path, &bytes);
             }
             Some(
                 options
@@ -1229,7 +1266,7 @@ async fn execute_table_command(
                         )
                         .await?;
                     let completion = build_completion_record("scan", Some(version), stats, limit);
-                    *pending_artifact = Some(staged.stage_manifest(&completion)?);
+                    *pending_artifact = Some(staged.prepare_publication(&completion)?);
                     Ok(completion)
                 } else {
                     let stats =

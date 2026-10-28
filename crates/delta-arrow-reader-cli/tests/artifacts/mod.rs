@@ -1,4 +1,4 @@
-//! Saved results are accepted through a small receipt and an independently verified manifest.
+//! Exported files can be read on their own; optional manifests retain provenance.
 
 use std::{
     fs,
@@ -18,6 +18,90 @@ use crate::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+#[test]
+fn default_exports_need_only_the_result_file_and_preserve_unrelated_sidecars() -> TestResult {
+    for command in ["scan", "query"] {
+        for format in ["arrow", "json"] {
+            if command == "scan" && format == "json" {
+                continue;
+            }
+            let directory = tempfile::tempdir()?;
+            fs::write(
+                directory.path().join("rows.manifest.json"),
+                b"unrelated file",
+            )?;
+            for name in ["rows", "other"] {
+                let mut request = if command == "query" {
+                    let mut request = query_command(directory.path(), "SELECT id FROM t LIMIT 3")?;
+                    request.args(["--format", format]);
+                    request
+                } else {
+                    let mut request = Command::new(env!("CARGO_BIN_EXE_dar"));
+                    request
+                        .current_dir(directory.path())
+                        .args(["--diagnostics=json", "scan"])
+                        .arg(fixture_path("partitioned").join("table"))
+                        .args(["--column", "id", "--limit", "3"]);
+                    request
+                };
+                let output = run_with_timeout(request.args(["--output", name]))?;
+                assert!(output.status.success(), "{output:?}");
+                let receipt: Value = serde_json::from_slice(&output.stdout)?;
+                assert_output_matches_schema("result-artifact", &receipt);
+                assert_eq!(
+                    receipt,
+                    json!({
+                        "format_version": 2, "kind": "result_artifact",
+                        "result": fs::canonicalize(directory.path())?.join(name),
+                    })
+                );
+                let completion = assert_single_terminal_record(&output.stderr, "completion");
+                assert_output_matches_schema("completion", &completion);
+                assert_eq!(completion["format_version"], 3);
+                let bytes = fs::read(receipt["result"].as_str().unwrap())?;
+                if format == "json" {
+                    let rows: Value = serde_json::from_slice(&bytes)?;
+                    assert_eq!(rows["completion"], "complete");
+                    assert_eq!(rows["rows"].as_array().unwrap().len(), 3);
+                } else {
+                    assert!(bytes.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]));
+                    let batches = StreamReader::try_new(Cursor::new(bytes), None)?
+                        .collect::<Result<Vec<_>, _>>()?;
+                    assert_eq!(
+                        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                        3
+                    );
+                }
+            }
+            assert_eq!(
+                fs::read(directory.path().join("rows.manifest.json"))?,
+                b"unrelated file"
+            );
+            assert!(!directory.path().join("other.manifest.json").exists());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn manifest_requires_an_output_path_before_loading_inputs() -> TestResult {
+    for command in ["scan", "query"] {
+        let mut request = Command::new(env!("CARGO_BIN_EXE_dar"));
+        request.args(["--diagnostics=json", command, "missing-table", "--manifest"]);
+        if command == "query" {
+            request.args(["--sql-file", "missing.sql"]);
+        }
+        let output = run_with_timeout(&mut request)?;
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            assert_single_terminal_record(&output.stderr, "diagnostic")["argument_kind"],
+            "MissingRequiredArgument"
+        );
+    }
+    Ok(())
+}
+
 fn query_command(directory: &Path, sql: &str) -> TestResult<Command> {
     fs::write(directory.join("query.sql"), sql)?;
     let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
@@ -29,7 +113,7 @@ fn query_command(directory: &Path, sql: &str) -> TestResult<Command> {
     Ok(command)
 }
 
-fn verify_artifact(output: &Output) -> TestResult<(Value, Vec<u8>)> {
+fn verify_result_and_manifest(output: &Output) -> TestResult<(Value, Vec<u8>)> {
     assert!(output.status.success(), "{output:?}");
     assert!(output.stdout.len() <= 8192);
     let receipt: Value = serde_json::from_slice(&output.stdout)?;
@@ -87,10 +171,11 @@ fn saved_query_formats_have_exact_counts_inputs_and_replay_versions() -> TestRes
         let output = run_with_timeout(query_command(directory.path(), sql)?.args([
             "--format",
             format,
+            "--manifest",
             "--output",
             &format!("rows.{format}"),
         ]))?;
-        let (manifest, bytes) = verify_artifact(&output)?;
+        let (manifest, bytes) = verify_result_and_manifest(&output)?;
         assert_eq!(manifest["rows"], "3");
         assert_eq!(manifest["scope"], "query");
         assert_eq!(
@@ -115,10 +200,11 @@ fn saved_query_formats_have_exact_counts_inputs_and_replay_versions() -> TestRes
             format,
             "--table-version",
             manifest["bindings"][0]["table_version"].as_str().unwrap(),
+            "--manifest",
             "--output",
             &format!("replay.{format}"),
         ]))?;
-        let (_, replay_bytes) = verify_artifact(&replay)?;
+        let (_, replay_bytes) = verify_result_and_manifest(&replay)?;
         assert_eq!(bytes, replay_bytes);
         if format == "json" {
             assert_eq!(
@@ -138,9 +224,16 @@ fn limited_scan_file_retains_its_scope_and_zero_column_rows() -> TestResult {
             .current_dir(directory.path())
             .args(["--diagnostics=json", "scan"])
             .arg(fixture_path("partitioned").join("table"))
-            .args(["--no-columns", "--limit", "3", "--output", "rows.arrow"]),
+            .args([
+                "--no-columns",
+                "--limit",
+                "3",
+                "--manifest",
+                "--output",
+                "rows.arrow",
+            ]),
     )?;
-    let (manifest, bytes) = verify_artifact(&output)?;
+    let (manifest, bytes) = verify_result_and_manifest(&output)?;
     assert_eq!(manifest["scope"], "limited_scan");
     assert_eq!(manifest["has_more"], Value::Null);
     assert_eq!(manifest["stop_reason"], "row_limit");
@@ -176,10 +269,14 @@ fn wide_and_large_json_files_do_not_expand_receipts_or_expose_sql_literals() -> 
             "360",
         ),
     ] {
-        let output = run_with_timeout(
-            query_command(directory.path(), &sql)?.args(["--format", "json", "--output", name]),
-        )?;
-        let (manifest, bytes) = verify_artifact(&output)?;
+        let output = run_with_timeout(query_command(directory.path(), &sql)?.args([
+            "--format",
+            "json",
+            "--manifest",
+            "--output",
+            name,
+        ]))?;
+        let (manifest, bytes) = verify_result_and_manifest(&output)?;
         assert!(bytes.len() > 8192);
         assert_eq!(manifest["rows"], rows);
         for text in [
@@ -197,17 +294,27 @@ fn wide_and_large_json_files_do_not_expand_receipts_or_expose_sql_literals() -> 
 #[test]
 fn no_clobber_and_failed_execution_leave_existing_files_unchanged() -> TestResult {
     let directory = tempfile::tempdir()?;
-    for name in ["rows", "rows.manifest.json"] {
+    for (manifest, name, reason) in [
+        (false, "rows", "artifact_destination_exists"),
+        (true, "rows", "artifact_destination_exists"),
+        (
+            true,
+            "rows.manifest.json",
+            "artifact_manifest_destination_exists",
+        ),
+    ] {
         fs::write(directory.path().join(name), b"keep me")?;
         let output = run_with_timeout(
-            query_command(directory.path(), "SELECT * FROM t")?.args(["--output", "rows"]),
+            query_command(directory.path(), "SELECT * FROM t")?
+                .args(["--output", "rows"])
+                .args(manifest.then_some("--manifest")),
         )?;
         assert_eq!(output.status.code(), Some(3), "{output:?}");
         assert!(output.stdout.is_empty());
         assert_eq!(fs::read(directory.path().join(name))?, b"keep me");
         assert_eq!(
             assert_single_terminal_record(&output.stderr, "diagnostic")["reason"],
-            "artifact_destination_exists"
+            reason
         );
         fs::remove_file(directory.path().join(name))?;
     }
@@ -362,11 +469,12 @@ fn many_bindings_stay_in_the_manifest_and_pin_independent_snapshots() -> TestRes
                 "query.sql",
                 "--format",
                 "json",
+                "--manifest",
                 "--output",
                 "rows.json",
             ]),
     )?;
-    let (manifest, bytes) = verify_artifact(&output)?;
+    let (manifest, bytes) = verify_result_and_manifest(&output)?;
     assert_eq!(
         serde_json::from_slice::<Value>(&bytes)?["rows"],
         json!([["12"]])
@@ -401,7 +509,11 @@ fn filesystem_write_failures_never_publish_or_report_a_cli_budget() -> TestResul
     assert!(compiler.status.success(), "{compiler:?}");
     for errno in [libc::ENOSPC, libc::EFBIG] {
         for format in ["json", "arrow"] {
-            for target in [".dar-result-", ".dar-manifest-"] {
+            for (manifest, target) in [
+                (false, ".dar-result-"),
+                (true, ".dar-result-"),
+                (true, ".dar-manifest-"),
+            ] {
                 let marker = directory.path().join("injected");
                 let output = run_with_timeout(
                     query_command(
@@ -412,7 +524,8 @@ fn filesystem_write_failures_never_publish_or_report_a_cli_budget() -> TestResul
                     .env("DAR_STORAGE_FAULT_ERRNO", errno.to_string())
                     .env("DAR_STORAGE_FAULT_MARKER", &marker)
                     .env("DAR_STORAGE_FAULT_FILE", target)
-                    .args(["--format", format, "--output", "rows"]),
+                    .args(["--format", format, "--output", "rows"])
+                    .args(manifest.then_some("--manifest")),
                 )?;
                 assert!(marker.exists(), "fault was not reached");
                 fs::remove_file(marker)?;
@@ -441,43 +554,50 @@ fn filesystem_write_failures_never_publish_or_report_a_cli_budget() -> TestResul
 
 #[cfg(target_os = "linux")]
 #[test]
-fn cancelled_receipt_can_leave_a_verifiable_complete_pair() -> TestResult {
-    let directory = tempfile::tempdir()?;
-    let (consumer, stdout) = crate::create_full_pipe()?;
-    let output = crate::run_with_stdout(
-        query_command(directory.path(), "SELECT 7 AS n FROM t LIMIT 1")?.args([
-            "--format",
-            "json",
-            "--output",
-            "rows",
-            "--deadline-ms",
-            "500",
-        ]),
-        stdout.into(),
-    )?;
-    drop(consumer);
-    assert!(!output.status.success());
-    assert_eq!(
-        assert_single_terminal_record(&output.stderr, "diagnostic")["reason"],
-        "command_deadline_exceeded"
-    );
-    assert!(
-        assert_single_terminal_record(&output.stderr, "diagnostic")["hint"]
-            .as_str()
-            .unwrap()
-            .contains("complete pair may already exist")
-    );
-    let manifest: Value =
-        serde_json::from_slice(&fs::read(directory.path().join("rows.manifest.json"))?)?;
-    let bytes = fs::read(directory.path().join("rows"))?;
-    assert_eq!(
-        manifest["result"]["sha256"],
-        format!("{:x}", Sha256::digest(&bytes))
-    );
-    assert_eq!(
-        serde_json::from_slice::<Value>(&bytes)?["rows"],
-        json!([["7"]])
-    );
+fn interrupted_receipt_preserves_complete_results_in_both_modes() -> TestResult {
+    for manifest_requested in [false, true] {
+        let directory = tempfile::tempdir()?;
+        let (consumer, stdout) = crate::create_full_pipe()?;
+        let output = crate::run_with_stdout(
+            query_command(directory.path(), "SELECT 7 AS n FROM t LIMIT 1")?
+                .args([
+                    "--format",
+                    "json",
+                    "--output",
+                    "rows",
+                    "--deadline-ms",
+                    "500",
+                ])
+                .args(manifest_requested.then_some("--manifest")),
+            stdout.into(),
+        )?;
+        drop(consumer);
+        assert!(!output.status.success());
+        assert_eq!(
+            assert_single_terminal_record(&output.stderr, "diagnostic")["reason"],
+            "command_deadline_exceeded"
+        );
+        let diagnostic = assert_single_terminal_record(&output.stderr, "diagnostic");
+        let hint = diagnostic["hint"].as_str().unwrap();
+        let bytes = fs::read(directory.path().join("rows"))?;
+        if manifest_requested {
+            assert!(hint.contains("matching manifest with completion=complete may already exist"));
+            let manifest: Value =
+                serde_json::from_slice(&fs::read(directory.path().join("rows.manifest.json"))?)?;
+            assert_eq!(
+                manifest["result"]["sha256"],
+                format!("{:x}", Sha256::digest(&bytes))
+            );
+        } else {
+            assert!(hint.contains("complete result may already exist"));
+            assert!(!hint.contains("manifest"));
+            assert!(!directory.path().join("rows.manifest.json").exists());
+        }
+        assert_eq!(
+            serde_json::from_slice::<Value>(&bytes)?["rows"],
+            json!([["7"]])
+        );
+    }
     Ok(())
 }
 
@@ -586,7 +706,7 @@ fn long_paths_either_fit_the_receipt_or_fail_before_publication() -> TestResult 
         Command::new(env!("CARGO_BIN_EXE_dar"))
             .args(["--diagnostics=json", "scan", "--limit", "0"])
             .arg(fixture_path("partitioned").join("table"))
-            .arg("--output")
+            .args(["--manifest", "--output"])
             .arg(parent.join("rows")),
     )?;
     assert_eq!(
@@ -621,9 +741,9 @@ fn long_paths_either_fit_the_receipt_or_fail_before_publication() -> TestResult 
         Command::new(env!("CARGO_BIN_EXE_dar"))
             .args(["--diagnostics=json", "scan", "--limit", "0"])
             .arg(fixture_path("partitioned").join("table"))
-            .arg("--output")
+            .args(["--manifest", "--output"])
             .arg(output_parent.join("rows")),
     )?;
-    verify_artifact(&output)?;
+    verify_result_and_manifest(&output)?;
     Ok(())
 }

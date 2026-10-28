@@ -61,9 +61,17 @@ impl DiscoverySchema {
                         argument: "--detail".to_owned(),
                         field_path: None,
                         supplied: None,
-                        expected: "a field, operator, or scalar type listed by the selected schema"
-                            .to_owned(),
-                        hint: "Run capabilities --schema NAME to list available details.",
+                        expected: if matches!(self, Self::Rows) {
+                            "a result field or value encoding"
+                        } else {
+                            "a field, operator, or scalar type listed by the selected schema"
+                        }
+                        .to_owned(),
+                        hint: if matches!(self, Self::Rows) {
+                            "Run capabilities --schema rows --detail rows for value encodings; omit --detail for result fields."
+                        } else {
+                            "Run capabilities --schema NAME to list available details."
+                        },
                     }),
                 })?;
             guide["detail"] = json!(name);
@@ -120,7 +128,7 @@ impl DiscoverySchema {
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "v1/v2 only; v3 keeps bindings in the result manifest (--output) or query_plan stdout (explain). Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "v1/v2 only; v3 omits bindings from stderr. JSON results and query_plan stdout (explain) contain bindings. Saved Arrow has no bindings; request --manifest when those versions must be recorded. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {
@@ -243,6 +251,17 @@ impl DiscoverySchema {
                     guide[field_list] = json!(other_fields);
                 }
             }
+            if matches!(self, Self::Rows) {
+                guide["value_encodings"] = json!({
+                    "common": schema["properties"]["rows"]["description"],
+                    "decimal": schema["$defs"]["decimal"]["description"],
+                });
+                guide["encodings"] = json!(
+                    schema["$defs"]
+                        .as_object()
+                        .map(|definitions| definitions.keys().collect::<Vec<_>>())
+                );
+            }
             if matches!(self, Self::Tables) {
                 guide["query_example"] = json!([
                     executable,
@@ -298,6 +317,27 @@ impl DiscoverySchema {
                 json!(["s3", "azure-blob", "gcs"])
             };
         }
+        if matches!(self, Self::StorageOptions) {
+            guide["authorization_source_command"] = json!([
+                executable,
+                "capabilities",
+                "--authorization",
+                "SERVICE",
+                "--detail",
+                "SOURCE"
+            ]);
+        }
+        if matches!(
+            self,
+            Self::Inspection
+                | Self::InspectionSummary
+                | Self::Diagnostic
+                | Self::Completion
+                | Self::Rows
+        ) && let Some(definition) = guide.get_mut("definition")
+        {
+            omit_output_validation_keywords(definition);
+        }
         Ok(guide)
     }
 
@@ -332,6 +372,30 @@ impl DiscoverySchema {
             }
         } else {
             guide["definition"] = selected.clone();
+            omit_output_validation_keywords(&mut guide["definition"]);
+        }
+        // Routine reading and replay need file references; full_command retains the validation schema.
+        if matches!(self, Self::ResultManifest) {
+            match detail {
+                Some("result") => {
+                    guide["fields"] = json!(["format", "path"]);
+                    guide["description"] = json!(
+                        "Absolute path and encoding of the saved file. JSON uses the rows schema."
+                    );
+                }
+                Some("replay.inputs") => {
+                    guide["definition"]["description"] = json!(
+                        "Input files parsed by this command. Paths use working_directory; credential files are excluded."
+                    );
+                    let input = &mut guide["definition"]["items"];
+                    input["properties"] = json!({
+                        "argument": input["properties"]["argument"],
+                        "path": input["properties"]["path"],
+                    });
+                    input["required"] = json!(["argument", "path"]);
+                }
+                _ => {}
+            }
         }
         Ok(guide)
     }
@@ -363,6 +427,38 @@ impl DiscoverySchema {
             "stream": stream,
             "schema": schema,
         })
+    }
+}
+
+fn omit_output_validation_keywords(definition: &mut Value) {
+    let Some(fields) = definition.as_object_mut() else {
+        return;
+    };
+    for keyword in ["pattern", "maxLength", "minItems", "maxItems"] {
+        fields.remove(keyword);
+    }
+    if fields
+        .get("not")
+        .is_some_and(|rule| rule.get("pattern").is_some())
+    {
+        fields.remove("not");
+    }
+    for keyword in ["properties", "$defs"] {
+        if let Some(children) = fields.get_mut(keyword).and_then(Value::as_object_mut) {
+            for child in children.values_mut() {
+                omit_output_validation_keywords(child);
+            }
+        }
+    }
+    if let Some(items) = fields.get_mut("items") {
+        omit_output_validation_keywords(items);
+    }
+    for keyword in ["anyOf", "oneOf", "allOf"] {
+        if let Some(choices) = fields.get_mut(keyword).and_then(Value::as_array_mut) {
+            for choice in choices {
+                omit_output_validation_keywords(choice);
+            }
+        }
     }
 }
 
@@ -453,9 +549,105 @@ mod tests {
     use crate::input::{PredicateInput, parse_json};
 
     #[test]
-    fn row_value_encodings_are_disclosed_only_when_selected() {
+    fn output_field_guides_keep_integer_and_null_meanings_without_validator_patterns() {
+        for (schema, field) in [
+            (DiscoverySchema::Rows, "row_count"),
+            (DiscoverySchema::QueryPlan, "bindings"),
+            (DiscoverySchema::ResultManifest, "bindings"),
+            (DiscoverySchema::ResultManifest, "replay.options.max-rows"),
+        ] {
+            let guide = schema.build_schema_guide(Some(field)).unwrap();
+            let text = guide["definition"].to_string();
+            assert!(text.contains("18446744073709551615"));
+            assert!(text.contains("decimal integer string"));
+            for keyword in ["pattern", "maxLength", "maxItems", "minItems"] {
+                assert!(!text.contains(keyword), "{schema:?}/{field}: {keyword}");
+            }
+            assert!(schema.schema_document().to_string().contains("pattern"));
+        }
+        let nullable = DiscoverySchema::QueryPlan
+            .build_schema_guide(Some("node.statistics.selected_files.input_rows_estimate"))
+            .unwrap();
+        assert_eq!(nullable["definition"]["type"], json!(["string", "null"]));
+        assert!(
+            nullable["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("null when unavailable")
+        );
+        let input = DiscoverySchema::Tables
+            .build_schema_guide(Some("tables[].alias"))
+            .unwrap();
+        assert!(input["definition"].get("pattern").is_some());
+    }
+
+    #[test]
+    fn manifest_file_guides_defer_integrity_metadata_to_the_full_schema() {
+        let format = DiscoverySchema::ResultManifest;
+        for field in [None, Some("result"), Some("replay"), Some("replay.inputs")] {
+            let guide = format.build_schema_guide(field).unwrap();
+            let text = guide.to_string().to_ascii_lowercase();
+            for term in [
+                "hash",
+                "sha256",
+                "sha-256",
+                "digest",
+                "checksum",
+                "integrity",
+            ] {
+                assert!(!text.contains(term), "{field:?}: {term}");
+            }
+            assert_eq!(guide["full_command"][4], "--full");
+        }
+        let result = format.build_schema_guide(Some("result")).unwrap();
+        assert_eq!(result["fields"], json!(["format", "path"]));
+        for field in ["result.path", "result.format"] {
+            assert!(format.build_schema_guide(Some(field)).is_ok());
+        }
+        let inputs = format.build_schema_guide(Some("replay.inputs")).unwrap();
+        let properties = &inputs["definition"]["items"]["properties"];
+        assert_eq!(properties["path"]["type"], "string");
+        assert!(
+            properties["argument"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("--sql-file"))
+        );
+        assert_eq!(
+            inputs["definition"]["items"]["required"],
+            json!(["argument", "path"])
+        );
+
+        let full = format.schema_document();
+        for definition in [
+            &full["schema"]["properties"]["result"],
+            &full["schema"]["properties"]["replay"]["properties"]["inputs"]["items"],
+        ] {
+            assert!(
+                definition["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("sha256"))
+            );
+            assert_eq!(
+                definition["properties"]["sha256"]["pattern"],
+                "^[a-f0-9]{64}$"
+            );
+        }
+        let requested = format.build_schema_guide(Some("result.sha256")).unwrap();
+        assert_eq!(requested["definition"]["type"], "string");
+        assert!(
+            requested["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("64 lowercase hexadecimal")
+        );
+        assert!(requested["definition"].get("pattern").is_none());
+    }
+
+    #[test]
+    fn row_guide_explains_common_values_and_links_specialized_encodings() {
         let guide = DiscoverySchema::Rows.build_schema_guide(None).unwrap();
-        assert!(guide.get("encodings").is_none());
         assert!(!guide.to_string().contains("base64"));
         assert!(
             guide["description"]
@@ -463,10 +655,25 @@ mod tests {
                 .unwrap()
                 .contains("integers use exact decimal strings")
         );
+        let common = guide["value_encodings"]["common"].as_str().unwrap();
+        for meaning in [
+            "JSON null",
+            "Date32 counts days",
+            "Date64 milliseconds since 1970-01-01",
+            "declared unit",
+            "timezone from data_type, including null",
+        ] {
+            assert!(common.contains(meaning), "{meaning}");
+        }
+        let decimal = guide["value_encodings"]["decimal"].as_str().unwrap();
+        assert!(decimal.contains("Unscaled base-10 integer string"));
+        assert!(decimal.contains("precision and scale from data_type"));
+        assert!(decimal.contains("1234 means 12.34"));
         let rows = DiscoverySchema::Rows
             .build_schema_guide(Some("rows"))
             .unwrap();
-        for name in rows["encodings"].as_array().unwrap() {
+        assert_eq!(guide["encodings"], rows["encodings"]);
+        for name in guide["encodings"].as_array().unwrap() {
             let detail = DiscoverySchema::Rows
                 .build_schema_guide(name.as_str())
                 .unwrap();
@@ -762,7 +969,8 @@ mod tests {
         let description = bindings["definition"]["description"].as_str().unwrap();
         assert!(description.contains("v1/v2 only"));
         assert!(description.contains("query_plan stdout (explain)"));
-        assert!(description.contains("bindings in the result manifest"));
+        assert!(description.contains("JSON results"));
+        assert!(description.contains("Saved Arrow has no bindings"));
         assert!(description.contains("query has at least one binding"));
         assert!(description.contains("inspect/scan/preview have one binding named t"));
         assert!(description.contains("Other commands have no bindings"));

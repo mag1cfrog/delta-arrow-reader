@@ -1,8 +1,8 @@
-//! Saved scan/query results and the manifests that commit them.
+//! Complete scan/query results published without replacing existing files.
 //!
-//! `--output rows.arrow` publishes `rows.arrow` before `rows.arrow.manifest.json`.
-//! A result without a matching completion manifest is uncommitted. Consumers check
-//! the manifest's hash, framing and counts before accepting or replaying a result.
+//! `--output rows.arrow` publishes one completed file. With `--manifest`, a
+//! separate `rows.arrow.manifest.json` records provenance after that publication.
+//! Only the explicitly requested pair needs a manifest to establish completion.
 
 use std::{
     fs,
@@ -27,22 +27,26 @@ const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 /// Owns unpublished output; dropping it removes the temporary result.
 pub(crate) struct StagedResult {
     file: NamedTempFile,
-    hasher: Sha256,
     result_path: PathBuf,
-    manifest_path: PathBuf,
     receipt: Vec<u8>,
     format: RowOutputFormat,
-    replay: Value,
-    inputs: Vec<Value>,
+    manifest: Option<ResultManifestBuilder>,
     cancellation: AbortHandle,
 }
 
-/// Both files are complete, but neither final name has been published.
+/// Provenance and digest collection exist only for an explicitly requested manifest.
+struct ResultManifestBuilder {
+    path: PathBuf,
+    hasher: Sha256,
+    replay: Value,
+    inputs: Vec<Value>,
+}
+
+/// The result and optional manifest are complete but have no final names yet.
 pub(crate) struct PendingArtifactPublication {
     result: NamedTempFile,
-    manifest: NamedTempFile,
+    manifest: Option<(NamedTempFile, PathBuf)>,
     result_path: PathBuf,
-    manifest_path: PathBuf,
     receipt: Vec<u8>,
 }
 
@@ -50,16 +54,9 @@ impl StagedResult {
     pub(crate) fn new(
         path: &Path,
         format: RowOutputFormat,
-        mut options: Value,
+        manifest_options: Option<Value>,
         cancellation: AbortHandle,
     ) -> Result<Self, Error> {
-        if let Some(fields) = options.as_object_mut() {
-            for value in fields.values_mut() {
-                if value.is_number() {
-                    *value = json!(value.to_string());
-                }
-            }
-        }
         let invalid = || Error::ArtifactIo {
             source: io::ErrorKind::InvalidInput.into(),
             reason: "artifact_path_invalid",
@@ -77,22 +74,49 @@ impl StagedResult {
             .to_str()
             .filter(|p| !p.chars().any(char::is_control))
             .ok_or_else(invalid)?;
-        let manifest_path = PathBuf::from(format!("{result_text}.manifest.json"));
-        let receipt = encode_bounded_json(
-            &json!({
-                "format_version": 1, "kind": "result_artifact",
-                "result": result_path, "manifest": manifest_path,
-            }),
-            MAX_RECEIPT_BYTES,
-            "artifact_receipt_too_large",
-        )?;
-        for destination in [&result_path, &manifest_path] {
+        let manifest = if let Some(mut options) = manifest_options {
+            if let Some(fields) = options.as_object_mut() {
+                for value in fields.values_mut() {
+                    if value.is_number() {
+                        *value = json!(value.to_string());
+                    }
+                }
+            }
+            let directory = std::env::current_dir().context(ArtifactIoSnafu {
+                reason: "artifact_directory_unavailable",
+            })?;
+            let directory = directory.to_str().ok_or_else(invalid)?;
+            Some(ResultManifestBuilder {
+                path: PathBuf::from(format!("{result_text}.manifest.json")),
+                hasher: Sha256::new(),
+                replay: json!({"working_directory": directory, "options": options}),
+                inputs: Vec::new(),
+            })
+        } else {
+            None
+        };
+        let mut receipt = json!({
+            "format_version": 2, "kind": "result_artifact", "result": result_path,
+        });
+        if let Some(manifest) = &manifest {
+            receipt["format_version"] = json!(1);
+            receipt["manifest"] = json!(manifest.path);
+        }
+        let receipt =
+            encode_bounded_json(&receipt, MAX_RECEIPT_BYTES, "artifact_receipt_too_large")?;
+        for (destination, exists_reason) in
+            std::iter::once((&result_path, "artifact_destination_exists")).chain(
+                manifest
+                    .as_ref()
+                    .map(|manifest| (&manifest.path, "artifact_manifest_destination_exists")),
+            )
+        {
             match fs::symlink_metadata(destination) {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Ok(_) => {
                     return Err(Error::ArtifactIo {
                         source: io::ErrorKind::AlreadyExists.into(),
-                        reason: "artifact_destination_exists",
+                        reason: exists_reason,
                     });
                 }
                 Err(source) => {
@@ -109,29 +133,25 @@ impl StagedResult {
             .context(ArtifactIoSnafu {
                 reason: "artifact_staging_failed",
             })?;
-        let directory = std::env::current_dir().context(ArtifactIoSnafu {
-            reason: "artifact_directory_unavailable",
-        })?;
-        let directory = directory.to_str().ok_or_else(invalid)?;
         Ok(Self {
             file,
-            hasher: Sha256::new(),
             result_path,
-            manifest_path,
             receipt,
             format,
-            replay: json!({"working_directory": directory, "options": options}),
-            inputs: Vec::new(),
+            manifest,
             cancellation,
         })
     }
 
     /// Only query, table-declaration, predicate and execution inputs belong here.
     /// Credential files are references in options, never digests or copied contents.
-    pub(crate) fn record_input_digest(&mut self, argument: &str, path: &str, digest: String) {
-        self.inputs.push(json!({
-            "argument": argument, "path": path, "sha256": digest,
-        }));
+    pub(crate) fn record_replay_input(&mut self, argument: &str, path: &str, bytes: &[u8]) {
+        if let Some(manifest) = &mut self.manifest {
+            manifest.inputs.push(json!({
+                "argument": argument, "path": path,
+                "sha256": format!("{:x}", Sha256::digest(bytes)),
+            }));
+        }
     }
 
     pub(crate) async fn write_rows(
@@ -172,52 +192,56 @@ impl StagedResult {
         Ok((output, stats))
     }
 
-    pub(crate) fn stage_manifest(
-        mut self,
+    pub(crate) fn prepare_publication(
+        self,
         completion: &Value,
     ) -> Result<PendingArtifactPublication, Error> {
-        self.replay["inputs"] = self.inputs.into();
-        if self.replay["options"]
-            .get("table")
-            .is_some_and(|value| value.is_string())
-        {
-            self.replay["options"]["table-version"] =
-                completion["bindings"][0]["table_version"].clone();
-        }
-        if self.replay["options"]["table-version"].is_null()
-            && let Some(options) = self.replay["options"].as_object_mut()
-        {
-            options.remove("table-version");
-        }
-        let manifest = json!({
-            "format_version": 1, "kind": "result_manifest", "completion": "complete",
-            "command": completion["command"], "scope": completion["scope"],
-            "stop_reason": completion["stop_reason"], "has_more": completion["has_more"],
-            "bindings": completion["bindings"], "rows": completion["rows"],
-            "batches": completion["batches"], "output_bytes": completion["output_bytes"],
-            "result": {"path": self.result_path, "format": self.format,
-                "sha256": format!("{:x}", self.hasher.finalize())},
-            "build": {"cli": env!("CARGO_PKG_VERSION"), "core": delta_arrow_reader::VERSION, "datafusion": datafusion::DATAFUSION_VERSION},
-            "replay": self.replay,
-        });
-        let bytes =
-            encode_bounded_json(&manifest, MAX_MANIFEST_BYTES, "artifact_manifest_too_large")?;
-        let parent = self.result_path.parent().ok_or(Error::ArtifactIo {
-            source: io::ErrorKind::InvalidInput.into(),
-            reason: "artifact_path_invalid",
-        })?;
-        let mut manifest = tempfile::Builder::new()
-            .prefix(".dar-manifest-")
-            .tempfile_in(parent)
-            .context(ArtifactIoSnafu {
-                reason: "artifact_staging_failed",
+        let manifest = if let Some(mut manifest) = self.manifest {
+            manifest.replay["inputs"] = manifest.inputs.into();
+            if manifest.replay["options"]
+                .get("table")
+                .is_some_and(|value| value.is_string())
+            {
+                manifest.replay["options"]["table-version"] =
+                    completion["bindings"][0]["table_version"].clone();
+            }
+            if manifest.replay["options"]["table-version"].is_null()
+                && let Some(options) = manifest.replay["options"].as_object_mut()
+            {
+                options.remove("table-version");
+            }
+            let document = json!({
+                "format_version": 1, "kind": "result_manifest", "completion": "complete",
+                "command": completion["command"], "scope": completion["scope"],
+                "stop_reason": completion["stop_reason"], "has_more": completion["has_more"],
+                "bindings": completion["bindings"], "rows": completion["rows"],
+                "batches": completion["batches"], "output_bytes": completion["output_bytes"],
+                "result": {"path": self.result_path, "format": self.format,
+                    "sha256": format!("{:x}", manifest.hasher.finalize())},
+                "build": {"cli": env!("CARGO_PKG_VERSION"), "core": delta_arrow_reader::VERSION, "datafusion": datafusion::DATAFUSION_VERSION},
+                "replay": manifest.replay,
+            });
+            let bytes =
+                encode_bounded_json(&document, MAX_MANIFEST_BYTES, "artifact_manifest_too_large")?;
+            let parent = self.result_path.parent().ok_or(Error::ArtifactIo {
+                source: io::ErrorKind::InvalidInput.into(),
+                reason: "artifact_path_invalid",
             })?;
-        manifest
-            .write_all(&bytes)
-            .and_then(|()| manifest.as_file().sync_all())
-            .context(ArtifactIoSnafu {
-                reason: "artifact_write_failed",
-            })?;
+            let mut file = tempfile::Builder::new()
+                .prefix(".dar-manifest-")
+                .tempfile_in(parent)
+                .context(ArtifactIoSnafu {
+                    reason: "artifact_staging_failed",
+                })?;
+            file.write_all(&bytes)
+                .and_then(|()| file.as_file().sync_all())
+                .context(ArtifactIoSnafu {
+                    reason: "artifact_write_failed",
+                })?;
+            Some((file, manifest.path))
+        } else {
+            None
+        };
         self.file.as_file().sync_all().context(ArtifactIoSnafu {
             reason: "artifact_write_failed",
         })?;
@@ -225,7 +249,6 @@ impl StagedResult {
             result: self.file,
             manifest,
             result_path: self.result_path,
-            manifest_path: self.manifest_path,
             receipt: self.receipt,
         })
     }
@@ -238,7 +261,9 @@ impl Write for StagedResult {
             return Err(io::Error::other("artifact write cancelled"));
         }
         let written = self.file.write(bytes)?;
-        self.hasher.update(&bytes[..written]);
+        if let Some(manifest) = &mut self.manifest {
+            manifest.hasher.update(&bytes[..written]);
+        }
         Ok(written)
     }
     fn flush(&mut self) -> io::Result<()> {
@@ -247,7 +272,7 @@ impl Write for StagedResult {
 }
 
 impl PendingArtifactPublication {
-    /// Call after command cleanup. Cancellation between publications leaves an uncommitted result.
+    /// Call after command cleanup; a requested manifest is published after the result.
     pub(crate) fn publish(self, cancellation: &AbortHandle) -> Result<Vec<u8>, Error> {
         if cancellation.is_aborted() {
             return Err(Error::Cancelled { status: 1 });
@@ -258,21 +283,19 @@ impl PendingArtifactPublication {
                 source: error.error,
                 reason: "artifact_result_publish_failed",
             })?;
-        if cancellation.is_aborted() {
-            return Err(Error::Cancelled { status: 1 });
+        if let Some((manifest, path)) = self.manifest {
+            if cancellation.is_aborted() {
+                return Err(Error::Cancelled { status: 1 });
+            }
+            manifest
+                .persist_noclobber(path)
+                .map_err(|error| Error::ArtifactIo {
+                    source: error.error,
+                    reason: "artifact_manifest_publish_failed",
+                })?;
         }
-        self.manifest
-            .persist_noclobber(&self.manifest_path)
-            .map_err(|error| Error::ArtifactIo {
-                source: error.error,
-                reason: "artifact_manifest_publish_failed",
-            })?;
         Ok(self.receipt)
     }
-}
-
-pub(crate) fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn map_file_write_error(error: Error) -> Error {
@@ -319,11 +342,14 @@ mod tests {
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-    fn stage_fixture(directory: &Path) -> Result<PendingArtifactPublication, Error> {
+    fn stage_fixture(
+        directory: &Path,
+        manifest: bool,
+    ) -> Result<PendingArtifactPublication, Error> {
         let mut staged = StagedResult::new(
             &directory.join("rows"),
             RowOutputFormat::Arrow,
-            json!({}),
+            manifest.then(|| json!({})),
             AbortHandle::new_pair().0,
         )?;
         staged
@@ -332,7 +358,7 @@ mod tests {
                 source,
                 reason: "artifact_write_failed",
             })?;
-        staged.stage_manifest(&crate::build_completion_record(
+        staged.prepare_publication(&crate::build_completion_record(
             "scan",
             Some(42),
             OutputStats {
@@ -346,7 +372,11 @@ mod tests {
 
     #[test]
     fn publication_never_replaces_existing_or_racing_destinations() -> TestResult {
-        for name in ["rows", "rows.manifest.json"] {
+        for (manifest, name) in [
+            (false, "rows"),
+            (true, "rows"),
+            (true, "rows.manifest.json"),
+        ] {
             let directory = tempfile::tempdir()?;
             let existing = directory.path().join(name);
             fs::write(&existing, b"existing data")?;
@@ -354,14 +384,14 @@ mod tests {
                 StagedResult::new(
                     &directory.path().join("rows"),
                     RowOutputFormat::Arrow,
-                    json!({}),
+                    manifest.then(|| json!({})),
                     AbortHandle::new_pair().0,
                 )
                 .is_err()
             );
             assert_eq!(fs::read(&existing)?, b"existing data");
             fs::remove_file(&existing)?;
-            let complete = stage_fixture(directory.path())?;
+            let complete = stage_fixture(directory.path(), manifest)?;
             fs::write(&existing, b"racing writer")?;
             let (cancel, _) = AbortHandle::new_pair();
             let error = complete
@@ -390,26 +420,33 @@ mod tests {
 
     #[test]
     fn cancelled_publication_leaves_no_final_or_temporary_files() -> TestResult {
-        let directory = tempfile::tempdir()?;
-        let complete = stage_fixture(directory.path())?;
-        let (cancel, _) = AbortHandle::new_pair();
-        cancel.abort();
-        assert!(matches!(
-            complete.publish(&cancel),
-            Err(Error::Cancelled { .. })
-        ));
-        assert_eq!(fs::read_dir(directory.path())?.count(), 0);
+        for manifest in [false, true] {
+            let directory = tempfile::tempdir()?;
+            let complete = stage_fixture(directory.path(), manifest)?;
+            let (cancel, _) = AbortHandle::new_pair();
+            cancel.abort();
+            assert!(matches!(
+                complete.publish(&cancel),
+                Err(Error::Cancelled { .. })
+            ));
+            assert_eq!(fs::read_dir(directory.path())?.count(), 0);
+        }
         Ok(())
     }
 
     #[tokio::test]
     async fn late_stream_errors_discard_both_output_formats() -> TestResult {
-        for format in [RowOutputFormat::Arrow, RowOutputFormat::Json] {
+        for (manifest, format) in [
+            (false, RowOutputFormat::Arrow),
+            (false, RowOutputFormat::Json),
+            (true, RowOutputFormat::Arrow),
+            (true, RowOutputFormat::Json),
+        ] {
             let directory = tempfile::tempdir()?;
             let staged = StagedResult::new(
                 &directory.path().join("rows"),
                 format,
-                json!({}),
+                manifest.then(|| json!({})),
                 AbortHandle::new_pair().0,
             )?;
             let batch = RecordBatch::try_from_iter([(

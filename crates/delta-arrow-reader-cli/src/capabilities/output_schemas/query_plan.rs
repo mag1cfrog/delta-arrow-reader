@@ -31,8 +31,8 @@ pub(in crate::capabilities) fn query_plan_schema() -> Value {
                 "description": "Files planned from snapshot metadata, not files read. Input row/byte estimates may be null. They do not account for row filters or deletion vectors.",
                 "properties": {
                     "files": unsigned_integer_string_schema(),
-                    "input_rows_estimate": {"type": ["string", "null"], "pattern": "^[0-9]+$"},
-                    "input_bytes_estimate": {"type": ["string", "null"], "pattern": "^[0-9]+$"},
+                    "input_rows_estimate": {"type": ["string", "null"], "pattern": "^[0-9]+$", "description": "Unsigned decimal integer string; null when unavailable."},
+                    "input_bytes_estimate": {"type": ["string", "null"], "pattern": "^[0-9]+$", "description": "Unsigned decimal integer string; null when unavailable."},
                 },
             },
         },

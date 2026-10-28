@@ -57,7 +57,7 @@ pub(super) fn build_env_file_guide(
                     ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"],
                 ],
                 "configuration": ["AZURE_STORAGE_ACCOUNT_NAME"],
-                "notes": "Use exactly one complete family. Supply the account name if absent from the URL; JSON account settings override the env file. Client-secret tokens renew for the loaded identity.",
+                "notes": "Use exactly one complete family. Supply the account name if absent from the URL; JSON account settings override this account setting. Client-secret tokens renew for the loaded identity.",
             }),
             AuthorizationService::Gcs => json!({
                 "required": ["GOOGLE_APPLICATION_CREDENTIALS"],
@@ -71,6 +71,9 @@ pub(super) fn build_env_file_guide(
             "Only these case-sensitive names are accepted; JSON key aliases are not env-file names."
         );
         json!({
+            "arguments": ["--env-file", "PATH"],
+            "conflicts_with": ["--auth-source", "--databricks-profile"],
+            "usage": "Pass a provisioned file without reading or expanding its values. Failures never select another identity. With --tables-file, set tables[].authorization.env_file and source=env-file instead of command-level authorization flags.",
             "variables": variables,
             "values": "Literal text: dollar signs and backticks do not expand or execute.",
             "grammar_command": [crate::command_name(), "capabilities", "--authorization", service, "--detail", "env-file-grammar"],

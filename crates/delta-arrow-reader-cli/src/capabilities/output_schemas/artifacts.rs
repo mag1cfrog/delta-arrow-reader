@@ -1,4 +1,4 @@
-//! File receipts locate saved results; manifests provide verification and replay inputs.
+//! File receipts locate saved results; manifests record completion and replay inputs.
 
 use serde_json::{Value, json};
 
@@ -7,23 +7,26 @@ use super::{snapshot_bindings_schema, unsigned_integer_string_schema};
 pub(in crate::capabilities) fn result_artifact_schema() -> Value {
     json!({
         "title": "Saved result receipt", "type": "object",
-        "description": "File output only. Verify the referenced manifest, result hash, framing and counts before accepting the result.",
-        "required": ["format_version", "kind", "result", "manifest"],
+        "description": "Successful --output receipt: v2 locates the result file; --manifest selects v1 with an additional provenance file.",
+        "required": ["format_version", "kind", "result"],
+        "if": {"properties": {"format_version": {"const": 1}}},
+        "then": {"required": ["manifest"]},
+        "else": {"not": {"required": ["manifest"]}},
         "properties": {
-            "format_version": {"const": 1}, "kind": {"const": "result_artifact"},
-            "result": {"type": "string", "description": "Absolute local result path. Use the manifest's format to decode it."},
-            "manifest": {"type": "string", "description": "Absolute local completion-manifest path. Read only the verification or replay fields needed next."},
+            "format_version": {"enum": [1, 2]}, "kind": {"const": "result_artifact"},
+            "result": {"type": "string", "description": "Absolute local result path. Encoding follows --format (default arrow), regardless of filename extension."},
+            "manifest": {"type": "string", "description": "With --manifest only (v1): absolute provenance-file path. Check completion=complete and result.path against the receipt; read other fields as needed."},
         },
-        "examples": [{"format_version": 1, "kind": "result_artifact", "result": "/work/rows.arrow", "manifest": "/work/rows.arrow.manifest.json"}],
+        "examples": [{"format_version": 2, "kind": "result_artifact", "result": "/work/rows.arrow"}],
     })
 }
 
 pub(in crate::capabilities) fn result_manifest_schema() -> Value {
     let integer = unsigned_integer_string_schema();
-    let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, lowercase hexadecimal."});
+    let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, 64 lowercase hexadecimal characters."});
     json!({
         "title": "Result completion manifest", "type": "object",
-        "description": "Commit record for a saved result. Verify result.sha256, output_bytes, decoded rows/batches and framing. A result without a matching manifest is uncommitted; publication is not a two-file transaction.",
+        "description": "Optional provenance from --output PATH --manifest. Only this mode requires a matching complete manifest; publication is not a two-file transaction.",
         "required": ["format_version", "kind", "command", "completion", "scope", "stop_reason", "has_more", "bindings", "rows", "batches", "output_bytes", "result", "build", "replay"],
         "properties": {
             "format_version": {"const": 1}, "kind": {"const": "result_manifest"},
@@ -44,7 +47,7 @@ pub(in crate::capabilities) fn result_manifest_schema() -> Value {
             },
             "replay": {
                 "type": "object", "required": ["working_directory", "options", "inputs"],
-                "description": "Use the recorded command/options in working_directory and choose a new --output. Match input hashes first. Pin manifest table entries to bindings; credential references must remain provisioned. Ordering and volatile SQL can still vary.",
+                "description": "Reuse the original input files with the recorded command/options in working_directory and choose a new --output. Pin manifest table entries to bindings; credential references must remain provisioned. Ordering and volatile SQL can still vary.",
                 "properties": {
                     "working_directory": {"type": "string", "description": "Absolute directory for relative CLI paths; table-manifest references remain relative to that manifest."},
                     "options": replay_options_schema(),
@@ -79,4 +82,25 @@ fn replay_options_schema() -> Value {
             "format": {"enum": ["arrow", "json"]},
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn receipt_versions_distinguish_optional_provenance() {
+        let validator = jsonschema::validator_for(&result_artifact_schema()).unwrap();
+        let mut receipt =
+            json!({"format_version": 2, "kind": "result_artifact", "result": "/work/rows"});
+        assert!(validator.is_valid(&receipt));
+        receipt["format_version"] = json!(1);
+        assert!(!validator.is_valid(&receipt));
+        receipt["manifest"] = json!("/work/rows.manifest.json");
+        assert!(validator.is_valid(&receipt));
+        for version in [0, 2, 3] {
+            receipt["format_version"] = json!(version);
+            assert!(!validator.is_valid(&receipt));
+        }
+    }
 }

@@ -43,9 +43,34 @@ fn s3_env_file_reaches_every_read_with_literal_values_and_json_configuration_pre
         assert!(discovery.status.success());
         let guide: serde_json::Value = serde_json::from_slice(&discovery.stdout)?;
         assert!(!String::from_utf8_lossy(&discovery.stdout).contains("AWS_ACCESS_KEY_ID"));
-        let file_arguments = guide["authorization"]["env_file"]["arguments"]
+        assert!(guide["authorization"].get("env_file").is_none());
+        let authorization_command = guide["authorization"]["details_command"]
             .as_array()
-            .unwrap();
+            .unwrap()
+            .iter()
+            .skip(1)
+            .map(|argument| {
+                if argument == "NAME" {
+                    "s3"
+                } else {
+                    argument.as_str().unwrap()
+                }
+            });
+        let output =
+            run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(authorization_command))?;
+        assert!(output.status.success());
+        let authorization: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let env_file_command = authorization["authorization"]["env_file_details_command"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .skip(1)
+            .map(|argument| argument.as_str().unwrap());
+        let output =
+            run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(env_file_command))?;
+        assert!(output.status.success());
+        let env_file_guide: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let file_arguments = env_file_guide["arguments"].as_array().unwrap();
         let mut command = fixture.command(operation);
         for argument in file_arguments {
             if argument == "PATH" {
@@ -104,7 +129,7 @@ fn saved_results_record_credential_references_without_values_or_hashes() -> Test
                 .command(operation)
                 .arg("--env-file")
                 .arg(&path)
-                .arg("--output")
+                .args(["--manifest", "--output"])
                 .arg(&destination)
                 .arg("--diagnostics=json"),
         )?;
@@ -223,45 +248,55 @@ fn malformed_and_incomplete_files_never_use_ambient_credentials() -> TestResult 
 }
 
 #[test]
-fn unknown_env_file_variables_offer_only_the_selected_service_guide() -> TestResult {
+fn invalid_env_files_and_connection_settings_offer_focused_service_guides() -> TestResult {
     for (protocol, service) in [
         (CloudStorageProtocol::S3, "s3"),
         (CloudStorageProtocol::AzureBlob, "azure-blob"),
         (CloudStorageProtocol::Gcs, "gcs"),
     ] {
         let fixture = DirectStorageFixture::new(protocol)?;
-        fixture.write_options(json!({}))?;
         let path = fixture.directory.path().join("secret-credentials.env");
         fs::write(&path, "SECRET_UNKNOWN_NAME=secret-value")?;
-        let output = run_with_timeout(
-            fixture
-                .command("inspect")
-                .arg("--env-file")
-                .arg(path)
-                .arg("--diagnostics=json"),
-        )?;
-        assert_failure_without_stdout(&output, 2);
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["argument"], "--env-file");
-        let hint = record["hint"].as_str().unwrap();
-        assert!(hint.contains(&format!(
-            "capabilities --authorization {service} --detail env-file"
-        )));
-        assert!(!hint.contains("--full"));
-        assert!(!String::from_utf8_lossy(&output.stderr).contains("SECRET_UNKNOWN_NAME"));
-        assert!(fixture.server.requests.lock().unwrap().is_empty());
-        let guide = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
-            "capabilities",
-            "--authorization",
-            service,
-            "--detail",
-            "env-file",
-        ]))?;
-        assert!(guide.status.success());
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&guide.stdout)?["name"],
-            service
-        );
+        for (options, argument, detail) in [
+            (json!({}), "--env-file", "env-file"),
+            (
+                json!({"unknown_connection_option": "private-setting"}),
+                "--storage-options-file",
+                "connection",
+            ),
+        ] {
+            fixture.write_options(options)?;
+            let output = run_with_timeout(
+                fixture
+                    .command("inspect")
+                    .arg("--env-file")
+                    .arg(&path)
+                    .arg("--diagnostics=json"),
+            )?;
+            assert_failure_without_stdout(&output, 2);
+            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["argument"], argument);
+            let hint = record["hint"].as_str().unwrap();
+            assert!(hint.contains(&format!(
+                "capabilities --authorization {service} --detail {detail}"
+            )));
+            assert!(!hint.contains("--full"));
+            for private in ["SECRET_UNKNOWN_NAME", "secret-value", "private-setting"] {
+                assert!(!String::from_utf8_lossy(&output.stderr).contains(private));
+            }
+            assert!(fixture.server.requests.lock().unwrap().is_empty());
+            let guide = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+                "capabilities",
+                "--authorization",
+                service,
+                "--detail",
+                detail,
+            ]))?;
+            assert!(guide.status.success());
+            let guide: serde_json::Value = serde_json::from_slice(&guide.stdout)?;
+            assert_eq!(guide["name"], service);
+            assert_eq!(guide["detail"], detail);
+        }
     }
     Ok(())
 }

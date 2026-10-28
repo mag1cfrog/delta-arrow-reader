@@ -11,8 +11,9 @@ use super::*;
 type TestResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn writing_process() -> Result<ScanProcess> {
-    let mut command = Command::new("head");
-    command.args(["-c", "1048576", "/dev/zero"]);
+    // head can enlarge stdout's pipe to fit the entire payload, defeating backpressure.
+    let mut command = Command::new("dd");
+    command.args(["if=/dev/zero", "bs=4096", "count=256", "status=none"]);
     ScanProcess::start(command)
 }
 

@@ -33,7 +33,7 @@ steps for that interface:
 - Connect to cloud storage with the [CLI](cli-storage.md) or [Python](configuration.md).
 - Troubleshoot a failed read in [Python](python-api/errors.md),
   [the command line](cli-recovery.md), or [Rust](diagnostics.md).
-- [Save, verify, and resume CLI work](cli-automation.md) for scripts and agents.
+- [Save and reuse CLI results](cli-automation.md) for scripts and agents.
 - Learn [how the reader works](architecture.md).
 - Review the [performance reports](benchmarks.md) and their test conditions.
 - Look up a type or method in the [Python API reference](python-api/index.md#api-reference) or

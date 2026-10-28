@@ -1,9 +1,10 @@
-# Verify a saved JSON result
+# Audit a saved JSON result
 
-Use these examples after [saving a complete result](cli-automation.md#save-a-complete-result).
-The script checks integrity and counts;
-also compare the output path, scope, snapshot bindings, and request provenance
-with your intended request before accepting the result.
+Use this example for an integrity audit, such as checking a transferred file
+against the manifest requested at export with `--manifest`. For ordinary analysis, [read the saved result](cli-automation.md#read-a-saved-result)
+and decode the requested values. The audit script checks integrity and counts;
+compare scope, snapshot bindings and request provenance when they are part of
+the audit.
 
 For `totals.json`, verify its manifest against the actual saved bytes:
 

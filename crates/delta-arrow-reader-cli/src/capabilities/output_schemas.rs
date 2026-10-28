@@ -19,7 +19,7 @@ use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 pub(super) fn rows_schema() -> Value {
     json!({
         "title": "Typed JSON rows",
-        "description": "Use schema.fields for column types and order; names may repeat. Arrow integers use exact decimal strings. Metadata is omitted. Other value encodings: --detail rows.",
+        "description": "Use schema.fields for column types and order; names may repeat. Arrow integers use exact decimal strings. Metadata is omitted.",
         "type": "object",
         "required": ["format_version", "kind", "bindings", "schema", "rows", "row_count", "completion"],
         "properties": {
@@ -218,11 +218,11 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "Require exit 0 and valid stdout. With --diagnostics=json, check one stderr completion: command matches the request; output_bytes matches stdout length; counts are decimal strings. v1: Validate terminal=true, completion=complete, scope/stop_reason/has_more and applicable bindings/rows/batches in stderr. v2 (JSON preview/query): Match stderr bindings/rows to stdout bindings/row_count. Read result semantics from stdout: preview has completion=sample plus stop_reason/has_more; query has completion=complete plus scope=query. In the JSON rows object, scope is query-only; stop_reason/has_more are preview-only. v3 (--output/explain): Stderr has command/output_bytes. Read saved-result counts/bindings/completion from the manifest, or explain bindings from query_plan stdout.",
+        "description": "Require exit 0 and valid stdout. With --diagnostics=json, also require a stderr completion for the requested command. v1: Read completion, scope, stop_reason and has_more from stderr. v2 (JSON preview/query): Read result semantics from stdout: preview is a sample with stop_reason/has_more; query is complete with scope=query. v3 (--output/explain): Read the saved-result path from the receipt, or plan details from query_plan stdout. Counts and output_bytes are decimal strings.",
         "type": "object",
         "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {
-            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output or explain; command and stdout byte count only. Version 2: preview/query JSON stdout. Other stdout uses version 1. File counts and bindings belong to the manifest; explain bindings are in stdout."},
+            "format_version": {"enum": [1, 2, 3], "description": "Version 3: scan/query --output or explain; command and stdout byte count only. Version 2: preview/query JSON stdout. Other stdout uses version 1. JSON result counts and bindings are in the result; explain bindings are in stdout."},
             "kind": {"const": "completion", "description": "Terminal success for the requested command, emitted after stdout is flushed. Also require exit 0 and valid stdout."},
             "terminal": {"const": true},
             "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "explain", "help", "version"]},
