@@ -8,12 +8,11 @@ Unity Catalog table names. CLI users can instead follow the
 
 ## Supply a provider
 
-This API was added after v0.7.0. Use a source dependency until a release includes
-it. The provider types in this checkout use `object_store` 0.13.2; your application
-needs the same compatible version:
+The provider types use `object_store` 0.13.2. Add the matching dependency to your
+application:
 
 ```sh
-cargo add delta-arrow-reader --git https://github.com/mag1cfrog/delta-arrow-reader.git
+cargo add delta-arrow-reader@0.8
 cargo add object_store@0.13.2
 ```
 

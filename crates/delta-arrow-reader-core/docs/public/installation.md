@@ -18,8 +18,7 @@ Use CPython 3.10 or newer on one of these platforms:
 | macOS | Apple silicon, macOS 12.0 or newer |
 
 The Python API includes PyArrow support and SQL. The package also installs the
-`delta-arrow-reader` command; its available commands depend on the package version,
-as described under [CLI installation](#cli-binaries-and-container-images).
+`delta-arrow-reader` command.
 You do not need Rust or the separate Python `datafusion` package to install a
 wheel.
 
@@ -28,13 +27,13 @@ wheel.
 In your project's activated virtual environment, run:
 
 ```console
-python -m pip install --only-binary=:all: delta-arrow-reader
+python -m pip install --upgrade --only-binary=:all: "delta-arrow-reader>=0.8"
 python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
 ```
 
 The second command prints the installed version. Installation also downloads a
 compatible PyArrow wheel; neither package is compiled from source. For a project
-managed by uv, use `uv add delta-arrow-reader` instead.
+managed by uv, use `uv add "delta-arrow-reader>=0.8"` instead.
 
 Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
 to read your first rows.
@@ -81,16 +80,13 @@ python -m pip install ./crates/delta-arrow-reader-python
 
 ## CLI binaries and container images
 
-The v0.7.0 release provides `inspect` and `scan`. The preview, SQL, discovery,
-and saved-manifest workflows on these pages require a build with those features.
-If your command's `--help` lists only `inspect` and `scan`, use a
-[source build](#build-cli-from-source) to follow those workflows.
+Use version 0.8 or newer for the CLI workflows on these pages.
 
-If you installed the Python package above, you already have the CLI. The same
-command-availability check applies to the bundled command:
+If you installed the Python package above, you already have the CLI. Check its
+version with:
 
 ```console
-delta-arrow-reader --help
+delta-arrow-reader --version
 ```
 
 Use `delta-arrow-reader` in place of `dar` in the
@@ -107,11 +103,10 @@ Choose a version whose CLI section reports successful download verification.
 [Install uv](https://docs.astral.sh/uv/getting-started/installation/) if needed,
 then install the command from PyPI in a separate tool environment. This uses
 the [wheel platforms listed above](#python), including Windows x86_64 and
-Apple silicon macOS. Check the command availability note above before using
-the newer workflows:
+Apple silicon macOS:
 
 ```console
-uv tool install --no-build delta-arrow-reader
+uv tool install --no-build "delta-arrow-reader>=0.8"
 delta-arrow-reader --version
 ```
 
@@ -120,7 +115,7 @@ If uv reports that its executable directory is missing from `PATH`, run
 installation:
 
 ```console
-uvx --no-build delta-arrow-reader --help
+uvx --no-build --from "delta-arrow-reader>=0.8" delta-arrow-reader --help
 ```
 
 These tool environments do not add the Python API to your project. They still
@@ -212,8 +207,8 @@ for mounting a table or integrating the CLI with a Go service.
 <details markdown="1">
 <summary id="build-cli-from-source">Build the CLI from source</summary>
 
-Use a source build when you need a feature that your installed release does not
-provide. Install [Git](https://git-scm.com/install/),
+Build from source to use unreleased features or a platform without a published
+package. Install [Git](https://git-scm.com/install/),
 [Rust 1.94 or newer with rustup](https://rust-lang.org/tools/install/), and the
 [native build prerequisites](#https-and-build-prerequisites). Rustup also
 installs Cargo, the build command used below. Restart your terminal after
@@ -253,7 +248,7 @@ The examples use your application's Tokio runtime.
 ### Streaming reader
 
 ```bash
-cargo add delta-arrow-reader
+cargo add delta-arrow-reader@0.8
 cargo add tokio --features macros,rt-multi-thread
 ```
 
@@ -266,7 +261,7 @@ dependency is needed.
 To query the table with SQL in Rust:
 
 ```bash
-cargo add delta-arrow-reader --features datafusion
+cargo add delta-arrow-reader@0.8 --features datafusion
 cargo add datafusion@54 --no-default-features --features sql
 cargo add tokio --features macros,rt-multi-thread
 ```
