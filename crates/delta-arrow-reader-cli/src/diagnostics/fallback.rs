@@ -11,10 +11,10 @@ use std::os::fd::AsFd;
 #[cfg(windows)]
 use std::os::windows::io::AsHandle;
 
-use super::{DiagnosticFormat, TERMINAL_RECORD_STARTED, build_subscriber, log_targets};
+use super::{DiagnosticFormat, Error, TERMINAL_RECORD_STARTED, build_subscriber, log_targets};
 
 impl DiagnosticFormat {
-    pub(super) fn report_failure_without_thread(self, error: &crate::Error) {
+    pub(super) fn report_failure_without_thread(self, error: &Error) {
         // A cloned handle bypasses Rust's stderr lock, which another worker may be holding.
         #[cfg(unix)]
         let handle = io::stderr().as_fd().try_clone_to_owned();

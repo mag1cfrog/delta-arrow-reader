@@ -34,7 +34,14 @@ use tracing_subscriber::{
     prelude::*,
 };
 
+mod error;
 mod fallback;
+
+pub(crate) use error::{
+    ArgumentSnafu, ArtifactIoSnafu, ConfigurationSnafu, Error, InputIoSnafu, InputValidationSnafu,
+    OutputSnafu, QuerySnafu, ReaderSnafu, RuntimeSnafu, StorageAuthorizationSnafu,
+    TerminalOutputSnafu, UnityCatalogSnafu,
+};
 
 pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
 pub(crate) const DIAGNOSTIC_FORMAT_VERSION: u8 = 2;
@@ -90,14 +97,14 @@ impl DiagnosticFormat {
         Self::Text
     }
 
-    pub(crate) fn report_failure(self, error: &crate::Error) {
+    pub(crate) fn report_failure(self, error: &Error) {
         match self {
             Self::Text => error.emit_tracing_diagnostic(),
             Self::Json => self.write_terminal_record(error.to_json_diagnostic()),
         }
     }
 
-    pub(crate) fn report_failure_with_timeout(self, error: crate::Error) -> ExitCode {
+    pub(crate) fn report_failure_with_timeout(self, error: Error) -> ExitCode {
         let status = error.exit_code();
         let error = Arc::new(error);
         let worker_error = Arc::clone(&error);
@@ -398,8 +405,7 @@ mod tests {
     use arrow_schema::ArrowError;
     use serde_json::Value;
 
-    use super::{DiagnosticFormat, capture_tracing_output};
-    use crate::Error;
+    use super::{DiagnosticFormat, Error, capture_tracing_output};
 
     struct PanicOnFormatError;
 
