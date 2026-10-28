@@ -1,0 +1,93 @@
+//! Reference material for provisioning or correcting a credential env file.
+//!
+//! Passing an existing file needs only `--env-file PATH`. These views describe
+//! its contents when needed: `--authorization s3 --detail env-file` lists S3
+//! variables, while `--detail env-file-grammar` describes the shared syntax.
+
+use clap::error::ErrorKind;
+use serde_json::{Value, json};
+
+use super::AuthorizationService;
+use crate::{
+    diagnostics::{Error, InputCorrection},
+    input,
+};
+
+pub(in crate::capabilities) fn build_env_file_guide(
+    service: AuthorizationService,
+    detail: &str,
+) -> Result<Value, Error> {
+    if matches!(service, AuthorizationService::UnityCatalog)
+        || !matches!(detail, "env-file" | "env-file-grammar")
+    {
+        return Err(Error::Argument {
+            kind: ErrorKind::InvalidValue,
+            correction: Some(InputCorrection {
+                argument: "--detail".into(),
+                field_path: None,
+                expected: "env-file or env-file-grammar for s3, azure-blob, or gcs".into(),
+                supplied: None,
+                hint: "Select a direct-storage authorization guide.",
+            }),
+        });
+    }
+    let mut guide = if detail == "env-file-grammar" {
+        json!({
+            "max_file_bytes": input::MAX_INPUT_BYTES,
+            "min_records": 1,
+            "max_records": input::MAX_ENV_FILE_RECORDS,
+            "syntax": [
+                "UTF-8 with LF or CRLF. Ignore blank lines and whole-line # comments.",
+                "One NAME=VALUE record per line. NAME matches [A-Za-z_][A-Za-z0-9_]*. Trim spaces/tabs outside names and values.",
+                "Values are unquoted text without quotes, or enclosed in matching single/double quotes. The enclosing quote cannot occur inside; trailing text is invalid.",
+                "Quoted whitespace is preserved. Reject empty or whitespace-only values, duplicate names and control characters including NUL.",
+                "No escapes, multiline values, inline comments, export, interpolation or execution. Dollar signs, backticks, # and backslashes inside values are literal.",
+            ],
+            "variables_command": [crate::cli::command_name(), "capabilities", "--authorization", service, "--detail", "env-file"],
+        })
+    } else {
+        let mut variables = match service {
+            AuthorizationService::S3 => json!({
+                "required": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+                "optional": ["AWS_SESSION_TOKEN", "AWS_REGION", "AWS_DEFAULT_REGION"],
+                "notes": "AWS_REGION overrides AWS_DEFAULT_REGION; JSON region settings override both. Set the bucket's region; the native default is us-east-1.",
+            }),
+            AuthorizationService::AzureBlob => json!({
+                "one_credential_family": [
+                    ["AZURE_STORAGE_ACCOUNT_KEY"],
+                    ["AZURE_STORAGE_SAS_KEY"],
+                    ["AZURE_STORAGE_TOKEN"],
+                    ["AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID"],
+                ],
+                "configuration": ["AZURE_STORAGE_ACCOUNT_NAME"],
+                "notes": "Use exactly one complete family. Supply the account name if absent from the URL; JSON account settings override this account setting. Client-secret tokens renew for the loaded identity.",
+            }),
+            AuthorizationService::Gcs => json!({
+                "required": ["GOOGLE_APPLICATION_CREDENTIALS"],
+                "notes": "Reference a service-account or authorized-user ADC file. Relative paths use the env file's directory. No default ADC lookup; tokens renew for the loaded identity.",
+            }),
+            AuthorizationService::UnityCatalog => {
+                unreachable!("rejected before constructing the guide")
+            }
+        };
+        variables["names"] = json!(
+            "Only these case-sensitive names are accepted; JSON key aliases are not env-file names."
+        );
+        json!({
+            "arguments": ["--env-file", "PATH"],
+            "conflicts_with": ["--auth-source", "--databricks-profile"],
+            "usage": "Pass a provisioned file without reading or expanding its values. Failures never select another identity. With --tables-file, set tables[].authorization.env_file and source=env-file instead of command-level authorization flags.",
+            "variables": variables,
+            "values": "Literal text: dollar signs and backticks do not expand or execute.",
+            "grammar_command": [crate::cli::command_name(), "capabilities", "--authorization", service, "--detail", "env-file-grammar"],
+        })
+    };
+    guide["format_version"] = json!(1);
+    guide["kind"] = json!("authorization_detail");
+    guide["name"] = json!(service);
+    guide["detail"] = json!(detail);
+    Ok(guide)
+}
+
+#[cfg(test)]
+mod tests;

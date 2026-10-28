@@ -372,6 +372,47 @@ fn cleanup_failure_prevents_success_and_preserves_snapshot_bindings() -> TestRes
 }
 
 #[cfg(target_os = "linux")]
+fn spill_directory_has_data(path: &std::path::Path) -> std::io::Result<bool> {
+    let files = match fs::read_dir(path) {
+        Ok(files) => files,
+        // DataFusion can remove the directory after the observer lists it.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    let mut has_data = false;
+    for file in files {
+        match file?.metadata() {
+            Ok(metadata) => has_data |= metadata.len() > 0,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(has_data)
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn spill_observation_handles_directory_removal_without_hiding_other_errors() -> TestResult {
+    let parent = tempfile::tempdir()?;
+    let path = parent.path().join("datafusion-spill");
+    fs::create_dir(&path)?;
+    let listed = fs::read_dir(parent.path())?.next().transpose()?.unwrap();
+    assert!(!spill_directory_has_data(&listed.path())?);
+    fs::write(path.join("batch"), b"spilled rows")?;
+    assert!(spill_directory_has_data(&listed.path())?);
+
+    fs::remove_dir_all(&path)?;
+    assert!(!spill_directory_has_data(&listed.path())?);
+
+    fs::write(&path, b"not a directory")?;
+    assert_eq!(
+        spill_directory_has_data(&listed.path()).unwrap_err().kind(),
+        std::io::ErrorKind::NotADirectory,
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 #[test]
 fn interruption_cleans_private_storage_during_spill_and_blocked_output() -> TestResult {
     use std::{
@@ -410,14 +451,7 @@ fn interruption_cleans_private_storage_during_spill_and_blocked_output() -> Test
             for directory in directories {
                 assert_eq!(directory.metadata()?.permissions().mode() & 0o077, 0);
                 for inner in fs::read_dir(directory.path())? {
-                    for file in fs::read_dir(inner?.path())? {
-                        let file = file?;
-                        match file.metadata() {
-                            Ok(metadata) => has_data |= metadata.len() > 0,
-                            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
-                            Err(error) => return Err(error.into()),
-                        }
-                    }
+                    has_data |= spill_directory_has_data(&inner?.path())?;
                 }
             }
             let mut available = 0;

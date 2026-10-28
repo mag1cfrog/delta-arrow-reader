@@ -1,0 +1,161 @@
+//! Databricks CLI authorization for local Delta reads and SQL queries.
+//!
+//! The CLI supplies table metadata and temporary storage credentials. Core then reads
+//! the Delta log and data files directly. Table identifiers, credentials, and raw command output
+//! must stay out of diagnostics. Raw responses and credential values omit `Debug`;
+//! credential caches and providers expose only redacted `Debug` output.
+
+mod credential_cache;
+mod databricks_cli;
+mod error;
+mod storage_access;
+mod storage_location;
+mod table_metadata;
+mod temporary_credentials;
+
+pub(crate) use databricks_cli::{
+    DATABRICKS_COMMAND_TIMEOUT, MAX_COMMAND_OUTPUT_BYTES, cancel_pending_requests,
+};
+
+use delta_arrow_reader::DeltaStorageOptions;
+
+pub(crate) use error::Error;
+pub(crate) use storage_access::AuthorizedTableAccess;
+use storage_location::TableStorageLocation;
+use table_metadata::TableMetadataResponse;
+use temporary_credentials::parse_temporary_credentials;
+
+/// A validated `uc://catalog.schema.table` target and the profile used to request access.
+pub(crate) struct UnityCatalogTableTarget {
+    /// The `catalog.schema.table` name without the `uc://` prefix.
+    full_table_name: String,
+    /// Name of the Databricks CLI profile to use for authorization.
+    databricks_profile: String,
+}
+
+/// Rejects identity overrides before any table's metadata or credentials are requested.
+pub(crate) fn validate_storage_options(options: &DeltaStorageOptions) -> Result<(), Error> {
+    storage_location::validate_storage_options(options, None)
+}
+
+impl UnityCatalogTableTarget {
+    /// Checks the target and profile before any subprocess or storage access.
+    ///
+    /// Direct file/storage paths without a Databricks profile return `None`.
+    /// UC targets require an explicit profile.
+    pub(crate) fn parse(
+        target: &str,
+        databricks_profile: Option<&str>,
+    ) -> Result<Option<Self>, Error> {
+        let Some(full_table_name) = target.strip_prefix("uc://") else {
+            return if databricks_profile.is_some() || target.to_ascii_lowercase().starts_with("uc:")
+            {
+                Err(Error::InvalidTableTarget)
+            } else {
+                Ok(None)
+            };
+        };
+        let databricks_profile = databricks_profile
+            .filter(|profile| !profile.trim().is_empty() && !profile.chars().any(char::is_control))
+            .ok_or(Error::InvalidTableTarget)?;
+        let name_parts = full_table_name.split('.').collect::<Vec<_>>();
+        if name_parts.len() != 3
+            || name_parts.iter().any(|part| {
+                part.is_empty()
+                    || part.starts_with('-')
+                    || !part
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+            })
+        {
+            return Err(Error::InvalidTableTarget);
+        }
+        Ok(Some(Self {
+            full_table_name: full_table_name.to_owned(),
+            databricks_profile: databricks_profile.to_owned(),
+        }))
+    }
+
+    /// Requests temporary READ credentials after fetching and validating the table metadata.
+    pub(crate) async fn request_read_access(
+        self,
+        storage_options: DeltaStorageOptions,
+    ) -> Result<AuthorizedTableAccess, Error> {
+        // Reject identity overrides before starting a subprocess, even before the backend is known.
+        validate_storage_options(&storage_options)?;
+        let metadata_json =
+            databricks_cli::get_table_metadata(&self.databricks_profile, &self.full_table_name)
+                .await?;
+        let table_metadata = TableMetadataResponse::parse(&metadata_json, &self.full_table_name)?;
+        let storage_location = TableStorageLocation::parse(&table_metadata.storage_location)?;
+        storage_location::validate_storage_options(
+            &storage_options,
+            Some(storage_location.backend),
+        )?;
+        let credentials_json = databricks_cli::generate_read_credentials(
+            &self.databricks_profile,
+            &table_metadata.table_id,
+        )
+        .await?;
+        let credentials = parse_temporary_credentials(&credentials_json, &storage_location)?;
+        AuthorizedTableAccess::new(
+            storage_location,
+            storage_options,
+            self.databricks_profile,
+            table_metadata.table_id,
+            credentials,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn table_target_requires_valid_name_and_explicit_profile() {
+        for target in ["uc://main.sales.orders", "uc://catalog-1.schema_2.table3"] {
+            assert!(
+                UnityCatalogTableTarget::parse(target, Some("work profile"))
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        for target in [
+            "uc://",
+            "uc://main.sales",
+            "uc://a.b.c.d",
+            "uc://a.b.c/",
+            "uc://a.b.c?x",
+            "uc://a.b.c#x",
+            "uc://a.b.%63",
+            "uc://a.b.`c`",
+            "uc://-a.b.c",
+            "UC://a.b.c",
+            "uc:a.b.c",
+        ] {
+            assert!(
+                matches!(
+                    UnityCatalogTableTarget::parse(target, Some("work")),
+                    Err(Error::InvalidTableTarget)
+                ),
+                "{target}"
+            );
+        }
+        for profile in [None, Some(""), Some("  "), Some("work\nprofile")] {
+            assert!(matches!(
+                UnityCatalogTableTarget::parse("uc://a.b.c", profile),
+                Err(Error::InvalidTableTarget)
+            ));
+        }
+        assert!(
+            UnityCatalogTableTarget::parse("s3://bucket/table", None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(matches!(
+            UnityCatalogTableTarget::parse("/local/table", Some("work")),
+            Err(Error::InvalidTableTarget)
+        ));
+    }
+}

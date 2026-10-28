@@ -20,8 +20,8 @@ use datafusion::execution::{
 };
 use snafu::ResultExt;
 
-use super::{InitializationSnafu, SpillCleanupSnafu, SpillDirectorySnafu};
-use crate::{Error, InputCorrection, QuerySnafu};
+use super::error::{InitializationSnafu, SpillCleanupSnafu, SpillDirectorySnafu};
+use crate::diagnostics::{Error, InputCorrection, QuerySnafu};
 
 /// The caller must keep the returned directory outside the cancellable query future.
 pub(super) fn build_query_runtime(
@@ -87,7 +87,7 @@ pub(crate) fn remove_spill_files(directory: tempfile::TempDir) -> Result<(), Err
             // A stdout worker already polling a batch can finish a spill after cancellation.
             Err(error)
                 if error.kind() == io::ErrorKind::DirectoryNotEmpty
-                    && started.elapsed() < crate::command_runtime::CLEANUP_GRACE =>
+                    && started.elapsed() < crate::runtime::CLEANUP_GRACE =>
             {
                 thread::sleep(Duration::from_millis(1));
             }

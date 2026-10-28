@@ -104,8 +104,11 @@ fn check_scalar_schema(
     location: &InputFieldLocation,
 ) -> Result<(), InputCorrection> {
     use super::{
-        Decimal128Fields, FixedSizeBinaryFields, IntegerStringFields, ScalarType,
-        TimestampMicrosecondFields, ValueFields,
+        ValueFields,
+        scalar::{
+            Decimal128Fields, FixedSizeBinaryFields, IntegerStringFields, ScalarType,
+            TimestampMicrosecondFields,
+        },
     };
     let fields: ObjectFields<&RawValue> =
         parse_json_at(raw, location, "a typed JSON scalar object")?;

@@ -14,31 +14,32 @@
 //!
 //! Each diagnostic identifies `--execution-options-file` as the input to correct.
 
-use std::{fmt, fs::File, io::Read, marker::PhantomData, str::FromStr};
+use std::{fs::File, io::Read};
 
-use delta_arrow_reader::DeltaStorageOptions;
-use num_traits::Bounded;
-use serde::{
-    Deserialize, Deserializer,
-    de::{self, DeserializeOwned, MapAccess, Visitor, value::MapAccessDeserializer},
-};
+use serde::de::DeserializeOwned;
 use snafu::{ResultExt, ensure};
 
-use crate::{Error, InputIoSnafu, InputValidationSnafu, diagnostics::InputCorrection};
+use crate::diagnostics::{Error, InputCorrection, InputIoSnafu, InputValidationSnafu};
 
 mod env_file;
 mod execution_options;
+mod json;
 mod predicate;
 mod schema_errors;
 mod schemas;
+mod storage_options;
+mod tables;
 
 pub(crate) use env_file::{MAX_ENV_FILE_RECORDS, read_env_file};
 pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_correction};
+pub(crate) use json::{
+    JsonObject, deserialize_integer_string, deserialize_present_field, parse_json,
+};
 pub(crate) use predicate::{PredicateInput, predicate_type_mismatch_correction};
+pub(crate) use storage_options::StorageOptionsInput;
+pub(crate) use tables::{MAX_TABLES, read_table_requests};
 
 pub(crate) const MAX_INPUT_BYTES: u64 = 1024 * 1024;
-
-const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -123,120 +124,4 @@ fn read_bounded_input_bytes(path: &str, argument: &'static str) -> Result<Vec<u8
         .read_to_end(&mut bytes)
         .context(InputIoSnafu { argument })?;
     Ok(bytes)
-}
-
-pub(crate) fn parse_json<T: DeserializeOwned>(
-    bytes: &[u8],
-    input_kind: JsonInputKind,
-) -> Result<T, Error> {
-    serde_json::from_slice(bytes).map_err(|source| {
-        let correction = if source.is_data() {
-            schema_errors::diagnose_schema_error(bytes, input_kind)
-        } else {
-            None
-        };
-        Error::InputJson {
-            source,
-            input_kind,
-            correction,
-        }
-    })
-}
-
-pub(crate) fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr + Bounded + fmt::Display,
-{
-    struct CanonicalIntegerStringVisitor<T>(PhantomData<T>);
-
-    impl<'de, T: FromStr + Bounded + fmt::Display> de::Visitor<'de>
-        for CanonicalIntegerStringVisitor<T>
-    {
-        type Value = T;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                formatter,
-                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
-                T::min_value(),
-                T::max_value()
-            )
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<T, E> {
-            let digits = value.strip_prefix('-').unwrap_or(value).as_bytes();
-            if value != "0"
-                && !(matches!(digits.first(), Some(b'1'..=b'9'))
-                    && digits.iter().all(u8::is_ascii_digit))
-            {
-                return Err(E::invalid_value(de::Unexpected::Str(value), &self));
-            }
-            value
-                .parse()
-                .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self))
-        }
-    }
-
-    deserializer.deserialize_str(CanonicalIntegerStringVisitor(PhantomData))
-}
-
-// The outer Option records presence, keeping omission separate from explicit null.
-pub(crate) fn deserialize_present_field<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(deserializer).map(Some)
-}
-
-// Serde also accepts arrays for structs and tagged enums; require objects.
-pub(crate) struct JsonObject<T>(pub(crate) T);
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for JsonObject<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct JsonObjectVisitor<T>(PhantomData<T>);
-
-        impl<'de, T: Deserialize<'de>> Visitor<'de> for JsonObjectVisitor<T> {
-            type Value = JsonObject<T>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a JSON object")
-            }
-
-            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
-                T::deserialize(MapAccessDeserializer::new(map)).map(JsonObject)
-            }
-        }
-
-        deserializer.deserialize_map(JsonObjectVisitor(PhantomData))
-    }
-}
-
-pub(crate) struct StorageOptionsInput(pub(crate) DeltaStorageOptions);
-
-impl<'de> Deserialize<'de> for StorageOptionsInput {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct StorageOptionsVisitor;
-
-        impl<'de> Visitor<'de> for StorageOptionsVisitor {
-            type Value = StorageOptionsInput;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a string map with unique keys")
-            }
-
-            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
-                let mut options = DeltaStorageOptions::new();
-                while let Some((key, value)) = map.next_entry::<String, String>()? {
-                    if options.insert(key, value).is_some() {
-                        return Err(serde::de::Error::duplicate_field("storage option key"));
-                    }
-                }
-                Ok(StorageOptionsInput(options))
-            }
-        }
-
-        deserializer.deserialize_map(StorageOptionsVisitor)
-    }
 }

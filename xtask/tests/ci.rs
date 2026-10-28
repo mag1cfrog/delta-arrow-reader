@@ -1515,11 +1515,11 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
             "test --locked --all-features --no-run",
             "test --locked --no-run",
             "test --locked --package xtask --bin xtask --test unity_catalog_live --no-run",
+            "test --locked -p delta-arrow-reader-cli --no-run",
         ];
         if runner == "Linux" {
             commands.extend([
                 "test --locked -p delta-arrow-reader-python --no-run",
-                "test --locked -p delta-arrow-reader-cli --no-run",
                 "clippy --locked --all-targets --all-features -- -D warnings",
                 "clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings",
                 "clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",

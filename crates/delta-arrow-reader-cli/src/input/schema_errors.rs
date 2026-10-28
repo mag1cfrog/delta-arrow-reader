@@ -27,7 +27,7 @@ use serde::de::DeserializeOwned;
 use serde_json::value::RawValue;
 use serde_value::DeserializerError;
 
-use super::{JsonInputKind, StorageOptionsInput, execution_options, predicate};
+use super::{JsonInputKind, StorageOptionsInput, execution_options, predicate, tables};
 use crate::diagnostics::InputCorrection;
 
 mod object_fields;
@@ -51,41 +51,11 @@ pub(super) fn diagnose_schema_error(
             diagnose_object_schema::<execution_options::ExecutionOptionsInput>(raw, &location)
         }
         JsonInputKind::Predicate => predicate::diagnose_schema_error(raw, &location),
-        JsonInputKind::Tables => diagnose_manifest_schema_error(raw, &location),
+        JsonInputKind::Tables => tables::diagnose_schema_error(raw, &location),
     }
 }
 
-fn diagnose_manifest_schema_error(
-    raw: &RawValue,
-    location: &InputFieldLocation,
-) -> Option<InputCorrection> {
-    use crate::query::tables_manifest::{ManifestAuthorization, ManifestTable, TablesManifest};
-
-    if let Some(correction) = diagnose_object_schema::<TablesManifest>(raw, location) {
-        return Some(correction);
-    }
-    // Nested Value maps discard duplicate keys; recheck each object from the raw input.
-    let fields: ObjectFields<&RawValue> = serde_json::from_str(raw.get()).ok()?;
-    let tables: Vec<&RawValue> = serde_json::from_str(fields.field_value("tables")?.get()).ok()?;
-    for (index, table) in tables.into_iter().enumerate() {
-        let table_location = location.child_field("tables").array_element(index);
-        if let Some(correction) = diagnose_object_schema::<ManifestTable>(table, &table_location) {
-            return Some(correction);
-        }
-        let fields: ObjectFields<&RawValue> = serde_json::from_str(table.get()).ok()?;
-        if let Some(authorization) = fields.field_value("authorization")
-            && let Some(correction) = diagnose_object_schema::<ManifestAuthorization>(
-                authorization,
-                &table_location.child_field("authorization"),
-            )
-        {
-            return Some(correction);
-        }
-    }
-    None
-}
-
-fn diagnose_object_schema<T: DeserializeOwned>(
+pub(super) fn diagnose_object_schema<T: DeserializeOwned>(
     raw: &RawValue,
     location: &InputFieldLocation,
 ) -> Option<InputCorrection> {
@@ -213,11 +183,11 @@ fn invalid_value_correction(
         }
         .to_owned()
     };
-    let hint = if serde_expected.starts_with(super::CANONICAL_INTEGER_EXPECTATION_PREFIX)
+    let hint = if serde_expected.starts_with(super::json::CANONICAL_INTEGER_EXPECTATION_PREFIX)
         && matches!(location.input_kind, JsonInputKind::Tables)
     {
         "Use a decimal string within the stated range, with no '+', leading zeros, or negative zero."
-    } else if serde_expected.starts_with(super::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
+    } else if serde_expected.starts_with(super::json::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
         "Match the literal type to the inspected column (e.g. Int32 uses int32); encode the value as a decimal string within that type's range, with no '+', leading zeros, or negative zero."
     } else if serde_expected == predicate::TIMEZONE_EXPECTATION {
         "Supply null or a nonempty timezone string matching the column's timezone."
