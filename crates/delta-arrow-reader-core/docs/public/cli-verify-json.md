@@ -1,7 +1,7 @@
 # Audit a saved JSON result
 
 Use this example for an integrity audit, such as checking a transferred file
-against the manifest requested at export with `--manifest`. For ordinary analysis, [read the saved result](cli-automation.md#read-a-saved-result)
+against the manifest requested at export with `--manifest`. For ordinary analysis, [read the saved result](cli-results.md#read-a-saved-result)
 and decode the requested values. The audit script checks integrity and counts;
 compare scope, snapshot bindings and request provenance when they are part of
 the audit.

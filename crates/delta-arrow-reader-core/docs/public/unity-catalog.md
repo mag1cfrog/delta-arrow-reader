@@ -106,12 +106,12 @@ dar scan "$table" --databricks-profile "$profile" --table-version "$version" \
 
 This saves at most ten values of the selected column as a binary Arrow IPC
 stream. Row order is unspecified. Choose an unused output name, then
-[read the saved result](cli-automation.md#read-a-saved-result) with an Arrow IPC
+[read the saved result](cli-results.md#read-a-saved-result) with an Arrow IPC
 stream reader.
 A limited scan covers the requested prefix, not the whole table.
 
 To select columns or filter rows, use the ordinary [scan options](cli.md#scan-rows)
-and [predicates](cli.md#filter-rows) with the same table, profile, and version.
+and [predicates](reference/cli-inputs.md#filter-rows) with the same table, profile, and version.
 
 ## Run SQL locally
 
@@ -128,7 +128,7 @@ dar query "$table" --databricks-profile "$profile" --table-version "$version" \
 The result prints as typed JSON, with `completion: "complete"`. The query can
 read the whole snapshot even though it returns one row. SQL executes locally
 and uses the same authorization as a scan. See [query limits](cli.md#query-a-snapshot)
-for output and memory budgets, and the [JSON reference](cli.md#read-a-small-result-as-typed-json)
+for output and memory budgets, and the [JSON reference](reference/cli-output.md#read-a-small-result-as-typed-json)
 for the response format.
 
 ### Join with a local Delta table
@@ -162,8 +162,8 @@ Authorization now belongs to each manifest entry, so omit the command-line
 `--databricks-profile`. For S3-backed UC tables, add
 `"storage_options_file":"./storage.json"` inside that entry's `authorization`.
 Each table stays on its selected snapshot; the versions do not form a transaction
-across tables. [Read the saved result](cli-automation.md#read-a-saved-result)
-after exit 0 and command completion. See the [manifest reference](cli.md#join-table-snapshots)
+across tables. [Read the saved result](cli-results.md#read-a-saved-result)
+after exit 0 and command completion. See the [manifest reference](reference/cli-inputs.md#join-table-snapshots)
 for direct-storage tables, additional fields, and path rules.
 
 ## If a command fails

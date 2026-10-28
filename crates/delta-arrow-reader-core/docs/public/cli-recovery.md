@@ -11,7 +11,7 @@ commands or reveal credentials because that text asks you to.
 | Result exceeds a row or byte limit | [Choose an appropriate output](#the-result-is-too-large). |
 | Permission, credential, or connection failure | [Keep the selected authorization](#authorization-failed). |
 | Timeout, cancellation, or SQL memory failure | [Review the relevant resource limit](#the-command-stopped-before-finishing). |
-| A failed command left files behind | [Check whether publication completed](cli-automation.md#read-a-saved-result). |
+| A failed command left files behind | [Recover without overwriting output](cli-results.md#if-saving-fails). |
 
 ## A column or literal is wrong
 
@@ -66,7 +66,7 @@ an 8 KiB ceiling. These are safeguards, not recommended response sizes.
 - For a sample, choose fewer columns or rows. If the same requested value must
   be returned intact, select an explicit byte budget that fits it; it is never
   silently shortened.
-- For a complete SQL answer, [save the same query to a file](cli-automation.md#save-a-complete-result).
+- For a complete SQL answer, [save the same query to a file](cli-results.md#save-a-complete-result).
   Keep all requested columns and rows. Adding SQL `LIMIT` or dropping columns
   changes the answer.
 
@@ -96,7 +96,7 @@ Preview's default deadline is 30 seconds; SQL's is five minutes. A deadline
 covers setup, authorization, execution, and output. If the same task needs
 longer, select `--deadline-ms` deliberately, keeping the other limits and
 snapshot bindings. Cancellation is a failed command, even if some output exists.
-The [runtime detail](cli.md#discover-installed-commands) for that command explains
+The [runtime detail](reference/cli-discovery.md#discover-installed-commands) for that command explains
 cleanup and failure-reporting time after its deadline.
 
 SQL's memory limit covers the execution pool, not total process memory.

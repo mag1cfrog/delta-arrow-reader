@@ -6,6 +6,14 @@ specific log targets. For ordinary troubleshooting, see
 For a failed Databricks-backed read, start with
 [Unity Catalog troubleshooting](../unity-catalog.md#if-a-command-fails).
 
+| Need | Section |
+| --- | --- |
+| Parse stderr in a program | [Machine diagnostics](#machine-diagnostics) |
+| Correct an argument or input file | [Rejected input](#correct-rejected-input) |
+| Recognize successful completion | [Completion records](#completion-records) |
+| Select logs or interpret a failure | [Target filters](#target-filters) and [diagnostic codes](#diagnostic-codes-and-output-failures) |
+| Handle a deadline or signal | [Cancellation](#threads-cancellation-and-signals) |
+
 ## Machine diagnostics
 
 Use the global option `--diagnostics=json` before or after the command:
@@ -39,8 +47,10 @@ Core failures retain their typed phase, code, reason, and source category.
 `source_kind` is null when absent. Safe optional fields include `argument_kind`,
 `json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. No raw dependency
 errors, arbitrary input values, paths, credentials, or captured child output are included.
-Diagnostic version 2 removes the fixed `message` from version 1. Use the
-classification fields for decisions.
+Diagnostic version 2 has no `message` field. Use the classification fields for
+decisions.
+
+### Correct rejected input
 
 Argument failures include a `hint` describing how to correct the invocation.
 When Clap identifies a declared argument, `argument` gives its name and
@@ -149,6 +159,8 @@ predicate, row limit, authorization, snapshot, and deadline when retrying.
 Preview deadlines and query memory exhaustion also use `adjust_budget`.
 These resource failures set `retryable: false`.
 
+### Completion records
+
 A successful command emits `kind: "completion"` after stdout has been flushed.
 It includes `command` and `output_bytes`. For stdout data, inspect, scan, preview, and query include the actual snapshot
 in `bindings`, for example
@@ -169,7 +181,7 @@ stdout bindings and row count in both cases.
 receipt. The default v2 receipt names one complete result file. With explicit
 `--manifest`, receipt v1 also references the provenance file containing counts
 and bindings. A receipt failure can leave published files;
-[check the output mode's recovery steps](../cli-automation.md#read-a-saved-result)
+[check the output mode's recovery steps](../cli-results.md#if-saving-fails)
 before retrying. `artifact_io` diagnostics identify failed staging, writes or
 publication, without printing paths or OS messages. Existing files are preserved.
 
@@ -199,8 +211,7 @@ require a new version.
 
 <span id="json-stderr-migration"></span>
 
-This opt-in format replaces the former unversioned
-JSON stderr object; plain text remains the default.
+Plain text is the default. JSON diagnostics are opt-in and versioned.
 
 ## Target filters
 

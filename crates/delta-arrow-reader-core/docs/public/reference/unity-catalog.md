@@ -15,7 +15,7 @@ Profiles must be nonblank and contain no control characters. Quote profile
 names containing spaces. `--databricks-profile` is invalid for a direct path
 or storage URL; `--auth-source` is invalid for a UC table.
 
-In a [tables manifest](../cli.md#join-table-snapshots), each UC entry requires
+In a [tables manifest](cli-inputs.md#join-table-snapshots), each UC entry requires
 `authorization.source: "databricks"` and `authorization.databricks_profile`.
 Entries can use different profiles, including for the same table name in
 different workspaces. Each binding retains its own identity and snapshot.
@@ -135,16 +135,16 @@ the CLI token cache. The executable must support:
 These commands and flags were checked with CLI 1.6.0; live Azure validation used
 1.15.0. This does not establish a minimum supported version.
 
-## Validation coverage
+<details markdown="1">
+<summary id="validation-coverage">Live validation limits</summary>
 
-Offline tests cover all credential forms in the storage table above, including
-renewal failures. Live validation covers Azure user OAuth, user-delegation SAS,
-and a managed Delta table on macOS and Linux ARM64. It passed inspection, scans,
-SQL aggregation, and UC/local joins with native source builds, a macOS dev-profile
-wheel, and a Linux release archive.
-Those live runs used Arrow output; they did not exercise previews or JSON queries.
+The live-validated path is an Azure managed Delta table using user OAuth and
+user-delegation SAS on macOS and Linux ARM64. Coverage includes inspection,
+Arrow scans, SQL aggregation, and UC/local joins.
 
-Other storage backends, Azure bearer credentials, other authentication modes,
-live renewal, and the full release platform matrix remain unverified online.
-Exact environments and coverage gaps are in the repository's
+Previews, JSON queries, other storage backends, Azure bearer credentials,
+other authentication modes, live renewal, and the full release platform matrix
+remain unverified online. Build and environment details are in the
 [Azure validation record](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/uc-azure-validation-2026-10-22.md).
+
+</details>

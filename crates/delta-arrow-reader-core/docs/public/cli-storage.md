@@ -42,7 +42,7 @@ dar preview "$table" --table-version "$version" --column id --limit 3 \
 
 Replace `0` and `id` with your version and column. The same `--env-file` argument
 works with `query`, `scan`, and `explain`. Keep it when following the
-[SQL recipes](cli-workflows.md) or [saving results](cli-automation.md#save-a-complete-result).
+[SQL recipes](cli-workflows.md) or [saving results](cli-results.md#save-a-complete-result).
 
 Do not `source` the file, print it, or expand credential values into CLI
 arguments. The CLI parses it without executing shell code. It reads only the
@@ -83,4 +83,4 @@ credentials expired. See [connection failure recovery](cli-recovery.md#authoriza
 After the connection works, return to [Read your first rows](cli-quickstart.md)
 or [Analyze a table with SQL](cli-workflows.md), keeping the same authorization
 arguments. For other credential sources, precedence, and file grammar, use the
-[authorization reference](cli.md#explicit-credential-sources).
+[authorization reference](reference/cli-authorization.md#explicit-credential-sources).

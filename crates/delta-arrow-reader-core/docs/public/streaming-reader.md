@@ -5,7 +5,7 @@ a group of rows that your application can process together.
 
 ## Before you start
 
-Add the [Rust streaming dependencies](installation.md#streaming-reader)
+Add the [Rust streaming dependencies](https://mag1cfrog.github.io/delta-arrow-reader/installation/#streaming-reader)
 to your application. You also need an existing Delta table. Use the table's
 directory, which contains `_delta_log`, rather than a single Parquet file.
 
@@ -114,7 +114,7 @@ for how refresh updates cached file information.
 ## Where to go next
 
 - [Rust diagnostics](https://mag1cfrog.github.io/delta-arrow-reader/diagnostics/): enable logs or investigate a failed read.
-- [Configuration](configuration.md): choose how much preparation happens when opening a table, including the default S3 connection check.
+- [Rust configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/#configure-rust): choose how much preparation happens when opening a table, including the default S3 connection check.
 - [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/): query the table with SQL.
 - [Scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/): inspect the work a query performed.
 - [Rust API reference](https://docs.rs/delta-arrow-reader): look up individual methods and options.

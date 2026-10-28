@@ -95,9 +95,9 @@ Only use results from a command that exits successfully. If it fails, follow
 
 - [Filter, group, sort, or join data](cli-workflows.md) with SQL.
 - [Connect to storage](cli-storage.md) using a provisioned credential file.
-- [Save and read a complete result](cli-automation.md#save-a-complete-result)
+- [Save and read a complete result](cli-results.md#save-a-complete-result)
   when the rows should stay in a file.
-- [Read a saved result](cli-automation.md#read-a-saved-result) when another
+- [Read a saved result](cli-results.md#read-a-saved-result) when another
   application needs Arrow IPC.
 
 For one command's flags, use `dar preview --help` or its

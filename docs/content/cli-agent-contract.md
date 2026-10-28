@@ -297,9 +297,15 @@ New commands, summary inspection, and file-mode scan use these selection rules:
 | GCS | Service-account/ADC file reference; `GOOGLE_APPLICATION_CREDENTIALS` | `gcp-adc` with explicit file, or `gcp-metadata` without home-directory ADC lookup. ADC supports service-account/authorized-user content. |
 
 These provider names are candidates, not a promise of availability. The
-[implemented credential-source matrix](../../crates/delta-arrow-reader-core/docs/public/cli.md#explicit-credential-sources)
-records accepted selectors and the native-provider limits that prevent exposing
-the others. Explicit GCS ADC files currently use `json` or `env`.
+[implemented credential-source matrix](../../crates/delta-arrow-reader-core/docs/public/reference/cli-authorization.md#explicit-credential-sources)
+records accepted selectors. Explicit GCS ADC files currently use `json` or `env`.
+The native provider prevents exposing these other selectors under this contract:
+
+| Candidate | Native-provider limitation |
+| --- | --- |
+| `aws-imds` | Queries the instance's current role on every refresh, so it cannot retain an explicitly selected role. |
+| `azure-cli` | Follows the current CLI account and invokes a blocking subprocess without a timeout or bounded output. |
+| `gcp-metadata` | Construction checks home-directory ADC first; metadata selects the default service account and retries a second address after failure. |
 
 Use existing storage-builder keys. Discovery lists accepted aliases, required
 provider reference fields, and installed mechanisms. The current S3 builder does
