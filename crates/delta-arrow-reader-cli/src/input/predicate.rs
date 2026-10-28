@@ -20,20 +20,22 @@
 
 use std::{fmt, str::FromStr};
 
-use arrow_schema::{DataType, TimeUnit};
-use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaPredicatePathStep, DeltaScalar};
+use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
 use num_traits::Bounded;
 use serde::{Deserialize, Deserializer, de};
 use snafu::ensure;
 
 use crate::{
-    diagnostics::{Error, InputCorrection, InputValidationSnafu},
-    input::{JsonInputKind, JsonObject, deserialize_integer_string},
+    diagnostics::{Error, InputValidationSnafu},
+    input::{JsonObject, deserialize_integer_string},
 };
 
+mod diagnostics;
 mod json_schema;
 mod schema_errors;
 
+pub(crate) use diagnostics::predicate_type_mismatch_correction;
+use diagnostics::{prepend_validation_path, validation_correction};
 pub(super) use json_schema::predicate_schema;
 pub(super) use schema_errors::diagnose_schema_error;
 
@@ -337,110 +339,6 @@ impl ScalarInput {
     }
 }
 
-fn validation_correction(
-    field_path: &str,
-    expected: String,
-    hint: &'static str,
-) -> InputCorrection {
-    InputCorrection {
-        argument: JsonInputKind::Predicate.argument().to_owned(),
-        field_path: Some(field_path.to_owned()),
-        expected,
-        supplied: None,
-        hint,
-    }
-}
-
-pub(crate) fn predicate_type_mismatch_correction(
-    expected: &DataType,
-    supplied: &DataType,
-    path: &[DeltaPredicatePathStep],
-) -> InputCorrection {
-    let mut field_path = String::new();
-    for step in path {
-        match step {
-            DeltaPredicatePathStep::AndChild(index) | DeltaPredicatePathStep::OrChild(index) => {
-                field_path.push_str(&format!("/args/{index}"));
-            }
-            DeltaPredicatePathStep::NotChild => field_path.push_str("/arg"),
-        }
-    }
-    let field = match (expected, supplied) {
-        (
-            DataType::Decimal128(expected_precision, _),
-            DataType::Decimal128(supplied_precision, _),
-        ) => {
-            if expected_precision != supplied_precision {
-                "precision"
-            } else {
-                "scale"
-            }
-        }
-        (DataType::FixedSizeBinary(_), DataType::FixedSizeBinary(_)) => "size",
-        (
-            DataType::Timestamp(TimeUnit::Microsecond, _),
-            DataType::Timestamp(TimeUnit::Microsecond, _),
-        ) => "timezone",
-        _ => "type",
-    };
-    field_path.push_str(&format!("/value/{field}"));
-    let expected_description = predicate_type_description(expected);
-    let hint = if expected_description.is_none() {
-        "This column type cannot be compared by a predicate scalar; use a supported column or a SQL query."
-    } else if field == "timezone" {
-        "Use inspect TABLE --view summary --column NAME with the same authorization and --table-version N for the exact timezone; timezone text is omitted here."
-    } else {
-        "Match the scalar type and parameters to expected; use capabilities --schema predicate --detail TYPE for its encoding."
-    };
-    InputCorrection {
-        argument: JsonInputKind::Predicate.argument().to_owned(),
-        field_path: Some(field_path),
-        expected: expected_description
-            .unwrap_or_else(|| "a column type supported by predicate comparisons".to_owned()),
-        supplied: predicate_type_description(supplied).map(String::into_boxed_str),
-        hint,
-    }
-}
-
-fn predicate_type_description(data_type: &DataType) -> Option<String> {
-    // Arrow's Display includes untrusted nested names and timezone strings.
-    Some(match data_type {
-        DataType::Boolean => "boolean".to_owned(),
-        DataType::Int8 => "int8".to_owned(),
-        DataType::Int16 => "int16".to_owned(),
-        DataType::Int32 => "int32".to_owned(),
-        DataType::Int64 => "int64".to_owned(),
-        DataType::Float32 => "float32".to_owned(),
-        DataType::Float64 => "float64".to_owned(),
-        DataType::Date32 => "date32".to_owned(),
-        DataType::Utf8 => "utf8".to_owned(),
-        DataType::LargeUtf8 => "large_utf8".to_owned(),
-        DataType::Binary => "binary".to_owned(),
-        DataType::LargeBinary => "large_binary".to_owned(),
-        DataType::FixedSizeBinary(size) => format!("fixed_size_binary (size {size})"),
-        DataType::Decimal128(precision, scale) => {
-            format!("decimal128 (precision {precision}, scale {scale})")
-        }
-        DataType::Timestamp(TimeUnit::Microsecond, timezone) => {
-            if timezone.is_some() {
-                "timestamp_us (timezone set)".to_owned()
-            } else {
-                "timestamp_us (timezone null)".to_owned()
-            }
-        }
-        _ => return None,
-    })
-}
-
-fn prepend_validation_path(mut error: Error, prefix: &str) -> Error {
-    if let Error::InputValidation { correction, .. } = &mut error
-        && let Some(path) = &mut correction.field_path
-    {
-        path.insert_str(0, prefix);
-    }
-    error
-}
-
 fn deserialize_timezone<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<String>, D::Error> {
@@ -459,83 +357,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-
-    #[test]
-    fn type_corrections_identify_parameters_without_disclosing_schema_text() {
-        for (expected, supplied, field, expected_text, supplied_text) in [
-            (
-                DataType::Decimal128(10, 2),
-                DataType::Decimal128(11, 2),
-                "precision",
-                "decimal128 (precision 10, scale 2)",
-                "decimal128 (precision 11, scale 2)",
-            ),
-            (
-                DataType::Decimal128(10, 2),
-                DataType::Decimal128(10, 3),
-                "scale",
-                "decimal128 (precision 10, scale 2)",
-                "decimal128 (precision 10, scale 3)",
-            ),
-            (
-                DataType::FixedSizeBinary(3),
-                DataType::FixedSizeBinary(2),
-                "size",
-                "fixed_size_binary (size 3)",
-                "fixed_size_binary (size 2)",
-            ),
-            (
-                DataType::Timestamp(TimeUnit::Microsecond, Some("secret-column-timezone".into())),
-                DataType::Timestamp(TimeUnit::Microsecond, Some("secret-scalar-timezone".into())),
-                "timezone",
-                "timestamp_us (timezone set)",
-                "timestamp_us (timezone set)",
-            ),
-            (
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                DataType::Timestamp(TimeUnit::Microsecond, Some("secret-scalar-timezone".into())),
-                "timezone",
-                "timestamp_us (timezone null)",
-                "timestamp_us (timezone set)",
-            ),
-            (
-                DataType::Struct(
-                    vec![arrow_schema::Field::new(
-                        "secret-name",
-                        DataType::Int32,
-                        false,
-                    )]
-                    .into(),
-                ),
-                DataType::Utf8,
-                "type",
-                "a column type supported by predicate comparisons",
-                "utf8",
-            ),
-        ] {
-            let correction = predicate_type_mismatch_correction(&expected, &supplied, &[]);
-            assert_eq!(
-                correction.field_path.as_deref(),
-                Some(format!("/value/{field}").as_str())
-            );
-            assert_eq!(correction.expected, expected_text);
-            assert_eq!(correction.supplied.as_deref(), Some(supplied_text));
-            let record = Error::InputValidation {
-                reason: "test_type_mismatch",
-                correction,
-            }
-            .to_json_diagnostic();
-            assert!(!record.to_string().contains("secret"));
-            if field == "timezone" {
-                assert!(
-                    record["hint"]
-                        .as_str()
-                        .unwrap()
-                        .contains("timezone text is omitted")
-                );
-            }
-        }
-    }
+    use crate::input::JsonInputKind;
 
     fn parse_with_schema_assertions(text: &str) -> Result<DeltaPredicate, Error> {
         let result =
