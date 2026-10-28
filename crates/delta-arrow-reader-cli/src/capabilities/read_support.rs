@@ -16,7 +16,7 @@ const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components an
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
 const S3_AUTHORIZATION_LIMITS: &str =
     "AWS profiles/SSO are unsupported. Stdout without source selectors uses backend defaults.";
-pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. Actual versions are decimal strings in declaration order: stderr bindings for stdout results or SQL/result failures with --diagnostics=json; manifest bindings for saved results. Pin every alias on retry. Snapshots are not a cross-table transaction.";
+pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. JSON results include bindings; --diagnostics=json reports them for query stdout results or SQL planning/row output failures after snapshots load. Saved Arrow needs --manifest to record bindings. Versions are decimal strings in declaration order. Pin every alias on retry. Snapshots are not a cross-table transaction.";
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
 
