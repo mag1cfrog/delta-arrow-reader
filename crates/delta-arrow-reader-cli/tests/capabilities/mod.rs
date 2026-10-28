@@ -683,6 +683,22 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             assert_eq!(guide["kind"], "schema_guide");
             assert_eq!(&guide["name"], name);
             assert!(guide.get("schema").is_none());
+            if name == "storage-options" {
+                for (service, source) in [
+                    ("s3", "aws-container"),
+                    ("azure-blob", "azure-managed-identity"),
+                    ("gcs", "env"),
+                ] {
+                    let mut invocation = guide["authorization_source_command"].clone();
+                    invocation[3] = serde_json::json!(service);
+                    invocation[5] = serde_json::json!(source);
+                    let detail = run_advertised(&invocation)?;
+                    assert_eq!(detail["kind"], "authorization_detail");
+                    assert_eq!(detail["name"], service);
+                    assert_eq!(detail["detail"], source);
+                    assert_eq!(detail["arguments"][1], source);
+                }
+            }
             for guide_name in guide["authorization_guides"]
                 .as_array()
                 .into_iter()

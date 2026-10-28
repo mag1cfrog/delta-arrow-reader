@@ -257,6 +257,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     if !authorization_guides.is_empty() {
         guide["authorization"] = json!({
             "local": "Local paths need no credentials.",
+            "files": "--env-file PATH selects a credential file; optional --storage-options-file PATH then supplies nonsecret connection settings only. Never expand credential values into arguments.",
             "guides": authorization_guides,
             "details_command": [executable, "capabilities", "--authorization", "NAME"],
         });
@@ -266,6 +267,9 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         output_schemas.push(DiscoverySchema::InspectionSummary);
     } else if matches!(name, "query" | "preview") {
         output_schemas.push(DiscoverySchema::Rows);
+        guide["json_values"] = json!(
+            "Decode JSON cells using schema.fields. Decimal strings are unscaled integers: value = integer * 10^(-scale), using scale from data_type. Encodings: capabilities --schema rows."
+        );
     } else if name == "explain" {
         output_schemas.push(DiscoverySchema::QueryPlan);
     }
@@ -740,7 +744,23 @@ mod tests {
                     ErrorKind::DisplayHelp
                 );
             } else {
-                Cli::try_parse_from(example).unwrap();
+                Cli::try_parse_from(&example).unwrap();
+                if matches!(
+                    command.get_name(),
+                    "inspect" | "scan" | "preview" | "query" | "explain"
+                ) {
+                    let files = guide["authorization"]["files"].as_str().unwrap();
+                    assert!(files.contains("--env-file PATH"));
+                    assert!(files.contains("--storage-options-file PATH"));
+                    let mut with_files = example;
+                    with_files.extend([
+                        "--env-file",
+                        "credentials.env",
+                        "--storage-options-file",
+                        "connection.json",
+                    ]);
+                    Cli::try_parse_from(with_files).unwrap();
+                }
             }
             let help: Vec<_> = guide["help_command"]
                 .as_array()
@@ -764,6 +784,14 @@ mod tests {
         let guide = build_command_guide("query").unwrap();
         assert_eq!(guide["resource_defaults_format"], "json");
         assert_eq!(guide["completion_format_version"], 2);
+        for name in ["query", "preview"] {
+            let guide = build_command_guide(name).unwrap();
+            let decoding = guide["json_values"].as_str().unwrap();
+            assert!(decoding.contains("schema.fields"));
+            assert!(decoding.contains("integer * 10^(-scale)"));
+            assert!(decoding.contains("scale from data_type"));
+            assert!(decoding.contains("capabilities --schema rows"));
+        }
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), guide["sql"]["example"].as_str().unwrap()).unwrap();
         crate::query::ReadOnlySqlQuery::read_file_with_bytes(file.path().to_str().unwrap())

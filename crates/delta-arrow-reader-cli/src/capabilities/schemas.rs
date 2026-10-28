@@ -251,6 +251,17 @@ impl DiscoverySchema {
                     guide[field_list] = json!(other_fields);
                 }
             }
+            if matches!(self, Self::Rows) {
+                guide["value_encodings"] = json!({
+                    "common": schema["properties"]["rows"]["description"],
+                    "decimal": schema["$defs"]["decimal"]["description"],
+                });
+                guide["encodings"] = json!(
+                    schema["$defs"]
+                        .as_object()
+                        .map(|definitions| definitions.keys().collect::<Vec<_>>())
+                );
+            }
             if matches!(self, Self::Tables) {
                 guide["query_example"] = json!([
                     executable,
@@ -305,6 +316,16 @@ impl DiscoverySchema {
             } else {
                 json!(["s3", "azure-blob", "gcs"])
             };
+        }
+        if matches!(self, Self::StorageOptions) {
+            guide["authorization_source_command"] = json!([
+                executable,
+                "capabilities",
+                "--authorization",
+                "SERVICE",
+                "--detail",
+                "SOURCE"
+            ]);
         }
         if matches!(
             self,
@@ -625,9 +646,8 @@ mod tests {
     }
 
     #[test]
-    fn row_value_encodings_are_disclosed_only_when_selected() {
+    fn row_guide_explains_common_values_and_links_specialized_encodings() {
         let guide = DiscoverySchema::Rows.build_schema_guide(None).unwrap();
-        assert!(guide.get("encodings").is_none());
         assert!(!guide.to_string().contains("base64"));
         assert!(
             guide["description"]
@@ -635,10 +655,25 @@ mod tests {
                 .unwrap()
                 .contains("integers use exact decimal strings")
         );
+        let common = guide["value_encodings"]["common"].as_str().unwrap();
+        for meaning in [
+            "JSON null",
+            "Date32 counts days",
+            "Date64 milliseconds since 1970-01-01",
+            "declared unit",
+            "timezone from data_type, including null",
+        ] {
+            assert!(common.contains(meaning), "{meaning}");
+        }
+        let decimal = guide["value_encodings"]["decimal"].as_str().unwrap();
+        assert!(decimal.contains("Unscaled base-10 integer string"));
+        assert!(decimal.contains("precision and scale from data_type"));
+        assert!(decimal.contains("1234 means 12.34"));
         let rows = DiscoverySchema::Rows
             .build_schema_guide(Some("rows"))
             .unwrap();
-        for name in rows["encodings"].as_array().unwrap() {
+        assert_eq!(guide["encodings"], rows["encodings"]);
+        for name in guide["encodings"].as_array().unwrap() {
             let detail = DiscoverySchema::Rows
                 .build_schema_guide(name.as_str())
                 .unwrap();
