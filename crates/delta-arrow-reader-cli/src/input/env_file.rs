@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use crate::Error;
+use crate::diagnostics::Error;
 
 use super::{MAX_INPUT_BYTES, read_bounded_input_bytes};
 

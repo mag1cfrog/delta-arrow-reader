@@ -7,7 +7,7 @@
 use arrow_schema::{DataType, Field};
 use serde_json::{Value, json};
 
-use crate::{Error, output::field_descriptions::field_details};
+use crate::{diagnostics::Error, output::field_descriptions::field_details};
 
 pub(super) fn describe_plan_field(index: usize, field: &Field) -> Result<Value, Error> {
     if !type_has_only_public_text(field.data_type()) {

@@ -20,9 +20,8 @@ use clap::{Arg, ArgAction, ArgGroup, Args, Command, CommandFactory, ValueEnum, e
 use serde_json::{Value, json};
 
 use crate::{
-    Error,
     cli::Cli,
-    diagnostics::{DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT, build_completion_record},
+    diagnostics::{DiagnosticFormat, Error, FAILURE_DIAGNOSTIC_TIMEOUT, build_completion_record},
     input::JsonInputKind,
     output::{OutputStats, write_stdout},
     runtime::{DISCOVERY_TIMEOUT, run_discovery},
@@ -342,7 +341,7 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
     if detail != "runtime" {
         return Err(Error::Argument {
             kind: ErrorKind::InvalidValue,
-            correction: Some(crate::InputCorrection {
+            correction: Some(crate::diagnostics::InputCorrection {
                 argument: "--detail".into(),
                 field_path: None,
                 expected: match name {

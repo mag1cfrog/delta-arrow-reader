@@ -10,7 +10,7 @@ use arrow_schema::SchemaRef;
 use futures_util::{Stream, StreamExt};
 use snafu::ResultExt;
 
-use crate::{Error, OutputSnafu};
+use crate::diagnostics::{Error, OutputSnafu};
 
 use super::{ByteBudgetWriter, OutputLimits, OutputStats, capacity, write_on_output_thread};
 

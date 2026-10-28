@@ -14,7 +14,7 @@ use snafu::{OptionExt, ensure};
 use super::{
     CredentialSource, normalize_storage_options, read_environment_value, validate_auth_source_value,
 };
-use crate::{Error, StorageAuthorizationSnafu};
+use crate::diagnostics::{Error, StorageAuthorizationSnafu};
 
 pub(super) const CREDENTIAL_ENVIRONMENT_VARIABLES: &[(&str, AmazonS3ConfigKey)] = &[
     ("AWS_ACCESS_KEY_ID", AmazonS3ConfigKey::AccessKeyId),

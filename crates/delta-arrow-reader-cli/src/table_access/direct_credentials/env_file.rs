@@ -13,7 +13,10 @@ use super::{
     CredentialSource, azure_blob, gcs, normalize_storage_options, parse_supported_storage_scheme,
     s3,
 };
-use crate::{Error, diagnostics::InputCorrection, input};
+use crate::{
+    diagnostics::{Error, InputCorrection},
+    input,
+};
 
 pub(crate) fn configure_credentials_from_env_file(
     builder: DeltaTableBuilder,

@@ -6,7 +6,7 @@ use snafu::ensure;
 use url::Url;
 
 use super::super::read_environment_value;
-use crate::{Error, StorageAuthorizationSnafu};
+use crate::diagnostics::{Error, StorageAuthorizationSnafu};
 
 const CONTAINER_REFERENCE_KEYS: [AmazonS3ConfigKey; 3] = [
     AmazonS3ConfigKey::ContainerCredentialsRelativeUri,

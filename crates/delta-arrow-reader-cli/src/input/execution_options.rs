@@ -148,7 +148,10 @@ mod tests {
     use snafu::ResultExt;
 
     use super::*;
-    use crate::{ConfigurationSnafu, Error, input::JsonObject};
+    use crate::{
+        diagnostics::{ConfigurationSnafu, Error},
+        input::JsonObject,
+    };
 
     fn parse_with_schema_assertions(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
         let result = crate::input::parse_json::<JsonObject<ExecutionOptionsInput>>(

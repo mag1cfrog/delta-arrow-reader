@@ -20,8 +20,9 @@ use snafu::{ResultExt, ensure};
 
 use super::{signals, stdout_monitor};
 use crate::{
-    Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu, cli::Command, diagnostics,
-    diagnostics::DiagnosticFormat, output, read,
+    cli::Command,
+    diagnostics::{self, DiagnosticFormat, Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu},
+    output, read,
 };
 
 pub(crate) const CLEANUP_GRACE: Duration = Duration::from_secs(1);

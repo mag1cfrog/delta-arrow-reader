@@ -11,6 +11,7 @@ use super::{
     Error, credential_cache::TableCredentialCache, storage_location::TableStorageLocation,
     temporary_credentials::TemporaryTableCredentials,
 };
+use crate::diagnostics::Error as CliError;
 
 /// Validated storage access for one UC table binding, including its renewable credentials.
 ///
@@ -49,7 +50,7 @@ impl AuthorizedTableAccess {
     pub(crate) async fn load_table(
         &self,
         snapshot_selection: DeltaSnapshotSelection,
-    ) -> Result<DeltaTable, crate::Error> {
+    ) -> Result<DeltaTable, CliError> {
         let builder = DeltaTableBuilder::new(self.storage_url.as_str())
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(snapshot_selection)
@@ -57,7 +58,7 @@ impl AuthorizedTableAccess {
             .with_storage_options(self.storage_options.clone());
         let table = match builder.load_table().await {
             Ok(table) => table,
-            Err(source) => return Err(self.map_read_error(crate::Error::Reader { source }).await),
+            Err(source) => return Err(self.map_read_error(CliError::Reader { source }).await),
         };
         // The Delta log can declare unsupported features even when UC metadata passed validation.
         let protocol = table.protocol();
@@ -68,7 +69,7 @@ impl AuthorizedTableAccess {
                 .iter()
                 .any(|feature| feature == "catalogManaged")
         {
-            return Err(crate::Error::UnityCatalog {
+            return Err(CliError::UnityCatalog {
                 source: Error::UnsupportedDirectRead,
             });
         }
@@ -76,10 +77,10 @@ impl AuthorizedTableAccess {
     }
 
     /// Preserves UC authorization failures through snapshot, planning, and streaming errors.
-    pub(crate) async fn map_read_error(&self, error: crate::Error) -> crate::Error {
+    pub(crate) async fn map_read_error(&self, error: CliError) -> CliError {
         self.credential_cache
             .refresh_failure()
             .await
-            .map_or(error, |source| crate::Error::UnityCatalog { source })
+            .map_or(error, |source| CliError::UnityCatalog { source })
     }
 }

@@ -14,7 +14,7 @@ use object_store::ObjectStoreScheme;
 use snafu::ensure;
 use url::Url;
 
-use crate::{Error, StorageAuthorizationSnafu};
+use crate::diagnostics::{Error, StorageAuthorizationSnafu};
 
 /// Selects one source; missing or rejected credentials never select another identity.
 #[derive(Clone, Copy, ValueEnum, serde::Serialize)]

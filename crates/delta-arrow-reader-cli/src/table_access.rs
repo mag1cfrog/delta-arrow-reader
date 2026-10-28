@@ -16,8 +16,8 @@ use direct_credentials::CredentialSource;
 use unity_catalog::{AuthorizedTableAccess, UnityCatalogTableTarget};
 
 use crate::{
-    Error, ReaderSnafu, StorageAuthorizationSnafu, UnityCatalogSnafu,
     cli::parse_unsigned_decimal,
+    diagnostics::{Error, ReaderSnafu, StorageAuthorizationSnafu, UnityCatalogSnafu},
     input::{self, JsonInputKind},
 };
 

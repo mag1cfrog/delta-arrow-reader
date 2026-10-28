@@ -16,8 +16,8 @@ use serde_json::Value;
 use snafu::{ResultExt, ensure};
 
 use crate::{
-    Error, TerminalOutputSnafu, UnityCatalogSnafu,
     cli::{Command, parse_unsigned_decimal},
+    diagnostics::{Error, TerminalOutputSnafu, UnityCatalogSnafu},
     output::artifact::PendingArtifactPublication,
     table_access::{TableArgs, unity_catalog::UnityCatalogTableTarget},
 };

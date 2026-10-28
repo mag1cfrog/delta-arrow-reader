@@ -14,8 +14,7 @@ use snafu::ResultExt;
 use url::Url;
 
 use crate::{
-    Error, InputIoSnafu, UnityCatalogSnafu,
-    diagnostics::InputCorrection,
+    diagnostics::{Error, InputCorrection, InputIoSnafu, UnityCatalogSnafu},
     input::{self, JsonInputKind, JsonObject},
     table_access::{
         TableLoadRequest, TableOptions,

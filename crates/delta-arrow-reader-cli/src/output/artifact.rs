@@ -19,7 +19,7 @@ use snafu::ResultExt;
 use tempfile::NamedTempFile;
 
 use super::{OutputLimits, OutputStats, RowOutputFormat};
-use crate::{ArtifactIoSnafu, Error};
+use crate::diagnostics::{ArtifactIoSnafu, Error};
 
 pub(crate) const MAX_RECEIPT_BYTES: usize = 8 * 1024;
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;

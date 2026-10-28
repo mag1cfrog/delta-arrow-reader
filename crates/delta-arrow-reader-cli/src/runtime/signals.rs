@@ -8,6 +8,8 @@ use std::{
 
 use snafu::ResultExt;
 
+use crate::diagnostics::{Error, RuntimeSnafu};
+
 #[cfg(target_os = "linux")]
 static ASYNC_CANCELLATION_READY: AtomicBool = AtomicBool::new(false);
 
@@ -38,15 +40,15 @@ pub(crate) fn install_container_signal_handlers() -> io::Result<()> {
 ///
 /// Installs listeners before its first suspension. Poll this first in a biased
 /// select so work starts only after cancellation can be handled asynchronously.
-pub(super) async fn wait_for_cancellation() -> Result<u8, crate::Error> {
+pub(super) async fn wait_for_cancellation() -> Result<u8, Error> {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
 
-        let mut interrupt = signal(SignalKind::interrupt()).context(crate::RuntimeSnafu {
+        let mut interrupt = signal(SignalKind::interrupt()).context(RuntimeSnafu {
             reason: "interrupt_handler_install_failed",
         })?;
-        let mut terminate = signal(SignalKind::terminate()).context(crate::RuntimeSnafu {
+        let mut terminate = signal(SignalKind::terminate()).context(RuntimeSnafu {
             reason: "terminate_handler_install_failed",
         })?;
         // Tokio chains the PID 1 handler; hand over only after both listeners are installed.
@@ -56,7 +58,7 @@ pub(super) async fn wait_for_cancellation() -> Result<u8, crate::Error> {
     }
     #[cfg(not(unix))]
     {
-        tokio::signal::ctrl_c().await.context(crate::RuntimeSnafu {
+        tokio::signal::ctrl_c().await.context(RuntimeSnafu {
             reason: "signal_wait_failed",
         })?;
         Ok(130)

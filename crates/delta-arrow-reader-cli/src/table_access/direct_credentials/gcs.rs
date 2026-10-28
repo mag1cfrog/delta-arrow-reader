@@ -9,7 +9,7 @@ use snafu::{OptionExt, ensure};
 use super::{
     CredentialSource, normalize_storage_options, read_environment_value, validate_auth_source_value,
 };
-use crate::{Error, StorageAuthorizationSnafu};
+use crate::diagnostics::{Error, StorageAuthorizationSnafu};
 
 pub(super) const ADC_ENVIRONMENT_VARIABLE: &str = "GOOGLE_APPLICATION_CREDENTIALS";
 

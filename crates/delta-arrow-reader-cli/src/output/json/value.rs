@@ -13,7 +13,7 @@ use arrow::{
 use base64::{display::Base64Display, engine::general_purpose::STANDARD};
 use serde::{Serialize, Serializer, ser::SerializeSeq};
 
-use crate::Error;
+use crate::diagnostics::Error;
 
 pub(super) fn validate_json_type_support(
     data_type: &DataType,

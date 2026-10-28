@@ -10,7 +10,7 @@ use super::super::azure_sas;
 use super::{
     CredentialSource, normalize_storage_options, read_environment_value, validate_auth_source_value,
 };
-use crate::{Error, StorageAuthorizationSnafu};
+use crate::diagnostics::{Error, StorageAuthorizationSnafu};
 
 pub(super) const CREDENTIAL_ENVIRONMENT_VARIABLES: &[(&str, AzureConfigKey)] = &[
     ("AZURE_STORAGE_ACCOUNT_KEY", AzureConfigKey::AccessKey),

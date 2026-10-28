@@ -12,7 +12,7 @@ use serde_json::json;
 
 use super::{BoundedJsonBuffer, JsonRow, OutputLimits, write_on_output_thread};
 use crate::{
-    Error,
+    diagnostics::Error,
     output::{OutputStats, write_stdout},
 };
 

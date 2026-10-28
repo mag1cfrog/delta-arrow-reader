@@ -32,20 +32,18 @@ use std::process::ExitCode;
 
 use clap::{Parser, error::ErrorKind};
 use cli::{Cli, Command};
-use diagnostics::{
-    ArtifactIoSnafu, ConfigurationSnafu, DiagnosticFormat, Error, InputCorrection, InputIoSnafu,
-    InputValidationSnafu, OutputSnafu, QuerySnafu, ReaderSnafu, RuntimeSnafu,
-    StorageAuthorizationSnafu, TerminalOutputSnafu, UnityCatalogSnafu,
-};
+#[cfg(target_os = "linux")]
 use snafu::ResultExt;
 
 fn main() -> ExitCode {
-    let diagnostic_format = DiagnosticFormat::from_cli_args();
+    let diagnostic_format = diagnostics::DiagnosticFormat::from_cli_args();
     runtime::install_panic_hook(diagnostic_format);
     #[cfg(target_os = "linux")]
-    if let Err(error) = runtime::install_container_signal_handlers().context(RuntimeSnafu {
-        reason: "signal_handler_install_failed",
-    }) {
+    if let Err(error) =
+        runtime::install_container_signal_handlers().context(diagnostics::RuntimeSnafu {
+            reason: "signal_handler_install_failed",
+        })
+    {
         return diagnostic_format.report_failure_with_timeout(error);
     }
     match Cli::try_parse() {
@@ -64,9 +62,9 @@ fn main() -> ExitCode {
         }
         Err(error) => {
             // Clap's diagnostics may contain argument values; report only safe fields.
-            diagnostic_format.report_failure_with_timeout(Error::Argument {
+            diagnostic_format.report_failure_with_timeout(diagnostics::Error::Argument {
                 kind: error.kind(),
-                correction: InputCorrection::from_clap(&error),
+                correction: diagnostics::InputCorrection::from_clap(&error),
             })
         }
     }

@@ -21,7 +21,7 @@ use super::{
     OutputLimits, OutputStats, field_descriptions::field_details, write_on_output_thread,
     write_stdout,
 };
-use crate::Error;
+use crate::diagnostics::Error;
 use value::{JsonRow, validate_json_type_support};
 
 pub(crate) const DEFAULT_MAX_BYTES: usize = 8 * 1024;

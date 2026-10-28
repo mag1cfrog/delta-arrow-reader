@@ -7,7 +7,7 @@ use object_store::{
     ObjectStoreScheme, aws::AmazonS3ConfigKey, azure::AzureConfigKey, gcp::GoogleConfigKey,
 };
 
-use crate::Error;
+use crate::diagnostics::Error;
 
 /// Resolves only native file-reference options, before providers add inherited environment values.
 pub(super) fn resolve_relative_paths(

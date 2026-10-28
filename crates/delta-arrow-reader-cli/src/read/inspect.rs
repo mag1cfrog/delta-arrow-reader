@@ -15,9 +15,8 @@ use delta_arrow_reader::DeltaTable;
 use serde_json::{Value, json};
 
 use crate::{
-    Error,
     cli::parse_unsigned_decimal,
-    diagnostics::{InputCorrection, build_completion_record},
+    diagnostics::{Error, InputCorrection, build_completion_record},
     output::{OutputStats, field_descriptions::field_details, write_stdout},
     table_access::{TableArgs, unity_catalog::UnityCatalogTableTarget},
 };

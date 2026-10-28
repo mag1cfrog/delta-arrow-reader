@@ -6,10 +6,7 @@ use serde_json::Value;
 use snafu::ResultExt;
 
 use super::signals;
-use crate::{
-    Error, OutputSnafu, RuntimeSnafu,
-    diagnostics::{self, DiagnosticFormat},
-};
+use crate::diagnostics::{self, DiagnosticFormat, Error, OutputSnafu, RuntimeSnafu};
 
 pub(crate) const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 

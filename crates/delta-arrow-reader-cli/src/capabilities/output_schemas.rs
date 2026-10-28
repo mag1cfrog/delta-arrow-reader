@@ -314,8 +314,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        Error, capabilities::DiscoverySchema, diagnostics::build_completion_record,
-        output::OutputStats, read::inspect::encode_inspection_json,
+        capabilities::DiscoverySchema,
+        diagnostics::{Error, build_completion_record},
+        output::OutputStats,
+        read::inspect::encode_inspection_json,
     };
 
     #[test]

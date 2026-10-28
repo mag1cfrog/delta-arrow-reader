@@ -27,8 +27,7 @@ use serde::{Deserialize, Deserializer, de};
 use snafu::ensure;
 
 use crate::{
-    Error, InputValidationSnafu,
-    diagnostics::InputCorrection,
+    diagnostics::{Error, InputCorrection, InputValidationSnafu},
     input::{JsonInputKind, JsonObject, deserialize_integer_string},
 };
 

@@ -8,7 +8,10 @@ use clap::error::ErrorKind;
 use serde_json::{Value, json};
 
 use super::read_support::AuthorizationService;
-use crate::{Error, diagnostics::InputCorrection, input};
+use crate::{
+    diagnostics::{Error, InputCorrection},
+    input,
+};
 
 pub(super) fn build_env_file_guide(
     service: AuthorizationService,

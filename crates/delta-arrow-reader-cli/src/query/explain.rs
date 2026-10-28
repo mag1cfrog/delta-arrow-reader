@@ -22,8 +22,10 @@ use snafu::ResultExt;
 
 use super::{PlanningSnafu, QueryInputArgs, resources};
 use crate::{
-    Error, QuerySnafu, cli::parse_unsigned_decimal, diagnostics::InputCorrection,
-    output::write_stdout, table_access::TableLoadRequest,
+    cli::parse_unsigned_decimal,
+    diagnostics::{Error, InputCorrection, QuerySnafu},
+    output::write_stdout,
+    table_access::TableLoadRequest,
 };
 
 pub(crate) const DEFAULT_PLAN_BYTES: usize = 4096;

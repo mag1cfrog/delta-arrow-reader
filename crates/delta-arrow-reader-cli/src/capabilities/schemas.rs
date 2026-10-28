@@ -9,7 +9,11 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::output_schemas;
-use crate::{Error, cli::command_name, diagnostics::InputCorrection, input::JsonInputKind};
+use crate::{
+    cli::command_name,
+    diagnostics::{Error, InputCorrection},
+    input::JsonInputKind,
+};
 
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]

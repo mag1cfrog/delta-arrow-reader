@@ -34,9 +34,11 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu,
     cli::parse_unsigned_decimal,
-    diagnostics::{ErrorClassification, build_completion_record, build_json_read_completion},
+    diagnostics::{
+        Error, ErrorClassification, InputIoSnafu, QuerySnafu, UnityCatalogSnafu,
+        build_completion_record, build_json_read_completion,
+    },
     output,
     table_access::{TableLoadRequest, TableOptions, unity_catalog::UnityCatalogTableTarget},
 };
@@ -377,7 +379,7 @@ pub(crate) struct ReadOnlySqlQuery {
 
 impl ReadOnlySqlQuery {
     /// Rejects malformed or disallowed SQL before opening the requested Delta table.
-    pub(crate) fn read_file_with_bytes(path: &str) -> Result<(Self, Vec<u8>), crate::Error> {
+    pub(crate) fn read_file_with_bytes(path: &str) -> Result<(Self, Vec<u8>), Error> {
         let file = File::open(path).context(InputIoSnafu {
             argument: "--sql-file",
         })?;
@@ -436,11 +438,11 @@ impl ReadOnlySqlQuery {
         self,
         tables: impl IntoIterator<Item = (String, DeltaTable)>,
         runtime: Arc<RuntimeEnv>,
-    ) -> Result<DataFrame, crate::Error> {
+    ) -> Result<DataFrame, Error> {
         let context = SessionContext::new_with_config_rt(SessionConfig::new(), runtime);
         for (alias, table) in tables {
             register_table(&context, alias, table, ScanOptions::default())
-                .context(crate::ReaderSnafu)?;
+                .context(crate::diagnostics::ReaderSnafu)?;
         }
         let plan = context
             .state()
@@ -466,7 +468,7 @@ impl ReadOnlySqlQuery {
         self,
         tables: impl IntoIterator<Item = (String, DeltaTable)>,
         runtime: Arc<RuntimeEnv>,
-    ) -> Result<SendableRecordBatchStream, crate::Error> {
+    ) -> Result<SendableRecordBatchStream, Error> {
         self.plan(tables, runtime)
             .await?
             .execute_stream()

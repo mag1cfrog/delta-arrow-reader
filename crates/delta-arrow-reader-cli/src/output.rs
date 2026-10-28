@@ -16,7 +16,7 @@ use std::{
 
 use snafu::{ResultExt, Snafu};
 
-use crate::{Error, OutputSnafu, RuntimeSnafu};
+use crate::diagnostics::{Error, OutputSnafu, RuntimeSnafu};
 
 /// Queries fail at these ceilings; previews return an explicitly labeled sample.
 pub(crate) struct OutputLimits {

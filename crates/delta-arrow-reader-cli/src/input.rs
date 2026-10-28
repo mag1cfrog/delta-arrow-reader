@@ -24,7 +24,7 @@ use serde::{
 };
 use snafu::{ResultExt, ensure};
 
-use crate::{Error, InputIoSnafu, InputValidationSnafu, diagnostics::InputCorrection};
+use crate::diagnostics::{Error, InputCorrection, InputIoSnafu, InputValidationSnafu};
 
 mod env_file;
 mod execution_options;
