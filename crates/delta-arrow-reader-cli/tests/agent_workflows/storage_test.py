@@ -102,7 +102,7 @@ class WorkflowStorageTests(unittest.TestCase):
         self.assertEqual(result["completion"], "complete")
         receipt = json.loads(output.stdout)
         self.assertEqual(receipt, {"format_version": 2, "kind": "result_artifact",
-                                   "result": str(self.directory / "result.json")})
+                                   "result": str((self.directory / "result.json").resolve())})
         self.assertFalse((self.directory / "result.json.manifest.json").exists())
         self.assertEqual({r["identity"] for r in self.storage_events() if r["event"] == "request"}, {"selected"})
 
