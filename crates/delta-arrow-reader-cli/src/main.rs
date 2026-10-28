@@ -20,15 +20,13 @@
 
 mod capabilities;
 mod cli;
-mod command_runtime;
 mod diagnostics;
 mod input;
 mod output;
 mod output_capacity;
 mod query;
 mod read;
-mod signals;
-mod stdout_monitor;
+mod runtime;
 mod table_access;
 
 use std::{
@@ -114,23 +112,11 @@ fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
     ))
 }
 
-fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
-    // Kernel workers can panic without waking their caller. Bound the report and
-    // exit without unwinding into a blocking join; never format the payload.
-    std::panic::set_hook(Box::new(move |_| {
-        diagnostic_format.report_failure_with_timeout(Error::Runtime {
-            source: io::Error::other("process panicked"),
-            reason: "process_panicked",
-        });
-        std::process::exit(1);
-    }));
-}
-
 fn main() -> ExitCode {
     let diagnostic_format = DiagnosticFormat::from_cli_args();
-    install_panic_hook(diagnostic_format);
+    runtime::install_panic_hook(diagnostic_format);
     #[cfg(target_os = "linux")]
-    if let Err(error) = signals::install_container_signal_handlers().context(RuntimeSnafu {
+    if let Err(error) = runtime::install_container_signal_handlers().context(RuntimeSnafu {
         reason: "signal_handler_install_failed",
     }) {
         return diagnostic_format.report_failure_with_timeout(error);
@@ -140,7 +126,7 @@ fn main() -> ExitCode {
             command: Command::Capabilities(options),
             ..
         }) => capabilities::run_capabilities(options, diagnostic_format),
-        Ok(cli) => command_runtime::run_table_command(cli.command, diagnostic_format),
+        Ok(cli) => runtime::run_table_command(cli.command, diagnostic_format),
         Err(error)
             if matches!(
                 error.kind(),

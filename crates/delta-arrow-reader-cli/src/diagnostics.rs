@@ -431,7 +431,7 @@ mod tests {
         };
         let diagnostic_format = DiagnosticFormat::Json;
         super::init_tracing(diagnostic_format);
-        crate::install_panic_hook(diagnostic_format);
+        crate::runtime::install_panic_hook(diagnostic_format);
         tracing::error!(target: "delta_arrow_reader", "secret core trace");
         tracing::error!(target: "reqwest", "secret dependency trace");
         tracing::error!(target: "delta_arrow_reader_cli", "secret CLI trace");

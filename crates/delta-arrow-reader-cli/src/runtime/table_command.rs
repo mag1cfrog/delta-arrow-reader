@@ -18,9 +18,10 @@ use futures_util::future::{AbortHandle, Abortable};
 use serde_json::Value;
 use snafu::{ResultExt, ensure};
 
+use super::{signals, stdout_monitor};
 use crate::{
     Error, OutputSnafu, RuntimeSnafu, TerminalOutputSnafu, cli::Command, diagnostics,
-    diagnostics::DiagnosticFormat, output, read, signals, stdout_monitor,
+    diagnostics::DiagnosticFormat, output, read,
 };
 
 pub(crate) const CLEANUP_GRACE: Duration = Duration::from_secs(1);

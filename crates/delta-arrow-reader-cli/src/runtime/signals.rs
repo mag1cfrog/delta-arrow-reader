@@ -12,7 +12,7 @@ use snafu::ResultExt;
 static ASYNC_CANCELLATION_READY: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_os = "linux")]
-pub(super) fn install_container_signal_handlers() -> io::Result<()> {
+pub(crate) fn install_container_signal_handlers() -> io::Result<()> {
     if std::process::id() != 1 {
         return Ok(());
     }

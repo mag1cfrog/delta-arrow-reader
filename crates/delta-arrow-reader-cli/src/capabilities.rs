@@ -14,18 +14,18 @@ mod schemas;
 
 pub(crate) use schemas::DiscoverySchema;
 
-use std::{io, process::ExitCode, time::Duration};
+use std::process::ExitCode;
 
 use clap::{Arg, ArgAction, ArgGroup, Args, Command, CommandFactory, ValueEnum, error::ErrorKind};
 use serde_json::{Value, json};
-use snafu::ResultExt;
 
 use crate::{
-    Error, OutputSnafu, OutputStats, RuntimeSnafu, build_completion_record,
+    Error, OutputStats, build_completion_record,
     cli::Cli,
-    diagnostics::{self, DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT},
+    diagnostics::{DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT},
     input::JsonInputKind,
-    signals, write_stdout,
+    runtime::{DISCOVERY_TIMEOUT, run_discovery},
+    write_stdout,
 };
 
 const MAX_INDEX_BYTES: usize = 2 * 1024;
@@ -34,7 +34,6 @@ const MAX_COMMAND_DETAIL_BYTES: usize = 2 * 1024;
 const MAX_SCHEMA_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_AUTHORIZATION_GUIDE_BYTES: usize = 2 * 1024;
 const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
-const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
 #[command(group(ArgGroup::new("full_definition_target").args(["command", "schema", "authorization"])))]
@@ -368,7 +367,7 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
             _ => "Fixed 5000 ms, including output and completion.",
         },
         "scope": if name == "explain" { "Inputs, authorization, metadata IO, planning, stdout and completion; no result execution." } else if is_table_command { "Inputs, authorization, planning, execution, stdout and completion." } else { "Offline generation, stdout and completion; no input or credential files are opened." },
-        "cleanup_ms": if is_table_command { crate::command_runtime::CLEANUP_GRACE.as_millis() } else { 0 },
+        "cleanup_ms": if is_table_command { crate::runtime::CLEANUP_GRACE.as_millis() } else { 0 },
         "failure_reporting_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
         "signals": "Unix SIGINT exits 130; SIGTERM exits 143, including Linux PID 1. Windows Ctrl+C exits 130.",
         "output": "Require exit 0; with --diagnostics=json, also validate the stderr completion for its command and format_version. Otherwise discard stdout, even if it looks complete.",
@@ -583,48 +582,6 @@ pub(crate) fn run_help_or_version(
     run_discovery(diagnostic_format, move || {
         crate::write_help_or_version(error)
     })
-}
-
-fn run_discovery(
-    diagnostic_format: DiagnosticFormat,
-    write_response: impl FnOnce() -> Result<Value, Error> + Send + 'static,
-) -> ExitCode {
-    let deadline = std::time::Instant::now() + DISCOVERY_TIMEOUT;
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context(RuntimeSnafu {
-            reason: "runtime_build_failed",
-        }) {
-        Ok(runtime) => runtime,
-        Err(error) => return diagnostic_format.report_failure_with_timeout(error),
-    };
-    let result = runtime.block_on(async {
-        tokio::select! {
-            biased;
-            status = signals::wait_for_cancellation() => Err(Error::Cancelled { status: status? }),
-            () = tokio::time::sleep_until(deadline.into()) => Err(Error::Runtime {
-                source: io::ErrorKind::TimedOut.into(),
-                reason: "discovery_deadline_exceeded",
-            }),
-            result = async {
-                let completion = tokio::task::spawn_blocking(move || {
-                    diagnostics::init_tracing(diagnostic_format);
-                    write_response()
-                }).await.map_err(io::Error::other).context(RuntimeSnafu {
-                    reason: "discovery_output_task_failed",
-                })??;
-                diagnostic_format.write_terminal_record_when_writable(&completion).await.context(OutputSnafu)
-            } => result,
-        }
-    });
-    let status = match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => diagnostic_format.report_failure_with_timeout(error),
-    };
-    // stdout or text logging may still be held by a blocked worker.
-    runtime.shutdown_background();
-    status
 }
 
 fn write_discovery_response(options: CapabilitiesArgs) -> Result<OutputStats, Error> {
