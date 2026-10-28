@@ -20,7 +20,7 @@ use datafusion::execution::{
 };
 use snafu::ResultExt;
 
-use super::{InitializationSnafu, SpillCleanupSnafu, SpillDirectorySnafu};
+use super::error::{InitializationSnafu, SpillCleanupSnafu, SpillDirectorySnafu};
 use crate::diagnostics::{Error, InputCorrection, QuerySnafu};
 
 /// The caller must keep the returned directory outside the cancellable query future.

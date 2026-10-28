@@ -20,7 +20,7 @@ use futures_util::{FutureExt, future::LocalBoxFuture};
 use serde_json::{Value, json};
 use snafu::ResultExt;
 
-use super::{PlanningSnafu, QueryInputArgs, resources};
+use super::{QueryInputArgs, error::PlanningSnafu, resources};
 use crate::{
     cli::parse_unsigned_decimal,
     diagnostics::{Error, InputCorrection, QuerySnafu},

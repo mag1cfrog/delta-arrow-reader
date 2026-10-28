@@ -1,30 +1,27 @@
 //! Query execution and plan inspection over named, immutable Core snapshots.
 
+mod error;
 pub(crate) mod explain;
 pub(crate) mod resources;
 mod sql;
 pub(crate) mod tables_manifest;
 
-use std::{fmt, num::NonZeroUsize, path::PathBuf};
+use std::{num::NonZeroUsize, path::PathBuf};
 
 use crate::output::RowOutputFormat;
 use clap::Args;
-use datafusion::common::{DataFusionError, SchemaError};
-use delta_arrow_reader::error_source_kind;
 use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
 use serde_json::{Value, json};
-use snafu::{ResultExt, Snafu};
+use snafu::ResultExt;
 
 use crate::{
     cli::parse_unsigned_decimal,
-    diagnostics::{
-        Error, ErrorClassification, UnityCatalogSnafu, build_completion_record,
-        build_json_read_completion,
-    },
+    diagnostics::{Error, UnityCatalogSnafu, build_completion_record, build_json_read_completion},
     output,
     table_access::{TableLoadRequest, TableOptions, unity_catalog::UnityCatalogTableTarget},
 };
 
+pub(crate) use error::QueryError;
 pub(crate) use sql::{MAX_SQL_BYTES, ReadOnlySqlQuery, SQL_RECURSION_LIMIT};
 
 /// SQL and snapshot declarations shared by query execution and plan inspection.
@@ -251,221 +248,5 @@ impl QueryArgs {
             Ok(completion)
         }.boxed_local();
         Ok((uses_unity_catalog, execution))
-    }
-}
-
-/// SQL failures retain typed sources without printing query text or dependency messages.
-#[derive(Snafu)]
-pub(crate) enum QueryError {
-    #[snafu(display(
-        "Invalid SQL input (reason={reason}). Use one read-only query over the selected tables."
-    ))]
-    Input { reason: &'static str },
-    #[snafu(display("Could not create private temporary storage in --spill-dir."))]
-    SpillDirectory { source: std::io::Error },
-    #[snafu(display("Could not remove the query's temporary spill files."))]
-    SpillCleanup { source: std::io::Error },
-    #[snafu(display("Could not initialize the SQL runtime."))]
-    Initialization { source: DataFusionError },
-    #[snafu(display("Could not plan the SQL query."))]
-    Planning { source: DataFusionError },
-    #[snafu(display("Could not execute the SQL query."))]
-    Execution { source: DataFusionError },
-}
-
-impl fmt::Debug for QueryError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, formatter)
-    }
-}
-
-impl QueryError {
-    pub(crate) fn classification(&self) -> ErrorClassification {
-        match self {
-            Self::Input { reason } => ErrorClassification {
-                phase: "configuration",
-                code: "invalid_sql_input",
-                reason,
-                source_kind: None,
-            },
-            Self::SpillDirectory { source } | Self::SpillCleanup { source } => {
-                let (phase, code) = if matches!(self, Self::SpillDirectory { .. }) {
-                    ("configuration", "spill_directory")
-                } else {
-                    ("datafusion", "spill_cleanup")
-                };
-                ErrorClassification {
-                    phase,
-                    code,
-                    reason: code,
-                    source_kind: Some(error_source_kind(source)),
-                }
-            }
-            Self::Initialization { source }
-            | Self::Planning { source }
-            | Self::Execution { source } => {
-                let code = match self {
-                    Self::Initialization { .. } => "sql_initialization",
-                    Self::Planning { .. } => "sql_planning",
-                    _ => "sql_execution",
-                };
-                let source_kind =
-                    if matches!(source.find_root(), DataFusionError::ResourcesExhausted(_)) {
-                        "resource_exhausted"
-                    } else {
-                        error_source_kind(source)
-                    };
-                let reason = match source.find_root() {
-                    DataFusionError::SchemaError(error, _)
-                        if matches!(self, Self::Planning { .. }) =>
-                    {
-                        match error.as_ref() {
-                            SchemaError::FieldNotFound { .. } => "column_not_found",
-                            SchemaError::AmbiguousReference { .. } => "ambiguous_column",
-                            _ => code,
-                        }
-                    }
-                    // DataFusion 54 uses one string variant for both budgets. Unknown messages stay unclassified.
-                    DataFusionError::ResourcesExhausted(message)
-                        if message.starts_with("The used disk space during the spilling process has exceeded the allowable limit of ") => "spill_limit_exceeded",
-                    DataFusionError::ResourcesExhausted(message)
-                        if message.starts_with("Memory Exhausted while ")
-                            && message.ends_with("(DiskManager is disabled)") => "spill_disabled",
-                    DataFusionError::ResourcesExhausted(message)
-                        if message.starts_with("Failed to allocate additional ") => "memory_limit_exceeded",
-                    _ => code,
-                };
-                ErrorClassification {
-                    phase: "datafusion",
-                    code,
-                    reason,
-                    source_kind: Some(source_kind),
-                }
-            }
-        }
-    }
-
-    pub(crate) fn exit_status(&self) -> u8 {
-        match self {
-            Self::Input { .. } | Self::SpillDirectory { .. } => 2,
-            _ => 1,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dependency_errors_are_redacted_and_memory_exhaustion_is_typed() {
-        let error = QueryError::Execution {
-            source: DataFusionError::Context(
-                "secret SQL".into(),
-                Box::new(DataFusionError::ResourcesExhausted(
-                    "secret query literal".into(),
-                )),
-            ),
-        };
-        assert_eq!(
-            error.classification().source_kind,
-            Some("resource_exhausted")
-        );
-        assert!(!format!("{error} {error:?}").contains("secret"));
-        assert_eq!(error.classification().reason, "sql_execution");
-        assert!(Error::Query { source: error }.input_correction().is_none());
-        let unrelated = QueryError::Execution {
-            source: DataFusionError::Execution("Failed to allocate additional secret".into()),
-        };
-        assert_eq!(unrelated.classification().reason, "sql_execution");
-    }
-
-    #[test]
-    fn sql_column_diagnostics_keep_typed_causes_and_redact_sources() {
-        use datafusion::common::{Column, Diagnostic};
-
-        for (source, reason) in [
-            (
-                SchemaError::FieldNotFound {
-                    field: Box::new(Column::new(Some("secret_alias"), "secret_column")),
-                    valid_fields: vec![Column::new(Some("secret_alias"), "secret_valid_column")],
-                },
-                "column_not_found",
-            ),
-            (
-                SchemaError::AmbiguousReference {
-                    field: Box::new(Column::new_unqualified("secret_column")),
-                },
-                "ambiguous_column",
-            ),
-        ] {
-            let source = DataFusionError::SchemaError(
-                Box::new(source),
-                Box::new(Some("secret backtrace".into())),
-            )
-            .with_diagnostic(Diagnostic::new_error("secret diagnostic", None));
-            let error = Error::Query {
-                source: QueryError::Planning {
-                    source: DataFusionError::Context(
-                        "secret SQL https://user:secret@host/table?token=secret".into(),
-                        Box::new(source),
-                    ),
-                },
-            };
-            let record = error.to_json_diagnostic();
-            assert_eq!(record["code"], "sql_planning");
-            assert_eq!(record["reason"], reason);
-            assert_eq!(record["source_kind"], "schema");
-            assert_eq!(record["recovery"], "fix_input");
-            assert_eq!(record["retryable"], false);
-            assert_eq!(record["argument"], "--sql-file");
-            let text = crate::diagnostics::capture_tracing_output("warn", || {
-                error.emit_tracing_diagnostic();
-            });
-            assert!(text.contains(&format!("error_reason=\"{reason}\"")));
-            assert!(text.contains(record["hint"].as_str().unwrap()));
-            for rendered in [record.to_string(), text, format!("{error:?}")] {
-                assert!(!rendered.contains("secret"), "{rendered}");
-            }
-        }
-    }
-
-    #[test]
-    fn other_sql_errors_do_not_offer_column_repairs() {
-        for source in [
-            DataFusionError::Plan("No field named secret_column".into()),
-            DataFusionError::SchemaError(
-                Box::new(SchemaError::DuplicateUnqualifiedField {
-                    name: "secret_column".into(),
-                }),
-                Box::new(None),
-            ),
-        ] {
-            let record = Error::Query {
-                source: QueryError::Planning { source },
-            }
-            .to_json_diagnostic();
-            assert_eq!(record["reason"], "sql_planning");
-            assert_eq!(record["recovery"], "unknown");
-            assert!(record["retryable"].is_null());
-            assert!(record.get("argument").is_none());
-            assert!(record.get("hint").is_none());
-            assert!(!record.to_string().contains("secret"));
-        }
-        let error = Error::Query {
-            source: QueryError::Execution {
-                source: DataFusionError::SchemaError(
-                    Box::new(SchemaError::FieldNotFound {
-                        field: Box::new(datafusion::common::Column::new_unqualified(
-                            "secret_column",
-                        )),
-                        valid_fields: Vec::new(),
-                    }),
-                    Box::new(None),
-                ),
-            },
-        };
-        assert_eq!(error.to_json_diagnostic()["reason"], "sql_execution");
-        assert!(error.input_correction().is_none());
     }
 }

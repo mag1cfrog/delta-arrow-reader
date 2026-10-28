@@ -23,7 +23,10 @@ use delta_arrow_reader::{
 };
 use snafu::ResultExt;
 
-use super::{ExecutionSnafu, PlanningSnafu, QueryError};
+use super::{
+    QueryError,
+    error::{ExecutionSnafu, PlanningSnafu},
+};
 use crate::diagnostics::{Error, InputIoSnafu, QuerySnafu};
 
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
