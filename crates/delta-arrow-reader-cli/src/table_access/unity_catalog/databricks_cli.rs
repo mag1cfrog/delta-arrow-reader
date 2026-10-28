@@ -173,7 +173,7 @@ mod tests {
             fs::write(&executable, "#!/bin/sh\nprintf '%s' $$ > \"$DAR_TEST_REQUEST_LIFETIME_PID\"\nexec /bin/sleep 60\n").unwrap();
             fs::set_permissions(executable, fs::Permissions::from_mode(0o755)).unwrap();
             let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "unity_catalog::databricks_cli::tests::dropping_the_request_waiter_keeps_the_child_owned_until_cleanup", "--nocapture"])
+                .args(["--exact", "table_access::unity_catalog::databricks_cli::tests::dropping_the_request_waiter_keeps_the_child_owned_until_cleanup", "--nocapture"])
                 .env("PATH", directory.path())
                 .env("DAR_TEST_REQUEST_LIFETIME_PID", directory.path().join("pid"))
                 .output().unwrap();
@@ -181,6 +181,10 @@ mod tests {
                 output.status.success(),
                 "{}",
                 String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(
+                directory.path().join("pid").is_file(),
+                "child lifetime test did not run"
             );
             return;
         };

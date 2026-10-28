@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 use crate::input::JsonObject;
 
+use super::super::azure_sas;
 use super::{
     Error,
     storage_location::{StorageBackend, TableStorageLocation},
@@ -156,7 +157,7 @@ pub(super) fn parse_temporary_credentials(
                 ..
             },
         ) => {
-            let query_pairs = crate::azure_sas::parse_query_pairs(&sas_credentials.sas_token)
+            let query_pairs = azure_sas::parse_query_pairs(&sas_credentials.sas_token)
                 .ok_or(Error::InvalidDatabricksResponse)?;
             CloudCredentials::Azure(Arc::new(AzureCredential::SASToken(query_pairs)))
         }

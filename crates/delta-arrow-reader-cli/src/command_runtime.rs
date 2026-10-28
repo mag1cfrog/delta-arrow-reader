@@ -72,7 +72,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
         tokio::pin!(cancellation, deadline);
         let cancelled = |status| {
             if report_uc_cancellation.load(Ordering::Relaxed) {
-                Error::UnityCatalog { source: crate::unity_catalog::Error::Cancelled { status } }
+                Error::UnityCatalog { source: crate::table_access::unity_catalog::Error::Cancelled { status } }
             } else {
                 Error::Cancelled { status }
             }
@@ -96,7 +96,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
                                 execute_table_command(command, &worker_report_uc_cancellation, &mut spill_directory, &mut pending_artifact, &worker_cancellation), registration,
                             ).await;
                             // A read/output error can finish the command while a renewal is still pending.
-                            let _ = tokio::time::timeout(CLEANUP_GRACE, crate::unity_catalog::cancel_pending_requests()).await;
+                            let _ = tokio::time::timeout(CLEANUP_GRACE, crate::table_access::unity_catalog::cancel_pending_requests()).await;
                             result
                         });
                         runtime.shutdown_background();
@@ -157,7 +157,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
             // Stop output first; credential runners own their children through cleanup.
             abort.abort();
             let cleanup = async {
-                crate::unity_catalog::cancel_pending_requests().await;
+                crate::table_access::unity_catalog::cancel_pending_requests().await;
                 let _ = receiver.await;
             };
             let _ = tokio::time::timeout(CLEANUP_GRACE, cleanup).await;
@@ -165,7 +165,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
         outcome.map_err(|error| {
             if publication_started.load(Ordering::Acquire)
                 && matches!(error, Error::Cancelled { .. } | Error::DeadlineExceeded | Error::Output { .. }
-                    | Error::UnityCatalog { source: crate::unity_catalog::Error::Cancelled { .. } })
+                    | Error::UnityCatalog { source: crate::table_access::unity_catalog::Error::Cancelled { .. } })
             {
                 Error::ArtifactPublicationInterrupted { source: Box::new(error), manifest_requested }
             } else { error }

@@ -16,10 +16,12 @@ use url::Url;
 use crate::{
     Error, InputIoSnafu, UnityCatalogSnafu,
     diagnostics::InputCorrection,
-    direct_credentials::{CredentialSource, validate_table_url},
     input::{self, JsonInputKind, JsonObject},
-    table_input::{TableLoadRequest, TableOptions},
-    unity_catalog::UnityCatalogTableTarget,
+    table_access::{
+        TableLoadRequest, TableOptions,
+        direct_credentials::{CredentialSource, validate_table_url},
+        unity_catalog::UnityCatalogTableTarget,
+    },
 };
 
 // Even with 63-byte aliases and full u64 versions, provenance fits one 8 KiB completion record.

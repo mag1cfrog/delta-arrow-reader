@@ -38,8 +38,7 @@ use crate::{
     build_json_read_completion,
     diagnostics::ErrorClassification,
     output, parse_unsigned_decimal,
-    table_input::{TableLoadRequest, TableOptions},
-    unity_catalog::UnityCatalogTableTarget,
+    table_access::{TableLoadRequest, TableOptions, unity_catalog::UnityCatalogTableTarget},
 };
 
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;

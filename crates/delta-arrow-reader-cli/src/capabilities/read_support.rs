@@ -10,7 +10,11 @@ use clap::ValueEnum;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{Error, diagnostics::InputCorrection, query, unity_catalog};
+use crate::{
+    diagnostics::{Error, InputCorrection},
+    query,
+    table_access::unity_catalog,
+};
 
 const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
@@ -494,7 +498,7 @@ mod tests {
     use object_store::{aws::AmazonS3ConfigKey, azure::AzureConfigKey, gcp::GoogleConfigKey};
 
     use super::*;
-    use crate::{Cli, unity_catalog::UnityCatalogTableTarget};
+    use crate::{Cli, table_access::unity_catalog::UnityCatalogTableTarget};
 
     #[test]
     fn selected_authorization_details_keep_configuration_and_exclude_other_providers() {
@@ -588,7 +592,7 @@ mod tests {
     fn full_authorization_examples_configure_each_advertised_identity_provider() {
         use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
 
-        use crate::direct_credentials::CredentialSource;
+        use crate::table_access::direct_credentials::CredentialSource;
 
         for (service, location, expected_sources) in [
             (
@@ -874,7 +878,7 @@ mod tests {
                 .map(|source| source.as_str().unwrap())
                 .collect();
         let installed_sources: std::collections::BTreeSet<_> =
-            crate::direct_credentials::CredentialSource::value_variants()
+            crate::table_access::direct_credentials::CredentialSource::value_variants()
                 .iter()
                 .map(|source| source.to_possible_value().unwrap().get_name().to_owned())
                 .collect();

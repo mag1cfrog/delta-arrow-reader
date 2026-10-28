@@ -140,7 +140,7 @@ mod tests {
                     records.push_str(&format!("{name}={value}\n"));
                 }
                 std::fs::write(&path, records)?;
-                let _ = crate::direct_credentials::env_file::configure_credentials_from_env_file(
+                let _ = crate::table_access::direct_credentials::env_file::configure_credentials_from_env_file(
                     DeltaTableBuilder::new(location),
                     location,
                     DeltaStorageOptions::new(),

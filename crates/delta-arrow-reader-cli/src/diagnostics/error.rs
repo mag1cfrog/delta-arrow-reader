@@ -12,7 +12,8 @@ use super::{self as diagnostics, ErrorClassification, InputCorrection};
 use crate::{
     command_name,
     input::{self, JsonInputKind},
-    output, query, unity_catalog,
+    output, query,
+    table_access::unity_catalog,
 };
 
 #[derive(Snafu)]

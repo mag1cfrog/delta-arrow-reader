@@ -18,11 +18,9 @@
 
 #![cfg_attr(test, allow(clippy::panic))]
 
-mod azure_sas;
 mod capabilities;
 mod command_runtime;
 mod diagnostics;
-mod direct_credentials;
 mod input;
 mod inspection;
 mod output;
@@ -31,8 +29,7 @@ mod preview;
 mod query;
 mod signals;
 mod stdout_monitor;
-mod table_input;
-mod unity_catalog;
+mod table_access;
 
 use std::{
     io::{self, IsTerminal, Write},
@@ -55,7 +52,7 @@ use input::JsonInputKind;
 use output::OutputStats;
 use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
-use table_input::TableArgs;
+use table_access::{TableArgs, unity_catalog};
 
 /// Read Delta Lake snapshots as JSON or Arrow IPC streams.
 #[derive(Parser)]
@@ -748,7 +745,7 @@ mod tests {
             let cli =
                 Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
             assert!(
-                matches!(cli.command, Command::Inspect { table: TableArgs {options: table_input::TableOptions { table_version: Some(version), .. }, ..}, .. } if version == text.parse::<u64>().unwrap())
+                matches!(cli.command, Command::Inspect { table: TableArgs {options: table_access::TableOptions { table_version: Some(version), .. }, ..}, .. } if version == text.parse::<u64>().unwrap())
             );
         }
     }

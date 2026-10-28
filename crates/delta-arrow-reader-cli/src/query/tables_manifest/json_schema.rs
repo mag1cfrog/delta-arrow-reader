@@ -3,7 +3,7 @@
 use clap::ValueEnum;
 use serde_json::{Value, json};
 
-use crate::direct_credentials::CredentialSource;
+use crate::table_access::direct_credentials::CredentialSource;
 
 pub(crate) fn tables_manifest_schema() -> Value {
     let mut sources: Vec<_> = CredentialSource::value_variants()

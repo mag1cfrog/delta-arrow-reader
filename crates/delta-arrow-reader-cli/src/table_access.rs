@@ -1,5 +1,9 @@
 //! Shared snapshot selection and authorization for a single table location.
 
+mod azure_sas;
+pub(crate) mod direct_credentials;
+pub(crate) mod unity_catalog;
+
 use std::path::Path;
 
 use clap::Args;
@@ -8,12 +12,13 @@ use delta_arrow_reader::{
 };
 use snafu::{ResultExt, ensure};
 
+use direct_credentials::CredentialSource;
+use unity_catalog::{AuthorizedTableAccess, UnityCatalogTableTarget};
+
 use crate::{
     Error, ReaderSnafu, StorageAuthorizationSnafu, UnityCatalogSnafu,
-    direct_credentials::CredentialSource,
     input::{self, JsonInputKind},
     parse_unsigned_decimal,
-    unity_catalog::{AuthorizedTableAccess, UnityCatalogTableTarget},
 };
 
 /// Captured input for one table load, validated before any query binding starts table IO.
@@ -96,7 +101,7 @@ impl TableOptions {
                 reason: "auth_source_invalid_table_url",
             }
         })?;
-        crate::direct_credentials::validate_table_url(&url, &scheme)?;
+        direct_credentials::validate_table_url(&url, &scheme)?;
         if matches!(scheme, object_store::ObjectStoreScheme::Local) {
             return Ok(());
         }
@@ -150,7 +155,7 @@ impl TableOptions {
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(self.snapshot_selection());
         if let Some(path) = &self.env_file {
-            return crate::direct_credentials::env_file::configure_credentials_from_env_file(
+            return direct_credentials::env_file::configure_credentials_from_env_file(
                 builder, location, options, path,
             );
         }
@@ -193,7 +198,7 @@ impl TableOptions {
                     }
                 );
                 let storage_options = self.read_storage_options()?;
-                crate::unity_catalog::validate_storage_options(&storage_options)
+                unity_catalog::validate_storage_options(&storage_options)
                     .context(UnityCatalogSnafu)?;
                 Ok(TableLoadRequest::UnityCatalog {
                     target,
