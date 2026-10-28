@@ -125,7 +125,7 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
                             (|| {
                                 worker_publication_started.store(true, Ordering::Release);
                                 let receipt = artifact.publish(&worker_cancellation)?;
-                                crate::write_stdout(&receipt).map_err(|error| match error {
+                                crate::output::write_stdout(&receipt).map_err(|error| match error {
                                     Error::Output { source } => Error::ArtifactIo { source, reason: "artifact_receipt_write_failed" },
                                     error => error,
                                 })?;

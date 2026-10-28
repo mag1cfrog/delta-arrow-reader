@@ -23,16 +23,12 @@ mod cli;
 mod diagnostics;
 mod input;
 mod output;
-mod output_capacity;
 mod query;
 mod read;
 mod runtime;
 mod table_access;
 
-use std::{
-    io::{self, Write},
-    process::ExitCode,
-};
+use std::process::ExitCode;
 
 use clap::{Parser, error::ErrorKind};
 use cli::{Cli, Command};
@@ -41,76 +37,7 @@ use diagnostics::{
     InputValidationSnafu, OutputSnafu, QuerySnafu, ReaderSnafu, RuntimeSnafu,
     StorageAuthorizationSnafu, TerminalOutputSnafu, UnityCatalogSnafu,
 };
-use output::OutputStats;
-use serde_json::{Value, json};
 use snafu::ResultExt;
-
-fn build_completion_record(
-    command: &'static str,
-    table_version: Option<u64>,
-    output_stats: OutputStats,
-    row_limit: Option<usize>,
-) -> Value {
-    let limit_reached = row_limit.is_some_and(|limit| output_stats.rows_written >= limit as u64);
-    let mut record = json!({
-        "format_version": 1,
-        "kind": "completion",
-        "terminal": true,
-        "command": command,
-        "completion": "complete",
-        "scope": if row_limit.is_some() { "limited_scan" } else { command },
-        "stop_reason": if limit_reached { "row_limit" } else { "end_of_input" },
-        "has_more": if limit_reached { None } else { Some(false) },
-        "bindings": table_version.map(|version| json!({"alias": "t", "table_version": version.to_string()})).into_iter().collect::<Vec<_>>(),
-        "output_bytes": output_stats.bytes_written.to_string(),
-    });
-    if matches!(command, "scan" | "query") {
-        record["rows"] = output_stats.rows_written.to_string().into();
-        record["batches"] = output_stats.batches_written.to_string().into();
-    }
-    record
-}
-
-fn build_json_read_completion(
-    command: &'static str,
-    bindings: Vec<Value>,
-    output_stats: OutputStats,
-) -> Value {
-    json!({
-        "format_version": 2,
-        "kind": "completion",
-        "command": command,
-        "bindings": bindings,
-        "rows": output_stats.rows_written.to_string(),
-        "output_bytes": output_stats.bytes_written.to_string(),
-    })
-}
-
-fn write_stdout(output: &[u8]) -> Result<(), Error> {
-    let mut stdout = io::stdout().lock();
-    stdout
-        .write_all(output)
-        .and_then(|()| stdout.flush())
-        .context(OutputSnafu)
-}
-
-fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
-    let output = error.to_string();
-    write_stdout(output.as_bytes())?;
-    Ok(build_completion_record(
-        if error.kind() == ErrorKind::DisplayHelp {
-            "help"
-        } else {
-            "version"
-        },
-        None,
-        OutputStats {
-            bytes_written: output.len() as u64,
-            ..Default::default()
-        },
-        None,
-    ))
-}
 
 fn main() -> ExitCode {
     let diagnostic_format = DiagnosticFormat::from_cli_args();

@@ -10,9 +10,9 @@ use arrow_schema::SchemaRef;
 use futures_util::{Stream, StreamExt};
 use snafu::ResultExt;
 
-use crate::{Error, OutputSnafu, OutputStats, output_capacity};
+use crate::{Error, OutputSnafu};
 
-use super::{ByteBudgetWriter, OutputLimits, write_on_output_thread};
+use super::{ByteBudgetWriter, OutputLimits, OutputStats, capacity, write_on_output_thread};
 
 /// Writes IPC to stdout on a dedicated thread so a full pipe cannot block the async runtime.
 pub(crate) async fn write_arrow_stream_to_stdout(
@@ -62,7 +62,7 @@ pub(super) async fn write_arrow_stream<W: Write>(
     // A resumed pipe write must observe cancellation before emitting the end marker.
     tokio::task::yield_now().await;
     if is_stdout {
-        while !output_capacity::can_write(&io::stdout(), 8).context(OutputSnafu)? {
+        while !capacity::can_write(&io::stdout(), 8).context(OutputSnafu)? {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }

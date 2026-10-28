@@ -15,12 +15,11 @@ use delta_arrow_reader::DeltaTable;
 use serde_json::{Value, json};
 
 use crate::{
-    Error, OutputStats, build_completion_record,
+    Error,
     cli::parse_unsigned_decimal,
-    diagnostics::InputCorrection,
-    output::field_descriptions::field_details,
+    diagnostics::{InputCorrection, build_completion_record},
+    output::{OutputStats, field_descriptions::field_details, write_stdout},
     table_access::{TableArgs, unity_catalog::UnityCatalogTableTarget},
-    write_stdout,
 };
 
 pub(crate) const DEFAULT_SUMMARY_BYTES: usize = 4096;

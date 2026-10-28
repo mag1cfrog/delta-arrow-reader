@@ -1,10 +1,11 @@
-//! Row output formats and their resource ceilings.
+//! Command output, row formats, and resource ceilings.
 //!
 //! Stdout supports incremental Arrow or bounded, complete JSON. File outputs
 //! stage a complete result before publication; provenance is optional via --manifest.
 
 pub(crate) mod arrow;
 pub(crate) mod artifact;
+pub(crate) mod capacity;
 pub(crate) mod field_descriptions;
 pub(crate) mod json;
 
@@ -15,12 +16,20 @@ use std::{
 
 use snafu::{ResultExt, Snafu};
 
-use crate::{Error, RuntimeSnafu};
+use crate::{Error, OutputSnafu, RuntimeSnafu};
 
 /// Queries fail at these ceilings; previews return an explicitly labeled sample.
 pub(crate) struct OutputLimits {
     pub(crate) max_rows: u64,
     pub(crate) max_bytes: u64,
+}
+
+pub(crate) fn write_stdout(output: &[u8]) -> Result<(), Error> {
+    let mut stdout = io::stdout().lock();
+    stdout
+        .write_all(output)
+        .and_then(|()| stdout.flush())
+        .context(OutputSnafu)
 }
 
 // A blocked pipe must leave the runtime and its blocking pool free to read files.

@@ -34,10 +34,9 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu, build_completion_record,
-    build_json_read_completion,
+    Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu,
     cli::parse_unsigned_decimal,
-    diagnostics::ErrorClassification,
+    diagnostics::{ErrorClassification, build_completion_record, build_json_read_completion},
     output,
     table_access::{TableLoadRequest, TableOptions, unity_catalog::UnityCatalogTableTarget},
 };

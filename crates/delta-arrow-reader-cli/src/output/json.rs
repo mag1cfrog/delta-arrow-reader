@@ -17,8 +17,11 @@ use futures_util::{Stream, StreamExt};
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{OutputLimits, field_descriptions::field_details, write_on_output_thread};
-use crate::{Error, OutputStats, write_stdout};
+use super::{
+    OutputLimits, OutputStats, field_descriptions::field_details, write_on_output_thread,
+    write_stdout,
+};
+use crate::Error;
 use value::{JsonRow, validate_json_type_support};
 
 pub(crate) const DEFAULT_MAX_BYTES: usize = 8 * 1024;

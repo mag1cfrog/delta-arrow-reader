@@ -11,7 +11,10 @@ use serde::Serialize;
 use serde_json::json;
 
 use super::{BoundedJsonBuffer, JsonRow, OutputLimits, write_on_output_thread};
-use crate::{Error, OutputStats, write_stdout};
+use crate::{
+    Error,
+    output::{OutputStats, write_stdout},
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]

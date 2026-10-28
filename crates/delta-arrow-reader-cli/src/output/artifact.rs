@@ -18,8 +18,8 @@ use sha2::{Digest, Sha256};
 use snafu::ResultExt;
 use tempfile::NamedTempFile;
 
-use super::{OutputLimits, RowOutputFormat};
-use crate::{ArtifactIoSnafu, Error, OutputStats};
+use super::{OutputLimits, OutputStats, RowOutputFormat};
+use crate::{ArtifactIoSnafu, Error};
 
 pub(crate) const MAX_RECEIPT_BYTES: usize = 8 * 1024;
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
@@ -358,7 +358,7 @@ mod tests {
                 source,
                 reason: "artifact_write_failed",
             })?;
-        staged.prepare_publication(&crate::build_completion_record(
+        staged.prepare_publication(&crate::diagnostics::build_completion_record(
             "scan",
             Some(42),
             OutputStats {

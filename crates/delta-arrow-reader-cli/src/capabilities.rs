@@ -20,12 +20,12 @@ use clap::{Arg, ArgAction, ArgGroup, Args, Command, CommandFactory, ValueEnum, e
 use serde_json::{Value, json};
 
 use crate::{
-    Error, OutputStats, build_completion_record,
+    Error,
     cli::Cli,
-    diagnostics::{DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT},
+    diagnostics::{DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT, build_completion_record},
     input::JsonInputKind,
+    output::{OutputStats, write_stdout},
     runtime::{DISCOVERY_TIMEOUT, run_discovery},
-    write_stdout,
 };
 
 const MAX_INDEX_BYTES: usize = 2 * 1024;
@@ -580,7 +580,21 @@ pub(crate) fn run_help_or_version(
     diagnostic_format: DiagnosticFormat,
 ) -> ExitCode {
     run_discovery(diagnostic_format, move || {
-        crate::write_help_or_version(error)
+        let output = error.to_string();
+        write_stdout(output.as_bytes())?;
+        Ok(build_completion_record(
+            if error.kind() == ErrorKind::DisplayHelp {
+                "help"
+            } else {
+                "version"
+            },
+            None,
+            OutputStats {
+                bytes_written: output.len() as u64,
+                ..Default::default()
+            },
+            None,
+        ))
     })
 }
 

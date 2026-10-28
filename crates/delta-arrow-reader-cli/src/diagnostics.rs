@@ -34,9 +34,11 @@ use tracing_subscriber::{
     prelude::*,
 };
 
+mod completion;
 mod error;
 mod fallback;
 
+pub(crate) use completion::{build_completion_record, build_json_read_completion};
 pub(crate) use error::{
     ArgumentSnafu, ArtifactIoSnafu, ConfigurationSnafu, Error, InputIoSnafu, InputValidationSnafu,
     OutputSnafu, QuerySnafu, ReaderSnafu, RuntimeSnafu, StorageAuthorizationSnafu,
@@ -148,7 +150,7 @@ impl DiagnosticFormat {
                     // POSIX guarantees at least 512 bytes for an atomic pipe write.
                     let end = (bytes_written + 512).min(line.len());
                     let chunk = &line.as_bytes()[bytes_written..end];
-                    if crate::output_capacity::can_write(&io::stderr(), chunk.len())? {
+                    if crate::output::capacity::can_write(&io::stderr(), chunk.len())? {
                         // A partial record must not be followed by a second terminal record.
                         *started = true;
                         io::stderr().lock().write_all(chunk)?;

@@ -52,7 +52,7 @@ struct FallbackStderrWriter(File);
 impl Write for FallbackStderrWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let bytes = &bytes[..bytes.len().min(512)];
-        if !crate::output_capacity::can_write(&io::stderr(), bytes.len())? {
+        if !crate::output::capacity::can_write(&io::stderr(), bytes.len())? {
             return Err(io::ErrorKind::WouldBlock.into());
         }
         self.0.write(bytes)

@@ -11,7 +11,7 @@ pub(super) async fn wait_for_disconnect() -> io::Error {
         let stdout = io::stdout();
         loop {
             // A full pipe is still connected; only errors stop the command here.
-            if let Err(error) = crate::output_capacity::can_write(&stdout, 1) {
+            if let Err(error) = crate::output::capacity::can_write(&stdout, 1) {
                 return error;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
