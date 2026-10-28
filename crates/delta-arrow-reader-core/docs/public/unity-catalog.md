@@ -107,7 +107,7 @@ dar scan "$table" --databricks-profile "$profile" --table-version "$version" \
 This saves at most ten values of the selected column as a binary Arrow IPC
 stream. Row order is unspecified. Choose an unused output name, then
 [read the saved result](cli-automation.md#read-a-saved-result) with an Arrow IPC
-stream reader. Add `--manifest` only when provenance or replay is needed.
+stream reader.
 A limited scan covers the requested prefix, not the whole table.
 
 To select columns or filter rows, use the ordinary [scan options](cli.md#scan-rows)

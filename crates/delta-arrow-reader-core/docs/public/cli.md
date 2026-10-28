@@ -55,9 +55,11 @@ command-line arguments, starting with the installed executable's name.
 | --- | --- | --- |
 | `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
 | `dar capabilities --command query` | `command_guide` | A usable example, essential options and limits, output format, and related lookups. |
-| `dar capabilities --authorization s3` | `authorization_guide` | Canonical credential keys and necessary access rules for one service. |
+| `dar capabilities --authorization s3` | `authorization_guide` | Credential source choices and access rules for one service. |
 | `dar capabilities --authorization s3 --detail env-file` | `authorization_detail` | Accepted env-file variables for one storage service. |
 | `dar capabilities --authorization s3 --detail env-file-grammar` | `authorization_detail` | Shared env-file syntax and limits. |
+| `dar capabilities --authorization s3 --detail aws-web-identity` | `authorization_detail` | Configuration for the selected credential source. |
+| `dar capabilities --authorization s3 --detail connection` | `authorization_detail` | Common noncredential connection settings. |
 | `dar capabilities --schema NAME` | `schema_guide` | One example, format notes, file size limit, and available fields or types. |
 | `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
 | `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
@@ -113,16 +115,17 @@ names in `authorization.guides`; the storage-options guide lists
 `authorization_guides`. Each authorization response identifies its guide in
 `name`. For example, use `dar capabilities --authorization azure-blob`
 for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
-The default guide lists canonical JSON credential keys. Its `full_command`
-supplies alternate spellings and complete service metadata when needed.
-For AWS and Azure identity providers, `--full` includes JSON reference examples,
-environment variable names, precedence, and renewal rules in `provider_configuration`.
+The default guide lists sources and the commands for their details. Select a
+source with `--detail`, such as `json`, `env`, or `aws-web-identity`, for its
+configuration. Provider details include JSON reference examples, environment
+names, precedence, and renewal rules. Use `--detail connection` for common
+connection settings. `full_command` supplies alternate spellings and complete
+service metadata when needed.
 These responses contain no credential values and do not check the caller's access.
 
-For a provisioned credential env file, a read command's guide gives the
-`--env-file PATH` arguments and conflicts in `authorization.env_file`. Pass
-the path directly; reading or expanding its values is unnecessary. To prepare
-or correct the contents, follow the service guide's `env_file_details_command`.
+For a provisioned credential env file, pass `--env-file PATH` directly;
+reading or expanding its values is unnecessary. For its arguments, conflicts,
+or contents, follow the service guide's `env_file_details_command`.
 This selects `--detail env-file`, with the service's accepted variable names
 and credential combinations. Its `grammar_command` selects
 `--detail env-file-grammar` for syntax and limits. These two details apply to
@@ -138,15 +141,17 @@ setting's default and bounds. `--schema predicate --detail timestamp_us` gives
 the timestamp unit, integer encoding, and required timezone field. Selected
 details retain the units and constraints needed for that field or type.
 
-These guides describe how to use a format. Recursive predicate references lead
+These guides describe how to use a format. Output field details retain types,
+units, ranges, and null meanings; full schemas include validation expressions.
+Recursive predicate references lead
 to another operator or scalar choice through `detail_command`. Use a guide's
 `full_command` when a JSON Schema validator or a metadata consumer needs the
 complete definition.
 
 `--schema completion` explains how to verify a terminal success record.
 Its v2 example applies to JSON query stdout: compare snapshots and counts with
-stdout, which carries sample/completion state. File output uses v3; optional
-`--manifest` records result counts, snapshots, and completion state in a sidecar.
+stdout, which carries sample/completion state. File output uses v3 and reports
+the receipt's byte count. Read JSON result counts and snapshots from the saved file.
 Use `--detail FIELD` for a field's type and meaning, including fields used in
 v1 scan and Arrow receipts. `--schema rows --detail has_more` explains the three
 preview stopping states without repeating conditional validation blocks;
@@ -735,11 +740,12 @@ on Unix; on Windows use a destination directory with a private inherited ACL.
 Inspect only the fields needed for the next read or replay step:
 
 ```sh
-dar capabilities --command query --detail artifacts
 dar capabilities --schema result-manifest --detail result
 dar capabilities --schema result-manifest --detail replay.inputs
-dar capabilities --schema result-manifest --full > manifest-schema.json
 ```
+
+For a JSON Schema validator, save the full definition with
+`dar capabilities --schema result-manifest --full > manifest-schema.json`.
 
 <span id="verify-a-json-result"></span>
 

@@ -45,7 +45,7 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an example and available fields or types for one JSON format.
     #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
     schema: Option<DiscoverySchema>,
-    /// Select runtime/artifacts (or query resources) from --command, a field/type from --schema, or env-file/env-file-grammar from --authorization.
+    /// Select a command topic, schema field/type, or authorization source/configuration from its guide.
     #[arg(
         long,
         value_name = "NAME",
@@ -130,7 +130,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "example": [executable, "--diagnostics=json", "scan", "./table", "--limit", "1", "--deadline-ms", "30000"],
             "stdout": "arrow_ipc_stream",
             "notes": [
-                "Use --output PATH to save a complete result and return a JSON receipt. Add --manifest for provenance and replay. Otherwise redirect Arrow stdout to a file or pipe.",
+                "Use --output PATH to save a complete result and return a JSON receipt. Otherwise redirect Arrow stdout to a file or pipe.",
                 "--limit selects a sample. Files default to 1000000 rows, 1 GiB and 300000 ms; --max-rows/--max-output-bytes are failure ceilings. Legacy stdout has no byte ceiling or default deadline.",
             ],
         }),
@@ -260,17 +260,6 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "guides": authorization_guides,
             "details_command": [executable, "capabilities", "--authorization", "NAME"],
         });
-        let mut conflicts = vec!["--auth-source", "--databricks-profile"];
-        if matches!(name, "query" | "explain") {
-            conflicts.push("--tables-file");
-        }
-        if name != "explain" {
-            guide["authorization"]["env_file"] = json!({
-                "arguments": ["--env-file", "PATH"],
-                "conflicts_with": conflicts,
-                "usage": "For a direct cloud TABLE, pass a provisioned credential file without reading or expanding its values. Selected-file failures never fall back to another identity.",
-            });
-        }
     }
     let mut output_schemas = vec![DiscoverySchema::Diagnostic, DiscoverySchema::Completion];
     if name == "inspect" {
@@ -281,10 +270,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         output_schemas.push(DiscoverySchema::QueryPlan);
     }
     if matches!(name, "scan" | "query") {
-        output_schemas.extend([
-            DiscoverySchema::ResultArtifact,
-            DiscoverySchema::ResultManifest,
-        ]);
+        output_schemas.push(DiscoverySchema::ResultArtifact);
         guide["artifact_details_command"] = json!([
             executable,
             "capabilities",
@@ -324,14 +310,19 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
         return Ok(json!({
             "format_version": 1, "kind": "command_detail", "command": name, "detail": "artifacts",
             "option": "--output PATH",
-            "authorization": "Local: none. UC: Databricks profile. Remote: --auth-source or --env-file; a storage-options file alone selects json. Each remote tables-file binding needs authorization.",
+            "authorization": if name == "query" {
+                "Local: none. UC: Databricks profile. Remote: --auth-source or --env-file; a storage-options file alone selects json. Each remote tables-file binding needs authorization."
+            } else {
+                "Local: none. UC: Databricks profile. Remote: --auth-source or --env-file; a storage-options file alone selects json."
+            },
             "publication": "Publishes one complete file at PATH; never overwrites it. Require exit 0. A failure after publication may leave a complete result; preserve it and choose an unused path if retrying.",
-            "receipt": "Stdout: result_artifact v2 with the absolute result path, at most 8192 bytes. --diagnostics=json: completion v3 with command/output_bytes (receipt bytes).",
-            "read_result": "Read the file using --format (default arrow), regardless of its extension. JSON uses schema.fields to decode columns. Read needed values locally and print only task results; keep complete files for reuse.",
-            "manifest": "Optional --manifest saves PATH.manifest.json after PATH and returns the v1 result/manifest receipt. Neither path is overwritten. This pair requires matching result.path and completion=complete; publication is not a two-file transaction.",
-            "replay": "With --manifest: reuse input files with replay.options in replay.working_directory and a new --output. Pin every alias from bindings. With --tables-file, copy it beside the original and set each table_version. Keep authorization/limits. SQL order or volatile values may vary.",
+            "receipt": "Default stdout: result_artifact v2 with the absolute result path, at most 8192 bytes. --diagnostics=json: completion v3 with command/output_bytes (receipt bytes).",
+            "read_result": if name == "query" {
+                "Read the file using --format (default arrow), regardless of its extension. JSON uses schema.fields to decode columns. Read needed values locally and print only task results; keep complete files for reuse."
+            } else {
+                "Open the file with an Arrow IPC stream reader, regardless of its extension. Read needed values locally and print only task results; keep the complete file for reuse."
+            },
             "storage": "Temporary files: owner-only on Unix; Windows needs a private inherited directory ACL. Crashes/uninterruptible IO may leave temps; no power-loss durability guarantee.",
-            "manifest_schema": [crate::command_name(), "capabilities", "--schema", "result-manifest"],
         }));
     }
     if name == "query" && detail == "resources" {
@@ -350,9 +341,14 @@ fn build_command_detail(name: &str, detail: &str) -> Result<Value, Error> {
             correction: Some(crate::InputCorrection {
                 argument: "--detail".into(),
                 field_path: None,
-                expected: "runtime, artifacts for scan/query, or resources for query".into(),
+                expected: match name {
+                    "query" => "runtime, artifacts, or resources",
+                    "scan" => "runtime or artifacts",
+                    _ => "runtime",
+                }
+                .into(),
                 supplied: None,
-                hint: "Use --detail runtime for deadlines and cancellation, or --command query --detail resources for memory and spill.",
+                hint: "Use --detail with a listed value for this command.",
             }),
         });
     }
@@ -658,7 +654,7 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<OutputStats, Er
             )
         } else if let Some(detail) = options.detail.as_deref() {
             (
-                env_file_guides::build_env_file_guide(service, detail)?,
+                service.build_authorization_detail(detail)?,
                 MAX_AUTHORIZATION_GUIDE_BYTES,
             )
         } else {
@@ -763,36 +759,7 @@ mod tests {
             ] {
                 assert!(guide.get(omitted).is_none(), "{omitted}");
             }
-            if let Some(conflicts) = guide["authorization"]["env_file"]["conflicts_with"].as_array()
-            {
-                let mut args = vec![
-                    "dar",
-                    command.get_name(),
-                    "s3://bucket/table",
-                    "--env-file",
-                    "credentials.env",
-                ];
-                if matches!(command.get_name(), "query" | "explain") {
-                    args.extend(["--sql-file", "query.sql"]);
-                }
-                assert!(Cli::try_parse_from(&args).is_ok());
-                for conflict in conflicts {
-                    let mut conflicting_args = args.clone();
-                    let option = conflict.as_str().unwrap();
-                    conflicting_args.extend([
-                        option,
-                        if option == "--auth-source" {
-                            "env"
-                        } else {
-                            "reference"
-                        },
-                    ]);
-                    assert_eq!(
-                        Cli::try_parse_from(conflicting_args).err().unwrap().kind(),
-                        ErrorKind::ArgumentConflict
-                    );
-                }
-            }
+            assert!(guide["authorization"].get("env_file").is_none());
         }
         let guide = build_command_guide("query").unwrap();
         assert_eq!(guide["resource_defaults_format"], "json");
@@ -905,6 +872,56 @@ mod tests {
         assert!(build_command_detail("scan", "resources").is_err());
         let resources = build_command_detail("query", "resources").unwrap();
         assert!(resources.to_string().len() < MAX_COMMAND_DETAIL_BYTES);
+    }
+
+    #[test]
+    fn command_details_cover_only_the_selected_operation() {
+        for name in ["scan", "query"] {
+            let guide = build_command_guide(name).unwrap();
+            assert!(
+                !guide["output_schemas"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("result-manifest"))
+            );
+            let detail = build_command_detail(name, "artifacts").unwrap();
+            for deferred in ["manifest", "manifest_schema", "replay"] {
+                assert!(detail.get(deferred).is_none());
+            }
+            assert!(
+                detail["publication"]
+                    .as_str()
+                    .unwrap()
+                    .contains("never overwrites")
+            );
+            if name == "scan" {
+                let text = detail.to_string();
+                for query_only in ["--format", "--tables-file", "schema.fields", "SQL"] {
+                    assert!(!text.contains(query_only), "{query_only}");
+                }
+                assert!(
+                    detail["read_result"]
+                        .as_str()
+                        .unwrap()
+                        .contains("Arrow IPC stream reader")
+                );
+            }
+        }
+        for (command, expected) in [
+            ("inspect", "runtime"),
+            ("scan", "runtime or artifacts"),
+            ("query", "runtime, artifacts, or resources"),
+        ] {
+            let Error::Argument {
+                correction: Some(correction),
+                ..
+            } = build_command_detail(command, "unknown").unwrap_err()
+            else {
+                panic!("expected a detail correction")
+            };
+            assert_eq!(correction.expected, expected);
+            assert!(!correction.hint.contains("--command query"));
+        }
     }
 
     #[test]

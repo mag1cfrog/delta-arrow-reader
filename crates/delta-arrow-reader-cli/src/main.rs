@@ -109,6 +109,8 @@ enum Command {
         #[arg(long, value_name = "PATH")]
         output: Option<PathBuf>,
         /// Also save PATH.manifest.json with the sources and options needed for replay.
+        ///
+        /// Replay details: capabilities --schema result-manifest --detail replay.
         #[arg(long, requires = "output")]
         manifest: bool,
         /// File result row ceiling; defaults to 1000000. Exceeding it fails, unlike --limit.

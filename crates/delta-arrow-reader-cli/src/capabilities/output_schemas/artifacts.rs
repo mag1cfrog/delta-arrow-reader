@@ -23,7 +23,7 @@ pub(in crate::capabilities) fn result_artifact_schema() -> Value {
 
 pub(in crate::capabilities) fn result_manifest_schema() -> Value {
     let integer = unsigned_integer_string_schema();
-    let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, lowercase hexadecimal."});
+    let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, 64 lowercase hexadecimal characters."});
     json!({
         "title": "Result completion manifest", "type": "object",
         "description": "Optional provenance from --output PATH --manifest. Only this mode requires a matching complete manifest; publication is not a two-file transaction.",

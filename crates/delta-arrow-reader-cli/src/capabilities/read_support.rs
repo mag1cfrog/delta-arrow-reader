@@ -10,13 +10,13 @@ use clap::ValueEnum;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{query, unity_catalog};
+use crate::{Error, diagnostics::InputCorrection, query, unity_catalog};
 
 const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
 const S3_AUTHORIZATION_LIMITS: &str =
     "AWS profiles/SSO are unsupported. Stdout without source selectors uses backend defaults.";
-pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. JSON results include bindings; --diagnostics=json reports them for query stdout results or SQL planning/row output failures after snapshots load. Saved Arrow needs --manifest to record bindings. Versions are decimal strings in declaration order. Pin every alias on retry. Snapshots are not a cross-table transaction.";
+pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. JSON results include bindings; --diagnostics=json reports them for query stdout results or SQL planning/row output failures after snapshots load. Versions are decimal strings in declaration order. Pin every alias on retry. Snapshots are not a cross-table transaction.";
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
 
@@ -53,12 +53,14 @@ impl AuthorizationService {
                     "commands": storage["commands"],
                     "source_argument": storage["source_argument"],
                     "sources": storage["sources"][self.name()],
+                    "source_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "SOURCE"],
                     "env_file_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "env-file"],
+                    "storage_connection_details_command": [crate::command_name(), "capabilities", "--authorization", self, "--detail", "connection"],
                     "storage_options_argument": storage["storage_options_argument"],
                     "notes": if matches!(self, Self::S3) {
                         json!([S3_AUTHORIZATION_LIMITS])
                     } else {
-                        storage["backend_notes"][self.name()].clone()
+                        json!(["Stdout without source selectors uses backend defaults."])
                     },
                     "schema_command": [crate::command_name(), "capabilities", "--schema", "storage-options"],
                 })
@@ -92,6 +94,91 @@ impl AuthorizationService {
                 "Use json with a storage-options file path, env with provisioned variables, or --env-file with a credential file path. --output requires an explicit source; a storage-options file alone selects json. env and --env-file reject credentials in storage-options. Explicit sources never fall back to another identity; never put credential values in arguments."
             }
         }
+    }
+
+    pub(super) fn build_authorization_detail(self, detail: &str) -> Result<Value, Error> {
+        if !matches!(self, Self::UnityCatalog) && matches!(detail, "env-file" | "env-file-grammar")
+        {
+            return super::env_file_guides::build_env_file_guide(self, detail);
+        }
+        let capabilities = build_authorization_capabilities();
+        let storage = &capabilities["direct_storage"];
+        let sources = &storage["sources"][self.name()];
+        let is_source = sources
+            .as_array()
+            .is_some_and(|sources| sources.iter().any(|source| source == detail));
+        if matches!(self, Self::UnityCatalog) || (!is_source && detail != "connection") {
+            return Err(Error::Argument {
+                kind: clap::error::ErrorKind::InvalidValue,
+                correction: Some(InputCorrection {
+                    argument: "--detail".into(),
+                    field_path: None,
+                    supplied: None,
+                    expected: if matches!(self, Self::UnityCatalog) {
+                        "no detail selector; omit --detail for the profile guide".into()
+                    } else {
+                        format!(
+                            "a source from {sources}, env-file, env-file-grammar, or connection"
+                        )
+                    },
+                    hint: "Keep the selected service and use its listed detail or omit --detail.",
+                }),
+            });
+        }
+        let mut guide = match detail {
+            "connection" => json!({
+                "argument": "--storage-options-file",
+                "settings": match self {
+                    Self::S3 => json!({
+                        "aws_region": "Bucket region; default us-east-1. JSON overrides environment region settings.",
+                        "aws_endpoint_url": "Optional S3-compatible endpoint URL.",
+                        "aws_virtual_hosted_style_request": "true for virtual-hosted requests; false for path-style requests.",
+                    }),
+                    Self::AzureBlob => json!({
+                        "azure_storage_account_name": "Required if the URL omits the account name.",
+                        "azure_storage_endpoint": "Optional storage endpoint URL.",
+                    }),
+                    Self::Gcs => json!({"google_base_url": "Optional storage endpoint URL."}),
+                    Self::UnityCatalog => unreachable!("handled above"),
+                },
+                "http": {"allow_http": "Allow HTTP requests to table storage; false by default."},
+                "usage": "Common connection settings; all values are JSON strings. Correct or remove unsupported settings, keeping the selected authorization. With --env-file or --auth-source env, keep credentials out of this JSON file.",
+            }),
+            "json" => json!({
+                "arguments": ["--auth-source", "json", "--storage-options-file", "PATH"],
+                "credential_fields": match self {
+                    Self::S3 => json!({"required": ["aws_access_key_id", "aws_secret_access_key"], "optional": ["aws_session_token"]}),
+                    Self::AzureBlob => json!({"one_complete_family": [["azure_storage_account_key"], ["azure_storage_sas_key"], ["azure_storage_token"], ["azure_storage_client_id", "azure_storage_client_secret", "azure_storage_tenant_id"]]}),
+                    Self::Gcs => json!({"required": ["google_application_credentials"], "usage": "Path to a service-account or authorized-user ADC file; relative paths use the options file's directory."}),
+                    Self::UnityCatalog => unreachable!("handled above"),
+                },
+                "usage": "Pass a provisioned file path without reading or expanding credentials into arguments. JSON values are strings. Environment credentials are ignored; failures do not select another identity.",
+            }),
+            "env" => {
+                let mut variables = super::env_file_guides::build_env_file_guide(self, "env-file")?
+                    ["variables"]
+                    .clone();
+                if matches!(self, Self::Gcs) {
+                    variables["notes"] = json!(
+                        "Reference a service-account or authorized-user ADC file. Relative paths use the working directory. No default ADC lookup; tokens renew for the loaded identity."
+                    );
+                }
+                variables["names"] = json!("Only these case-sensitive environment names are read.");
+                json!({
+                    "arguments": ["--auth-source", "env"], "variables": variables,
+                    "usage": "Use provisioned environment credentials without expanding values into arguments. An optional --storage-options-file may contain connection settings only. Failures never fall back to another identity.",
+                })
+            }
+            _ => storage["provider_configuration"][self.name()][detail].clone(),
+        };
+        guide["format_version"] = json!(1);
+        guide["kind"] = json!("authorization_detail");
+        guide["name"] = json!(self);
+        guide["detail"] = json!(detail);
+        if is_source && guide.get("arguments").is_none() {
+            guide["arguments"] = json!(["--auth-source", detail]);
+        }
+        Ok(guide)
     }
 
     pub(super) fn build_full_authorization_guide(self) -> Value {
@@ -410,6 +497,94 @@ mod tests {
     use crate::{Cli, unity_catalog::UnityCatalogTableTarget};
 
     #[test]
+    fn selected_authorization_details_keep_configuration_and_exclude_other_providers() {
+        for service in [
+            AuthorizationService::S3,
+            AuthorizationService::AzureBlob,
+            AuthorizationService::Gcs,
+        ] {
+            let index = service.build_authorization_guide();
+            for source in index["authorization"]["sources"].as_array().unwrap() {
+                let source = source.as_str().unwrap();
+                let detail = service.build_authorization_detail(source).unwrap();
+                assert_eq!(
+                    &detail["arguments"].as_array().unwrap()[..2],
+                    &[json!("--auth-source"), json!(source)]
+                );
+                assert!(detail.to_string().len() < super::super::MAX_AUTHORIZATION_GUIDE_BYTES);
+                if source != "json" && source != "env" {
+                    let full = service.build_full_authorization_guide();
+                    let expected = &full["authorization"]["provider_configuration"][source];
+                    for field in ["json_example", "environment", "rules"] {
+                        assert_eq!(detail[field], expected[field]);
+                        assert!(!detail[field].is_null());
+                    }
+                    let providers = full["authorization"]["provider_configuration"]
+                        .as_object()
+                        .unwrap();
+                    for other in providers.keys().filter(|name| name.as_str() != source) {
+                        assert!(!detail.to_string().contains(other));
+                    }
+                }
+            }
+            let connection = service.build_authorization_detail("connection").unwrap();
+            assert!(
+                connection["usage"]
+                    .as_str()
+                    .unwrap()
+                    .contains("JSON strings")
+            );
+            for key in connection["settings"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .chain(connection["http"].as_object().unwrap().keys())
+            {
+                match service {
+                    AuthorizationService::S3 => {
+                        key.parse::<AmazonS3ConfigKey>().unwrap();
+                    }
+                    AuthorizationService::AzureBlob => {
+                        key.parse::<AzureConfigKey>().unwrap();
+                    }
+                    AuthorizationService::Gcs => {
+                        key.parse::<GoogleConfigKey>().unwrap();
+                    }
+                    AuthorizationService::UnityCatalog => unreachable!(),
+                }
+            }
+        }
+        assert!(
+            AuthorizationService::S3
+                .build_authorization_detail("azure-managed-identity")
+                .is_err()
+        );
+        assert!(
+            AuthorizationService::UnityCatalog
+                .build_authorization_detail("env-file")
+                .is_err()
+        );
+        let file = AuthorizationService::Gcs
+            .build_authorization_detail("env-file")
+            .unwrap();
+        let env = AuthorizationService::Gcs
+            .build_authorization_detail("env")
+            .unwrap();
+        assert!(
+            file["variables"]["notes"]
+                .as_str()
+                .unwrap()
+                .contains("env file's directory")
+        );
+        assert!(
+            env["variables"]["notes"]
+                .as_str()
+                .unwrap()
+                .contains("working directory")
+        );
+    }
+
+    #[test]
     fn full_authorization_examples_configure_each_advertised_identity_provider() {
         use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
 
@@ -520,10 +695,11 @@ mod tests {
                         .contains("Workload sources use provisioned")
                 );
             } else {
-                assert_eq!(
-                    selected["notes"],
-                    build_authorization_capabilities()["direct_storage"]["backend_notes"]
-                        [service.name()]
+                assert!(!selected["notes"].to_string().contains("CLIENT_SECRET"));
+                assert!(
+                    !selected["notes"]
+                        .to_string()
+                        .contains("APPLICATION_CREDENTIALS")
                 );
             }
             assert_eq!(

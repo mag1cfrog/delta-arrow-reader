@@ -46,7 +46,7 @@ are documented separately. Writes are outside this contract.
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
 | Join | `dar query --tables-file PATH --sql-file PATH`; bind each table explicitly. |
 | Plan | `dar explain` with the same query inputs; report bounded structured plan information without executing rows. |
-| Save | `scan` or `query` with `--output PATH`; save one result file. Add `--manifest` for provenance and replay. |
+| Save | `scan` or `query` with `--output PATH`; save one result file. |
 
 The wheel executable is `delta-arrow-reader`, with the same arguments.
 Capabilities reports only installed commands, options, schemas, auth mechanisms,

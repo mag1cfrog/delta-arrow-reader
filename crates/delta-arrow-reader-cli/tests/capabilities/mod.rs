@@ -504,13 +504,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 assert_eq!(
                     guide["output_schemas"],
                     if name == "query" {
-                        serde_json::json!([
-                            "diagnostic",
-                            "completion",
-                            "rows",
-                            "result-artifact",
-                            "result-manifest"
-                        ])
+                        serde_json::json!(["diagnostic", "completion", "rows", "result-artifact"])
                     } else {
                         serde_json::json!(["diagnostic", "completion", "rows"])
                     }
@@ -558,6 +552,24 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 assert_eq!(expanded["kind"], "authorization_capabilities");
                 assert_eq!(&expanded["name"], guide_name);
                 if guide_name != "unity-catalog" {
+                    let connection = run_advertised(
+                        &authorization["authorization"]["storage_connection_details_command"],
+                    )?;
+                    assert_eq!(connection["detail"], "connection");
+                    assert_eq!(&connection["name"], guide_name);
+                    for source in authorization["authorization"]["sources"]
+                        .as_array()
+                        .unwrap()
+                    {
+                        let mut invocation =
+                            authorization["authorization"]["source_details_command"].clone();
+                        *invocation.as_array_mut().unwrap().last_mut().unwrap() = source.clone();
+                        let detail = run_advertised(&invocation)?;
+                        assert_eq!(&detail["detail"], source);
+                        assert_eq!(&detail["name"], guide_name);
+                        assert!(detail.get("connection_details_command").is_none());
+                        assert!(detail.get("storage_connection_details_command").is_none());
+                    }
                     let variables = run_advertised(
                         &authorization["authorization"]["env_file_details_command"],
                     )?;

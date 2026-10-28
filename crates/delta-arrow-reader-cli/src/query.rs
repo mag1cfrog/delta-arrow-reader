@@ -115,6 +115,8 @@ pub(crate) struct QueryArgs {
     #[serde(skip)]
     pub(crate) output: Option<PathBuf>,
     /// Also save PATH.manifest.json with the sources and options needed for replay.
+    ///
+    /// Replay details: capabilities --schema result-manifest --detail replay.
     #[arg(long, requires = "output")]
     #[serde(skip)]
     pub(crate) manifest: bool,

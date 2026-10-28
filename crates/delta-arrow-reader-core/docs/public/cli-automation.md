@@ -52,8 +52,6 @@ file. The file can be copied or moved on its own. The installed guide is
 After a failed invocation, a complete file may already exist at the output
 path. Preserve it. If completion is uncertain, correct the failure and rerun
 with a new output name and the same inputs, versions and authorization.
-For explicitly requested provenance, follow the
-[manifest checks below](#save-provenance-for-replay).
 
 ## Check a query before running it
 
@@ -95,8 +93,7 @@ If a JSON type is unfamiliar, request its focused type guide. Do not run the que
 help text.
 
 If execution must be repeated, use the retained SQL, inputs, versions and
-options with a new output name. To have the CLI record these references during
-export, use the optional manifest described below.
+options with a new output name.
 
 ## Discover only what the task lacks
 
