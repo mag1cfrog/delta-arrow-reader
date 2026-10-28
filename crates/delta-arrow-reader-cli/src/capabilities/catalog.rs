@@ -3,7 +3,9 @@
 use clap::{Arg, ArgAction, Command, CommandFactory, ValueEnum, error::ErrorKind};
 use serde_json::{Value, json};
 
-use super::{DiscoverySchema, MAX_FULL_RESPONSE_BYTES, discovery_limits, read_support};
+use super::{
+    DiscoverySchema, MAX_FULL_RESPONSE_BYTES, authorization, discovery_limits, read_support,
+};
 use crate::{cli::Cli, diagnostics::Error, input::JsonInputKind};
 
 pub(super) fn parse_command_name(name: &str) -> Result<String, &'static str> {
@@ -87,7 +89,7 @@ pub(super) fn build_capability_details(selected_command: Option<&str>) -> Result
             json!({"name": DiscoverySchema::ResultManifest, "stream": "file"}),
         ]);
     }
-    let mut authorization = read_support::build_authorization_capabilities();
+    let mut authorization = authorization::build_authorization_capabilities();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
         "capabilities": {"format": "json", "format_version": 1},

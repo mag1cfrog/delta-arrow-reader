@@ -7,7 +7,7 @@
 use clap::error::ErrorKind;
 use serde_json::{Value, json};
 
-use super::read_support::AuthorizationService;
+use super::authorization::AuthorizationService;
 use crate::{
     diagnostics::{Error, InputCorrection},
     input,

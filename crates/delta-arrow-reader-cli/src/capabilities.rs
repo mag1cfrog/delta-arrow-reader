@@ -7,6 +7,7 @@
 //! or a validation schema. All views work without opening a table or resolving
 //! authorization.
 
+mod authorization;
 mod catalog;
 mod command_guides;
 mod env_file_guides;
@@ -54,7 +55,7 @@ pub(crate) struct CapabilitiesArgs {
     detail: Option<String>,
     /// Show an authorization guide for a storage or catalog service.
     #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
-    authorization: Option<read_support::AuthorizationService>,
+    authorization: Option<authorization::AuthorizationService>,
     /// Export a full JSON Schema for validators, or command/authorization metadata for tooling.
     #[arg(long, requires = "full_definition_target", conflicts_with = "detail")]
     full: bool,
