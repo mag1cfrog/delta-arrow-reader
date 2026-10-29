@@ -206,19 +206,23 @@ impl ScanFixture<'_> {
     fn check_thread_start_failures(&self) -> Result<()> {
         let table = self.directory.path().join("repeated-table");
         create_repeated_table(&self.corpus.join("partitioned/table"), &table, 32)?;
-        let mut saw_success = false;
         let mut saw_failure = false;
-        for limit in 0..8 {
-            eprintln!("  thread_limit={limit}");
-            let output = output_on_single_cpu(
-                self.command()
-                    .arg(&table)
-                    .env("LD_PRELOAD", self.fault_library)
-                    .env("RUST_BACKTRACE", "full")
-                    .env("DAR_TEST_THREAD_LIMIT", limit.to_string()),
-                Duration::from_secs(15),
-            )?;
-            if output.status.code() == Some(1) {
+        // Thread reuse depends on scheduling; verify success without a thread limit.
+        for limit in (0..8).map(Some).chain([None]) {
+            let mut command = self.command();
+            command
+                .arg(&table)
+                .env("LD_PRELOAD", self.fault_library)
+                .env("RUST_BACKTRACE", "full")
+                .env_remove("DAR_TEST_THREAD_LIMIT");
+            if let Some(limit) = limit {
+                eprintln!("  thread_limit={limit}");
+                command.env("DAR_TEST_THREAD_LIMIT", limit.to_string());
+            } else {
+                eprintln!("  thread_limit=unlimited");
+            }
+            let output = output_on_single_cpu(&mut command, Duration::from_secs(15))?;
+            if limit.is_some() && output.status.code() == Some(1) {
                 check_diagnostic(&output.stderr, "execution", "runtime_initialization")?;
                 saw_failure = true;
             } else {
@@ -232,13 +236,12 @@ impl ScanFixture<'_> {
                         ),
                     }
                 );
-                saw_success = true;
             }
         }
         ensure!(
-            saw_success && saw_failure,
+            saw_failure,
             InvalidInputSnafu {
-                message: "thread creation fault checks must exercise both successful and failed scans",
+                message: "thread creation fault injection did not reject any scan",
             }
         );
         Ok(())

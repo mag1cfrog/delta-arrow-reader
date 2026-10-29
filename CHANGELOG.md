@@ -2,6 +2,72 @@
 
 ## Unreleased
 
+## [0.8.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.8.0) - 2026-10-28
+
+### Command line
+
+- Run read-only SQL with `dar query`, including aggregates and joins across named
+  Delta snapshots. Queries execute locally through DataFusion.
+  [SQL workflows](https://mag1cfrog.github.io/delta-arrow-reader/cli-workflows/).
+- Preview rows as typed JSON with `dar preview`. Use `inspect --view summary`
+  to find a snapshot version or selected column types without printing the full schema.
+  [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
+- Save complete Arrow or typed JSON results with `--output`. Add `--manifest`
+  when you need to record sources and options for replay.
+  [Save and read results](https://mag1cfrog.github.io/delta-arrow-reader/cli-results/).
+- Read `uc://catalog.schema.table` through an existing Databricks CLI profile,
+  with renewable storage credentials. Unity Catalog tables can participate in
+  local SQL queries and joins with direct-storage tables.
+  [Unity Catalog guide](https://mag1cfrog.github.io/delta-arrow-reader/unity-catalog/).
+- Select cloud credential sources explicitly, including provisioned JSON and
+  env files.
+  [Connect to storage](https://mag1cfrog.github.io/delta-arrow-reader/cli-storage/).
+- Discover installed commands, input/output schemas, and authorization options
+  offline with `dar capabilities`. Request individual fields or types as needed.
+  [Discovery reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/cli-discovery/).
+- Inspect logical or physical query plans with `dar explain`. Control command
+  deadlines, SQL memory, and optional disk spilling with explicit budgets.
+  [Query and plan options](https://mag1cfrog.github.io/delta-arrow-reader/cli/#query-a-snapshot).
+
+### Python and Rust
+
+- Forward Core tracing to Python's `delta_arrow_reader` logger. Reader exceptions
+  now expose `reason` and `source_kind` alongside `phase` and `code`.
+  [Python logging](https://mag1cfrog.github.io/delta-arrow-reader/python-api/logging/).
+- Supply renewable S3, Azure, or GCS credentials in Rust with
+  `DeltaTableBuilder::with_credential_provider`.
+  [Credential providers](https://mag1cfrog.github.io/delta-arrow-reader/reference/storage-credentials/).
+- Record Core operation outcomes and retain error causes across worker tasks,
+  streaming reads, and DataFusion queries.
+  [Tracing reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/tracing/).
+
+### Upgrading from 0.7
+
+- CLI stderr uses text diagnostics by default. Scripts that parse stderr as JSON
+  must add `--diagnostics=json` and handle versioned records. Failures use
+  `format_version: 2` and `kind: "diagnostic"`, with no `message` field; use `code`
+  and `reason` for classification. Successful commands also emit completion
+  records, so stderr being nonempty does not mean failure.
+  [Diagnostic and completion formats](https://mag1cfrog.github.io/delta-arrow-reader/reference/cli-diagnostics/).
+- Handled Unix signals now return exit status 130 for SIGINT or 143 for SIGTERM.
+  Supervisors that only check native signal termination, such as negative Python
+  `returncode` values, must also recognize these statuses.
+  [Cancellation](https://mag1cfrog.github.io/delta-arrow-reader/reference/cli-diagnostics/#threads-cancellation-and-signals).
+- Applications with configured Python logging can now receive
+  `delta_arrow_reader` records. Set that logger's level and handlers to control
+  which messages reach your existing log output.
+  [Logging configuration](https://mag1cfrog.github.io/delta-arrow-reader/python-api/logging/).
+- `DeltaTableBuilder` no longer implements `UnwindSafe` or `RefUnwindSafe`,
+  because it can hold application-supplied credential providers. If a
+  `catch_unwind` closure captures a builder, move its construction inside the
+  closure where possible. Captured custom providers also need an unwind-safety review.
+- Rust code matching `DeltaReaderError` variants should handle
+  `PredicateTypeMismatch` for scalar/column type mismatches and
+  `ExecutionTaskFailed` for worker failures. Their `unsupported_predicate` and
+  `cancelled` codes are retained; use `code()` when a category-level handler is enough.
+
+[All changes since 0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.8.0).
+
 ## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-15
 
 ### Python
