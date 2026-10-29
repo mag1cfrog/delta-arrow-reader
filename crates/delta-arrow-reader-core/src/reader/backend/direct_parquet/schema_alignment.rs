@@ -182,7 +182,10 @@ pub(super) fn build_schema_alignment(
                         || projected_roots
                             .get(*stream_index)
                             .and_then(|root| parquet_arrow_schema.fields().get(*root))
-                            .is_none_or(|file_field| file_field.name() != target_field.name())
+                            .is_none_or(|file_field| {
+                                file_field.name() != target_field.name()
+                                    || file_field.is_nullable() != target_field.is_nullable()
+                            })
                 }
                 TargetColumnPlan::Null => true,
             },
@@ -843,12 +846,110 @@ mod tests {
         record_batch::RecordBatch,
     };
     use parquet::arrow::{
-        ArrowWriter, PARQUET_FIELD_ID_META_KEY, ProjectionMask,
+        ArrowSchemaConverter, ArrowWriter, PARQUET_FIELD_ID_META_KEY, ProjectionMask,
         arrow_reader::ParquetRecordBatchReaderBuilder,
     };
 
     use super::super::tests::{TestDir, metrics, parquet_bytes_for, reader, task};
     use crate::DeltaScanExecutionOptions;
+
+    #[tokio::test]
+    async fn required_parquet_strings_satisfy_nullable_target_fields()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for file_nullable in [false, true] {
+            let root = TestDir::new("required-string-nullable-target")?;
+            let values = Arc::new(StringArray::from(vec!["alpha", "beta", "alpha"]));
+            let file_schema = Arc::new(Schema::new(vec![Field::new(
+                "value",
+                DataType::Utf8,
+                file_nullable,
+            )]));
+            let bytes = parquet_bytes_for(file_schema, vec![values.clone()])?;
+            fs::write(root.path().join("part.parquet"), &bytes)?;
+            let target_schema =
+                Arc::new(Schema::new(vec![Field::new("value", DataType::Utf8, true)]));
+            for threshold in [None, Some(usize::MAX)] {
+                let reader = reader(
+                    &root,
+                    DeltaScanExecutionOptions::new()
+                        .with_parquet_full_file_read_threshold_bytes(threshold)?,
+                    metrics(),
+                )?;
+                let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
+                let mut stream = reader
+                    .open_physical_parquet_stream(&task, &target_schema, Default::default())
+                    .await?;
+                let batch = stream.next_batch().await?.ok_or("expected one batch")?;
+                assert_eq!(batch.schema(), target_schema);
+                assert_eq!(batch.column(0).to_data(), values.to_data());
+                assert!(stream.next_batch().await?.is_none());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn nullability_alignment_preserves_values_metadata_and_ignores_virtual_columns()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let file_schema = Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Utf8,
+            false,
+        )]));
+        let parquet = ArrowSchemaConverter::new().convert(file_schema.as_ref())?;
+        let target = Arc::new(Schema::new_with_metadata(
+            vec![
+                Field::new("value", DataType::Utf8, true).with_metadata(HashMap::from([(
+                    "purpose".to_owned(),
+                    "target-field".to_owned(),
+                )])),
+            ],
+            HashMap::from([("source".to_owned(), "target-schema".to_owned())]),
+        ));
+        let alignment = super::build_schema_alignment(&parquet, &file_schema, target.clone())?;
+        assert!(alignment.needs_batch_reshape);
+        let values: ArrayRef = Arc::new(StringArray::from(vec!["alpha", "beta", "alpha"]));
+        let input = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                file_schema.field(0).clone(),
+                Field::new("row_index", DataType::Int64, false),
+            ])),
+            vec![values.clone(), Arc::new(Int64Array::from(vec![0, 1, 2]))],
+        )?;
+        let output = alignment.reshape_batch_to_target_schema(input)?;
+        assert_eq!(output.schema(), target);
+        assert_eq!(output.num_rows(), 3);
+        assert_eq!(output.num_columns(), 1);
+        assert!(Arc::ptr_eq(output.column(0), &values));
+        Ok(())
+    }
+
+    #[test]
+    fn required_target_fields_reject_null_values() -> Result<(), Box<dyn std::error::Error>> {
+        let nullable_file = Arc::new(Schema::new(vec![Field::new("value", DataType::Utf8, true)]));
+        let parquet = ArrowSchemaConverter::new().convert(nullable_file.as_ref())?;
+        let required = Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Utf8,
+            false,
+        )]));
+        let alignment = super::build_schema_alignment(&parquet, &nullable_file, required.clone())?;
+        assert!(alignment.needs_batch_reshape);
+        let valid = RecordBatch::try_new(
+            nullable_file.clone(),
+            vec![Arc::new(StringArray::from(vec!["alpha", "beta"]))],
+        )?;
+        assert_eq!(
+            alignment.reshape_batch_to_target_schema(valid)?.schema(),
+            required
+        );
+        let invalid = RecordBatch::try_new(
+            nullable_file,
+            vec![Arc::new(StringArray::from(vec![Some("alpha"), None]))],
+        )?;
+        assert!(alignment.reshape_batch_to_target_schema(invalid).is_err());
+        Ok(())
+    }
 
     #[test]
     fn list_element_metadata_reports_invalid_shapes_with_field_path()
