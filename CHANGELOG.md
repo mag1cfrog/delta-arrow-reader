@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.9.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.0...v0.9.1) - 2026-10-29
+
+### Documentation
+
+- require the first available split PyPI release ([#578](https://github.com/mag1cfrog/delta-arrow-reader/pull/578))
+
 ### Fixed
 
 - Package the Python API and CLI wheels with PyPA's standard wheel packager.

@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "delta-arrow-reader"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1366,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "delta-arrow-reader-cli"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "arrow",
  "arrow-schema",
@@ -1398,7 +1398,7 @@ dependencies = [
 
 [[package]]
 name = "delta-arrow-reader-python"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "arrow",
  "datafusion",
