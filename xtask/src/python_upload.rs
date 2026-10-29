@@ -8,7 +8,11 @@ use std::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use crate::{Result, python_wheels::check_wheel_artifacts, run};
+use crate::{
+    Result,
+    python_wheels::{WheelContents, check_wheel_artifacts},
+    run,
+};
 
 #[derive(Deserialize)]
 struct IndexRelease {
@@ -34,7 +38,11 @@ struct FileDigests {
     sha256: String,
 }
 
-fn fetch_published_hashes(index: &str, version: &str) -> Result<BTreeMap<String, String>> {
+fn fetch_published_hashes(
+    index: &str,
+    package: &str,
+    version: &str,
+) -> Result<BTreeMap<String, String>> {
     let host = match index {
         "pypi" => "pypi.org",
         "testpypi" => "test.pypi.org",
@@ -48,7 +56,7 @@ fn fetch_published_hashes(index: &str, version: &str) -> Result<BTreeMap<String,
             encoded_version.push_str(&format!("%{byte:02X}"));
         }
     }
-    let url = format!("https://{host}/pypi/delta-arrow-reader/{encoded_version}/json");
+    let url = format!("https://{host}/pypi/{package}/{encoded_version}/json");
     let response = String::from_utf8(run(
         "curl",
         &[
@@ -91,7 +99,7 @@ fn fetch_published_hashes(index: &str, version: &str) -> Result<BTreeMap<String,
             normalized_name.push(character.to_ascii_lowercase());
         }
     }
-    if normalized_name != "delta-arrow-reader" || release.info.version != version {
+    if normalized_name != package || release.info.version != version {
         return Err("index response does not match the requested package and version".into());
     }
     let mut hashes = BTreeMap::new();
@@ -133,7 +141,15 @@ pub fn stage_missing_wheels(
             .to_owned();
         wheels.insert(filename, path);
     }
-    let published_hashes = fetch_published_hashes(index, version)?;
+    let mut published_hashes = BTreeMap::new();
+    for package in [WheelContents::PythonLibrary, WheelContents::Cli] {
+        let hashes = fetch_published_hashes(index, package.package_name(), version)?;
+        let prefix = format!("{}-{version}-", package.package_name().replace('-', "_"));
+        if hashes.keys().any(|name| !name.starts_with(&prefix)) {
+            return Err("unexpected published file for package".into());
+        }
+        published_hashes.extend(hashes);
+    }
     for (filename, expected_hash) in &published_hashes {
         let path = wheels
             .get(filename)

@@ -1,13 +1,14 @@
 # Publish Python wheels
 
-This guide is for maintainers releasing `delta-arrow-reader` wheels containing
-both the Python API and native CLI. The first combined package is available on
-[PyPI as 0.7.0](https://pypi.org/project/delta-arrow-reader/0.7.0/).
-The first-release checklists and verification records are tracked in
-[#101](https://github.com/mag1cfrog/delta-arrow-reader/issues/101) and
-[#428](https://github.com/mag1cfrog/delta-arrow-reader/issues/428).
-Each new publication still requires successful release checks and maintainer
-authorization.
+This guide covers the two PyPI distributions released together:
+
+- `delta-arrow-reader`: the Python API, with PyArrow as a dependency.
+- `delta-arrow-reader-cli`: the native `delta-arrow-reader` command, with no
+  Python package dependencies.
+
+The split layout requires a new shared version after 0.8.0. Existing combined
+wheels remain unchanged. Each publication requires successful release checks
+and maintainer authorization.
 
 The commands use a Linux or macOS shell and an authenticated GitHub CLI. Replace
 `X.Y.Z` with the exact stable version in the selected commit's root `Cargo.toml`.
@@ -16,8 +17,8 @@ For supported installation targets, see the
 
 ## Configure the publishers
 
-Confirm that the maintainer can use the `delta-arrow-reader` project name on both
-indexes. TestPyPI needs its own account; it has a
+Confirm that the maintainer can use both project names on both indexes.
+TestPyPI needs its own account; it has a
 [separate database from PyPI](https://packaging.python.org/en/latest/guides/using-testpypi/).
 Resolve a name conflict with the maintainer before changing the package name.
 
@@ -33,12 +34,12 @@ maintainer can approve a run they restart. This environment needs no secrets
 or PyPI publisher registration; it approves building and testing both artifact
 sets.
 
-Register a separate GitHub Actions Trusted Publisher on each index. Use these
-values, including the environment field:
+Register a GitHub Actions Trusted Publisher for **each project on each index**.
+Use these values for both projects, including the environment field:
 
 | Publisher field | TestPyPI | PyPI |
 | --- | --- | --- |
-| Project name | `delta-arrow-reader` | `delta-arrow-reader` |
+| Project names | `delta-arrow-reader`, `delta-arrow-reader-cli` | `delta-arrow-reader`, `delta-arrow-reader-cli` |
 | Repository owner | `mag1cfrog` | `mag1cfrog` |
 | Repository name | `delta-arrow-reader` | `delta-arrow-reader` |
 | Workflow filename | `pypi.yml` | `pypi.yml` |
@@ -49,7 +50,9 @@ For an existing project, use its
 For a new project, add a
 [pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
 under the account's Publishing settings. A pending publisher does not reserve
-the project name; the first successful publication creates the project.
+the project name; the first successful publication creates the project. Configure
+the new CLI publisher before releasing the split packages. The existing
+Python project's publisher does not authorize the new project.
 
 The workflow uses OIDC through `pypa/gh-action-pypi-publish`, with `id-token: write`
 only on its two upload jobs. It needs no PyPI password or long-lived API token.
@@ -74,15 +77,15 @@ gh run watch RUN_ID --repo mag1cfrog/delta-arrow-reader --exit-status
 ```
 
 Replace `RUN_ID` with the dispatched run's ID. The default mode, `none`, builds
-and validates all three wheels without running either upload job. Require
+and validates all six wheels without running either upload job. Require
 `Require validated wheels` to pass; individual platform artifacts can exist even
 when the complete build failed. The
 [wheel build guide](contributing.md#build-python-wheels-in-ci) describes the
-platform artifacts and installed checks. Save the passing run URL and source
-commit in #101's checklist. For each platform, record the wheel filename and
+platform artifacts and installed checks. Retain the passing run URL and source
+commit with the release record. For each platform, record the wheel filename and
 SHA256, artifact ID, Python and PyArrow versions, and results for pip, uv tool,
-and uvx. The checks must use the final repaired wheel, including its native CLI
-and SQL session API. Require the installed SQL tests for joins, aggregation,
+and uvx. The checks must use both final wheels, including the CLI without
+PyArrow and the Python SQL session API. Require the installed SQL tests for joins, aggregation,
 Delta/deletion-vector parity, empty/null results and retained reader ownership
 on all three platforms.
 This build-only rehearsal does not authorize PyPI publication.
@@ -125,18 +128,29 @@ import delta_arrow_reader
 assert version("delta-arrow-reader") == delta_arrow_reader.__version__ == sys.argv[1]
 print(delta_arrow_reader.__version__)
 PY
-test "$(delta-arrow-reader --version)" = "delta-arrow-reader $PYTHON_RELEASE_VERSION"
 python -I -m unittest discover \
   -s "$PYTHON_RELEASE_REPO/crates/delta-arrow-reader-python/tests" -k installed
 ```
 
-The installed checks cover package metadata, Python Arrow streams, and the
-native CLI's version, scan results, diagnostics, closed stdout, and process
-termination. Build `xtask` in the checkout before running them, or set
-`DELTA_ARROW_READER_XTASK` to the acceptance tool's absolute path. The process
-checks use the CLI installed in this environment. Record the
-exact version, source commit, workflow URL, TestPyPI version URL, wheel hashes,
-and installation results in #101.
+These checks cover Python package metadata, Arrow streams, and SQL results.
+Test the CLI in a second environment without the Python API or PyArrow. Build
+`xtask` in the checkout first, or set `DELTA_ARROW_READER_XTASK` to the acceptance
+tool's absolute path:
+
+```console
+python3 -m venv "$PYTHON_RELEASE_CHECK/cli"
+. "$PYTHON_RELEASE_CHECK/cli/bin/activate"
+python -m pip --isolated install --no-cache-dir --only-binary=:all: \
+  --index-url https://test.pypi.org/simple/ "delta-arrow-reader-cli==$PYTHON_RELEASE_VERSION"
+python -m pip check
+test "$(delta-arrow-reader --version)" = "delta-arrow-reader $PYTHON_RELEASE_VERSION"
+python -I -m unittest discover \
+  -s "$PYTHON_RELEASE_REPO/crates/delta-arrow-reader-cli/python_tests" -k installed
+```
+
+The CLI checks cover version, scan results, SQL, diagnostics, closed stdout, and
+process termination. Retain the source commit, workflow URL, both TestPyPI
+version URLs, wheel hashes, and installation results with the release record.
 
 ## Publish a stable release
 
@@ -153,10 +167,11 @@ Automatic release PRs require the repository variable
 `RELEASE_PLZ_PR_ENABLED=true`. Review the version, lockfile, and changelog in that
 PR. When ready to validate the release, open its CI run, choose
 `Review deployments`, select `release-checks`, and click `Approve and deploy`.
-This starts the three combined Python/CLI wheel builds and the separate
+This starts the three platform builds for both PyPI packages and the separate
 standalone CLI checks in parallel, without uploading to a package index.
 The required `CI` check waits for successful approval and complete validation of
-both artifact sets. Each wheel must pass the Python API and bundled CLI checks,
+both artifact sets. The Python API and independent CLI wheels must pass their
+installed checks,
 including pip, uv tool, and uvx acceptance. A failed, skipped, or cancelled
 platform cannot produce a validated set. New commits to the PR require a new
 approval and build.
@@ -169,7 +184,7 @@ existing release-plz workflow publishes the core crate and its GitHub release.
 A stable published release starts `pypi.yml`, which verifies the tag and commit
 and retrieves the merged release PR's validated wheel bundle. It requires that
 PR's latest CI run to have succeeded, matches the Git tree to the release tag,
-and verifies the bundle's SHA256 and all three wheels. It then requests the
+and verifies the bundle's SHA256 and all six wheels. It then requests the
 `pypi-release` environment. This path uploads the same final wheel bytes; it does
 not build, repair, repackage, or repeat the installed acceptance suites. Missing,
 expired, or mismatched artifacts stop publication without a fallback build.
@@ -192,10 +207,10 @@ Both paths use the same release PR artifact checks as automatic publication.
 If an upload already started, use the recovery steps below instead of starting
 a new run. After publication, repeat the installation and acceptance checks in a
 fresh environment, changing the reader's index URL to `https://pypi.org/simple/`.
-Record the PyPI version URL and results in #101 before closing its checklist.
+Record both PyPI version URLs and installation results with the release record.
 Also verify the exact public version with uv tool and uvx in separate tool
-environments. Pin the package as `delta-arrow-reader==X.Y.Z` for uv tool, and
-use `uvx --no-build --isolated --from delta-arrow-reader==X.Y.Z delta-arrow-reader --version`
+environments. Pin the package as `delta-arrow-reader-cli==X.Y.Z` for uv tool, and
+use `uvx --no-build --isolated --from delta-arrow-reader-cli==X.Y.Z delta-arrow-reader --version`
 for uvx. Both must expose `delta-arrow-reader`; neither installs the Python API
 into a consumer's project environment. Use the
 [installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python)
@@ -205,8 +220,10 @@ for the commands and record the tested platform and Python version.
 
 The selection command can download and validate a release PR's retained bundle
 without uploading. Build the current tools from a clean checkout of `main`,
-then run that executable from a separate checkout of the tag. This lets an older
-release use repaired selection tools without changing its package source.
+then run that executable from a separate checkout of the tag. This lets a
+release with the six-wheel layout use repaired selection tools without changing
+its package source. For combined releases at 0.8.0 or earlier, use the tools from
+the original tag.
 You need authenticated `gh` access to Actions and pull requests and the release
 tag fetched locally. Set `PYTHON_RELEASE_VERSION` to its exact version:
 
@@ -258,18 +275,19 @@ upload. GitHub keeps the original commit and ref for a rerun and
 [allows reruns for up to 30 days](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 The artifacts must still exist and be unexpired.
 
-The upload job validates all three wheels again and compares the index's
-published filenames and SHA256 hashes with those artifacts. It stages only
+The upload job validates all six wheels again and compares the index's
+published filenames and SHA256 hashes for both projects with those artifacts.
+It stages only
 missing files; if every file already matches, the job succeeds without another
-upload. A wheel without its CLI or dependency notices is rejected before the
-index is contacted. It rejects unexpected or yanked files, hash mismatches,
+upload. Both distributions must contain their required payload and dependency
+notices before either project's index is contacted. It rejects unexpected or
+yanked files, hash mismatches,
 malformed index responses, and network failures. Uploads to the same index and
 version run one at a time, and `skip-existing` stays disabled.
 
 Stop on a hash mismatch or if the original artifacts are unavailable. Corrected
-binaries need a new shared version and tag. This includes adding a CLI to a
-version already published with library-only wheels. Do not overwrite released
-files, move the release tag, or bypass the hash checks.
+binaries need a new shared version and tag. This includes splitting an already
+published combined package. Do not overwrite released files, move the release tag, or bypass the hash checks.
 
 ### Use repaired publishing tools
 
@@ -285,7 +303,10 @@ gh workflow run pypi.yml --repo mag1cfrog/delta-arrow-reader --ref main \
 This uses the existing `vX.Y.Z` tag as the package source. The tag must be an
 ancestor of the selected `main` commit and its Cargo version must match the
 input. The workflow runs repaired tools but selects the original validated
-wheels; it does not rebuild them or move the tag.
+wheels; it does not rebuild them or move the tag. These tools require the
+six-wheel split layout. For a combined release at 0.8.0 or earlier, use the
+original workflow and tools from that tag. Converting its artifacts to the new
+layout requires a new release, not a recovery run.
 
 When `pypi-release` allows only `v*` tags, temporarily add an exact `main` branch
 rule in Settings > Environments > pypi-release. Keep the required reviewer and

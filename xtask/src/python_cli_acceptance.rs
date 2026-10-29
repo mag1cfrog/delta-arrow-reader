@@ -1,8 +1,9 @@
 //! Process checks against the executable installed by a wheel, on every wheel platform.
 
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
-    io::{Read, Seek},
+    io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, mpsc},
@@ -10,8 +11,8 @@ use std::{
     time::Duration,
 };
 
-use arrow_array::{RecordBatch, StringArray};
-use arrow_ipc::reader::FileReader;
+use arrow_array::{Array, Int32Array, RecordBatch, StringArray};
+use arrow_ipc::reader::{FileReader, StreamReader};
 use clap::Args;
 use parquet::arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder};
 use serde_json::{Value, json};
@@ -36,7 +37,7 @@ pub(crate) struct Arguments {
     /// CPython's base install provides the supported Windows MSVC runtime.
     #[arg(long)]
     python_base_prefix: PathBuf,
-    /// New directory for the original CLI streams consumed by the PyArrow test.
+    /// New directory retaining the CLI streams checked against the Spark fixture.
     #[arg(long)]
     output_directory: PathBuf,
 }
@@ -198,9 +199,27 @@ impl Arguments {
                 .map(|field| json!(field.name()))
                 .collect::<Vec<_>>()
         );
-        let rows = expected
-            .map(|batch| batch.map(|batch| batch.num_rows()))
-            .sum::<std::result::Result<usize, _>>()?;
+        let schema = expected.schema();
+        let batches = expected.collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut expected_rows = BTreeMap::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|column| column.as_any().downcast_ref::<Int32Array>())
+                .ok_or("fixture has no int32 id column")?;
+            let labels = batch
+                .column_by_name("label")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                .ok_or("fixture has no string label column")?;
+            for (id, label) in ids.iter().zip(labels.iter()) {
+                assert!(
+                    expected_rows
+                        .insert(id.ok_or("fixture id is null")?, label)
+                        .is_none()
+                );
+            }
+        }
+        let rows = expected_rows.len();
         fs::create_dir(&self.output_directory)?;
         for limit in [0, 5, rows + 1] {
             let output = output_with_timeout(
@@ -217,6 +236,35 @@ impl Arguments {
             );
             // Arrow readers also accept EOF without an end marker.
             assert!(output.stdout.ends_with(b"\xff\xff\xff\xff\x00\x00\x00\x00"));
+            let mut cursor = Cursor::new(&output.stdout);
+            let stream = StreamReader::try_new(&mut cursor, None)?;
+            let expected_fields: arrow_schema::Fields = vec![
+                schema.field_with_name("label")?.clone(),
+                schema.field_with_name("id")?.clone(),
+            ]
+            .into();
+            assert_eq!(stream.schema().fields(), &expected_fields);
+            let mut seen = BTreeSet::new();
+            for batch in stream {
+                let batch = batch?;
+                let ids = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or("scan id is not int32")?;
+                let labels = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or("scan label is not string")?;
+                for (id, label) in ids.iter().zip(labels.iter()) {
+                    let id = id.ok_or("scan id is null")?;
+                    assert!(seen.insert(id), "duplicate scan id");
+                    assert_eq!(expected_rows.get(&id), Some(&label));
+                }
+            }
+            assert_eq!(seen.len(), limit.min(rows));
+            assert_eq!(cursor.position(), output.stdout.len() as u64);
             fs::write(
                 self.output_directory.join(format!("limit-{limit}.arrow")),
                 output.stdout,

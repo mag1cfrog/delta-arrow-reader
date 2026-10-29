@@ -8,7 +8,7 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use serde_json::{Value, json};
 
 mod support;
-use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel};
+use support::{PLATFORMS, Result, WheelFixture, cli_wheel_files, write_wheel};
 
 fn workflow() -> Value {
     serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi.yml")).unwrap()
@@ -740,6 +740,13 @@ fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<(
     assert!(position("Test installed wheel on Python 3.10 and PyArrow 18.0.0") < audit_position);
     assert!(audit_position < position("Upload validated wheel"));
     let audit = &steps[audit_position];
+    let symbols = &steps[position("Retain native symbols separately")];
+    assert!(
+        symbols["with"]["name"]
+            .as_str()
+            .unwrap()
+            .contains("github.run_attempt")
+    );
     assert_eq!(audit["if"], "${{ !inputs.cache-only }}");
     assert!(audit["continue-on-error"].is_null());
     let fixture = WheelFixture::new("installed-cli-audit")?;
@@ -769,7 +776,7 @@ fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<(
                 [
                     "xtask",
                     "audit-python-cli",
-                    runner_temp.join("python310").join(cli).to_str().unwrap(),
+                    runner_temp.join("cli310").join(cli).to_str().unwrap(),
                     "--platform-tag",
                     platform["platform-tag"].as_str().unwrap(),
                 ]
@@ -856,8 +863,9 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
         );
         for (index, path) in [
             (10, "crates/delta-arrow-reader-python/tests"),
+            (12, "crates/delta-arrow-reader-cli/python_tests"),
             (
-                12,
+                14,
                 "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus",
             ),
         ] {
@@ -868,23 +876,23 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             );
         }
         assert_eq!(
-            &arguments[22..28],
+            &arguments[24..30],
             ["--entrypoint", "/bin/bash", image, "-euo", "pipefail", "-c"]
         );
-        assert_eq!(arguments[14], "--volume");
+        assert_eq!(arguments[16], "--volume");
         assert_eq!(
-            arguments[15],
+            arguments[17],
             format!(
                 "{}/.python-sdist-source/target/wheel-tools/debug/xtask:/acceptance/xtask:ro",
                 workspace.display()
             )
         );
         assert_eq!(
-            &arguments[16..18],
+            &arguments[18..20],
             ["--env", "DELTA_ARROW_READER_XTASK=/acceptance/xtask"]
         );
         assert_eq!(
-            &arguments[18..22],
+            &arguments[20..24],
             [
                 "--volume",
                 &format!("{}:/records", records.display()),
@@ -892,8 +900,8 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
                 "DELTA_ARROW_READER_ACCEPTANCE_RECORDS=/records"
             ]
         );
-        assert_eq!(arguments.len(), 29);
-        container_script = arguments[28].to_owned();
+        assert_eq!(arguments.len(), 31);
+        container_script = arguments[30].to_owned();
     }
     // Keep the actual shell control flow while replacing the container's interpreters.
     let script = container_script
@@ -901,12 +909,15 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             "/opt/python/cp$version-cp$version/bin/python",
             "base_python",
         )
-        .replace("/tmp/python$version/bin/python", "installed_python");
+        .replace("/tmp/python$version/bin/python", "installed_python")
+        .replace("/tmp/cli$version/bin/python", "installed_cli");
     for (glibc, failure) in [
         ("2.28", ""),
         ("2.39", ""),
         ("2.28", "pip"),
         ("2.28", "unittest"),
+        ("2.28", "cli-pip"),
+        ("2.28", "cli-unittest"),
     ] {
         let output = Command::new("bash")
             .args([
@@ -920,6 +931,11 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
                     installed_python() {{
                         printf '%s %s\n' "$version" "$*"
                         if [ -n "$FAILURE" ] && [[ "$*" == *"$FAILURE"* ]]; then return 7; fi
+                    }}
+                    installed_cli() {{
+                        printf 'cli%s %s\n' "$version" "$*"
+                        if [ "$FAILURE" = cli-pip ] && [[ "$*" == *pip* ]]; then return 7; fi
+                        if [ "$FAILURE" = cli-unittest ] && [[ "$*" == *unittest* ]]; then return 7; fi
                     }}
                     {script}
                 "#
@@ -939,11 +955,17 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
                 stdout.lines().collect::<Vec<_>>(),
                 [
                     "create 310",
-                    "310 -m pip install --only-binary=:all: /wheels/*.whl pyarrow==18.0.0",
+                    "310 -m pip install --only-binary=:all: /wheels/delta_arrow_reader-[0-9]*.whl pyarrow==18.0.0",
                     "310 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
+                    "create 310",
+                    "cli310 -m pip install --only-binary=:all: /wheels/delta_arrow_reader_cli-*.whl",
+                    "cli310 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-cli/python_tests",
                     "create 314",
-                    "314 -m pip install --only-binary=:all: /wheels/*.whl",
+                    "314 -m pip install --only-binary=:all: /wheels/delta_arrow_reader-[0-9]*.whl",
                     "314 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
+                    "create 314",
+                    "cli314 -m pip install --only-binary=:all: /wheels/delta_arrow_reader_cli-*.whl",
+                    "cli314 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-cli/python_tests",
                 ]
             );
         } else if glibc != "2.28" {
@@ -985,7 +1007,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
     let runner_temp = fixture.directory.join("runner temp");
     fs::create_dir_all(workspace.join("dist"))?;
     fs::create_dir(&runner_temp)?;
-    let wheel = workspace.join("dist/test wheel.whl");
+    let wheel = workspace.join("dist/delta_arrow_reader_cli-1.2.3-py3-none-linux_x86_64.whl");
     fs::write(&wheel, "fixture")?;
     let calls = fixture.directory.join("calls");
     let mocks = r#"
@@ -1028,7 +1050,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
             .replace("${{ matrix.venv-python }}", python)
             .replace("${{ runner.os == 'Windows' && '.exe' || '' }}", suffix)
             .replace(
-                &format!("\"$UV_TOOL_DIR/delta-arrow-reader/{python}\""),
+                &format!("\"$UV_TOOL_DIR/delta-arrow-reader-cli/{python}\""),
                 "tool_python",
             )
             .replace(
@@ -1080,7 +1102,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
             if failure.is_empty() {
                 let calls = fs::read_to_string(&calls)?;
                 let wheel = wheel.display();
-                let tests = workspace.join("crates/delta-arrow-reader-python/tests");
+                let tests = workspace.join("crates/delta-arrow-reader-cli/python_tests");
                 let tests = tests.display();
                 assert_eq!(
                     calls.lines().collect::<Vec<_>>(),
@@ -1208,9 +1230,9 @@ fn wheels_without_a_cli_cannot_complete_release_validation() -> Result<()> {
     for (index, (platform, tag)) in PLATFORMS.into_iter().enumerate() {
         let fixture = WheelFixture::new(&format!("validation-missing-cli-{platform}"))?;
         let (_, wheels) = fixture.create_artifacts()?;
-        let mut files = wheel_files(tag);
+        let mut files = cli_wheel_files(tag);
         files.retain(|(name, _)| !name.contains(".data/scripts/"));
-        write_wheel(&wheels[index], &files, true)?;
+        write_wheel(&wheels[index + PLATFORMS.len()], &files, true)?;
         let output_file = fixture.directory.join("outputs");
         fs::write(&output_file, "existing=kept\n")?;
         let output = Command::new("bash")
@@ -1224,7 +1246,7 @@ fn wheels_without_a_cli_cannot_complete_release_validation() -> Result<()> {
         assert!(!output.status.success(), "{platform}: {output:?}");
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(
-                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader"
+                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader"
             ),
             "{output:?}"
         );

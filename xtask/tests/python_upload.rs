@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 mod support;
-use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel};
+use support::{PLATFORMS, Result, WheelFixture, cli_wheel_files, write_wheel};
 
 const EXISTING_OUTPUT: &str = "existing=kept\n";
 
@@ -32,7 +32,10 @@ impl UploadFixture {
         fs::write(
             &curl,
             r#"#!/bin/sh
-printf '%s\0' "$@" > "$CURL_ARGUMENTS"
+printf '%s\0' "$@" >> "$CURL_ARGUMENTS"
+case "$*" in
+  */pypi/delta-arrow-reader-cli/*) [ "${CURL_CLI_EXIT:-0}" = 0 ] || exit "$CURL_CLI_EXIT"; printf '%s\n%s' "$CURL_CLI_BODY" "${CURL_CLI_STATUS:-404}"; exit 0 ;;
+esac
 [ "$CURL_EXIT" = 0 ] || exit "$CURL_EXIT"
 printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
 "#,
@@ -66,15 +69,29 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
             )
             .env("CURL_EXIT", "0")
             .env("CURL_STATUS", "200")
-            .env("CURL_BODY", self.index_response(0).unwrap().to_string())
+            .env("CURL_CLI_STATUS", "404")
+            .env("CURL_CLI_BODY", "not published")
+            .env(
+                "CURL_BODY",
+                self.index_response(0, false).unwrap().to_string(),
+            )
             .env("GITHUB_OUTPUT", self.fixture.directory.join("output"));
         command
     }
 
-    fn index_response(&self, published_mask: usize) -> Result<Value> {
+    fn index_response(&self, published_mask: usize, cli: bool) -> Result<Value> {
         let mut files = Vec::new();
         // Each bit selects one platform wheel already present on the index.
         for (index, path) in self.wheel_paths.iter().enumerate() {
+            if path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("delta_arrow_reader_cli-")
+                != cli
+            {
+                continue;
+            }
             if published_mask & (1 << index) != 0 {
                 files.push(json!({
                     "filename": path.file_name().unwrap().to_str().unwrap(),
@@ -84,7 +101,7 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
             }
         }
         Ok(json!({
-            "info": {"name": "delta-arrow-reader", "version": "1.2.3"},
+            "info": {"name": if cli { "delta-arrow-reader-cli" } else { "delta-arrow-reader" }, "version": "1.2.3"},
             "urls": files,
         }))
     }
@@ -131,13 +148,18 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
 #[test]
 fn stages_exactly_the_missing_wheels_for_every_published_subset() -> Result<()> {
     for index in ["pypi", "testpypi"] {
-        for published_mask in 0..(1 << PLATFORMS.len()) {
+        for published_mask in 0..(1 << (2 * PLATFORMS.len())) {
             let upload = UploadFixture::new(&format!("upload-{index}-{published_mask}"))?;
-            let mut release = upload.index_response(published_mask)?;
+            let mut release = upload.index_response(published_mask, false)?;
             release["info"]["name"] = json!("Delta._-Arrow.Reader");
             let output = upload
                 .command(index)
                 .env("CURL_BODY", release.to_string())
+                .env("CURL_CLI_STATUS", "200")
+                .env(
+                    "CURL_CLI_BODY",
+                    upload.index_response(published_mask, true)?.to_string(),
+                )
                 .output()?;
             assert!(output.status.success(), "{output:?}");
             upload.assert_staged(published_mask)?;
@@ -183,8 +205,8 @@ fn missing_release_queries_the_selected_index_and_stages_all_wheels() -> Result<
 #[test]
 fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
     let upload = UploadFixture::new("upload-changed")?;
-    for index in 0..upload.wheel_paths.len() {
-        let mut release = upload.index_response((1 << upload.wheel_paths.len()) - 1)?;
+    for index in 0..PLATFORMS.len() {
+        let mut release = upload.index_response((1 << upload.wheel_paths.len()) - 1, false)?;
         release["urls"][index]["digests"]["sha256"] = json!("0".repeat(64));
         upload.assert_rejected(
             upload
@@ -194,14 +216,14 @@ fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
             "changed binaries need a new version",
         )?;
     }
-    let mut release = upload.index_response(1)?;
+    let mut release = upload.index_response(1, false)?;
     release["urls"][0]["filename"] = json!("extra.whl");
     upload.assert_rejected(
         upload
             .command("pypi")
             .env("CURL_BODY", release.to_string())
             .output()?,
-        "unexpected published file: extra.whl",
+        "unexpected published file",
     )?;
     Ok(())
 }
@@ -209,7 +231,7 @@ fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
 #[test]
 fn invalid_index_metadata_never_enables_an_upload() -> Result<()> {
     let upload = UploadFixture::new("upload-invalid-metadata")?;
-    let valid = upload.index_response(1)?;
+    let valid = upload.index_response(1, false)?;
     let mut invalid = vec![json!(null), json!([]), json!({})];
     for (pointer, value) in [
         ("/info", json!(null)),
@@ -279,8 +301,51 @@ fn invalid_local_inputs_stop_before_contacting_the_index() -> Result<()> {
         "index must be pypi or testpypi",
     )?;
     fs::remove_file(&upload.wheel_paths[0])?;
-    upload.assert_rejected(upload.command("pypi").output()?, "expected one wheel")?;
+    upload.assert_rejected(
+        upload.command("pypi").output()?,
+        "expected Python and CLI wheels",
+    )?;
     assert!(!upload.fixture.directory.join("curl-arguments").exists());
+    Ok(())
+}
+
+#[test]
+fn cli_index_failures_do_not_stage_either_distribution() -> Result<()> {
+    let upload = UploadFixture::new("upload-cli-index-errors")?;
+    for position in 0..PLATFORMS.len() {
+        let mut release = upload.index_response(63, true)?;
+        release["urls"][position]["digests"]["sha256"] = json!("0".repeat(64));
+        upload.assert_rejected(
+            upload
+                .command("pypi")
+                .env("CURL_CLI_STATUS", "200")
+                .env("CURL_CLI_BODY", release.to_string())
+                .output()?,
+            "changed binaries need a new version",
+        )?;
+    }
+    for status in ["403", "503"] {
+        upload.assert_rejected(
+            upload
+                .command("pypi")
+                .env("CURL_CLI_STATUS", status)
+                .output()?,
+            &format!("package index returned HTTP {status}"),
+        )?;
+    }
+    upload.assert_rejected(
+        upload.command("pypi").env("CURL_CLI_EXIT", "28").output()?,
+        "curl failed",
+    )?;
+    let python_metadata = upload.index_response(0, false)?;
+    upload.assert_rejected(
+        upload
+            .command("pypi")
+            .env("CURL_CLI_STATUS", "200")
+            .env("CURL_CLI_BODY", python_metadata.to_string())
+            .output()?,
+        "index response does not match the requested package and version",
+    )?;
     Ok(())
 }
 
@@ -289,12 +354,16 @@ fn wheels_without_a_cli_cannot_reach_either_package_index() -> Result<()> {
     for (position, (platform, tag)) in PLATFORMS.into_iter().enumerate() {
         for index in ["pypi", "testpypi"] {
             let upload = UploadFixture::new(&format!("upload-missing-cli-{platform}-{index}"))?;
-            let mut files = wheel_files(tag);
+            let mut files = cli_wheel_files(tag);
             files.retain(|(name, _)| !name.contains(".data/scripts/"));
-            write_wheel(&upload.wheel_paths[position], &files, true)?;
+            write_wheel(
+                &upload.wheel_paths[position + PLATFORMS.len()],
+                &files,
+                true,
+            )?;
             upload.assert_rejected(
                 upload.command(index).output()?,
-                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader",
+                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader",
             )?;
             assert!(!upload.fixture.directory.join("curl-arguments").exists());
         }

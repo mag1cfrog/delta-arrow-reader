@@ -185,7 +185,7 @@ jobs:
         if: runner.os != 'Linux'
         run: |
           rustup component add rust-docs
-          cargo xtask build-python-wheel --prepare-only \
+          cargo xtask build-python-wheel --prepare-only --include-cli \
             --project-directory crates/delta-arrow-reader-python \
             --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
       - name: Build wheel
@@ -216,7 +216,7 @@ jobs:
             uv tool install 'sccache>=0.10.0'
             export PATH="/opt/dar-tools:$PATH"
             # Keep the tool's cache outside Maturin's target/debug/build cleanup.
-            CARGO_TARGET_DIR="$PWD/target/wheel-tools" cargo xtask build-python-wheel --prepare-only --project-directory . \
+            CARGO_TARGET_DIR="$PWD/target/wheel-tools" cargo xtask build-python-wheel --prepare-only --include-cli --project-directory . \
               --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
           args: >-
             --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }}
@@ -244,6 +244,26 @@ jobs:
           delocate-wheel --verbose --require-archs "$(uname -m)" \
             --wheel-dir dist unrepaired-dist/*.whl
           delocate-listdeps --all dist/*.whl
+      - name: Split library and CLI wheels
+        if: ${{ !inputs.cache-only }}
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          mv dist combined-dist
+          cargo xtask split-python-wheel combined-dist/*.whl \
+            --expected-version "$EXPECTED_VERSION" --platform-tag '${{ matrix.platform-tag }}' \
+            --destination dist --symbols-directory "$RUNNER_TEMP/wheel-symbols"
+      - name: Retain native symbols separately
+        if: ${{ !inputs.cache-only }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: symbols-${{ matrix.artifact }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/wheel-symbols/
+            target/${{ matrix.target }}/release/*.pdb
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 90
       - name: Inspect wheel metadata
         if: ${{ !inputs.cache-only }}
         env:
@@ -257,23 +277,32 @@ jobs:
         run: |
           cmp "$RUNNER_TEMP/python-sdist/Cargo.lock" .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
-          auditwheel show dist/*.whl
+          auditwheel show dist/delta_arrow_reader-[0-9]*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
         if: ${{ !inputs.cache-only }}
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv python310
           python310/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
-            "$GITHUB_WORKSPACE"/dist/*.whl 'pyarrow==18.0.0'
+            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-[0-9]*.whl 'pyarrow==18.0.0'
           python310/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
+      - name: Test independent CLI wheel
+        if: ${{ !inputs.cache-only }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv cli310
+          cli310/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
+            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl
+          cli310/${{ matrix.venv-python }} -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests"
       - name: Audit installed wheel CLI
         if: ${{ !inputs.cache-only }}
         env:
           RUSTC_WRAPPER: ""
         run: |
           cargo xtask audit-python-cli \
-            "$RUNNER_TEMP/python310/${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}" \
+            "$RUNNER_TEMP/cli310/${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}" \
             --platform-tag '${{ matrix.platform-tag }}'
       - uses: actions/setup-python@v6
         id: python314
@@ -286,7 +315,7 @@ jobs:
         run: |
           python -m venv python314
           python314/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
-            "$GITHUB_WORKSPACE"/dist/*.whl
+            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-[0-9]*.whl
           python314/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Test installed wheel on glibc 2.28
@@ -294,12 +323,14 @@ jobs:
         run: |
           mkdir -p "$DELTA_ARROW_READER_ACCEPTANCE_RECORDS"
           python_tests=crates/delta-arrow-reader-python/tests
+          cli_tests=crates/delta-arrow-reader-cli/python_tests
           fixture=crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus
           # Reuse the acceptance tool compiled inside the same manylinux baseline.
           docker run --rm --workdir /tmp \
             --env PATH=/usr/bin:/bin --env LD_LIBRARY_PATH= \
             --volume "$GITHUB_WORKSPACE/dist:/wheels:ro" \
             --volume "$GITHUB_WORKSPACE/$python_tests:/acceptance/$python_tests:ro" \
+            --volume "$GITHUB_WORKSPACE/$cli_tests:/acceptance/$cli_tests:ro" \
             --volume "$GITHUB_WORKSPACE/$fixture:/acceptance/$fixture:ro" \
             --volume "$GITHUB_WORKSPACE/.python-sdist-source/target/wheel-tools/debug/xtask:/acceptance/xtask:ro" \
             --env DELTA_ARROW_READER_XTASK=/acceptance/xtask \
@@ -314,9 +345,13 @@ jobs:
                   dependencies+=(pyarrow==18.0.0)
                 fi
                 /tmp/python$version/bin/python -m pip install --only-binary=:all: \
-                  /wheels/*.whl "${dependencies[@]}"
+                  /wheels/delta_arrow_reader-[0-9]*.whl "${dependencies[@]}"
                 /tmp/python$version/bin/python -I -m unittest discover \
                   -s /acceptance/crates/delta-arrow-reader-python/tests -k installed
+                /opt/python/cp$version-cp$version/bin/python -m venv /tmp/cli$version
+                /tmp/cli$version/bin/python -m pip install --only-binary=:all: /wheels/delta_arrow_reader_cli-*.whl
+                /tmp/cli$version/bin/python -I -m unittest discover \
+                  -s /acceptance/crates/delta-arrow-reader-cli/python_tests
               done
             '
       - name: Test wheel with uv tool and uvx
@@ -332,17 +367,17 @@ jobs:
           export UV_TOOL_DIR="$tools/environments"
           export UV_TOOL_BIN_DIR="$tools/bin"
           export UV_CACHE_DIR="$tools/cache"
-          python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/*.whl
-          "$UV_TOOL_DIR/delta-arrow-reader/${{ matrix.venv-python }}" -I -m unittest discover \
-            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" -k installed
+          python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl
+          "$UV_TOOL_DIR/delta-arrow-reader-cli/${{ matrix.venv-python }}" -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests" -k installed
           tool_version="$("$UV_TOOL_BIN_DIR/delta-arrow-reader${{ runner.os == 'Windows' && '.exe' || '' }}" --version)"
           test "$tool_version" = "delta-arrow-reader $EXPECTED_VERSION"
           # uv tool run is uvx; --isolated ignores the persistent tool above.
-          python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/*.whl \
+          python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl \
             python -I -m unittest discover \
-            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" -k installed
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests" -k installed
           uvx_version="$(python -m uv tool run --no-config --isolated \
-            --from "$GITHUB_WORKSPACE"/dist/*.whl delta-arrow-reader --version)"
+            --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl delta-arrow-reader --version)"
           test "$uvx_version" = "delta-arrow-reader $EXPECTED_VERSION"
       - name: Retain installed CLI invocation records
         if: ${{ always() && !inputs.cache-only }}
