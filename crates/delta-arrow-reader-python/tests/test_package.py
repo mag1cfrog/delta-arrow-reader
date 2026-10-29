@@ -26,8 +26,8 @@ class PackageTests(unittest.TestCase):
             self.assertTrue(distribution.locate_file(files[name]).is_file())
         self.assertFalse(
             any(
-                "delta-arrow-reader" == path.name
-                or path.name == "delta-arrow-reader.exe"
+                path.name
+                in {"dar", "dar.exe", "delta-arrow-reader", "delta-arrow-reader.exe"}
                 for path in files.values()
             )
         )

@@ -6,7 +6,9 @@ individual Parquet file. The examples use Bash.
 
 ## Before you start
 
-[Install a CLI with these commands](installation.md#cli-binaries-and-container-images).
+For the commands below, install `dar` with [uv](installation.md#install-cli-with-uv)
+or [pipx](installation.md#install-cli-with-pipx), or use a
+[standalone binary](installation.md#cli-binaries-and-container-images).
 
 Start with a local table. For a cloud URL and an existing credential file, use
 [Connect to storage](cli-storage.md). For a catalog name and a Databricks
