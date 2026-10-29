@@ -11,12 +11,10 @@ use std::{
     process::Command,
 };
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use clap::Args;
-use flate2::{Compression, read::DeflateDecoder, write::DeflateEncoder};
-use rawzip::{CompressionMethod, ZipArchive, ZipArchiveWriter, path::EntryPath};
+use flate2::read::DeflateDecoder;
+use rawzip::{CompressionMethod, ZipArchive};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 
 use crate::{
     Result,
@@ -159,8 +157,14 @@ and [installation guide](https://mag1cfrog.github.io/delta-arrow-reader/installa
             (&python, WheelContents::PythonLibrary),
             (&cli, WheelContents::Cli),
         ] {
+            command_output(
+                Command::new("python")
+                    .args(["-m", "wheel", "pack"])
+                    .arg(directory)
+                    .arg("--dest-dir")
+                    .arg(&output),
+            )?;
             let wheel = output.join(contents.filename(version, platform));
-            write_wheel(directory, &wheel)?;
             check_wheel(&wheel, version, platform)?;
         }
         // Keep the input and both destinations untouched until every wheel passes validation.
@@ -231,84 +235,5 @@ fn unpack_checked_wheel(source: &Path, destination: &Path) -> Result<()> {
             )?;
         }
     }
-    Ok(())
-}
-
-fn write_wheel(source: &Path, destination: &Path) -> Result<()> {
-    let mut files = Vec::new();
-    collect_files(source, &mut files)?;
-    files.sort();
-    let mut archive = ZipArchiveWriter::new(File::create(destination)?);
-    let mut record = csv::WriterBuilder::new()
-        .has_headers(false)
-        .from_writer(Vec::new());
-    let record_name = files
-        .iter()
-        .find_map(|path| {
-            let name = path.strip_prefix(source).ok()?.to_str()?.replace('\\', "/");
-            name.strip_suffix("/WHEEL")
-                .map(|info| format!("{info}/RECORD"))
-        })
-        .ok_or("wheel has no WHEEL metadata")?;
-    for path in files {
-        let name = path
-            .strip_prefix(source)?
-            .to_str()
-            .ok_or("wheel path is not UTF-8")?
-            .replace('\\', "/");
-        let mut hash = Sha256::new();
-        let size = io::copy(&mut File::open(&path)?, &mut hash)?;
-        record.write_record([
-            name.as_str(),
-            &format!("sha256={}", URL_SAFE_NO_PAD.encode(hash.finalize())),
-            &size.to_string(),
-        ])?;
-        let executable = name.contains(".data/scripts/");
-        write_compressed_entry(
-            &mut archive,
-            &name,
-            File::open(path)?,
-            if executable { 0o755 } else { 0o644 },
-        )?;
-    }
-    record.write_record([record_name.as_str(), "", ""])?;
-    write_compressed_entry(
-        &mut archive,
-        &record_name,
-        record.into_inner()?.as_slice(),
-        0o644,
-    )?;
-    archive.finish()?;
-    Ok(())
-}
-
-fn collect_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            collect_files(&entry.path(), files)?;
-        } else {
-            files.push(entry.path());
-        }
-    }
-    Ok(())
-}
-
-fn write_compressed_entry(
-    archive: &mut ZipArchiveWriter<File>,
-    name: &str,
-    mut source: impl Read,
-    permissions: u32,
-) -> Result<()> {
-    let (mut entry, config) = archive
-        .new_file(EntryPath::verbatim(name.as_bytes()))
-        .compression_method(CompressionMethod::DEFLATE)
-        .unix_permissions(0o100000 | permissions)
-        .start()?;
-    let mut writer = config.wrap(DeflateEncoder::new(&mut entry, Compression::best()));
-    io::copy(&mut source, &mut writer)?;
-    let (encoder, descriptor) = writer.finish()?;
-    encoder.finish()?;
-    entry.finish(descriptor)?;
     Ok(())
 }

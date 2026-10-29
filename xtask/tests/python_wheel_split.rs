@@ -34,6 +34,12 @@ fn members(path: &Path) -> Result<BTreeSet<String>> {
     let mut entries = archive.entries();
     let mut names = BTreeSet::new();
     while let Some(entry) = entries.next_entry()? {
+        assert!(
+            !entry.flags().has_data_descriptor(),
+            "PyPI rejects ZIP data descriptors"
+        );
+        let local = archive.get_entry(entry.wayfinder())?;
+        assert!(!local.local_header().flags().has_data_descriptor());
         // pip requires S_IFREG as well as execute bits; mode() supplies a missing type.
         assert_eq!((entry.external_attributes() >> 16) & 0o170000, 0o100000);
         names.insert(entry.file_path().try_normalize()?.as_str().to_owned());

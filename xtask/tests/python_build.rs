@@ -238,7 +238,7 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             }
             assert!(arguments.contains("--editable\n"));
             assert!(arguments.contains("--strip=false\n"));
-            assert!(arguments.contains("--compression-level\n9\n"));
+            assert!(!arguments.contains("--compression-level"));
             assert_eq!(
                 fs::read(output_directory.join("assembled.whl"))?,
                 b"test wheel"

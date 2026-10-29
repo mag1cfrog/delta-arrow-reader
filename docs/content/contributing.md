@@ -197,7 +197,7 @@ build tools.
 
 The backend collects dependency notices before Maturin builds the Python
 extension. It does not build or install the CLI. Normal builds use `release`
-with native symbols stripped and maximum wheel compression; editable installs
+with native symbols stripped and Maturin's default compression; editable installs
 use `dev` and retain symbols:
 
 ```console
@@ -351,9 +351,11 @@ manylinux_2_28 container. Do not copy a standalone Debian-built `dar` into a
 wheel: that binary's glibc 2.36 requirement exceeds the wheel's glibc 2.28 baseline.
 
 Maturin on Linux, delvewheel on Windows, or delocate on macOS repairs the wheel.
-`cargo xtask split-python-wheel` then produces the independent Python and CLI
-wheels, strips native symbols, and compresses both at DEFLATE level 9. This is
-the last step that changes wheel bytes.
+`cargo xtask split-python-wheel` separates the Python and CLI files, strips native
+symbols, and runs `python -m wheel pack` for each distribution. PyPA's wheel
+packager creates the ZIP archives and their `RECORD` files with default compression.
+The workflow installs `wheel==0.48.0` for this step. This is the last step that
+changes wheel bytes.
 
 The workflow retains the original native binaries and their before/after SHA256
 identities in a separate `symbols-<platform-artifact>-<run-attempt>` Actions artifact for 90
@@ -429,8 +431,10 @@ Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
 the pruning jobs have `actions: write` and `pull-requests: read` permission.
 
 The `xtask` tests also cover Python release validation and workflow gates.
-The release planning tests require `release-plz` 0.3.171 on `PATH` and are
-ignored by default. After installing that version, run the PR CI task tests with:
+The split-wheel tests need `wheel==0.48.0` installed in the Python environment
+selected by `python` on `PATH`. The release planning tests require `release-plz`
+0.3.171 on `PATH` and are ignored by default. After installing these tools, run
+the PR CI task tests with:
 
 ```sh
 cargo test --locked --package xtask --bin xtask cache_tests::
