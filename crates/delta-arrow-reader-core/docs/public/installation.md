@@ -17,8 +17,8 @@ Use CPython 3.10 or newer on one of these platforms:
 | Windows | x86_64 |
 | macOS | Apple silicon, macOS 12.0 or newer |
 
-The Python API includes PyArrow support and SQL. The package also installs the
-`delta-arrow-reader` command.
+The Python package includes PyArrow support and SQL. Install the separate
+[CLI package](#install-cli-with-uv) for command-line use.
 You do not need Rust or the separate Python `datafusion` package to install a
 wheel.
 
@@ -44,14 +44,14 @@ to read your first rows.
 The wheel platform tags are `manylinux_2_28_x86_64`, `win_amd64`, and
 `macosx_12_0_arm64`, respectively.
 
-These targets apply to both the Python extension and bundled CLI. Linux arm64,
+These targets apply to the Python and CLI wheels. Linux arm64,
 Intel Macs, Windows arm64, and musl systems have no official wheels or wheel CI
 coverage. Source builds on Intel Macs are untested and unsupported. The wheel's
 Linux baseline is glibc 2.28; the standalone `dar` archives require glibc 2.36.
 
-Each platform has one `cp310-abi3` wheel. A successful build tests that same
-wheel on CPython 3.10 with PyArrow 18.0.0 and CPython 3.14 with the current
-compatible PyArrow release. Intermediate Python versions are not separately
+Each platform has a `cp310-abi3` Python wheel and a `py3-none` CLI wheel.
+A successful build tests the Python wheel on CPython 3.10 with PyArrow 18.0.0
+and CPython 3.14 with the current compatible PyArrow release. Intermediate Python versions are not separately
 tested. Free-threaded CPython, PyPy, and other platform targets are not covered.
 
 The Linux wheel is tested in a glibc 2.28 container. Windows checks run on
@@ -82,12 +82,14 @@ python -m pip install ./crates/delta-arrow-reader-python
 
 Use version 0.8 or newer for the CLI workflows on these pages.
 
-If you installed the Python package above, you already have the CLI. Check its
-version with:
+For a single run with uv, use the separate CLI package:
 
 ```console
-delta-arrow-reader --version
+uvx --no-build --from delta-arrow-reader-cli delta-arrow-reader --help
 ```
+
+The CLI package does not install the Python API or PyArrow. It supports the
+[wheel platforms listed above](#python).
 
 Use `delta-arrow-reader` in place of `dar` in the
 [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
@@ -106,7 +108,7 @@ the [wheel platforms listed above](#python), including Windows x86_64 and
 Apple silicon macOS:
 
 ```console
-uv tool install --no-build "delta-arrow-reader>=0.8"
+uv tool install --no-build delta-arrow-reader-cli
 delta-arrow-reader --version
 ```
 
@@ -115,12 +117,37 @@ If uv reports that its executable directory is missing from `PATH`, run
 installation:
 
 ```console
-uvx --no-build --from "delta-arrow-reader>=0.8" delta-arrow-reader --help
+uvx --no-build --from delta-arrow-reader-cli delta-arrow-reader --help
 ```
 
-These tool environments do not add the Python API to your project. They still
-install the extension, CLI, and PyArrow. Keep the tool environment and its Python
-installation available when using the command.
+Keep the tool environment available when using the command.
+
+</details>
+
+<details markdown="1">
+<summary>Upgrade from the combined Python and CLI package</summary>
+
+Version 0.8.0 and earlier bundled the CLI with the Python library. If you use uv
+tools, replace that installation with the separate CLI package:
+
+```console
+uv tool uninstall delta-arrow-reader
+uv tool install --no-build delta-arrow-reader-cli
+```
+
+For a pip environment that needs both interfaces, upgrade the Python package
+first, then install or reinstall the CLI. Uninstalling the old combined package
+removes its command, even if another package has since installed the same path:
+
+```console
+python -m pip install --upgrade --only-binary=:all: delta-arrow-reader
+python -m pip install --upgrade --force-reinstall --only-binary=:all: delta-arrow-reader-cli
+delta-arrow-reader --version
+```
+
+Projects that only use the Python API need just the first command. Python imports
+and CLI arguments are unchanged; one-off uvx calls now use
+`--from delta-arrow-reader-cli`.
 
 </details>
 
@@ -175,7 +202,7 @@ HTTPS storage. The archives do not support Alpine Linux's musl runtime or a
 `scratch` container. Other platforms can build from source.
 
 The binaries do not need Rust or Python. macOS and Windows users can use
-[Python wheels](#python) or a [source build](#build-cli-from-source).
+[CLI wheels](#install-cli-with-uv) or a [source build](#build-cli-from-source).
 
 `cli-artifacts.json` records the tested source commit, toolchain, runtime
 libraries, and hashes. The Release's CLI section lists the final release commit

@@ -180,7 +180,6 @@ cargo install --locked --features cli --version 0.9.2 cargo-about
 python -m pip install 'build>=1.2,<2'
 python -m build --wheel --outdir target/python-wheels crates/delta-arrow-reader-python
 python -m pip install --force-reinstall target/python-wheels/*.whl
-delta-arrow-reader --version
 cargo build --locked -p xtask
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 cargo test --locked -p delta-arrow-reader-python
@@ -196,9 +195,10 @@ under `workspace.metadata.cli-release`, and that toolchain's `rust-docs` compone
 to collect dependency notices. Installing a completed wheel needs none of these
 build tools.
 
-The backend builds the native `delta-arrow-reader` command and dependency notices
-before Maturin assembles the wheel. Both native components use the same Cargo
-profile and target. Normal builds use `release`; editable installs use `dev`:
+The backend collects dependency notices before Maturin builds the Python
+extension. It does not build or install the CLI. Normal builds use `release`
+with native symbols stripped and maximum wheel compression; editable installs
+use `dev` and retain symbols:
 
 ```console
 python -m pip install --editable crates/delta-arrow-reader-python
@@ -212,13 +212,14 @@ are `--profile` (`dev` or `release`), `--target`, `--target-dir`, `--jobs`,
 `--offline`, and `--frozen`. Cargo network restrictions do not disable notice
 downloads. Other build arguments are rejected. Native source builds support the
 same three targets as the release wheels; cross-compilation is not supported.
-macOS defaults to deployment target 12.0, with `MACOSX_DEPLOYMENT_TARGET` applying
-to both components.
+macOS defaults to deployment target 12.0; override it with
+`MACOSX_DEPLOYMENT_TARGET`.
 
 Use the backend commands above for local builds. Direct `maturin build` and
 `maturin develop` bypass native preparation. The release workflow calls
-`cargo xtask build-python-wheel --prepare-only` before its Maturin action so it
-can retain the pinned manylinux container and existing wheel repair steps.
+`cargo xtask build-python-wheel --prepare-only --include-cli` before its Maturin
+action. This stages both native artifacts for the release pipeline, which
+repairs them before splitting the two distributions.
 
 To check a wheel's filename and metadata before installation, run `cargo xtask`
 from the repository root with the expected version and platform tag:
@@ -231,18 +232,14 @@ cargo xtask check-python-wheel \
 
 Use the version and platform tag required by your build. The check compares the
 filename with the wheel's `METADATA` and `WHEEL` records, including the expected
-package name, version, and `cp310-abi3` tag. It also requires the native CLI and
-dependency notices, and verifies the wheel's `RECORD` hashes. The installed
-checks below exercise both native components.
+package name, version, and tag: `cp310-abi3` for the Python library or `py3-none`
+for the CLI. It requires the appropriate native payload and dependency notices,
+rejects files belonging to the other distribution, and verifies `RECORD` hashes.
+The same command accepts multiple wheel paths.
 
 For the installed-wheel acceptance checks, run the following from a directory
 outside the checkout, using the environment where the wheel is installed.
 Replace the test directory with its absolute path:
-
-Build the native acceptance tool with `cargo build --locked -p xtask` in the
-checkout first. The tests find `target/debug/xtask` there, respecting
-`CARGO_TARGET_DIR`. Set `DELTA_ARROW_READER_XTASK` to an absolute executable path
-when using a separately built tool. It tests the CLI installed by the wheel.
 
 ```console
 python -I -m unittest discover \
@@ -250,13 +247,23 @@ python -I -m unittest discover \
   -k installed
 ```
 
-This selects package metadata, native CLI, SQL, and local Arrow stream checks.
+This selects Python package metadata, SQL, and local Arrow stream checks.
 The stream check covers both Python entrypoints and both Parquet backends,
 selects columns and filters rows, and closes the reader before consuming all results.
 It uses the checked-in Spark fixture and checks batch values after closing the
 reader. These checks also run in the full Python suite.
-The CLI checks resolve the executable from that Python environment's scripts
-directory. They cover help, the exact package version, snapshot inspection,
+To test the CLI wheel, install it in a separate environment without PyArrow or
+the Python API. Build `xtask` with `cargo build --locked -p xtask`, then run:
+
+```console
+python -I -m unittest discover \
+  -s /absolute/path/to/delta-arrow-reader/crates/delta-arrow-reader-cli/python_tests
+```
+
+The tests find `target/debug/xtask` in the checkout, respecting `CARGO_TARGET_DIR`.
+Set `DELTA_ARROW_READER_XTASK` to an absolute executable path when using a
+separately built tool. The CLI checks resolve the executable from this Python
+environment's scripts directory. They cover help, the exact package version, snapshot inspection,
 projection and row limits, and a complete Arrow IPC stream with matching values.
 They also check redacted errors, empty stdout on input failures, status 3 for a
 closed stdout pipe, and termination of a scan blocked on stdout. Unix checks
@@ -306,8 +313,8 @@ release tools, benchmarks, and `docs/` skip them.
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
 on Linux with Python 3.10 and PyArrow 18.0.0. It uses the PEP 517 backend's editable
-install to build both the extension and CLI in a virtual environment. Feature pull requests do not
-build the three release wheels.
+install to build the extension in a virtual environment. Feature pull requests
+do not build the release wheels.
 
 The same installed bindings also check the generated Python API documentation.
 After changing Rust binding comments or Python signatures, follow the
@@ -344,11 +351,21 @@ manylinux_2_28 container. Do not copy a standalone Debian-built `dar` into a
 wheel: that binary's glibc 2.36 requirement exceeds the wheel's glibc 2.28 baseline.
 
 Maturin on Linux, delvewheel on Windows, or delocate on macOS repairs the wheel.
-The workflow checks the final wheel's metadata and extension dependencies, then
-installs it outside the checkout on Python 3.10 with PyArrow 18.0.0 and Python
-3.14 with the current compatible PyArrow release. Linux runs the full Python
-suite; Windows and macOS run all the installed-package, Python stream, SQL, and CLI
-checks described above.
+`cargo xtask split-python-wheel` then produces the independent Python and CLI
+wheels, strips native symbols, and compresses both at DEFLATE level 9. This is
+the last step that changes wheel bytes.
+
+The workflow retains the original native binaries and their before/after SHA256
+identities in a separate `symbols-<platform-artifact>-<run-attempt>` Actions artifact for 90
+days. Windows also retains available PDB files. Keep this artifact to investigate
+native crashes or profiles from that build. It contains the symbols emitted by
+the release profile, not a full debug build.
+
+After metadata and dependency checks, each Python wheel is installed outside the
+checkout on Python 3.10 with PyArrow 18.0.0 and Python 3.14 with current PyArrow.
+Linux runs the full Python suite; Windows and macOS run the installed-package,
+stream, and SQL checks. A separate CLI environment has neither PyArrow nor the
+Python API and runs the native CLI acceptance checks.
 
 Wheel repair does not replace the separate audit of the CLI in `.data/scripts`.
 `cargo xtask audit-python-cli` checks the installed executable from the final
@@ -365,11 +382,11 @@ cargo xtask audit-python-cli /absolute/path/to/venv/bin/delta-arrow-reader \
 ```
 
 Linux repeats the installed checks with both Python versions in a fresh
-glibc 2.28 container. Only the final wheel, tests, and fixture are mounted into
+glibc 2.28 container. Only the final wheels, tests, tool, and fixture are mounted into
 that container. CLI subprocesses have no `LD_*` or `DYLD_*` overrides and a
 restricted `PATH`; Windows keeps the system and CPython runtime directories.
 
-Each platform also installs the same final wheel through `uv tool install` and
+Each platform also installs the final CLI wheel through `uv tool install` and
 an isolated `uv tool run` environment, the command behind `uvx`. Both environments
 run the installed acceptance checks on Python 3.14, and both CLI commands
 must report the exact package version. These checks disable source builds and
@@ -419,7 +436,7 @@ ignored by default. After installing that version, run the PR CI task tests with
 cargo test --locked --package xtask --bin xtask cache_tests::
 cargo test --locked --package xtask \
   --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
-  --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+  --test python_wheel_split --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
 ```
 
 These PR checks cover workflow behavior, Python, and cache tasks. On release-plz
@@ -436,7 +453,7 @@ To populate core caches after a toolchain or workflow change, run `Warm CI cache
 manually on main. Use `Warm release build caches` for CLI and wheel dependencies.
 The first build for new compiler inputs can still be cold.
 
-Each platform job uploads its final wheel only after the Python, CLI, native
+Each platform job uploads both final wheels only after the Python, CLI, native
 dependency, and uv checks pass:
 
 | Build environment | Artifact |
@@ -452,8 +469,9 @@ macOS 12.0 itself.
 
 The `Validate wheel artifact set` job requires all platform builds to pass,
 then downloads the three artifacts from the same workflow run. It rejects
-missing or unexpected artifacts, requires exactly one wheel per artifact,
-and checks each wheel's version, tags, CLI payload, notices, and `RECORD` again.
+missing or unexpected artifacts, requires one Python wheel and one CLI wheel
+per artifact, and checks each wheel's version, tags, native payload, notices,
+and `RECORD` again.
 A missing CLI fails validation even when the wheel and artifact hashes match.
 For release PRs, it saves the complete set as
 `python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
@@ -468,7 +486,7 @@ contain individual platform artifacts.
 PyPI preparation uses `cargo xtask reuse-python-wheels` to locate the merged
 release PR and requires its latest CI run to have succeeded. It requires a bundle
 for the same Git tree, verifies the archive's SHA256 from GitHub, and checks all
-three wheels. The upload job downloads that exact artifact ID and verifies the
+six wheels. The upload job downloads that exact artifact ID and verifies the
 same SHA256 again. Production uploads reuse these exact wheel bytes without
 rebuilding or repeating the installed acceptance suites. Missing, expired, or
 mismatched bundles stop publication. These commands require `gh` and `GH_TOKEN`;

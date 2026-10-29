@@ -294,7 +294,7 @@ jobs:
             --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
-            --test python_wheel_reuse --test python_workflow --test python_build --test release_plz --test scan_scheduling --test selective_read_build --test selective_read -- --include-ignored
+            --test python_wheel_reuse --test python_wheel_split --test python_workflow --test python_build --test release_plz --test scan_scheduling --test selective_read_build --test selective_read -- --include-ignored
       - name: Test offline Unity Catalog validation
         run: *test-uc-validation
       - name: Report cache read failures

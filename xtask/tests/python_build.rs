@@ -106,9 +106,9 @@ esac
         r#"
 printf '%s\n' "$@" > "$TEST_ROOT/maturin-arguments"
 printf '%s\n' "${CARGO_MANIFEST_DIR-unset}" "${CARGO_PKG_NAME-unset}" "${CARGO_PKG_VERSION_MAJOR-unset}" "$CARGO_BUILD_JOBS" "$RUSTFLAGS" "$CARGO_TARGET_DIR" > "$TEST_ROOT/maturin-environment"
-test -x "delta_arrow_reader.data/scripts/$TEST_EXECUTABLE"
+test ! -d delta_arrow_reader.data/scripts
 test -f delta_arrow_reader.data/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt
-test -f delta_arrow_reader.data/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt
+test ! -f delta_arrow_reader.data/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt
 [ "$FAIL_STAGE" != maturin ] || exit 43
 printf 'test wheel' > "$TEST_ROOT/assembled.whl"
 printf '%s/assembled.whl\n' "$TEST_ROOT"
@@ -121,7 +121,6 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
     )?;
 
     for (target, failure, network_flag, inherited_offline) in [
-        ("x86_64-unknown-linux-gnu", "build", None, "false"),
         ("x86_64-unknown-linux-gnu", "notices", None, "false"),
         ("x86_64-unknown-linux-gnu", "maturin", None, "false"),
         ("x86_64-unknown-linux-gnu", "none", None, "false"),
@@ -218,35 +217,109 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
                 .starts_with(".python-wheel-")
         }));
         if failure == "none" {
-            for tool in ["cargo", "maturin"] {
+            assert_eq!(
+                fs::read_to_string(root.join("maturin-environment"))?,
+                "unset\nunset\nunset\n3\n-C debuginfo=0\ninherited target\n",
+                "Maturin must drop xtask's package metadata and preserve build settings"
+            );
+            assert!(
+                !root.join("cargo-arguments").exists(),
+                "library wheel built a CLI"
+            );
+            let arguments = fs::read_to_string(root.join("maturin-arguments"))?;
+            assert!(arguments.contains("--profile\nrelease\n"));
+            assert!(arguments.contains(&format!("--target\n{target}\n")));
+            assert!(arguments.contains(&format!(
+                "--target-dir\n{}\n",
+                root.join("build outputs").display()
+            )));
+            for flag in ["--offline", "--frozen"] {
                 assert_eq!(
-                    fs::read_to_string(root.join(format!("{tool}-environment")))?,
-                    "unset\nunset\nunset\n3\n-C debuginfo=0\ninherited target\n",
-                    "{tool} must drop xtask's package metadata and preserve build settings"
+                    arguments.lines().any(|argument| argument == flag),
+                    network_flag == Some(flag)
                 );
             }
-            let cargo = fs::read_to_string(root.join("cargo-arguments"))?;
-            let maturin = fs::read_to_string(root.join("maturin-arguments"))?;
-            for arguments in [&cargo, &maturin] {
-                assert!(arguments.contains("--profile\nrelease\n"));
-                assert!(arguments.contains(&format!("--target\n{target}\n")));
-                assert!(arguments.contains(&format!(
-                    "--target-dir\n{}\n",
-                    root.join("build outputs").display()
-                )));
-                for flag in ["--offline", "--frozen"] {
-                    assert_eq!(
-                        arguments.lines().any(|argument| argument == flag),
-                        network_flag == Some(flag)
-                    );
-                }
-            }
-            assert!(maturin.contains("--editable\n"));
+            assert!(arguments.contains("--editable\n"));
+            assert!(arguments.contains("--strip=false\n"));
+            assert!(arguments.contains("--compression-level\n9\n"));
             assert_eq!(
                 fs::read(output_directory.join("assembled.whl"))?,
                 b"test wheel"
             );
         }
+    }
+    for strip in [None, Some("--strip=false"), Some("--strip")] {
+        let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+            .args(["build-python-wheel", "--profile", "release"])
+            .args(strip)
+            .arg("--project-directory")
+            .arg(root)
+            .arg("--wheel-directory")
+            .arg(root.join("release wheels"))
+            .env("PATH", &search_path)
+            .env("CARGO", root.join("bin/cargo"))
+            .env("RUSTC", root.join("bin/rustc"))
+            .env("TEST_ROOT", root)
+            .env("TEST_WORKSPACE", repository)
+            .env("TEST_TARGET", "x86_64-unknown-linux-gnu")
+            .env("FAIL_STAGE", "none")
+            .env("CARGO_NET_OFFLINE", "false")
+            .env("EXPECTED_CARGO_NET_OFFLINE", "false")
+            .env("CARGO_BUILD_JOBS", "3")
+            .env("RUSTFLAGS", "")
+            .env("CARGO_TARGET_DIR", "")
+            .output()?;
+        assert!(output.status.success(), "{output:?}");
+        let arguments = fs::read_to_string(root.join("maturin-arguments"))?;
+        let expected = if strip == Some("--strip=false") {
+            "false"
+        } else {
+            "true"
+        };
+        assert!(arguments.contains(&format!("--strip={expected}\n")));
+        assert!(!arguments.contains("--editable"));
+    }
+    fs::remove_file(root.join("maturin-arguments"))?;
+    for failure in ["build", "notices", "none"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+            .args(["build-python-wheel", "--prepare-only", "--include-cli"])
+            .arg("--project-directory")
+            .arg(root)
+            .env("PATH", &search_path)
+            .env("CARGO", root.join("bin/cargo"))
+            .env("RUSTC", root.join("bin/rustc"))
+            .env("TEST_ROOT", root)
+            .env("TEST_WORKSPACE", repository)
+            .env("TEST_TARGET", "x86_64-unknown-linux-gnu")
+            .env("FAIL_STAGE", failure)
+            .env("CARGO_NET_OFFLINE", "false")
+            .env("EXPECTED_CARGO_NET_OFFLINE", "false")
+            .env("CARGO_BUILD_JOBS", "3")
+            .env("RUSTFLAGS", "")
+            .env("CARGO_TARGET_DIR", "")
+            .output()?;
+        assert_eq!(
+            output.status.success(),
+            failure == "none",
+            "{failure}: {output:?}"
+        );
+        let data = root.join("delta_arrow_reader.data");
+        assert_eq!(data.exists(), failure == "none");
+        if failure == "none" {
+            assert!(data.join("scripts/delta-arrow-reader").is_file());
+            assert!(
+                data.join("data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt")
+                    .is_file()
+            );
+            assert!(
+                data.join("data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt")
+                    .is_file()
+            );
+        }
+        assert!(
+            !root.join("maturin-arguments").exists(),
+            "prepare-only assembled a wheel"
+        );
     }
     Ok(())
 }

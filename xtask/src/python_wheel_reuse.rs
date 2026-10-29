@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     Result,
-    python_wheels::{ARTIFACT_PLATFORM_TAGS, check_wheel_artifacts},
+    python_wheels::{ARTIFACT_PLATFORM_TAGS, WheelContents, check_wheel_artifacts},
     release_selection::release_commit_matches_pr,
     run,
 };
@@ -232,12 +232,13 @@ pub fn download_wheel_artifact(
     let archive = ZipArchive::from_slice(bytes)?;
     let mut expected: BTreeSet<_> = ARTIFACT_PLATFORM_TAGS
         .iter()
-        .map(|(artifact, tag)| {
-            format!("{artifact}/delta_arrow_reader-{version}-cp310-abi3-{tag}.whl")
+        .flat_map(|(artifact, tag)| {
+            [WheelContents::PythonLibrary, WheelContents::Cli]
+                .map(|contents| format!("{artifact}/{}", contents.filename(version, tag)))
         })
         .collect();
     if archive.entries_hint() != expected.len() as u64 {
-        return Err("wheel bundle must contain exactly three wheels".into());
+        return Err("wheel bundle must contain exactly six wheels".into());
     }
     let mut files = Vec::new();
     let mut entries = archive.entries();

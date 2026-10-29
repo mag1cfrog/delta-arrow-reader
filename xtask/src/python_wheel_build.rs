@@ -32,6 +32,9 @@ pub(crate) struct BuildPythonWheelArgs {
     /// Prepare data for the release workflow's Maturin action.
     #[arg(long, conflicts_with_all = ["wheel_directory", "editable", "metadata_directory"])]
     prepare_only: bool,
+    /// Stage the CLI for the release job that splits the two distributions.
+    #[arg(long, requires = "prepare_only")]
+    include_cli: bool,
     /// Build an editable wheel.
     #[arg(long)]
     editable: bool,
@@ -71,7 +74,7 @@ pub(crate) struct BuildPythonWheelArgs {
     /// Maturin's extension dependency audit mode.
     #[arg(long, value_parser = ["repair", "check", "warn", "skip"])]
     auditwheel: Option<String>,
-    /// Strip the extension; native CLI stripping follows the Cargo profile.
+    /// Strip the extension; release wheels default to true, editable builds to false.
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     strip: Option<bool>,
 }
@@ -109,7 +112,7 @@ impl BuildPythonWheelArgs {
                     path: &expected_manifest
                 })?,
             InvalidInputSnafu {
-                message: "wheel and CLI must use the same source workspace"
+                message: "wheel must use the selected source workspace"
             }
         );
         let profile = self.build_profile(&config.tool.maturin)?;
@@ -141,14 +144,17 @@ impl BuildPythonWheelArgs {
             .prefix(".python-wheel-")
             .tempdir_in(&project)
             .context(FileSnafu { path: &project })?;
-        stage_cli(staged.path(), &target, || {
-            build_cli(&repository, &target, profile, &cargo_arguments)
-        })?;
+        if self.include_cli {
+            stage_cli(staged.path(), &target, || {
+                build_cli(&repository, &target, profile, &cargo_arguments)
+            })?;
+        }
         stage_notices(
             &repository,
             staged.path(),
             &target,
             self.offline || self.frozen,
+            self.include_cli,
         )?;
         fs::rename(staged.path(), &data).context(FileSnafu { path: &data })?;
         if self.prepare_only {
@@ -237,6 +243,8 @@ impl BuildPythonWheelArgs {
                 target,
                 "--compatibility",
                 &self.compatibility,
+                "--compression-level",
+                "9",
             ])
             .args(cargo_arguments);
         if let Some(interpreter) = self.interpreter.as_ref().or(self.python.as_ref()) {
@@ -245,9 +253,8 @@ impl BuildPythonWheelArgs {
         if let Some(auditwheel) = &self.auditwheel {
             command.args(["--auditwheel", auditwheel]);
         }
-        if let Some(strip) = self.strip {
-            command.arg(format!("--strip={strip}"));
-        }
+        let strip = self.strip.unwrap_or(profile == "release" && !self.editable);
+        command.arg(format!("--strip={strip}"));
         if self.editable {
             command.arg("--editable");
         }
@@ -298,10 +305,16 @@ fn tool_command(program: &str, repository: &Path) -> Command {
     command
 }
 
-fn stage_notices(repository: &Path, data: &Path, target: &str, offline: bool) -> Result<()> {
+fn stage_notices(
+    repository: &Path,
+    data: &Path,
+    target: &str,
+    offline: bool,
+    include_cli: bool,
+) -> Result<()> {
     let destination = data.join("data/share/delta-arrow-reader");
     fs::create_dir_all(&destination).context(FileSnafu { path: &destination })?;
-    for package in ["python", "cli"] {
+    for package in std::iter::once("python").chain(include_cli.then_some("cli")) {
         let text = dependency_notices(
             repository,
             &repository.join(format!("crates/delta-arrow-reader-{package}/Cargo.toml")),

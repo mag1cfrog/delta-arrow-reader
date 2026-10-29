@@ -27,6 +27,7 @@ mod python_sdist;
 mod python_upload;
 mod python_wheel_build;
 mod python_wheel_reuse;
+mod python_wheel_split;
 mod python_wheels;
 mod release_assets;
 mod release_images;
@@ -113,8 +114,10 @@ enum Task {
     CheckPythonReleaseRequest,
     /// Build and stage the native executable for Python wheel packaging.
     StagePythonCli(python_cli::StagePythonCliArgs),
-    /// Prepare the native CLI and notices, then assemble the combined Python wheel.
+    /// Prepare dependency notices and assemble the Python library wheel.
     BuildPythonWheel(python_wheel_build::BuildPythonWheelArgs),
+    /// Split the repaired release build into stripped Python and CLI wheels.
+    SplitPythonWheel(python_wheel_split::SplitPythonWheelArgs),
     /// Include the native build tools and original workspace in a Maturin sdist.
     CompletePythonSdist {
         source: PathBuf,
@@ -136,9 +139,10 @@ enum Task {
         #[arg(long)]
         sha256: String,
     },
-    /// Validate one Python wheel's metadata, installation layout, and file hashes.
+    /// Validate wheel metadata, installation layouts, and file hashes.
     CheckPythonWheel {
-        path: PathBuf,
+        #[arg(required = true)]
+        path: Vec<PathBuf>,
         #[arg(long)]
         expected_version: String,
         #[arg(long)]
@@ -251,6 +255,7 @@ fn run_task(task: Task) -> Result<()> {
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
         Task::StagePythonCli(args) => args.run().map_err(Into::into),
         Task::BuildPythonWheel(args) => args.run().map_err(Into::into),
+        Task::SplitPythonWheel(args) => args.run(),
         Task::CompletePythonSdist {
             source,
             destination,
@@ -274,7 +279,9 @@ fn run_task(task: Task) -> Result<()> {
             path,
             expected_version,
             platform_tag,
-        } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
+        } => path.iter().try_for_each(|path| {
+            python_wheels::check_wheel(path, &expected_version, &platform_tag)
+        }),
         Task::AuditPythonCli(args) => args.run().map_err(Into::into),
         Task::CheckInstalledPythonCli(args) => args.run(),
         Task::CheckPythonArtifacts {

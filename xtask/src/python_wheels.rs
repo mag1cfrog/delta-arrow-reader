@@ -21,9 +21,59 @@ pub(crate) const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 3] = [
     ("delta-arrow-reader-macos-arm64-wheel", "macosx_12_0_arm64"),
 ];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WheelContents {
+    PythonLibrary,
+    Cli,
+    CombinedBuild,
+}
+
+impl WheelContents {
+    pub(crate) fn package_name(self) -> &'static str {
+        match self {
+            Self::Cli => "delta-arrow-reader-cli",
+            Self::PythonLibrary | Self::CombinedBuild => "delta-arrow-reader",
+        }
+    }
+
+    pub(crate) fn wheel_tag(self, platform: &str) -> String {
+        let abi = if self == Self::Cli {
+            "py3-none"
+        } else {
+            "cp310-abi3"
+        };
+        format!("{abi}-{platform}")
+    }
+
+    pub(crate) fn filename(self, version: &str, platform: &str) -> String {
+        format!(
+            "{}-{version}-{}.whl",
+            self.package_name().replace('-', "_"),
+            self.wheel_tag(platform)
+        )
+    }
+}
+
 pub fn check_wheel(path: &Path, version: &str, platform_tag: &str) -> Result<()> {
-    let wheel_tag = format!("cp310-abi3-{platform_tag}");
-    let filename = format!("delta_arrow_reader-{version}-{wheel_tag}.whl");
+    let contents = if path.file_name().is_some_and(|name| {
+        name.to_string_lossy()
+            .starts_with("delta_arrow_reader_cli-")
+    }) {
+        WheelContents::Cli
+    } else {
+        WheelContents::PythonLibrary
+    };
+    check_wheel_contents(path, version, platform_tag, contents)
+}
+
+pub(crate) fn check_wheel_contents(
+    path: &Path,
+    version: &str,
+    platform_tag: &str,
+    contents: WheelContents,
+) -> Result<()> {
+    let wheel_tag = contents.wheel_tag(platform_tag);
+    let filename = contents.filename(version, platform_tag);
     if path.file_name().and_then(|name| name.to_str()) != Some(&filename) {
         return Err(format!("expected wheel {filename:?}, got {}", path.display()).into());
     }
@@ -33,27 +83,36 @@ pub fn check_wheel(path: &Path, version: &str, platform_tag: &str) -> Result<()>
         "win_amd64" => ("pyd", ".exe", b"MZ"),
         _ => return Err(format!("unsupported wheel platform: {platform_tag}").into()),
     };
-    let dist_info = format!("delta_arrow_reader-{version}.dist-info");
-    let data = format!("delta_arrow_reader-{version}.data");
+    let distribution = contents.package_name().replace('-', "_");
+    let dist_info = format!("{distribution}-{version}.dist-info");
+    let data = format!("{distribution}-{version}.data");
     let cli = format!("{data}/scripts/delta-arrow-reader{cli_suffix}");
     let extension = format!("delta_arrow_reader/delta_arrow_reader.{extension_suffix}");
     let metadata_path = format!("{dist_info}/METADATA");
     let wheel_path = format!("{dist_info}/WHEEL");
     let record_path = format!("{dist_info}/RECORD");
-    let required = [
+    let mut required = vec![
         metadata_path.clone(),
         wheel_path.clone(),
         record_path.clone(),
         format!("{dist_info}/licenses/LICENSE"),
         format!("{dist_info}/licenses/NOTICE"),
-        "delta_arrow_reader/__init__.py".into(),
-        "delta_arrow_reader/__init__.pyi".into(),
-        "delta_arrow_reader/py.typed".into(),
-        extension.clone(),
-        cli.clone(),
-        format!("{data}/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt"),
-        format!("{data}/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt"),
     ];
+    if contents != WheelContents::Cli {
+        required.extend([
+            "delta_arrow_reader/__init__.py".into(),
+            "delta_arrow_reader/__init__.pyi".into(),
+            "delta_arrow_reader/py.typed".into(),
+            extension.clone(),
+            format!("{data}/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt"),
+        ]);
+    }
+    if contents != WheelContents::PythonLibrary {
+        required.extend([
+            cli.clone(),
+            format!("{data}/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt"),
+        ]);
+    }
     let mut buffer = vec![0; rawzip::RECOMMENDED_BUFFER_SIZE];
     let mut header_buffer = vec![0; rawzip::RECOMMENDED_BUFFER_SIZE];
     let archive = ZipArchive::from_file(fs::File::open(path)?, &mut buffer)?;
@@ -88,12 +147,18 @@ pub fn check_wheel(path: &Path, version: &str, platform_tag: &str) -> Result<()>
             || required.iter().any(|path| path == name)
             || (name.starts_with(&format!("{dist_info}/sboms/")) && name.ends_with(".json"))
             || (platform_tag == "win_amd64" && name == format!("{dist_info}/DELVEWHEEL"))
-            || is_bundled_library(name, platform_tag);
+            || (contents != WheelContents::Cli && is_bundled_library(name, platform_tag));
         if !allowed {
             return Err(format!("unexpected wheel member: {name}").into());
         }
         if name == cli && cli_suffix.is_empty() && entry.mode().permissions() & 0o111 != 0o111 {
             return Err(format!("CLI must be executable by every user: {name}").into());
+        }
+        if name == cli
+            && cli_suffix.is_empty()
+            && (entry.external_attributes() >> 16) & 0o170000 != 0o100000
+        {
+            return Err(format!("CLI must declare a regular file type for pip: {name}").into());
         }
         let local = archive.get_entry(entry.wayfinder())?;
         let header = local.local_header(&mut header_buffer)?;
@@ -171,8 +236,19 @@ pub fn check_wheel(path: &Path, version: &str, platform_tag: &str) -> Result<()>
     check_headers(
         "METADATA",
         &metadata[&metadata_path],
-        &[("Name", "delta-arrow-reader"), ("Version", version)],
+        &[("Name", contents.package_name()), ("Version", version)],
     )?;
+    if contents == WheelContents::Cli
+        && metadata[&metadata_path]
+            .lines()
+            .take_while(|line| !line.is_empty())
+            .any(|line| {
+                line.split_once(':')
+                    .is_some_and(|(name, _)| name.eq_ignore_ascii_case("Requires-Dist"))
+            })
+    {
+        return Err("CLI wheel must not install Python dependencies".into());
+    }
     check_headers(
         "WHEEL",
         &metadata[&wheel_path],
@@ -294,14 +370,28 @@ pub fn check_wheel_artifacts(directory: &Path, version: &str) -> Result<Vec<Path
         let paths = fs::read_dir(directory.join(artifact))?
             .map(|entry| entry.map(|entry| entry.path()))
             .collect::<std::io::Result<Vec<_>>>()?;
-        if paths.len() != 1 {
+        let mut actual: Vec<_> = paths
+            .iter()
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        actual.sort();
+        let mut expected = [WheelContents::PythonLibrary, WheelContents::Cli]
+            .map(|contents| contents.filename(version, platform));
+        expected.sort();
+        if actual != expected {
             return Err(format!(
-                "{artifact}: expected one wheel, got {} entries",
-                paths.len()
+                "{artifact}: expected Python and CLI wheels {expected:?}, got {actual:?}"
             )
             .into());
         }
-        check_wheel(&paths[0], version, platform)?;
+        for path in &paths {
+            check_wheel(path, version, platform)?;
+        }
         wheels.extend(paths);
     }
     Ok(wheels)

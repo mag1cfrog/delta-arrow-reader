@@ -41,6 +41,13 @@ impl WheelFixture {
             write_wheel(&path, &wheel_files(tag), true)?;
             paths.push(path);
         }
+        for (platform, tag) in PLATFORMS {
+            let path = directory
+                .join(format!("delta-arrow-reader-{platform}-wheel"))
+                .join(cli_wheel_filename(tag));
+            write_wheel(&path, &cli_wheel_files(tag), true)?;
+            paths.push(path);
+        }
         Ok((directory, paths))
     }
 }
@@ -56,6 +63,47 @@ pub fn wheel_filename(tag: &str) -> String {
 }
 
 pub fn wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
+    combined_wheel_files(tag)
+        .into_iter()
+        .filter(|(name, _)| {
+            !name.contains("/scripts/") && !name.ends_with("cli-THIRD_PARTY_NOTICES.txt")
+        })
+        .collect()
+}
+
+pub fn cli_wheel_filename(tag: &str) -> String {
+    format!("delta_arrow_reader_cli-1.2.3-py3-none-{tag}.whl")
+}
+
+pub fn cli_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
+    combined_wheel_files(tag)
+        .into_iter()
+        .filter(|(name, _)| {
+            name.contains(".dist-info/")
+                || name.contains("/scripts/")
+                || name.ends_with("cli-THIRD_PARTY_NOTICES.txt")
+        })
+        .map(|(name, data)| {
+            let data = if name.ends_with("/METADATA") || name.ends_with("/WHEEL") {
+                String::from_utf8_lossy(&data)
+                    .replace(
+                        "Name: delta-arrow-reader\n",
+                        "Name: delta-arrow-reader-cli\n",
+                    )
+                    .replace("cp310-abi3", "py3-none")
+                    .into_bytes()
+            } else {
+                data
+            };
+            (
+                name.replace("delta_arrow_reader-", "delta_arrow_reader_cli-"),
+                data,
+            )
+        })
+        .collect()
+}
+
+pub fn combined_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
     let (extension, command, signature): (&str, &str, &[u8]) = match tag {
         "win_amd64" => ("pyd", "delta-arrow-reader.exe", b"MZfixture"),
         "macosx_12_0_arm64" => ("abi3.so", "delta-arrow-reader", b"\xcf\xfa\xed\xfefixture"),
@@ -94,17 +142,30 @@ pub fn record_contents(files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
             &contents.len().to_string(),
         ])?;
     }
-    writer.write_record(["delta_arrow_reader-1.2.3.dist-info/RECORD", "", ""])?;
+    let info = if files
+        .iter()
+        .any(|(name, _)| name.starts_with("delta_arrow_reader_cli-"))
+    {
+        "delta_arrow_reader_cli-1.2.3.dist-info/"
+    } else {
+        "delta_arrow_reader-1.2.3.dist-info/"
+    };
+    writer.write_record([&format!("{info}RECORD"), "", ""])?;
     Ok(writer.into_inner()?)
 }
 
 pub fn write_wheel(path: &Path, files: &[(String, Vec<u8>)], compressed: bool) -> Result<()> {
     let mut files = files.to_vec();
     if !files.iter().any(|(name, _)| name.ends_with("/RECORD")) {
-        files.push((
-            "delta_arrow_reader-1.2.3.dist-info/RECORD".into(),
-            record_contents(&files)?,
-        ));
+        let info = if files
+            .iter()
+            .any(|(name, _)| name.starts_with("delta_arrow_reader_cli-"))
+        {
+            "delta_arrow_reader_cli-1.2.3.dist-info/"
+        } else {
+            "delta_arrow_reader-1.2.3.dist-info/"
+        };
+        files.push((format!("{info}RECORD"), record_contents(&files)?));
     }
     write_zip(path, &files, compressed)
 }
@@ -118,9 +179,9 @@ pub fn write_zip(
         if name.ends_with('/') {
             0o040755
         } else if name.ends_with("/delta-arrow-reader") {
-            0o755
+            0o100755
         } else {
-            0o644
+            0o100644
         }
     })
 }
