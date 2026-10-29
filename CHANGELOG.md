@@ -9,6 +9,13 @@
 - install the packaged CLI as dar ([#576](https://github.com/mag1cfrog/delta-arrow-reader/pull/576))
 - distribute smaller Python and CLI wheels separately
 
+### Upgrading the CLI
+
+The Python package `delta-arrow-reader` no longer installs the CLI. Install
+`delta-arrow-reader-cli` with uv or pipx, then use `dar` in place of the
+`delta-arrow-reader` command. Python imports and CLI arguments are unchanged.
+See the [installation and upgrade guide](https://mag1cfrog.github.io/delta-arrow-reader/installation/#command-line).
+
 ## [0.8.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.8.0) - 2026-10-28
 
 ### Command line
