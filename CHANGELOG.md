@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.8.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.8.0...v0.8.1) - 2026-10-29
+
+### Added
+
+- install the packaged CLI as dar ([#576](https://github.com/mag1cfrog/delta-arrow-reader/pull/576))
+- distribute smaller Python and CLI wheels separately
+
 ## [0.8.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.8.0) - 2026-10-28
 
 ### Command line
