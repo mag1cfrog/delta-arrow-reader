@@ -1,9 +1,9 @@
 //! Query failures, safe classifications, and exit statuses.
 
-use std::fmt;
+use std::{error::Error as _, fmt, sync::Arc};
 
 use datafusion::common::{DataFusionError, SchemaError};
-use delta_arrow_reader::error_source_kind;
+use delta_arrow_reader::{DeltaReaderError, error_source_kind};
 use snafu::Snafu;
 
 use crate::diagnostics::ErrorClassification;
@@ -35,6 +35,30 @@ impl fmt::Debug for QueryError {
 }
 
 impl QueryError {
+    pub(crate) fn reader_cause(&self) -> Option<&DeltaReaderError> {
+        let mut source = self.source()?;
+        // Match the core classifier's bound on external error chains.
+        for _ in 0..16 {
+            if let Some(reader) = source
+                .downcast_ref::<DeltaReaderError>()
+                .or_else(|| {
+                    source
+                        .downcast_ref::<Arc<DeltaReaderError>>()
+                        .map(AsRef::as_ref)
+                })
+                .or_else(|| {
+                    source
+                        .downcast_ref::<Box<DeltaReaderError>>()
+                        .map(AsRef::as_ref)
+                })
+            {
+                return Some(reader);
+            }
+            source = source.source()?;
+        }
+        None
+    }
+
     pub(crate) fn classification(&self) -> ErrorClassification {
         match self {
             Self::Input { reason } => ErrorClassification {
@@ -72,7 +96,7 @@ impl QueryError {
                     };
                 let reason = match source.find_root() {
                     DataFusionError::SchemaError(error, _)
-                        if matches!(self, Self::Planning { .. }) =>
+                        if matches!(self, Self::Planning { .. }) && self.reader_cause().is_none() =>
                     {
                         match error.as_ref() {
                             SchemaError::FieldNotFound { .. } => "column_not_found",

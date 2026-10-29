@@ -4,6 +4,7 @@
 mod completion;
 mod explain;
 pub(super) mod json;
+mod reader_errors;
 mod resources;
 mod tables_manifest;
 

@@ -4499,7 +4499,7 @@ pub(in crate::reader) mod tests {
             .expect_err("wrong logical schema must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read code=data_file_read reason=backend_logical_schema_mismatch"
+            "delta reader error: phase=data_file_read code=data_file_read reason=backend_field_count_mismatch"
         );
         assert_failed_metrics(&schema_metrics.snapshot(), 0);
         Ok(())
@@ -4930,7 +4930,7 @@ pub(in crate::reader) mod tests {
             .expect_err("wrong logical schema must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read code=data_file_read reason=backend_logical_schema_mismatch"
+            "delta reader error: phase=data_file_read code=data_file_read reason=backend_field_count_mismatch"
         );
         Ok(())
     }

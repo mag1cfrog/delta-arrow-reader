@@ -169,10 +169,11 @@ impl Error {
                         "a larger spill budget in bytes",
                         "Discard stdout. Increase only --spill-limit-bytes; preserve SQL, snapshot bindings and other limits.",
                     ),
-                    _ if matches!(
-                        classification.source_kind,
-                        Some("storage_full" | "storage_quota_exceeded")
-                    ) =>
+                    _ if source.reader_cause().is_none()
+                        && matches!(
+                            classification.source_kind,
+                            Some("storage_full" | "storage_quota_exceeded")
+                        ) =>
                     {
                         (
                             "--spill-dir",

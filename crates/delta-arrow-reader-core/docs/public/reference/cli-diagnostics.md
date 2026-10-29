@@ -49,6 +49,25 @@ errors, arbitrary input values, paths, credentials, or captured child output are
 Diagnostic version 2 has no `message` field. Use the classification fields for
 decisions.
 
+For a reader failure during SQL, the outer `phase`, `code`, and `reason` describe
+the SQL operation. The optional `cause` contains the reader's `phase`, `code`,
+`reason`, and `source_kind`. Snapshot `bindings` remain on the outer diagnostic.
+For example, incompatible Parquet and Delta column types can produce this cause:
+
+```json
+{
+  "phase": "data_file_read", "code": "data_file_read",
+  "reason": "parquet_schema_match_failed", "source_kind": "unexpected_column_type"
+}
+```
+
+When checking a backend batch against the logical schema, the reader distinguishes
+`backend_field_count_mismatch`, `backend_field_name_mismatch`,
+`backend_nullability_mismatch`, and `backend_field_type_mismatch`.
+Other alignment failures retain `backend_logical_schema_mismatch`.
+The CLI omits `cause` when it cannot identify a typed reader error. These fields
+contain categories, not dependency messages or data values.
+
 ### Correct rejected input
 
 Argument failures include a `hint` describing how to correct the invocation.
