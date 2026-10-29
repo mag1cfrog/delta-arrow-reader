@@ -116,7 +116,7 @@ wheel. For a local Linux development build:
 cargo +1.94.1 xtask stage-python-cli \
   --target x86_64-unknown-linux-gnu --profile dev \
   --destination target/python-cli
-target/python-cli/scripts/delta-arrow-reader --version
+target/python-cli/scripts/dar --version
 ```
 
 `--destination` and `--target` are required. The profile is `release` by default;
@@ -125,13 +125,13 @@ and their output paths are:
 
 | Rust target | Path under `--destination` |
 | --- | --- |
-| `x86_64-unknown-linux-gnu` | `scripts/delta-arrow-reader` |
-| `aarch64-apple-darwin` | `scripts/delta-arrow-reader` |
-| `x86_64-pc-windows-msvc` | `scripts/delta-arrow-reader.exe` |
+| `x86_64-unknown-linux-gnu` | `scripts/dar` |
+| `aarch64-apple-darwin` | `scripts/dar` |
+| `x86_64-pc-windows-msvc` | `scripts/dar.exe` |
 
 The task builds the current checkout's `dar` target with `--locked`, inherits
 Cargo cache and compiler settings, and reads the executable path from Cargo's
-build output. It rejects cross compilation and checks the renamed executable's
+build output. It rejects cross compilation and checks the staged executable's
 version before placing it in `scripts/`. Build diagnostics go to stderr.
 
 The two executable paths in the table are reserved for this task. Every run
@@ -377,7 +377,7 @@ system and CPython/MSVC runtime DLLs. To repeat the audit locally, use the
 installed executable's absolute path and the wheel's platform tag:
 
 ```console
-cargo xtask audit-python-cli /absolute/path/to/venv/bin/delta-arrow-reader \
+cargo xtask audit-python-cli /absolute/path/to/venv/bin/dar \
   --platform-tag manylinux_2_28_x86_64
 ```
 

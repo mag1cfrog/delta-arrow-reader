@@ -86,7 +86,7 @@ pub(crate) fn check_wheel_contents(
     let distribution = contents.package_name().replace('-', "_");
     let dist_info = format!("{distribution}-{version}.dist-info");
     let data = format!("{distribution}-{version}.data");
-    let cli = format!("{data}/scripts/delta-arrow-reader{cli_suffix}");
+    let cli = format!("{data}/scripts/dar{cli_suffix}");
     let extension = format!("delta_arrow_reader/delta_arrow_reader.{extension_suffix}");
     let metadata_path = format!("{dist_info}/METADATA");
     let wheel_path = format!("{dist_info}/WHEEL");

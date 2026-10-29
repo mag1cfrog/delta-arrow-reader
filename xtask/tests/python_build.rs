@@ -48,7 +48,7 @@ fn wheel_build_stops_at_each_failure_and_cleans_stale_payloads() -> Result {
     )?;
     executable(
         &root.join("native CLI"),
-        &format!("printf 'delta-arrow-reader {version}\\n'\n"),
+        &format!("printf 'dar {version}\\n'\n"),
     )?;
     fs::write(
         root.join("cargo-artifact.json"),
@@ -142,10 +142,7 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
     ] {
         let data = root.join("delta_arrow_reader.data");
         fs::create_dir_all(data.join("scripts"))?;
-        fs::write(
-            data.join("scripts/delta-arrow-reader.exe"),
-            "stale wrong platform CLI",
-        )?;
+        fs::write(data.join("scripts/dar.exe"), "stale wrong platform CLI")?;
         let output_directory = root.join(format!("wheel output {failure}"));
         let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
         command
@@ -176,9 +173,9 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             .env(
                 "TEST_EXECUTABLE",
                 if target == "x86_64-pc-windows-msvc" {
-                    "delta-arrow-reader.exe"
+                    "dar.exe"
                 } else {
-                    "delta-arrow-reader"
+                    "dar"
                 },
             )
             .env("TEST_WORKSPACE", repository)
@@ -306,7 +303,7 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
         let data = root.join("delta_arrow_reader.data");
         assert_eq!(data.exists(), failure == "none");
         if failure == "none" {
-            assert!(data.join("scripts/delta-arrow-reader").is_file());
+            assert!(data.join("scripts/dar").is_file());
             assert!(
                 data.join("data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt")
                     .is_file()

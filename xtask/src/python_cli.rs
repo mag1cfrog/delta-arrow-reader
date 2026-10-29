@@ -18,7 +18,7 @@ use crate::{
     repository::{WorkspaceManifest, read_toml, repository_root},
 };
 
-const EXECUTABLE_NAMES: [&str; 2] = ["delta-arrow-reader", "delta-arrow-reader.exe"];
+const EXECUTABLE_NAMES: [&str; 2] = ["dar", "dar.exe"];
 
 #[derive(Args)]
 pub(crate) struct StagePythonCliArgs {
@@ -221,12 +221,10 @@ pub(crate) fn stage_cli(
     )?;
     ensure!(
         output.status.success()
-            && output.stdout == format!("delta-arrow-reader {version}\n").as_bytes()
+            && output.stdout == format!("dar {version}\n").as_bytes()
             && output.stderr.is_empty(),
         InvalidInputSnafu {
-            message: format!(
-                "staged Python CLI must report delta-arrow-reader {version} with no errors"
-            )
+            message: format!("staged Python CLI must report dar {version} with no errors")
         }
     );
     let executable = scripts.join(name);

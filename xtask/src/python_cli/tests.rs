@@ -7,9 +7,9 @@ const LINUX_TARGET: &str = "x86_64-unknown-linux-gnu";
 #[test]
 fn requires_a_supported_native_target_and_selects_its_filename() -> TestResult {
     let targets = [
-        (LINUX_TARGET, "delta-arrow-reader"),
-        ("aarch64-apple-darwin", "delta-arrow-reader"),
-        ("x86_64-pc-windows-msvc", "delta-arrow-reader.exe"),
+        (LINUX_TARGET, "dar"),
+        ("aarch64-apple-darwin", "dar"),
+        ("x86_64-pc-windows-msvc", "dar.exe"),
     ];
     for (target, name) in targets {
         assert_eq!(executable_name(target)?, name);
@@ -101,7 +101,7 @@ fn copy_failures_leave_no_payload_and_never_delete_directories() -> TestResult {
     assert_eq!(fs::read_dir(destination)?.count(), 1);
     assert_eq!(fs::read_dir(&scripts)?.count(), 0);
 
-    let reserved_directory = scripts.join("delta-arrow-reader");
+    let reserved_directory = scripts.join("dar");
     fs::create_dir(&reserved_directory)?;
     let unrelated = reserved_directory.join("keep.txt");
     fs::write(&unrelated, b"keep this")?;
@@ -123,7 +123,7 @@ fn rejects_directory_symlinks_without_following_them() -> TestResult {
     let temporary = tempfile::tempdir()?;
     let outside = temporary.path().join("outside");
     fs::create_dir(&outside)?;
-    let unrelated = outside.join("delta-arrow-reader");
+    let unrelated = outside.join("dar");
     fs::write(&unrelated, b"keep this")?;
     let destination = temporary.path().join("wheel data");
     symlink(&outside, &destination)?;
@@ -163,15 +163,15 @@ fn stages_only_a_verified_executable_and_preserves_its_permissions() -> TestResu
     let scripts = destination.join("scripts");
     fs::create_dir_all(&scripts)?;
     let built = temporary.path().join("built executable");
-    fs::write(&built, "#!/bin/sh\nprintf 'delta-arrow-reader 1.2.3\\n'\n")?;
+    fs::write(&built, "#!/bin/sh\nprintf 'dar 1.2.3\\n'\n")?;
     fs::set_permissions(&built, fs::Permissions::from_mode(0o751))?;
     // Replacing a reserved file symlink must leave its target untouched.
-    symlink(&built, scripts.join("delta-arrow-reader"))?;
-    fs::write(scripts.join("delta-arrow-reader.exe"), b"old Windows build")?;
+    symlink(&built, scripts.join("dar"))?;
+    fs::write(scripts.join("dar.exe"), b"old Windows build")?;
     let executable = stage_cli(&destination, LINUX_TARGET, || {
         Ok((built.clone(), "1.2.3".into()))
     })?;
-    assert_eq!(executable, scripts.join("delta-arrow-reader"));
+    assert_eq!(executable, scripts.join("dar"));
     assert_eq!(fs::read(&executable)?, fs::read(&built)?);
     assert_eq!(
         fs::metadata(&executable)?.permissions().mode() & 0o777,
@@ -182,10 +182,10 @@ fn stages_only_a_verified_executable_and_preserves_its_permissions() -> TestResu
     assert_eq!(fs::read_dir(&destination)?.count(), 1);
 
     for body in [
-        "printf 'delta-arrow-reader 1.2.2\\n'",
-        "printf 'dar 1.2.3\\n'",
-        "printf 'delta-arrow-reader 1.2.3\\n'; printf 'warning\\n' >&2",
-        "printf 'delta-arrow-reader 1.2.3\\n'; exit 1",
+        "printf 'dar 1.2.2\\n'",
+        "printf 'delta-arrow-reader 1.2.3\\n'",
+        "printf 'dar 1.2.3\\n'; printf 'warning\\n' >&2",
+        "printf 'dar 1.2.3\\n'; exit 1",
     ] {
         fs::write(&built, format!("#!/bin/sh\n{body}\n"))?;
         fs::write(&executable, b"stale payload")?;
@@ -234,10 +234,10 @@ fn interrupted_staging_can_be_retried_without_polluting_wheel_data() -> TestResu
         .current_dir(&destination);
     let interrupted = output_with_timeout(&mut child, Duration::from_secs(30))?;
     assert_eq!(interrupted.status.signal(), Some(9), "{interrupted:?}");
-    let executable = destination.join("scripts/delta-arrow-reader");
+    let executable = destination.join("scripts/dar");
     assert!(!executable.exists());
 
-    fs::write(&built, "#!/bin/sh\nprintf 'delta-arrow-reader 1.2.3\\n'\n")?;
+    fs::write(&built, "#!/bin/sh\nprintf 'dar 1.2.3\\n'\n")?;
     let retried = output_with_timeout(&mut child, Duration::from_secs(30))?;
     assert!(retried.status.success(), "{retried:?}");
     assert_eq!(fs::read(&executable)?, fs::read(&built)?);
@@ -262,7 +262,7 @@ fn native_cli_stages_and_reads_a_fixture_outside_the_checkout() -> TestResult {
         profile: "dev".into(),
     }
     .run()?;
-    let executable = destination.join("scripts/delta-arrow-reader");
+    let executable = destination.join("scripts/dar");
     let output = output_with_timeout(
         Command::new(&executable)
             .arg("--version")
@@ -273,11 +273,7 @@ fn native_cli_stages_and_reads_a_fixture_outside_the_checkout() -> TestResult {
     assert!(output.stderr.is_empty());
     assert_eq!(
         output.stdout,
-        format!(
-            "delta-arrow-reader {}\n",
-            manifest.workspace.package.version
-        )
-        .as_bytes()
+        format!("dar {}\n", manifest.workspace.package.version).as_bytes()
     );
 
     let fixture = repository.join(

@@ -363,7 +363,7 @@ fn wheels_without_a_cli_cannot_reach_either_package_index() -> Result<()> {
             )?;
             upload.assert_rejected(
                 upload.command(index).output()?,
-                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader",
+                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/dar",
             )?;
             assert!(!upload.fixture.directory.join("curl-arguments").exists());
         }

@@ -92,14 +92,14 @@ See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and m
 
 ### CLI
 
-Run the CLI without installing the Python API:
+Run the CLI with uv:
 
 ```console
-uvx --from delta-arrow-reader-cli delta-arrow-reader --help
+uvx --from delta-arrow-reader-cli dar --help
 ```
 
-You can also
-[install a standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
+Install with [pipx](https://mag1cfrog.github.io/delta-arrow-reader/installation/#install-cli-with-pipx),
+or use a [standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
 The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
 metadata as JSON and rows as an Arrow IPC stream.
 

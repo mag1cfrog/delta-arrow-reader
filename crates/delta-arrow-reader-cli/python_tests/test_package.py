@@ -30,7 +30,7 @@ class CliPackageTests(unittest.TestCase):
             root
             / "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned"
         )
-        name = "delta-arrow-reader.exe" if os.name == "nt" else "delta-arrow-reader"
+        name = "dar.exe" if os.name == "nt" else "dar"
         executable = Path(sysconfig.get_path("scripts")) / name
         target = Path(os.environ.get("CARGO_TARGET_DIR", root / "target"))
         name = "xtask.exe" if os.name == "nt" else "xtask"

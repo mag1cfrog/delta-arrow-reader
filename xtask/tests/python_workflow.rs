@@ -754,13 +754,21 @@ fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<(
     for platform in build["strategy"]["matrix"]["include"].as_array().unwrap() {
         let windows = platform["os"] == "windows-2022";
         let cli = if windows {
-            "Scripts/delta-arrow-reader.exe"
+            "Scripts/dar.exe"
         } else {
-            "bin/delta-arrow-reader"
+            "bin/dar"
         };
-        let script = audit["run"].as_str().unwrap()
-            .replace("${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}", cli)
-            .replace("${{ matrix.platform-tag }}", platform["platform-tag"].as_str().unwrap());
+        let script = audit["run"]
+            .as_str()
+            .unwrap()
+            .replace(
+                "${{ runner.os == 'Windows' && 'Scripts/dar.exe' || 'bin/dar' }}",
+                cli,
+            )
+            .replace(
+                "${{ matrix.platform-tag }}",
+                platform["platform-tag"].as_str().unwrap(),
+            );
         for exit_status in [0, 9] {
             let script =
                 format!("cargo() {{ printf '%s\\n' \"$@\"; return {exit_status}; }}\n{script}");
@@ -1025,16 +1033,16 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
                     test "$UV_TOOL_BIN_DIR" = "$tools/bin"
                     test "$UV_CACHE_DIR" = "$tools/cache" ;;
                 *'python -I -m unittest '*) record uvx-tests "$@" ;;
-                *'delta-arrow-reader --version')
+                *'dar --version')
                     record uvx-version "$@" || return 9
-                    printf 'delta-arrow-reader %s\n' "$UVX_VERSION" ;;
+                    printf 'dar %s\n' "$UVX_VERSION" ;;
                 *) return 99 ;;
             esac
         }
         tool_python() { record tool-tests "$@"; }
         tool_cli() {
             record tool-version "$@" || return 9
-            printf 'delta-arrow-reader %s\n' "$TOOL_VERSION"
+            printf 'dar %s\n' "$TOOL_VERSION"
         }
     "#;
     for platform in build["strategy"]["matrix"]["include"].as_array().unwrap() {
@@ -1053,10 +1061,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
                 &format!("\"$UV_TOOL_DIR/delta-arrow-reader-cli/{python}\""),
                 "tool_python",
             )
-            .replace(
-                &format!("\"$UV_TOOL_BIN_DIR/delta-arrow-reader{suffix}\""),
-                "tool_cli",
-            );
+            .replace(&format!("\"$UV_TOOL_BIN_DIR/dar{suffix}\""), "tool_cli");
         for failure in [
             "",
             "setup",
@@ -1115,7 +1120,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
                             "uvx-tests|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|python|-I|-m|unittest|discover|-s|{tests}|-k|installed|"
                         ),
                         format!(
-                            "uvx-version|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|delta-arrow-reader|--version|"
+                            "uvx-version|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|dar|--version|"
                         ),
                     ]
                 );
@@ -1246,7 +1251,7 @@ fn wheels_without_a_cli_cannot_complete_release_validation() -> Result<()> {
         assert!(!output.status.success(), "{platform}: {output:?}");
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(
-                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader"
+                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/dar"
             ),
             "{output:?}"
         );

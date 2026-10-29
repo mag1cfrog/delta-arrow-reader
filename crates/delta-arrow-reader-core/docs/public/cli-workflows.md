@@ -2,8 +2,7 @@
 
 Start here after [reading your first rows](cli-quickstart.md). Keep the table
 path and chosen snapshot version. The examples assume columns named
-`id`, `amount`, and `day`; substitute names from your table. The standalone
-command is `dar`; Python package users run `delta-arrow-reader` instead.
+`id`, `amount`, and `day`; substitute names from your table.
 
 ```sh
 table=/path/to/table

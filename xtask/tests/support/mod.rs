@@ -105,9 +105,9 @@ pub fn cli_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
 
 pub fn combined_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
     let (extension, command, signature): (&str, &str, &[u8]) = match tag {
-        "win_amd64" => ("pyd", "delta-arrow-reader.exe", b"MZfixture"),
-        "macosx_12_0_arm64" => ("abi3.so", "delta-arrow-reader", b"\xcf\xfa\xed\xfefixture"),
-        _ => ("abi3.so", "delta-arrow-reader", b"\x7fELFfixture"),
+        "win_amd64" => ("pyd", "dar.exe", b"MZfixture"),
+        "macosx_12_0_arm64" => ("abi3.so", "dar", b"\xcf\xfa\xed\xfefixture"),
+        _ => ("abi3.so", "dar", b"\x7fELFfixture"),
     };
     vec![
         (
@@ -178,7 +178,7 @@ pub fn write_zip(
     write_zip_with_permissions(path, files, compressed, |name| {
         if name.ends_with('/') {
             0o040755
-        } else if name.ends_with("/delta-arrow-reader") {
+        } else if name.ends_with("/dar") {
             0o100755
         } else {
             0o100644

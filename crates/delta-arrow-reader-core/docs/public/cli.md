@@ -4,9 +4,7 @@ For a first read, start with the [CLI quickstart](cli-quickstart.md). For a task
 example, use [Filter, group, and join](cli-workflows.md),
 [Save and read results](cli-results.md), or [Connect to storage](cli-storage.md).
 
-The examples use `dar`. If you installed the Python wheel, substitute
-`delta-arrow-reader`; both names accept the same arguments. See
-[Installation](installation.md) for packages and runtime requirements.
+See [Installation](installation.md) for packages and runtime requirements.
 
 ## Commands
 

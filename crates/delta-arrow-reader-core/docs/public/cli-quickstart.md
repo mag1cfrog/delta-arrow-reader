@@ -7,8 +7,6 @@ individual Parquet file. The examples use Bash.
 ## Before you start
 
 [Install a CLI with these commands](installation.md#cli-binaries-and-container-images).
-The standalone command is `dar`. If you installed the Python package, replace
-`dar` with `delta-arrow-reader`; the arguments are the same.
 
 Start with a local table. For a cloud URL and an existing credential file, use
 [Connect to storage](cli-storage.md). For a catalog name and a Databricks

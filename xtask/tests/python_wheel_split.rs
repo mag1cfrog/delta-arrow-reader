@@ -45,10 +45,7 @@ fn members(path: &Path) -> Result<BTreeSet<String>> {
 fn splits_real_native_payloads_preserves_symbols_and_validates_both_distributions() -> Result<()> {
     let root = tempfile::tempdir()?;
     let source = root.path().join("native.rs");
-    fs::write(
-        &source,
-        "fn main() { println!(\"delta-arrow-reader 1.2.3\"); }",
-    )?;
+    fs::write(&source, "fn main() { println!(\"dar 1.2.3\"); }")?;
     let native = root.path().join("native");
     let output = Command::new("rustc")
         .arg(&source)
@@ -60,7 +57,7 @@ fn splits_real_native_payloads_preserves_symbols_and_validates_both_distribution
     let tag = "manylinux_2_28_x86_64";
     let mut files = combined_wheel_files(tag);
     for (name, data) in &mut files {
-        if name.ends_with("/delta-arrow-reader") || name.ends_with(".abi3.so") {
+        if name.ends_with("/dar") || name.ends_with(".abi3.so") {
             *data = native_bytes.clone();
         }
     }
@@ -84,6 +81,14 @@ fn splits_real_native_payloads_preserves_symbols_and_validates_both_distribution
                 || name.ends_with("python-THIRD_PARTY_NOTICES.txt"))
     );
     assert!(library_members.is_disjoint(&cli_members));
+    assert_eq!(
+        cli_members
+            .iter()
+            .filter(|name| name.contains("/scripts/"))
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["delta_arrow_reader_cli-1.2.3.data/scripts/dar"]
+    );
     let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("check-python-wheel")
         .args([&python, &cli])
@@ -93,7 +98,7 @@ fn splits_real_native_payloads_preserves_symbols_and_validates_both_distribution
     let identities: Value =
         serde_json::from_slice(&fs::read(root.path().join("symbols/binaries.json"))?)?;
     assert_eq!(identities["version"], "1.2.3");
-    for filename in ["delta-arrow-reader", "delta_arrow_reader.abi3.so"] {
+    for filename in ["dar", "delta_arrow_reader.abi3.so"] {
         assert_eq!(
             fs::read(root.path().join("symbols").join(filename))?,
             native_bytes
