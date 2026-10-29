@@ -6,7 +6,7 @@ This guide covers the two PyPI distributions released together:
 - `delta-arrow-reader`: the native `dar` command, with no
   Python package dependencies.
 
-The two distributions use the same version, starting with 0.9.0. Existing combined
+The two distributions use the same version, starting with 0.9.1. Existing combined
 wheels remain unchanged. Each publication requires successful release checks
 and maintainer authorization.
 

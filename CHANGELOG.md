@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Package the Python API and CLI wheels with PyPA's standard wheel packager.
+  This fixes the archive format rejected by PyPI during the 0.9.0 upload.
+
 ## [0.9.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.8.0...v0.9.0) - 2026-10-29
 
 ### Added
@@ -11,8 +16,8 @@
 
 ### Package names and upgrading from 0.8
 
-On PyPI, `delta-arrow-reader` now installs the `dar` command. The Python API
-is published as `delta-arrow-reader-py`; its import remains `delta_arrow_reader`.
+Starting with 0.9.1 on PyPI, `delta-arrow-reader` installs the `dar` command.
+The Python API is published as `delta-arrow-reader-py`; its import remains `delta_arrow_reader`.
 Update Python project dependencies to the new package name. In an existing pip
 environment, uninstall the old combined package before installing the new ones.
 For CLI scripts, replace the `delta-arrow-reader` command with `dar`.

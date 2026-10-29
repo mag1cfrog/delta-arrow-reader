@@ -29,13 +29,13 @@ first. For a new installation, run this in your project's activated virtual
 environment:
 
 ```console
-python -m pip install --upgrade --only-binary=:all: "delta-arrow-reader-py>=0.9"
+python -m pip install --upgrade --only-binary=:all: "delta-arrow-reader-py>=0.9.1"
 python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
 ```
 
 The second command prints the installed version. Installation also downloads a
 compatible PyArrow wheel; neither package is compiled from source. For a project
-managed by uv, use `uv add "delta-arrow-reader-py>=0.9"` instead.
+managed by uv, use `uv add "delta-arrow-reader-py>=0.9.1"` instead.
 
 Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
 to read your first rows.
