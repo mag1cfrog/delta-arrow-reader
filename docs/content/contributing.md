@@ -226,7 +226,7 @@ from the repository root with the expected version and platform tag:
 
 ```console
 cargo xtask check-python-wheel \
-  /path/to/delta_arrow_reader-X.Y.Z-cp310-abi3-manylinux_2_28_x86_64.whl \
+  /path/to/delta_arrow_reader_py-X.Y.Z-cp310-abi3-manylinux_2_28_x86_64.whl \
   --expected-version X.Y.Z --platform-tag manylinux_2_28_x86_64
 ```
 

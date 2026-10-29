@@ -10,8 +10,8 @@ import delta_arrow_reader
 
 class PackageTests(unittest.TestCase):
     def test_installed_package(self):
-        distribution = importlib.metadata.distribution("delta-arrow-reader")
-        self.assertEqual(distribution.metadata["Name"], "delta-arrow-reader")
+        distribution = importlib.metadata.distribution("delta-arrow-reader-py")
+        self.assertEqual(distribution.metadata["Name"], "delta-arrow-reader-py")
         self.assertEqual(delta_arrow_reader.__version__, distribution.version)
         self.assertEqual(distribution.metadata["Requires-Python"], ">=3.10")
         self.assertIn("pyarrow>=18.0.0", distribution.requires)

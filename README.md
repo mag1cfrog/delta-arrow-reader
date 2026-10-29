@@ -48,7 +48,7 @@ Start with [Python](#python), the [command line](#cli), or [Rust](#rust).
 Install from PyPI (Python 3.10 or later):
 
 ```bash
-pip install delta-arrow-reader
+pip install delta-arrow-reader-py
 ```
 
 Read tables as PyArrow batches or query them with SQL. Start with the
@@ -97,7 +97,7 @@ See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and m
 Try the CLI with [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```console
-uvx --from delta-arrow-reader-cli dar --help
+uvx --from delta-arrow-reader dar --help
 ```
 
 Install with [pipx](https://mag1cfrog.github.io/delta-arrow-reader/installation/#install-cli-with-pipx),

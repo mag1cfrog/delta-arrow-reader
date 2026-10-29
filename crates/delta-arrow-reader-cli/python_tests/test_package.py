@@ -11,7 +11,7 @@ from pathlib import Path
 
 class CliPackageTests(unittest.TestCase):
     def test_installed_package_has_no_python_api_dependencies(self):
-        distribution = importlib.metadata.distribution("delta-arrow-reader-cli")
+        distribution = importlib.metadata.distribution("delta-arrow-reader")
         self.assertFalse(distribution.requires)
         self.assertIsNone(importlib.util.find_spec("pyarrow"))
         self.assertIsNone(importlib.util.find_spec("delta_arrow_reader"))
@@ -44,7 +44,7 @@ class CliPackageTests(unittest.TestCase):
                 "check-installed-python-cli",
                 str(executable),
                 "--expected-version",
-                importlib.metadata.version("delta-arrow-reader-cli"),
+                importlib.metadata.version("delta-arrow-reader"),
                 "--fixture",
                 str(fixture),
                 "--python-base-prefix",

@@ -277,14 +277,14 @@ jobs:
         run: |
           cmp "$RUNNER_TEMP/python-sdist/Cargo.lock" .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
-          auditwheel show dist/delta_arrow_reader-[0-9]*.whl
+          auditwheel show dist/delta_arrow_reader_py-[0-9]*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
         if: ${{ !inputs.cache-only }}
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv python310
           python310/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
-            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-[0-9]*.whl 'pyarrow==18.0.0'
+            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_py-[0-9]*.whl 'pyarrow==18.0.0'
           python310/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Test independent CLI wheel
@@ -293,7 +293,7 @@ jobs:
         run: |
           python -m venv cli310
           cli310/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
-            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl
+            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-*.whl
           cli310/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests"
       - name: Audit installed wheel CLI
@@ -315,7 +315,7 @@ jobs:
         run: |
           python -m venv python314
           python314/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
-            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-[0-9]*.whl
+            "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_py-[0-9]*.whl
           python314/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Test installed wheel on glibc 2.28
@@ -345,11 +345,11 @@ jobs:
                   dependencies+=(pyarrow==18.0.0)
                 fi
                 /tmp/python$version/bin/python -m pip install --only-binary=:all: \
-                  /wheels/delta_arrow_reader-[0-9]*.whl "${dependencies[@]}"
+                  /wheels/delta_arrow_reader_py-[0-9]*.whl "${dependencies[@]}"
                 /tmp/python$version/bin/python -I -m unittest discover \
                   -s /acceptance/crates/delta-arrow-reader-python/tests -k installed
                 /opt/python/cp$version-cp$version/bin/python -m venv /tmp/cli$version
-                /tmp/cli$version/bin/python -m pip install --only-binary=:all: /wheels/delta_arrow_reader_cli-*.whl
+                /tmp/cli$version/bin/python -m pip install --only-binary=:all: /wheels/delta_arrow_reader-*.whl
                 /tmp/cli$version/bin/python -I -m unittest discover \
                   -s /acceptance/crates/delta-arrow-reader-cli/python_tests
               done
@@ -367,17 +367,17 @@ jobs:
           export UV_TOOL_DIR="$tools/environments"
           export UV_TOOL_BIN_DIR="$tools/bin"
           export UV_CACHE_DIR="$tools/cache"
-          python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl
-          "$UV_TOOL_DIR/delta-arrow-reader-cli/${{ matrix.venv-python }}" -I -m unittest discover \
+          python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-*.whl
+          "$UV_TOOL_DIR/delta-arrow-reader/${{ matrix.venv-python }}" -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests" -k installed
           tool_version="$("$UV_TOOL_BIN_DIR/dar${{ runner.os == 'Windows' && '.exe' || '' }}" --version)"
           test "$tool_version" = "dar $EXPECTED_VERSION"
           # uv tool run is uvx; --isolated ignores the persistent tool above.
-          python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl \
+          python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-*.whl \
             python -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests" -k installed
           uvx_version="$(python -m uv tool run --no-config --isolated \
-            --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl dar --version)"
+            --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader-*.whl dar --version)"
           test "$uvx_version" = "dar $EXPECTED_VERSION"
       - name: Retain installed CLI invocation records
         if: ${{ always() && !inputs.cache-only }}

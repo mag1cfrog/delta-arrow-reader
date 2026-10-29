@@ -24,16 +24,18 @@ wheel.
 
 ### Install from PyPI
 
-In your project's activated virtual environment, run:
+If you used version 0.8, follow the [upgrade instructions](#upgrade-from-0-8)
+first. For a new installation, run this in your project's activated virtual
+environment:
 
 ```console
-python -m pip install --upgrade --only-binary=:all: "delta-arrow-reader>=0.8"
+python -m pip install --upgrade --only-binary=:all: "delta-arrow-reader-py>=0.9"
 python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
 ```
 
 The second command prints the installed version. Installation also downloads a
 compatible PyArrow wheel; neither package is compiled from source. For a project
-managed by uv, use `uv add "delta-arrow-reader>=0.8"` instead.
+managed by uv, use `uv add "delta-arrow-reader-py>=0.9"` instead.
 
 Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
 to read your first rows.
@@ -85,7 +87,7 @@ python -m pip install ./crates/delta-arrow-reader-python
 Try the CLI with uv:
 
 ```console
-uvx --no-build --from delta-arrow-reader-cli dar --help
+uvx --no-build --from delta-arrow-reader dar --help
 ```
 
 To use `dar` directly in your shell, [install it with uv](#install-cli-with-uv)
@@ -104,7 +106,7 @@ Choose version 0.8 or newer with successful download verification in its CLI sec
 then run:
 
 ```console
-uv tool install --no-build delta-arrow-reader-cli
+uv tool install --no-build delta-arrow-reader
 dar --version
 ```
 
@@ -120,7 +122,7 @@ If uv reports that its executable directory is missing from `PATH`, run
 then install the command:
 
 ```console
-pipx install delta-arrow-reader-cli
+pipx install delta-arrow-reader
 dar --version
 ```
 
@@ -131,45 +133,47 @@ to preview rows and run SQL.
 For a single run:
 
 ```console
-pipx run --spec delta-arrow-reader-cli dar --help
+pipx run --spec delta-arrow-reader dar --help
 ```
 
 </details>
 
 <details markdown="1">
-<summary>Upgrade from the combined Python and CLI package</summary>
+<summary id="upgrade-from-0-8">Upgrade from 0.8</summary>
 
-The `delta-arrow-reader` package bundled the CLI with its Python library through
-version 0.8.0. If you installed that package with uv tools, replace it with the
-separate CLI package:
+Starting with 0.9, `delta-arrow-reader` installs the `dar` command, and
+`delta-arrow-reader-py` provides the Python API. Python imports and CLI arguments
+are unchanged. Replace `delta-arrow-reader` with `dar` in scripts that call the
+installed command.
+
+For a CLI installation managed by uv, upgrade the existing package:
 
 ```console
-uv tool uninstall delta-arrow-reader
-uv tool install --no-build delta-arrow-reader-cli
+uv tool upgrade --no-build delta-arrow-reader
 ```
 
-For a pipx installation:
+For pipx, reinstall the package to remove the old command link:
 
 ```console
-pipx uninstall delta-arrow-reader
-pipx install delta-arrow-reader-cli
+pipx reinstall delta-arrow-reader
 ```
 
-For a pip environment that needs both interfaces, upgrade both packages:
+For a Python project, replace `delta-arrow-reader` with `delta-arrow-reader-py`
+in its dependencies. In a pip environment, remove the old combined package
+before installing the Python package, so uninstalling the old package cannot
+remove files from the new installation:
 
 ```console
-python -m pip install --upgrade --only-binary=:all: delta-arrow-reader
-python -m pip install --upgrade --only-binary=:all: delta-arrow-reader-cli
+python -m pip uninstall delta-arrow-reader
+python -m pip install --only-binary=:all: delta-arrow-reader-py
+```
+
+If that environment also needs the CLI, install it afterward:
+
+```console
+python -m pip install --only-binary=:all: delta-arrow-reader
 dar --version
 ```
-
-Projects that only use the Python API need just the first command. In scripts
-that call the installed executable, replace `delta-arrow-reader` with `dar`.
-Python imports and CLI arguments are unchanged.
-
-For one-off runs, use `uvx --from delta-arrow-reader-cli dar --version` or
-`pipx run --spec delta-arrow-reader-cli dar --version`. Replace `--version`
-with your command's arguments.
 
 </details>
 
@@ -297,7 +301,7 @@ The examples use your application's Tokio runtime.
 ### Streaming reader
 
 ```bash
-cargo add delta-arrow-reader@0.8
+cargo add delta-arrow-reader@0.9
 cargo add tokio --features macros,rt-multi-thread
 ```
 
@@ -310,7 +314,7 @@ dependency is needed.
 To query the table with SQL in Rust:
 
 ```bash
-cargo add delta-arrow-reader@0.8 --features datafusion
+cargo add delta-arrow-reader@0.9 --features datafusion
 cargo add datafusion@54 --no-default-features --features sql
 cargo add tokio --features macros,rt-multi-thread
 ```

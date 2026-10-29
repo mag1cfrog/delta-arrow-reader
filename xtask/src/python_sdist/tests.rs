@@ -55,7 +55,7 @@ impl Fixture {
         let source = directory.path().join("input.tar.gz");
         let destination = directory
             .path()
-            .join("output directory/delta_arrow_reader-1.2.3.tar.gz");
+            .join("output directory/delta_arrow_reader_py-1.2.3.tar.gz");
         Ok(Self {
             directory,
             repository,
@@ -87,7 +87,7 @@ impl Fixture {
             header.set_cksum();
             archive.append_data(
                 &mut header,
-                format!("delta_arrow_reader-1.2.3/{relative}"),
+                format!("delta_arrow_reader_py-1.2.3/{relative}"),
                 b"retained".as_slice(),
             )?;
         }
@@ -111,7 +111,7 @@ fn preserves_metadata_and_adds_build_sources_without_generated_files() -> TestRe
         let mut entry = entry?;
         let path = entry
             .path()?
-            .strip_prefix("delta_arrow_reader-1.2.3")?
+            .strip_prefix("delta_arrow_reader_py-1.2.3")?
             .to_owned();
         let mut contents = String::new();
         entry.read_to_string(&mut contents)?;

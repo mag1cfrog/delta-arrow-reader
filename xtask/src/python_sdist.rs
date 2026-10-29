@@ -21,7 +21,7 @@ pub(crate) fn complete(source: &Path, destination: &Path) -> Result<()> {
 fn complete_workspace_sdist(repository: &Path, source: &Path, destination: &Path) -> Result<()> {
     let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
     let root = PathBuf::from(format!(
-        "delta_arrow_reader-{}",
+        "delta_arrow_reader_py-{}",
         manifest.workspace.package.version
     ));
     let mut sources = BTreeMap::new();

@@ -963,16 +963,16 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
                 stdout.lines().collect::<Vec<_>>(),
                 [
                     "create 310",
-                    "310 -m pip install --only-binary=:all: /wheels/delta_arrow_reader-[0-9]*.whl pyarrow==18.0.0",
+                    "310 -m pip install --only-binary=:all: /wheels/delta_arrow_reader_py-[0-9]*.whl pyarrow==18.0.0",
                     "310 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
                     "create 310",
-                    "cli310 -m pip install --only-binary=:all: /wheels/delta_arrow_reader_cli-*.whl",
+                    "cli310 -m pip install --only-binary=:all: /wheels/delta_arrow_reader-*.whl",
                     "cli310 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-cli/python_tests",
                     "create 314",
-                    "314 -m pip install --only-binary=:all: /wheels/delta_arrow_reader-[0-9]*.whl",
+                    "314 -m pip install --only-binary=:all: /wheels/delta_arrow_reader_py-[0-9]*.whl",
                     "314 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
                     "create 314",
-                    "cli314 -m pip install --only-binary=:all: /wheels/delta_arrow_reader_cli-*.whl",
+                    "cli314 -m pip install --only-binary=:all: /wheels/delta_arrow_reader-*.whl",
                     "cli314 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-cli/python_tests",
                 ]
             );
@@ -1015,7 +1015,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
     let runner_temp = fixture.directory.join("runner temp");
     fs::create_dir_all(workspace.join("dist"))?;
     fs::create_dir(&runner_temp)?;
-    let wheel = workspace.join("dist/delta_arrow_reader_cli-1.2.3-py3-none-linux_x86_64.whl");
+    let wheel = workspace.join("dist/delta_arrow_reader-1.2.3-py3-none-linux_x86_64.whl");
     fs::write(&wheel, "fixture")?;
     let calls = fixture.directory.join("calls");
     let mocks = r#"
@@ -1058,7 +1058,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
             .replace("${{ matrix.venv-python }}", python)
             .replace("${{ runner.os == 'Windows' && '.exe' || '' }}", suffix)
             .replace(
-                &format!("\"$UV_TOOL_DIR/delta-arrow-reader-cli/{python}\""),
+                &format!("\"$UV_TOOL_DIR/delta-arrow-reader/{python}\""),
                 "tool_python",
             )
             .replace(&format!("\"$UV_TOOL_BIN_DIR/dar{suffix}\""), "tool_cli");
@@ -1250,9 +1250,8 @@ fn wheels_without_a_cli_cannot_complete_release_validation() -> Result<()> {
             .output()?;
         assert!(!output.status.success(), "{platform}: {output:?}");
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains(
-                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/dar"
-            ),
+            String::from_utf8_lossy(&output.stderr)
+                .contains("missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/dar"),
             "{output:?}"
         );
         assert_eq!(fs::read_to_string(output_file)?, "existing=kept\n");

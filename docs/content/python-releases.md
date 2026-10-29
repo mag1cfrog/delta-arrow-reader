@@ -2,11 +2,11 @@
 
 This guide covers the two PyPI distributions released together:
 
-- `delta-arrow-reader`: the Python API, with PyArrow as a dependency.
-- `delta-arrow-reader-cli`: the native `dar` command, with no
+- `delta-arrow-reader-py`: the Python API, with PyArrow as a dependency.
+- `delta-arrow-reader`: the native `dar` command, with no
   Python package dependencies.
 
-The split layout requires a new shared version after 0.8.0. Existing combined
+The two distributions use the same version, starting with 0.9.0. Existing combined
 wheels remain unchanged. Each publication requires successful release checks
 and maintainer authorization.
 
@@ -39,7 +39,7 @@ Use these values for both projects, including the environment field:
 
 | Publisher field | TestPyPI | PyPI |
 | --- | --- | --- |
-| Project names | `delta-arrow-reader`, `delta-arrow-reader-cli` | `delta-arrow-reader`, `delta-arrow-reader-cli` |
+| Project names | `delta-arrow-reader`, `delta-arrow-reader-py` | `delta-arrow-reader`, `delta-arrow-reader-py` |
 | Repository owner | `mag1cfrog` | `mag1cfrog` |
 | Repository name | `delta-arrow-reader` | `delta-arrow-reader` |
 | Workflow filename | `pypi.yml` | `pypi.yml` |
@@ -50,9 +50,10 @@ For an existing project, use its
 For a new project, add a
 [pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
 under the account's Publishing settings. A pending publisher does not reserve
-the project name; the first successful publication creates the project. Configure
-the new CLI publisher before releasing the split packages. The existing
-Python project's publisher does not authorize the new project.
+the project name; the first successful publication creates the project.
+Keep the existing `delta-arrow-reader` publisher for the CLI and configure a
+pending publisher for `delta-arrow-reader-py` before releasing. Authorization
+for the existing project does not extend to the new Python project.
 
 The workflow uses OIDC through `pypa/gh-action-pypi-publish`, with `id-token: write`
 only on its two upload jobs. It needs no PyPI password or long-lived API token.
@@ -118,14 +119,14 @@ cd "$PYTHON_RELEASE_CHECK"
 python -m pip --isolated install --only-binary=:all: \
   --index-url https://pypi.org/simple/ 'pyarrow>=18.0.0'
 python -m pip --isolated install --no-cache-dir --only-binary=:all: --no-deps \
-  --index-url https://test.pypi.org/simple/ "delta-arrow-reader==$PYTHON_RELEASE_VERSION"
+  --index-url https://test.pypi.org/simple/ "delta-arrow-reader-py==$PYTHON_RELEASE_VERSION"
 python -m pip check
 python -I - "$PYTHON_RELEASE_VERSION" <<'PY'
 from importlib.metadata import version
 import sys
 import delta_arrow_reader
 
-assert version("delta-arrow-reader") == delta_arrow_reader.__version__ == sys.argv[1]
+assert version("delta-arrow-reader-py") == delta_arrow_reader.__version__ == sys.argv[1]
 print(delta_arrow_reader.__version__)
 PY
 python -I -m unittest discover \
@@ -141,7 +142,7 @@ tool's absolute path:
 python3 -m venv "$PYTHON_RELEASE_CHECK/cli"
 . "$PYTHON_RELEASE_CHECK/cli/bin/activate"
 python -m pip --isolated install --no-cache-dir --only-binary=:all: \
-  --index-url https://test.pypi.org/simple/ "delta-arrow-reader-cli==$PYTHON_RELEASE_VERSION"
+  --index-url https://test.pypi.org/simple/ "delta-arrow-reader==$PYTHON_RELEASE_VERSION"
 python -m pip check
 test "$(dar --version)" = "dar $PYTHON_RELEASE_VERSION"
 python -I -m unittest discover \
@@ -209,8 +210,8 @@ a new run. After publication, repeat the installation and acceptance checks in a
 fresh environment, changing the reader's index URL to `https://pypi.org/simple/`.
 Record both PyPI version URLs and installation results with the release record.
 Also verify the exact public version with uv tool and uvx in separate tool
-environments. Pin the package as `delta-arrow-reader-cli==X.Y.Z` for uv tool, and
-use `uvx --no-build --isolated --from delta-arrow-reader-cli==X.Y.Z dar --version`
+environments. Pin the package as `delta-arrow-reader==X.Y.Z` for uv tool, and
+use `uvx --no-build --isolated --from delta-arrow-reader==X.Y.Z dar --version`
 for uvx. Both must expose `dar`; neither installs the Python API
 into a consumer's project environment. Use the
 [installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python)

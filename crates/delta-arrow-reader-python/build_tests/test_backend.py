@@ -29,7 +29,7 @@ class BackendTests(unittest.TestCase):
             spec.loader.exec_module(self.backend)
 
     def test_completes_sdist_from_a_temporary_archive_with_argument_lists(self):
-        filename = "delta_arrow_reader-1.2.3.tar.gz"
+        filename = "delta_arrow_reader_py-1.2.3.tar.gz"
         settings = {"build-args": "--locked"}
         self.maturin.build_sdist.return_value = filename
         with tempfile.TemporaryDirectory(prefix="workspace with spaces ") as temporary:
@@ -54,7 +54,7 @@ class BackendTests(unittest.TestCase):
             self.assertFalse(Path(source_dir).exists())
 
     def test_native_tool_failure_does_not_return_a_completed_archive(self):
-        self.maturin.build_sdist.return_value = "delta_arrow_reader-1.2.3.tar.gz"
+        self.maturin.build_sdist.return_value = "delta_arrow_reader_py-1.2.3.tar.gz"
         with patch.object(self.backend.subprocess, "run",
                           side_effect=subprocess.CalledProcessError(1, ["cargo"])):
             with self.assertRaises(subprocess.CalledProcessError):
@@ -62,7 +62,7 @@ class BackendTests(unittest.TestCase):
         self.assertFalse(Path(self.maturin.build_sdist.call_args.args[0]).exists())
 
     def test_wheel_hooks_forward_frontend_paths_and_maturin_arguments(self):
-        filename = "delta_arrow_reader-1.2.3-cp310-abi3-linux_x86_64.whl"
+        filename = "delta_arrow_reader_py-1.2.3-cp310-abi3-linux_x86_64.whl"
         settings = {"maturin.build-args": ["--profile", "dev", "--target-dir", "build output"]}
         self.maturin.get_maturin_pep517_args.return_value = settings["maturin.build-args"]
         for editable in (False, True):
