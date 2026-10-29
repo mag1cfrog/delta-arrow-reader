@@ -65,7 +65,7 @@ strings so large integers remain exact.
 
 The result is a **sample**, and row order is unspecified. Reaching three rows
 does not prove that the table has only three rows. Preview defaults to an 8 KiB
-response budget and a 30-second deadline. Choose a small projection; see
+response budget and a 30-second deadline. Select only the columns you need; see
 [Handle a result that is too large](cli-recovery.md#the-result-is-too-large)
 if even one value cannot fit.
 

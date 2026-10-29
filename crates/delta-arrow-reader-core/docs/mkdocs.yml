@@ -54,9 +54,9 @@ nav:
   - Start here:
       - Overview: index.md
       - Installation: installation.md
-      - Command-line quickstart: cli-quickstart.md
       - Read Unity Catalog tables: unity-catalog.md
   - Command line:
+      - Quickstart: cli-quickstart.md
       - Everyday tasks:
           - Filter, group, and join: cli-workflows.md
           - Save and read results: cli-results.md

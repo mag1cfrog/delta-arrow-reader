@@ -82,8 +82,6 @@ python -m pip install ./crates/delta-arrow-reader-python
 
 ## Command line
 
-Use version 0.8 or newer for the CLI workflows on these pages.
-
 Try the CLI with uv:
 
 ```console
@@ -97,7 +95,7 @@ The CLI supports the [wheel platforms listed above](#python).
 
 Standalone `dar` binaries and container images are available from
 [GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases).
-Choose a version whose CLI section reports successful download verification.
+Choose version 0.8 or newer with successful download verification in its CLI section.
 
 <details markdown="1">
 <summary id="install-cli-with-uv">Install the command with uv</summary>
@@ -123,17 +121,12 @@ then install the command:
 
 ```console
 pipx install delta-arrow-reader-cli
+dar --version
 ```
 
 If your terminal cannot find `dar`, run `pipx ensurepath` and
-restart the terminal. Preview a column from your table:
-
-```console
-dar preview /path/to/delta-table --column id --limit 3
-```
-
-Replace the path and `id` with your table directory and column name.
-Continue with the [CLI quickstart](cli-quickstart.md) to run SQL.
+restart the terminal. Continue with the [CLI quickstart](cli-quickstart.md)
+to preview rows and run SQL.
 
 For a single run:
 
@@ -146,8 +139,9 @@ pipx run --spec delta-arrow-reader-cli dar --help
 <details markdown="1">
 <summary>Upgrade from the combined Python and CLI package</summary>
 
-Version 0.8.0 and earlier bundled the CLI with the Python library. If you use uv
-tools, replace that installation with the separate CLI package:
+The `delta-arrow-reader` package bundled the CLI with its Python library through
+version 0.8.0. If you installed that package with uv tools, replace it with the
+separate CLI package:
 
 ```console
 uv tool uninstall delta-arrow-reader
