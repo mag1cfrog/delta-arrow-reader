@@ -243,8 +243,6 @@ impl BuildPythonWheelArgs {
                 target,
                 "--compatibility",
                 &self.compatibility,
-                "--compression-level",
-                "9",
             ])
             .args(cargo_arguments);
         if let Some(interpreter) = self.interpreter.as_ref().or(self.python.as_ref()) {
