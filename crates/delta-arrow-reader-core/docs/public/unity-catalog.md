@@ -4,8 +4,7 @@ Use your Databricks CLI profile to read a table by its catalog name. DAR obtains
 temporary storage credentials through Unity Catalog, then reads the Delta data
 and runs SQL on your machine. You do not need a Databricks cluster or SQL warehouse.
 
-The examples use Bash and the standalone command `dar`. If you installed the
-Python wheel, use `delta-arrow-reader` instead.
+The examples use Bash.
 
 ## Before you start
 

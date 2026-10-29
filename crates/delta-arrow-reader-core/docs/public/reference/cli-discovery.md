@@ -292,9 +292,7 @@ the discovery envelope or `format_version` to them.
 
 ## Help and version
 
-`dar --version` prints the executable name and workspace version. A wheel
-installation displays `delta-arrow-reader` instead. Both names accept the same
-arguments and produce the same data, diagnostics, and exit statuses.
+`dar --version` prints the executable name and version, such as `dar 0.8.1`.
 
 Use `dar --help` for commands or `dar query --help` for one command's flags.
 `dar help query` is equivalent. `-h` and `-V` are short for `--help` and

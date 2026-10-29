@@ -6,9 +6,9 @@ individual Parquet file. The examples use Bash.
 
 ## Before you start
 
-[Install a CLI with these commands](installation.md#cli-binaries-and-container-images).
-The standalone command is `dar`. If you installed the Python package, replace
-`dar` with `delta-arrow-reader`; the arguments are the same.
+For the commands below, install `dar` with [uv](installation.md#install-cli-with-uv)
+or [pipx](installation.md#install-cli-with-pipx), or use a
+[standalone binary](installation.md#cli-binaries-and-container-images).
 
 Start with a local table. For a cloud URL and an existing credential file, use
 [Connect to storage](cli-storage.md). For a catalog name and a Databricks
@@ -65,7 +65,7 @@ strings so large integers remain exact.
 
 The result is a **sample**, and row order is unspecified. Reaching three rows
 does not prove that the table has only three rows. Preview defaults to an 8 KiB
-response budget and a 30-second deadline. Choose a small projection; see
+response budget and a 30-second deadline. Select only the columns you need; see
 [Handle a result that is too large](cli-recovery.md#the-result-is-too-large)
 if even one value cannot fit.
 

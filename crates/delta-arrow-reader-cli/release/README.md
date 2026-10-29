@@ -692,8 +692,7 @@ Test output goes to stderr; stdout contains the acceptance result.
 ## Check the installed agent workflow
 
 Archive runtime validation, installed wheel tests, and image runtime validation
-run the same checks from `xtask::packaged_cli`. The archive uses `dar`; wheel
-tests use the installed `delta-arrow-reader` executable. The suite follows all
+run the same checks from `xtask::packaged_cli`. The suite follows all
 advertised discovery details, then checks pinned inspection, typed preview,
 predicate repair, SQL joins, plans, and complete JSON/Arrow result files.
 Fixtures include 1,000 columns, nested fields, large metadata, an oversized

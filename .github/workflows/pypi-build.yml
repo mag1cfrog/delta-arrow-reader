@@ -302,7 +302,7 @@ jobs:
           RUSTC_WRAPPER: ""
         run: |
           cargo xtask audit-python-cli \
-            "$RUNNER_TEMP/cli310/${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}" \
+            "$RUNNER_TEMP/cli310/${{ runner.os == 'Windows' && 'Scripts/dar.exe' || 'bin/dar' }}" \
             --platform-tag '${{ matrix.platform-tag }}'
       - uses: actions/setup-python@v6
         id: python314
@@ -370,15 +370,15 @@ jobs:
           python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl
           "$UV_TOOL_DIR/delta-arrow-reader-cli/${{ matrix.venv-python }}" -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests" -k installed
-          tool_version="$("$UV_TOOL_BIN_DIR/delta-arrow-reader${{ runner.os == 'Windows' && '.exe' || '' }}" --version)"
-          test "$tool_version" = "delta-arrow-reader $EXPECTED_VERSION"
+          tool_version="$("$UV_TOOL_BIN_DIR/dar${{ runner.os == 'Windows' && '.exe' || '' }}" --version)"
+          test "$tool_version" = "dar $EXPECTED_VERSION"
           # uv tool run is uvx; --isolated ignores the persistent tool above.
           python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl \
             python -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-cli/python_tests" -k installed
           uvx_version="$(python -m uv tool run --no-config --isolated \
-            --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl delta-arrow-reader --version)"
-          test "$uvx_version" = "delta-arrow-reader $EXPECTED_VERSION"
+            --from "$GITHUB_WORKSPACE"/dist/delta_arrow_reader_cli-*.whl dar --version)"
+          test "$uvx_version" = "dar $EXPECTED_VERSION"
       - name: Retain installed CLI invocation records
         if: ${{ always() && !inputs.cache-only }}
         uses: actions/upload-artifact@v6

@@ -39,7 +39,7 @@ DAR_LOCAL_BINARY=/absolute/path/to/dar \
 This self-check redirects UC reads to a local Delta fixture, joins a second
 local fixture at a different snapshot version, and uses a fake Databricks
 version command. It does not validate cloud authorization. Repeat
-with `DAR_LOCAL_BINARY` pointing to the wheel's installed `delta-arrow-reader`.
+with `DAR_LOCAL_BINARY` pointing to the wheel's installed `dar`.
 
 ## Check a packaged executable
 
@@ -54,7 +54,7 @@ DAR_TEST_UC_BINARY=/absolute/path/to/dar \
 ```
 
 Repeat with `DAR_TEST_UC_BINARY` pointing to the wheel's installed
-`delta-arrow-reader` executable. These tests use temporary Databricks CLI and
+`dar` executable. These tests use temporary Databricks CLI and
 storage fixtures; they need no login or cloud account. They check exact SQL
 results, mixed joins, profile isolation, renewal, and redacted authorization
 failures for S3, R2, GCS, Azure SAS, and Azure bearer credentials. Linux also

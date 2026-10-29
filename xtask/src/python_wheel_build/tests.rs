@@ -146,7 +146,7 @@ fn wheel_copy_replaces_output_only_after_success() {
 fn stale_data_is_removed_and_symlinks_are_rejected() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join(WHEEL_DATA);
-    let script = data.join("scripts/delta-arrow-reader");
+    let script = data.join("scripts/dar");
     fs::create_dir_all(script.parent().unwrap()).unwrap();
     fs::write(&script, "stale binary").unwrap();
     remove_generated_data(&data).unwrap();

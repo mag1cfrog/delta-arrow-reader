@@ -4,7 +4,7 @@ Choose the interface you want to use. You only need the installation steps for
 that interface:
 
 - [Python](#python): read with PyArrow or run SQL.
-- [Command line](#cli-binaries-and-container-images): inspect, preview, and query tables.
+- [Command line](#command-line): inspect, preview, and query tables.
 - [Rust](#streaming-reader): read batches in an application, with optional SQL support.
 
 ## Python
@@ -17,7 +17,7 @@ Use CPython 3.10 or newer on one of these platforms:
 | Windows | x86_64 |
 | macOS | Apple silicon, macOS 12.0 or newer |
 
-The Python package includes PyArrow support and SQL. Install the separate
+The Python package includes PyArrow support and SQL. Install the
 [CLI package](#install-cli-with-uv) for command-line use.
 You do not need Rust or the separate Python `datafusion` package to install a
 wheel.
@@ -78,76 +78,98 @@ python -m pip install ./crates/delta-arrow-reader-python
 
 </details>
 
-## CLI binaries and container images
+<span id="cli-binaries-and-container-images"></span>
 
-Use version 0.8 or newer for the CLI workflows on these pages.
+## Command line
 
-For a single run with uv, use the separate CLI package:
+Try the CLI with uv:
 
 ```console
-uvx --no-build --from delta-arrow-reader-cli delta-arrow-reader --help
+uvx --no-build --from delta-arrow-reader-cli dar --help
 ```
 
-The CLI package does not install the Python API or PyArrow. It supports the
-[wheel platforms listed above](#python).
+To use `dar` directly in your shell, [install it with uv](#install-cli-with-uv)
+or [pipx](#install-cli-with-pipx). Then follow the [CLI quickstart](cli-quickstart.md).
 
-Use `delta-arrow-reader` in place of `dar` in the
-[CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
-Both names accept the same arguments. The wheel does not install a `dar` alias.
+The CLI supports the [wheel platforms listed above](#python).
 
 Standalone `dar` binaries and container images are available from
 [GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases).
-Choose a version whose CLI section reports successful download verification.
+Choose version 0.8 or newer with successful download verification in its CLI section.
 
 <details markdown="1">
-<summary id="install-cli-with-uv">Install just the command with uv</summary>
+<summary id="install-cli-with-uv">Install the command with uv</summary>
 
 [Install uv](https://docs.astral.sh/uv/getting-started/installation/) if needed,
-then install the command from PyPI in a separate tool environment. This uses
-the [wheel platforms listed above](#python), including Windows x86_64 and
-Apple silicon macOS:
+then run:
 
 ```console
 uv tool install --no-build delta-arrow-reader-cli
-delta-arrow-reader --version
+dar --version
 ```
 
 If uv reports that its executable directory is missing from `PATH`, run
-`uv tool update-shell` and restart your shell. To run without a persistent tool
-installation:
+`uv tool update-shell` and restart your shell.
+
+</details>
+
+<details markdown="1">
+<summary id="install-cli-with-pipx">Install the command with pipx</summary>
+
+[Install pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html) if needed,
+then install the command:
 
 ```console
-uvx --no-build --from delta-arrow-reader-cli delta-arrow-reader --help
+pipx install delta-arrow-reader-cli
+dar --version
 ```
 
-Keep the tool environment available when using the command.
+If your terminal cannot find `dar`, run `pipx ensurepath` and
+restart the terminal. Continue with the [CLI quickstart](cli-quickstart.md)
+to preview rows and run SQL.
+
+For a single run:
+
+```console
+pipx run --spec delta-arrow-reader-cli dar --help
+```
 
 </details>
 
 <details markdown="1">
 <summary>Upgrade from the combined Python and CLI package</summary>
 
-Version 0.8.0 and earlier bundled the CLI with the Python library. If you use uv
-tools, replace that installation with the separate CLI package:
+The `delta-arrow-reader` package bundled the CLI with its Python library through
+version 0.8.0. If you installed that package with uv tools, replace it with the
+separate CLI package:
 
 ```console
 uv tool uninstall delta-arrow-reader
 uv tool install --no-build delta-arrow-reader-cli
 ```
 
-For a pip environment that needs both interfaces, upgrade the Python package
-first, then install or reinstall the CLI. Uninstalling the old combined package
-removes its command, even if another package has since installed the same path:
+For a pipx installation:
+
+```console
+pipx uninstall delta-arrow-reader
+pipx install delta-arrow-reader-cli
+```
+
+For a pip environment that needs both interfaces, upgrade both packages:
 
 ```console
 python -m pip install --upgrade --only-binary=:all: delta-arrow-reader
-python -m pip install --upgrade --force-reinstall --only-binary=:all: delta-arrow-reader-cli
-delta-arrow-reader --version
+python -m pip install --upgrade --only-binary=:all: delta-arrow-reader-cli
+dar --version
 ```
 
-Projects that only use the Python API need just the first command. Python imports
-and CLI arguments are unchanged; one-off uvx calls now use
-`--from delta-arrow-reader-cli`.
+Projects that only use the Python API need just the first command. In scripts
+that call the installed executable, replace `delta-arrow-reader` with `dar`.
+Python imports and CLI arguments are unchanged.
+
+For one-off runs, use `uvx --from delta-arrow-reader-cli dar --version` or
+`pipx run --spec delta-arrow-reader-cli dar --version`. Replace `--version`
+with your command's arguments.
 
 </details>
 

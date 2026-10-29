@@ -380,20 +380,20 @@ fn rejects_wrong_cli_names_and_installation_paths() -> Result<()> {
     for (_, tag) in PLATFORMS {
         let path = fixture.directory.join(cli_wheel_filename(tag));
         for name in [
-            "delta_arrow_reader_cli-1.2.3.data/scripts/dar",
-            "delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader.py",
-            "delta_arrow_reader_cli-1.2.3.data/scripts/nested/delta-arrow-reader",
-            "delta_arrow_reader.data/scripts/delta-arrow-reader",
-            "delta_arrow_reader_cli-1.2.4.data/scripts/delta-arrow-reader",
+            "delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader",
+            "delta_arrow_reader_cli-1.2.3.data/scripts/dar.py",
+            "delta_arrow_reader_cli-1.2.3.data/scripts/nested/dar",
+            "delta_arrow_reader.data/scripts/dar",
+            "delta_arrow_reader_cli-1.2.4.data/scripts/dar",
             "delta_arrow_reader_cli-1.2.3.data/purelib/delta_arrow_reader/__init__.py",
-            "delta_arrow_reader/delta-arrow-reader",
-            "delta-arrow-reader",
-            "/home/builder/delta-arrow-reader",
-            "C:\\build\\delta-arrow-reader.exe",
+            "delta_arrow_reader/dar",
+            "dar",
+            "/home/builder/dar",
+            "C:\\build\\dar.exe",
             if tag == "win_amd64" {
-                "delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader"
+                "delta_arrow_reader_cli-1.2.3.data/scripts/dar"
             } else {
-                "delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader.exe"
+                "delta_arrow_reader_cli-1.2.3.data/scripts/dar.exe"
             },
         ] {
             let mut files = cli_wheel_files(tag);
@@ -623,7 +623,7 @@ fn rejects_corrupt_native_bytes_and_conflicting_zip_headers() -> Result<()> {
     let fixture = WheelFixture::new("native-corruption")?;
     let tag = PLATFORMS[0].1;
     let path = fixture.directory.join(cli_wheel_filename(tag));
-    let cli = "delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader";
+    let cli = "delta_arrow_reader_cli-1.2.3.data/scripts/dar";
     write_wheel(&path, &cli_wheel_files(tag), false)?;
     let original = fs::read(&path)?;
     let archive = rawzip::ZipArchive::from_slice(&original)?;

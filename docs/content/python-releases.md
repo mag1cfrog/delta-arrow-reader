@@ -3,7 +3,7 @@
 This guide covers the two PyPI distributions released together:
 
 - `delta-arrow-reader`: the Python API, with PyArrow as a dependency.
-- `delta-arrow-reader-cli`: the native `delta-arrow-reader` command, with no
+- `delta-arrow-reader-cli`: the native `dar` command, with no
   Python package dependencies.
 
 The split layout requires a new shared version after 0.8.0. Existing combined
@@ -143,7 +143,7 @@ python3 -m venv "$PYTHON_RELEASE_CHECK/cli"
 python -m pip --isolated install --no-cache-dir --only-binary=:all: \
   --index-url https://test.pypi.org/simple/ "delta-arrow-reader-cli==$PYTHON_RELEASE_VERSION"
 python -m pip check
-test "$(delta-arrow-reader --version)" = "delta-arrow-reader $PYTHON_RELEASE_VERSION"
+test "$(dar --version)" = "dar $PYTHON_RELEASE_VERSION"
 python -I -m unittest discover \
   -s "$PYTHON_RELEASE_REPO/crates/delta-arrow-reader-cli/python_tests" -k installed
 ```
@@ -210,8 +210,8 @@ fresh environment, changing the reader's index URL to `https://pypi.org/simple/`
 Record both PyPI version URLs and installation results with the release record.
 Also verify the exact public version with uv tool and uvx in separate tool
 environments. Pin the package as `delta-arrow-reader-cli==X.Y.Z` for uv tool, and
-use `uvx --no-build --isolated --from delta-arrow-reader-cli==X.Y.Z delta-arrow-reader --version`
-for uvx. Both must expose `delta-arrow-reader`; neither installs the Python API
+use `uvx --no-build --isolated --from delta-arrow-reader-cli==X.Y.Z dar --version`
+for uvx. Both must expose `dar`; neither installs the Python API
 into a consumer's project environment. Use the
 [installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python)
 for the commands and record the tested platform and Python version.

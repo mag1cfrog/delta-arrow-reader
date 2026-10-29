@@ -2,8 +2,7 @@
 
 Use the table location and authorization reference provided by your administrator.
 You can pass a credential file's path without opening it or copying its contents
-into a command. The examples use `dar`; substitute `delta-arrow-reader` for a
-Python package installation.
+into a command.
 
 | What you have | Where to start |
 | --- | --- |

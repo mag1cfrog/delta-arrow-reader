@@ -41,6 +41,8 @@ times for the first complete query after table initialization, excluding startup
 
 ## Get started
 
+Start with [Python](#python), the [command line](#cli), or [Rust](#rust).
+
 ### Python
 
 Install from PyPI (Python 3.10 or later):
@@ -92,16 +94,17 @@ See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and m
 
 ### CLI
 
-Run the CLI without installing the Python API:
+Try the CLI with [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```console
-uvx --from delta-arrow-reader-cli delta-arrow-reader --help
+uvx --from delta-arrow-reader-cli dar --help
 ```
 
-You can also
-[install a standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
-The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
-metadata as JSON and rows as an Arrow IPC stream.
+Install with [pipx](https://mag1cfrog.github.io/delta-arrow-reader/installation/#install-cli-with-pipx),
+or use a [standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
+The [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)
+shows how to preview rows and run SQL with JSON results. Queries can also stream
+results as Arrow IPC for other programs.
 
 For development and benchmark setup, see the
 [repository documentation](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/README.md).

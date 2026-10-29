@@ -72,9 +72,9 @@ impl SplitPythonWheelArgs {
         let python_stem = format!("delta_arrow_reader-{version}");
         let cli_stem = format!("delta_arrow_reader_cli-{version}");
         let executable = if platform == "win_amd64" {
-            "delta-arrow-reader.exe"
+            "dar.exe"
         } else {
-            "delta-arrow-reader"
+            "dar"
         };
         let cli_binary = cli.join(format!("{cli_stem}.data/scripts/{executable}"));
         for relative in [
@@ -114,10 +114,9 @@ Description-Content-Type: text/markdown
 # Delta Arrow Reader CLI
 
 Inspect Delta Lake snapshots, preview rows, and run read-only SQL.
-This package installs the native command without the Python API or PyArrow.
 
 ```console
-uvx --from delta-arrow-reader-cli delta-arrow-reader --help
+uvx --from delta-arrow-reader-cli dar --help
 ```
 
 See the [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)

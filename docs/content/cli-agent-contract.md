@@ -48,7 +48,6 @@ are documented separately. Writes are outside this contract.
 | Plan | `dar explain` with the same query inputs; report bounded structured plan information without executing rows. |
 | Save | `scan` or `query` with `--output PATH`; save one result file. |
 
-The wheel executable is `delta-arrow-reader`, with the same arguments.
 Capabilities reports only installed commands, options, schemas, auth mechanisms,
 formats, defaults, and limitations. Help/discovery requires neither credentials
 nor network access. JSON Schemas use draft 2020-12 and match the actual parsers.

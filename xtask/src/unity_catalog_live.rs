@@ -31,7 +31,7 @@ pub(crate) struct TestUnityCatalogArgs {
     /// Private JSON configuration; omit to skip without running either CLI.
     #[arg(long, requires_all = ["binary", "dar_revision"])]
     fixture: Option<PathBuf>,
-    /// Extracted dar or installed delta-arrow-reader executable.
+    /// Extracted or installed dar executable.
     #[arg(long, requires = "fixture")]
     binary: Option<PathBuf>,
     /// Full Git commit used to build the executable, from its build provenance.

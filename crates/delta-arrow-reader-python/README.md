@@ -15,11 +15,10 @@ Python extension and require PyArrow 18 or newer. See the
 [installation guide](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
 for tested versions and platform limits. Installing a wheel needs no Rust toolchain.
 
-For command-line use, install the separate `delta-arrow-reader-cli` package.
-It does not install the Python API or PyArrow:
+Run the CLI with uv:
 
 ```console
-uvx --no-build --from delta-arrow-reader-cli delta-arrow-reader --help
+uvx --no-build --from delta-arrow-reader-cli dar --help
 ```
 
 ```python

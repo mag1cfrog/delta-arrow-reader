@@ -78,7 +78,7 @@ impl Arguments {
         assert!(version.stderr.is_empty(), "{version:?}");
         assert_eq!(
             String::from_utf8(version.stdout)?,
-            format!("delta-arrow-reader {}\n", self.expected_version)
+            format!("dar {}\n", self.expected_version)
         );
         for subcommand in [None, Some("inspect"), Some("scan"), Some("query")] {
             let mut command = self.command(root)?;
@@ -92,10 +92,7 @@ impl Arguments {
             );
             let text = String::from_utf8(output.stdout)?;
             let prefix = subcommand.map_or(String::new(), |name| format!(" {name}"));
-            assert!(
-                text.contains(&format!("Usage: delta-arrow-reader{prefix} ")),
-                "{text}"
-            );
+            assert!(text.contains(&format!("Usage: dar{prefix} ")), "{text}");
             assert!(!text.contains("secret"), "{text}");
         }
         let table = self.fixture.join("table");
@@ -106,7 +103,7 @@ impl Arguments {
             &|| self.command(&agent_checks),
             &|| self.command(&agent_checks),
             &agent_checks,
-            "delta-arrow-reader",
+            "dar",
             &self.expected_version,
         )?;
         let malformed = root.join("secret-options.json");

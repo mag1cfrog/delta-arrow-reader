@@ -30,8 +30,7 @@ enable this mode.
 
 This mode writes one UTF-8 JSON object followed by a newline to stderr. It
 emits no human logs or ANSI escapes, regardless of `RUST_LOG`. Stdout and exit
-statuses are unchanged. The wheel command, `delta-arrow-reader`, accepts the
-same option. A handled failure produces:
+statuses are unchanged. A handled failure produces:
 
 ```json
 {
