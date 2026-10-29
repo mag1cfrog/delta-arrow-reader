@@ -292,7 +292,7 @@ the discovery envelope or `format_version` to them.
 
 ## Help and version
 
-`dar --version` prints the executable name and version, such as `dar 0.8.1`.
+`dar --version` prints the executable name and version, such as `dar 0.9.0`.
 
 Use `dar --help` for commands or `dar query --help` for one command's flags.
 `dar help query` is equivalent. `-h` and `-V` are short for `--help` and

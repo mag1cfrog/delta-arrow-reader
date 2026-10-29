@@ -6,7 +6,7 @@ Use filters directly or query registered tables with SQL.
 Install in an activated Python virtual environment:
 
 ```console
-python -m pip install --only-binary=:all: delta-arrow-reader
+python -m pip install --only-binary=:all: delta-arrow-reader-py
 ```
 
 Wheels require CPython 3.10 or newer and target Linux x86_64 with glibc 2.28 or
@@ -18,7 +18,7 @@ for tested versions and platform limits. Installing a wheel needs no Rust toolch
 Run the CLI with uv:
 
 ```console
-uvx --no-build --from delta-arrow-reader-cli dar --help
+uvx --no-build --from delta-arrow-reader dar --help
 ```
 
 ```python

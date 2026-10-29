@@ -12,7 +12,7 @@ The provider types use `object_store` 0.13.2. Add the matching dependency to you
 application:
 
 ```sh
-cargo add delta-arrow-reader@0.8
+cargo add delta-arrow-reader@0.9
 cargo add object_store@0.13.2
 ```
 

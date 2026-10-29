@@ -105,7 +105,7 @@ fn distributions_reject_shared_payloads_and_cli_dependencies() -> Result<()> {
             .find(|(name, _)| name.contains("/scripts/"))
             .unwrap();
         library.push((
-            name.replace("delta_arrow_reader_cli-", "delta_arrow_reader-"),
+            name.replace("delta_arrow_reader-", "delta_arrow_reader_py-"),
             bytes.clone(),
         ));
         write_wheel(&library_path, &library, true)?;
@@ -145,7 +145,7 @@ fn rejects_inconsistent_missing_duplicate_and_folded_headers() -> Result<()> {
     let tag = PLATFORMS[0].1;
     let path = fixture.directory.join(wheel_filename(tag));
     for (member, original, replacement) in [
-        (0, "Name: delta-arrow-reader\n", "Name: other-package\n"),
+        (0, "Name: delta-arrow-reader-py\n", "Name: other-package\n"),
         (0, "Version: 1.2.3\n", "Version: 1.2.4\n"),
         (0, "Version: 1.2.3\n", "Version: 1.2.3\nVersion: 1.2.3\n"),
         (0, "Version: 1.2.3\n", "Version: 1.2.3\nversion: 1.2.3\n"),
@@ -203,8 +203,8 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
         }
     }
     for name in [
-        "delta_arrow_reader-1.2.3.dist-info/METADATA\0shadow",
-        "delta_arrow_reader-1.2.3.dist-info\\METADATA",
+        "delta_arrow_reader_py-1.2.3.dist-info/METADATA\0shadow",
+        "delta_arrow_reader_py-1.2.3.dist-info\\METADATA",
     ] {
         let mut files = wheel_files(tag);
         files.push((name.into(), files[0].1.clone()));
@@ -220,17 +220,17 @@ fn rejects_metadata_paths_that_installers_can_alias() -> Result<()> {
     let tag = PLATFORMS[0].1;
     let path = fixture.directory.join(wheel_filename(tag));
     for alias in [
-        "delta_arrow_reader-1.2.3.dist-info/./METADATA",
-        "delta_arrow_reader-1.2.3.dist-info//METADATA",
-        "delta_arrow_reader-1.2.3.dist-info/nested/../METADATA",
-        "delta_arrow_reader-1.2.3.dist-info/METADATA.",
-        "delta_arrow_reader-1.2.3.dist-info/METADATA ",
-        "delta_arrow_reader-1.2.3.dist-info/METADATA:",
-        "delta_arrow_reader-1.2.3.dist-info/METADATA?",
-        "delta_arrow_reader-1.2.3.dist-info/metadata",
-        "DELTA_ARROW_READER-1.2.3.DIST-INFO/METADATA",
-        "delta_arrow_reader-1.2.3.dist-info/./WHEEL",
-        "delta_arrow_reader-1.2.3.dist-info/wheel",
+        "delta_arrow_reader_py-1.2.3.dist-info/./METADATA",
+        "delta_arrow_reader_py-1.2.3.dist-info//METADATA",
+        "delta_arrow_reader_py-1.2.3.dist-info/nested/../METADATA",
+        "delta_arrow_reader_py-1.2.3.dist-info/METADATA.",
+        "delta_arrow_reader_py-1.2.3.dist-info/METADATA ",
+        "delta_arrow_reader_py-1.2.3.dist-info/METADATA:",
+        "delta_arrow_reader_py-1.2.3.dist-info/METADATA?",
+        "delta_arrow_reader_py-1.2.3.dist-info/metadata",
+        "DELTA_ARROW_READER_PY-1.2.3.DIST-INFO/METADATA",
+        "delta_arrow_reader_py-1.2.3.dist-info/./WHEEL",
+        "delta_arrow_reader_py-1.2.3.dist-info/wheel",
     ] {
         let mut files = wheel_files(tag);
         files.push((alias.into(), b"shadow metadata".to_vec()));
@@ -259,7 +259,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
 
     write_wheel(&path, &wheel_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
-    let name = b"delta_arrow_reader-1.2.3.dist-info/METADATA";
+    let name = b"delta_arrow_reader_py-1.2.3.dist-info/METADATA";
     let position = bytes
         .windows(name.len())
         .position(|window| window == name)
@@ -380,20 +380,20 @@ fn rejects_wrong_cli_names_and_installation_paths() -> Result<()> {
     for (_, tag) in PLATFORMS {
         let path = fixture.directory.join(cli_wheel_filename(tag));
         for name in [
-            "delta_arrow_reader_cli-1.2.3.data/scripts/delta-arrow-reader",
-            "delta_arrow_reader_cli-1.2.3.data/scripts/dar.py",
-            "delta_arrow_reader_cli-1.2.3.data/scripts/nested/dar",
+            "delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader",
+            "delta_arrow_reader-1.2.3.data/scripts/dar.py",
+            "delta_arrow_reader-1.2.3.data/scripts/nested/dar",
             "delta_arrow_reader.data/scripts/dar",
-            "delta_arrow_reader_cli-1.2.4.data/scripts/dar",
-            "delta_arrow_reader_cli-1.2.3.data/purelib/delta_arrow_reader/__init__.py",
+            "delta_arrow_reader-1.2.4.data/scripts/dar",
+            "delta_arrow_reader-1.2.3.data/purelib/delta_arrow_reader/__init__.py",
             "delta_arrow_reader/dar",
             "dar",
             "/home/builder/dar",
             "C:\\build\\dar.exe",
             if tag == "win_amd64" {
-                "delta_arrow_reader_cli-1.2.3.data/scripts/dar"
+                "delta_arrow_reader-1.2.3.data/scripts/dar"
             } else {
-                "delta_arrow_reader_cli-1.2.3.data/scripts/dar.exe"
+                "delta_arrow_reader-1.2.3.data/scripts/dar.exe"
             },
         ] {
             let mut files = cli_wheel_files(tag);
@@ -406,9 +406,9 @@ fn rejects_wrong_cli_names_and_installation_paths() -> Result<()> {
             check(&path, "1.2.3", Some(tag), Err("Error"))?;
         }
         for extra in [
-            "delta_arrow_reader_cli-1.2.3.data/scripts/unrelated",
-            "delta_arrow_reader_cli-1.2.3.dist-info/entry_points.txt",
-            "delta_arrow_reader.libs/another-program.exe",
+            "delta_arrow_reader-1.2.3.data/scripts/unrelated",
+            "delta_arrow_reader-1.2.3.dist-info/entry_points.txt",
+            "delta_arrow_reader_py.libs/another-program.exe",
         ] {
             let mut files = cli_wheel_files(tag);
             files.push((extra.into(), b"extra program".to_vec()));
@@ -450,7 +450,7 @@ fn requires_native_payloads_and_unix_cli_permissions() -> Result<()> {
         let path = fixture.directory.join(cli_wheel_filename(tag));
         let mut files = cli_wheel_files(tag);
         files.push((
-            "delta_arrow_reader_cli-1.2.3.dist-info/RECORD".into(),
+            "delta_arrow_reader-1.2.3.dist-info/RECORD".into(),
             record_contents(&files)?,
         ));
         for (mode, message) in [
@@ -502,27 +502,27 @@ fn accepts_repair_libraries_sboms_directories_and_quoted_record_paths() -> Resul
         let mut files = wheel_files(tag);
         let libraries = match tag {
             "win_amd64" => vec![
-                "delta_arrow_reader.libs/dependency.dll",
-                "delta_arrow_reader-1.2.3.dist-info/DELVEWHEEL",
+                "delta_arrow_reader_py.libs/dependency.dll",
+                "delta_arrow_reader_py-1.2.3.dist-info/DELVEWHEEL",
             ],
             "macosx_12_0_arm64" => vec![
-                "delta_arrow_reader.dylibs/libdependency.dylib",
+                "delta_arrow_reader_py.dylibs/libdependency.dylib",
                 "delta_arrow_reader/.dylibs/libother.dylib",
             ],
             _ => vec![
-                "delta_arrow_reader.libs/libdependency.so.1",
-                "delta_arrow_reader.libs/libother.so",
+                "delta_arrow_reader_py.libs/libdependency.so.1",
+                "delta_arrow_reader_py.libs/libother.so",
             ],
         };
         for name in libraries {
             files.push((name.into(), b"repair fixture".to_vec()));
         }
         files.push((
-            "delta_arrow_reader-1.2.3.dist-info/sboms/extension,cli.json".into(),
+            "delta_arrow_reader_py-1.2.3.dist-info/sboms/extension,cli.json".into(),
             b"{}".to_vec(),
         ));
         files.push(("delta_arrow_reader/".into(), Vec::new()));
-        files.push(("delta_arrow_reader-1.2.3.data/data/".into(), Vec::new()));
+        files.push(("delta_arrow_reader_py-1.2.3.data/data/".into(), Vec::new()));
         write_wheel(&path, &files, true)?;
         check(&path, "1.2.3", Some(tag), Ok(()))?;
 
@@ -545,7 +545,7 @@ fn record_must_cover_every_file_once_with_exact_hashes_and_sizes() -> Result<()>
     let files = wheel_files(tag);
     let record = String::from_utf8(record_contents(&files)?)?;
     let first = record.lines().next().unwrap();
-    let record_path = "delta_arrow_reader-1.2.3.dist-info/RECORD";
+    let record_path = "delta_arrow_reader_py-1.2.3.dist-info/RECORD";
     for (contents, message) in [
         (
             record.replacen("sha256=", "md5=", 1),
@@ -623,7 +623,7 @@ fn rejects_corrupt_native_bytes_and_conflicting_zip_headers() -> Result<()> {
     let fixture = WheelFixture::new("native-corruption")?;
     let tag = PLATFORMS[0].1;
     let path = fixture.directory.join(cli_wheel_filename(tag));
-    let cli = "delta_arrow_reader_cli-1.2.3.data/scripts/dar";
+    let cli = "delta_arrow_reader-1.2.3.data/scripts/dar";
     write_wheel(&path, &cli_wheel_files(tag), false)?;
     let original = fs::read(&path)?;
     let archive = rawzip::ZipArchive::from_slice(&original)?;

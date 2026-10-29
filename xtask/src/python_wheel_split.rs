@@ -69,8 +69,8 @@ impl SplitPythonWheelArgs {
         fs::create_dir(&output)?;
         unpack_checked_wheel(&self.wheel, &python)?;
 
-        let python_stem = format!("delta_arrow_reader-{version}");
-        let cli_stem = format!("delta_arrow_reader_cli-{version}");
+        let python_stem = format!("delta_arrow_reader_py-{version}");
+        let cli_stem = format!("delta_arrow_reader-{version}");
         let executable = if platform == "win_amd64" {
             "dar.exe"
         } else {
@@ -100,7 +100,7 @@ impl SplitPythonWheelArgs {
             info.join("METADATA"),
             format!(
                 "Metadata-Version: 2.4
-Name: delta-arrow-reader-cli
+Name: delta-arrow-reader
 Version: {version}
 Summary: Inspect, preview, and query Delta Lake tables
 Requires-Python: >=3.10
@@ -116,7 +116,7 @@ Description-Content-Type: text/markdown
 Inspect Delta Lake snapshots, preview rows, and run read-only SQL.
 
 ```console
-uvx --from delta-arrow-reader-cli dar --help
+uvx --from delta-arrow-reader dar --help
 ```
 
 See the [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)

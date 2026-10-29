@@ -34,7 +34,7 @@ impl UploadFixture {
             r#"#!/bin/sh
 printf '%s\0' "$@" >> "$CURL_ARGUMENTS"
 case "$*" in
-  */pypi/delta-arrow-reader-cli/*) [ "${CURL_CLI_EXIT:-0}" = 0 ] || exit "$CURL_CLI_EXIT"; printf '%s\n%s' "$CURL_CLI_BODY" "${CURL_CLI_STATUS:-404}"; exit 0 ;;
+  */pypi/delta-arrow-reader/*) [ "${CURL_CLI_EXIT:-0}" = 0 ] || exit "$CURL_CLI_EXIT"; printf '%s\n%s' "$CURL_CLI_BODY" "${CURL_CLI_STATUS:-404}"; exit 0 ;;
 esac
 [ "$CURL_EXIT" = 0 ] || exit "$CURL_EXIT"
 printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
@@ -87,7 +87,7 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
                 .file_name()
                 .unwrap()
                 .to_string_lossy()
-                .starts_with("delta_arrow_reader_cli-")
+                .starts_with("delta_arrow_reader-")
                 != cli
             {
                 continue;
@@ -101,7 +101,7 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
             }
         }
         Ok(json!({
-            "info": {"name": if cli { "delta-arrow-reader-cli" } else { "delta-arrow-reader" }, "version": "1.2.3"},
+            "info": {"name": if cli { "delta-arrow-reader" } else { "delta-arrow-reader-py" }, "version": "1.2.3"},
             "urls": files,
         }))
     }
@@ -151,7 +151,7 @@ fn stages_exactly_the_missing_wheels_for_every_published_subset() -> Result<()> 
         for published_mask in 0..(1 << (2 * PLATFORMS.len())) {
             let upload = UploadFixture::new(&format!("upload-{index}-{published_mask}"))?;
             let mut release = upload.index_response(published_mask, false)?;
-            release["info"]["name"] = json!("Delta._-Arrow.Reader");
+            release["info"]["name"] = json!("Delta._-Arrow.Reader.Py");
             let output = upload
                 .command(index)
                 .env("CURL_BODY", release.to_string())
@@ -185,7 +185,7 @@ fn missing_release_queries_the_selected_index_and_stages_all_wheels() -> Result<
         for pair in [
             [
                 "--url",
-                &format!("https://{host}/pypi/delta-arrow-reader/1.2.3/json"),
+                &format!("https://{host}/pypi/delta-arrow-reader-py/1.2.3/json"),
             ],
             ["--max-time", "30"],
             ["--proto", "=https"],
@@ -363,7 +363,7 @@ fn wheels_without_a_cli_cannot_reach_either_package_index() -> Result<()> {
             )?;
             upload.assert_rejected(
                 upload.command(index).output()?,
-                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/dar",
+                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/dar",
             )?;
             assert!(!upload.fixture.directory.join("curl-arguments").exists());
         }

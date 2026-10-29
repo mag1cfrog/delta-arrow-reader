@@ -526,7 +526,7 @@ fn a_matching_bundle_digest_cannot_authorize_a_wheel_without_its_cli() -> Result
             fixture.write_bundle(true)?;
             fixture.assert_rejected(
                 fixture.command(task)?.output()?,
-                "missing required wheel file: delta_arrow_reader_cli-1.2.3.data/scripts/dar",
+                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/dar",
             )?;
         }
     }

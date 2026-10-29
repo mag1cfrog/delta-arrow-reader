@@ -2,19 +2,22 @@
 
 ## Unreleased
 
-## [0.8.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.8.0...v0.8.1) - 2026-10-29
+## [0.9.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.8.0...v0.9.0) - 2026-10-29
 
 ### Added
 
 - install the packaged CLI as dar ([#576](https://github.com/mag1cfrog/delta-arrow-reader/pull/576))
 - distribute smaller Python and CLI wheels separately
 
-### Upgrading the CLI
+### Package names and upgrading from 0.8
 
-The Python package `delta-arrow-reader` no longer installs the CLI. Install
-`delta-arrow-reader-cli` with uv or pipx, then use `dar` in place of the
-`delta-arrow-reader` command. Python imports and CLI arguments are unchanged.
-See the [installation and upgrade guide](https://mag1cfrog.github.io/delta-arrow-reader/installation/#command-line).
+On PyPI, `delta-arrow-reader` now installs the `dar` command. The Python API
+is published as `delta-arrow-reader-py`; its import remains `delta_arrow_reader`.
+Update Python project dependencies to the new package name. In an existing pip
+environment, uninstall the old combined package before installing the new ones.
+For CLI scripts, replace the `delta-arrow-reader` command with `dar`.
+CLI arguments are unchanged. See the
+[upgrade instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#upgrade-from-0-8).
 
 ## [0.8.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.8.0) - 2026-10-28
 

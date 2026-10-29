@@ -59,7 +59,7 @@ impl Drop for WheelFixture {
 }
 
 pub fn wheel_filename(tag: &str) -> String {
-    format!("delta_arrow_reader-1.2.3-cp310-abi3-{tag}.whl")
+    format!("delta_arrow_reader_py-1.2.3-cp310-abi3-{tag}.whl")
 }
 
 pub fn wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
@@ -72,7 +72,7 @@ pub fn wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
 }
 
 pub fn cli_wheel_filename(tag: &str) -> String {
-    format!("delta_arrow_reader_cli-1.2.3-py3-none-{tag}.whl")
+    format!("delta_arrow_reader-1.2.3-py3-none-{tag}.whl")
 }
 
 pub fn cli_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
@@ -87,8 +87,8 @@ pub fn cli_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
             let data = if name.ends_with("/METADATA") || name.ends_with("/WHEEL") {
                 String::from_utf8_lossy(&data)
                     .replace(
+                        "Name: delta-arrow-reader-py\n",
                         "Name: delta-arrow-reader\n",
-                        "Name: delta-arrow-reader-cli\n",
                     )
                     .replace("cp310-abi3", "py3-none")
                     .into_bytes()
@@ -96,7 +96,7 @@ pub fn cli_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
                 data
             };
             (
-                name.replace("delta_arrow_reader-", "delta_arrow_reader_cli-"),
+                name.replace("delta_arrow_reader_py-", "delta_arrow_reader-"),
                 data,
             )
         })
@@ -111,22 +111,22 @@ pub fn combined_wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
     };
     vec![
         (
-            "delta_arrow_reader-1.2.3.dist-info/METADATA".into(),
-            b"Metadata-Version: 2.4\nName: delta-arrow-reader\nVersion: 1.2.3\n".to_vec(),
+            "delta_arrow_reader_py-1.2.3.dist-info/METADATA".into(),
+            b"Metadata-Version: 2.4\nName: delta-arrow-reader-py\nVersion: 1.2.3\n".to_vec(),
         ),
         (
-            "delta_arrow_reader-1.2.3.dist-info/WHEEL".into(),
+            "delta_arrow_reader_py-1.2.3.dist-info/WHEEL".into(),
             format!("Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: cp310-abi3-{tag}\n").into_bytes(),
         ),
         ("delta_arrow_reader/__init__.py".into(), b"# fixture\n".to_vec()),
         ("delta_arrow_reader/__init__.pyi".into(), b"# fixture\n".to_vec()),
         ("delta_arrow_reader/py.typed".into(), Vec::new()),
         (format!("delta_arrow_reader/delta_arrow_reader.{extension}"), signature.to_vec()),
-        (format!("delta_arrow_reader-1.2.3.data/scripts/{command}"), signature.to_vec()),
-        ("delta_arrow_reader-1.2.3.dist-info/licenses/LICENSE".into(), b"license\n".to_vec()),
-        ("delta_arrow_reader-1.2.3.dist-info/licenses/NOTICE".into(), b"notice\n".to_vec()),
-        ("delta_arrow_reader-1.2.3.data/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt".into(), b"Python notices\n".to_vec()),
-        ("delta_arrow_reader-1.2.3.data/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt".into(), b"CLI notices\n".to_vec()),
+        (format!("delta_arrow_reader_py-1.2.3.data/scripts/{command}"), signature.to_vec()),
+        ("delta_arrow_reader_py-1.2.3.dist-info/licenses/LICENSE".into(), b"license\n".to_vec()),
+        ("delta_arrow_reader_py-1.2.3.dist-info/licenses/NOTICE".into(), b"notice\n".to_vec()),
+        ("delta_arrow_reader_py-1.2.3.data/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt".into(), b"Python notices\n".to_vec()),
+        ("delta_arrow_reader_py-1.2.3.data/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt".into(), b"CLI notices\n".to_vec()),
     ]
 }
 
@@ -144,11 +144,11 @@ pub fn record_contents(files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
     }
     let info = if files
         .iter()
-        .any(|(name, _)| name.starts_with("delta_arrow_reader_cli-"))
+        .any(|(name, _)| name.starts_with("delta_arrow_reader-"))
     {
-        "delta_arrow_reader_cli-1.2.3.dist-info/"
-    } else {
         "delta_arrow_reader-1.2.3.dist-info/"
+    } else {
+        "delta_arrow_reader_py-1.2.3.dist-info/"
     };
     writer.write_record([&format!("{info}RECORD"), "", ""])?;
     Ok(writer.into_inner()?)
@@ -159,11 +159,11 @@ pub fn write_wheel(path: &Path, files: &[(String, Vec<u8>)], compressed: bool) -
     if !files.iter().any(|(name, _)| name.ends_with("/RECORD")) {
         let info = if files
             .iter()
-            .any(|(name, _)| name.starts_with("delta_arrow_reader_cli-"))
+            .any(|(name, _)| name.starts_with("delta_arrow_reader-"))
         {
-            "delta_arrow_reader_cli-1.2.3.dist-info/"
-        } else {
             "delta_arrow_reader-1.2.3.dist-info/"
+        } else {
+            "delta_arrow_reader_py-1.2.3.dist-info/"
         };
         files.push((format!("{info}RECORD"), record_contents(&files)?));
     }

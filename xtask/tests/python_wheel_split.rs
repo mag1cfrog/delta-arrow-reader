@@ -70,7 +70,7 @@ fn splits_real_native_payloads_preserves_symbols_and_validates_both_distribution
     let python = root.path().join("wheels").join(wheel_filename(tag));
     let cli = root
         .path()
-        .join("wheels/delta_arrow_reader_cli-1.2.3-py3-none-manylinux_2_28_x86_64.whl");
+        .join("wheels/delta_arrow_reader-1.2.3-py3-none-manylinux_2_28_x86_64.whl");
     let library_members = members(&python)?;
     let cli_members = members(&cli)?;
     assert!(!library_members.iter().any(|name| name.contains("/scripts/") || name.ends_with("cli-THIRD_PARTY_NOTICES.txt")));
@@ -87,7 +87,7 @@ fn splits_real_native_payloads_preserves_symbols_and_validates_both_distribution
             .filter(|name| name.contains("/scripts/"))
             .map(String::as_str)
             .collect::<Vec<_>>(),
-        ["delta_arrow_reader_cli-1.2.3.data/scripts/dar"]
+        ["delta_arrow_reader-1.2.3.data/scripts/dar"]
     );
     let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("check-python-wheel")

@@ -516,7 +516,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let version = module
         .py()
         .import("importlib.metadata")?
-        .call_method1("version", ("delta-arrow-reader",))?;
+        .call_method1("version", ("delta-arrow-reader-py",))?;
     module.add("__version__", version)?;
     module.add_class::<DeltaTable>()?;
     module.add_class::<RecordBatchStream>()?;

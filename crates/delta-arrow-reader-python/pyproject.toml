@@ -4,7 +4,7 @@ build-backend = "build_backend"
 backend-path = ["."]
 
 [project]
-name = "delta-arrow-reader"
+name = "delta-arrow-reader-py"
 dynamic = ["version"]
 description = "Read-only Delta Lake to Apache Arrow reader"
 readme = "README.md"

@@ -31,8 +31,8 @@ pub(crate) enum WheelContents {
 impl WheelContents {
     pub(crate) fn package_name(self) -> &'static str {
         match self {
-            Self::Cli => "delta-arrow-reader-cli",
-            Self::PythonLibrary | Self::CombinedBuild => "delta-arrow-reader",
+            Self::Cli => "delta-arrow-reader",
+            Self::PythonLibrary | Self::CombinedBuild => "delta-arrow-reader-py",
         }
     }
 
@@ -55,10 +55,10 @@ impl WheelContents {
 }
 
 pub fn check_wheel(path: &Path, version: &str, platform_tag: &str) -> Result<()> {
-    let contents = if path.file_name().is_some_and(|name| {
-        name.to_string_lossy()
-            .starts_with("delta_arrow_reader_cli-")
-    }) {
+    let contents = if path
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().starts_with("delta_arrow_reader-"))
+    {
         WheelContents::Cli
     } else {
         WheelContents::PythonLibrary
@@ -260,9 +260,12 @@ pub(crate) fn check_wheel_contents(
 fn is_bundled_library(name: &str, platform_tag: &str) -> bool {
     // Preserve the dependency directories emitted by Maturin and the existing repair tools.
     let prefixes: &[&str] = if platform_tag.starts_with("macosx_") {
-        &["delta_arrow_reader.dylibs/", "delta_arrow_reader/.dylibs/"]
+        &[
+            "delta_arrow_reader_py.dylibs/",
+            "delta_arrow_reader/.dylibs/",
+        ]
     } else {
-        &["delta_arrow_reader.libs/"]
+        &["delta_arrow_reader_py.libs/"]
     };
     let Some(filename) = prefixes.iter().find_map(|prefix| name.strip_prefix(prefix)) else {
         return false;

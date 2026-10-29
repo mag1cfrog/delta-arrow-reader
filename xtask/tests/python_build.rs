@@ -386,7 +386,7 @@ fn source_archives_use_the_current_workspace_with_a_cached_xtask() -> Result {
         header.set_cksum();
         archive.append_data(
             &mut header,
-            format!("delta_arrow_reader-{version}/{file}"),
+            format!("delta_arrow_reader_py-{version}/{file}"),
             std::io::empty(),
         )?;
     }
