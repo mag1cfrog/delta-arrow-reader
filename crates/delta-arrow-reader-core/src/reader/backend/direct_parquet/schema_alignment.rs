@@ -604,7 +604,7 @@ fn incompatible_parquet_type(
     target_type: &DataType,
     file_type: &DataType,
 ) -> delta_kernel::Error {
-    delta_kernel::Error::generic(format!(
+    delta_kernel::Error::UnexpectedColumnType(format!(
         "target field '{path}' expected Parquet type {target_type} but found {file_type}"
     ))
 }

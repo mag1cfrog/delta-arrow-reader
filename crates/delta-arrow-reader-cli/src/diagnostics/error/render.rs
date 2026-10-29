@@ -178,15 +178,25 @@ impl Error {
             | Self::ArtifactPublicationInterrupted { source, .. } => {
                 record = source.to_json_diagnostic()
             }
-            Self::Query { .. } if source_kind == Some("resource_exhausted") => {
-                record["resource_details_command"] = json!([
-                    command_name(),
-                    "capabilities",
-                    "--command",
-                    "query",
-                    "--detail",
-                    "resources"
-                ]);
+            Self::Query { source } => {
+                if let Some(cause) = source.reader_cause() {
+                    record["cause"] = json!({
+                        "phase": cause.phase().as_str(),
+                        "code": cause.code(),
+                        "reason": cause.reason(),
+                        "source_kind": cause.source_kind(),
+                    });
+                }
+                if source_kind == Some("resource_exhausted") {
+                    record["resource_details_command"] = json!([
+                        command_name(),
+                        "capabilities",
+                        "--command",
+                        "query",
+                        "--detail",
+                        "resources"
+                    ]);
+                }
             }
             Self::WithResolvedBindings { source, bindings } => {
                 record = source.to_json_diagnostic();

@@ -10,6 +10,32 @@ use crate::{
 };
 
 #[test]
+fn diagnostic_schema_validates_the_optional_reader_cause() {
+    let schema = diagnostic_schema();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let mut record = schema["examples"][0].clone();
+    assert!(validator.is_valid(&record));
+    let cause = json!({
+        "phase": "data_file_read", "code": "data_file_read",
+        "reason": "parquet_schema_match_failed", "source_kind": "unexpected_column_type",
+    });
+    record["cause"] = cause.clone();
+    assert!(validator.is_valid(&record));
+    for invalid in [json!(null), json!("secret"), json!([]), json!({})] {
+        record["cause"] = invalid;
+        assert!(!validator.is_valid(&record));
+    }
+    for field in ["phase", "code", "reason", "source_kind"] {
+        record["cause"] = cause.clone();
+        record["cause"][field] = json!(42);
+        assert!(!validator.is_valid(&record));
+        record["cause"] = cause.clone();
+        record["cause"].as_object_mut().unwrap().remove(field);
+        assert!(!validator.is_valid(&record));
+    }
+}
+
+#[test]
 fn output_schemas_validate_examples_and_allow_additional_fields() {
     for name in [
         DiscoverySchema::Inspection,

@@ -19,6 +19,17 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             "code": {"type": "string"},
             "reason": {"type": "string"},
             "source_kind": {"type": ["string", "null"]},
+            "cause": {
+                "type": "object",
+                "description": "Reader failure inside SQL; present only when a typed reader cause is available. Categories are extensible strings.",
+                "required": ["phase", "code", "reason", "source_kind"],
+                "properties": {
+                    "phase": {"type": "string"},
+                    "code": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "source_kind": {"type": ["string", "null"]},
+                },
+            },
             "retryable": {
                 "type": ["boolean", "null"],
                 "description": "True means retry as a new command after discarding failed output. False requires the indicated recovery action first; null means retryability is unknown.",

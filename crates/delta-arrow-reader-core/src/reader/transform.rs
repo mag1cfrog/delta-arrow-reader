@@ -23,23 +23,28 @@ pub(crate) fn align_batch_to_logical_schema(
     if batch.schema().as_ref() == logical_schema.as_ref() {
         return Ok(batch);
     }
-    let compatible = batch.num_columns() == logical_schema.fields().len()
-        && batch
+    let mismatch_reason = if batch.num_columns() != logical_schema.fields().len() {
+        Some("backend_field_count_mismatch")
+    } else {
+        batch
             .schema()
             .fields()
             .iter()
             .zip(logical_schema.fields())
-            .all(|(actual, expected)| {
-                actual.name() == expected.name()
-                    && actual.is_nullable() == expected.is_nullable()
-                    && is_view_compatible(actual.data_type(), expected.data_type())
-            });
-    if !compatible {
+            .find_map(|(actual, expected)| {
+                if actual.name() != expected.name() {
+                    Some("backend_field_name_mismatch")
+                } else if actual.is_nullable() != expected.is_nullable() {
+                    Some("backend_nullability_mismatch")
+                } else {
+                    view_type_mismatch_reason(actual.data_type(), expected.data_type())
+                }
+            })
+    };
+    if let Some(reason) = mismatch_reason {
         return Err(delta_kernel::Error::generic(mismatch_message))
             .boxed()
-            .context(DataFileReadSnafu {
-                reason: "backend_logical_schema_mismatch",
-            });
+            .context(DataFileReadSnafu { reason });
     }
     let columns = batch
         .columns()
@@ -118,34 +123,49 @@ fn data_type_uses_view_types(data_type: &DataType) -> bool {
     }
 }
 
-fn is_view_compatible(actual: &DataType, expected: &DataType) -> bool {
+fn view_type_mismatch_reason(actual: &DataType, expected: &DataType) -> Option<&'static str> {
     if actual.equals_datatype(expected) {
-        return true;
+        return None;
     }
     match (actual, expected) {
         (DataType::Utf8 | DataType::LargeUtf8, DataType::Utf8View)
-        | (DataType::Binary | DataType::LargeBinary, DataType::BinaryView) => true,
-        (actual, DataType::Dictionary(_, expected)) => actual.equals_datatype(expected),
+        | (DataType::Binary | DataType::LargeBinary, DataType::BinaryView) => None,
+        (actual, DataType::Dictionary(_, expected)) => {
+            (!actual.equals_datatype(expected)).then_some("backend_field_type_mismatch")
+        }
         (DataType::Struct(actual), DataType::Struct(expected)) => {
-            actual.len() == expected.len()
-                && actual.iter().zip(expected).all(|(actual, expected)| {
-                    actual.is_nullable() == expected.is_nullable()
-                        && is_view_compatible(actual.data_type(), expected.data_type())
+            if actual.len() != expected.len() {
+                Some("backend_field_count_mismatch")
+            } else {
+                actual.iter().zip(expected).find_map(|(actual, expected)| {
+                    if actual.is_nullable() != expected.is_nullable() {
+                        Some("backend_nullability_mismatch")
+                    } else {
+                        view_type_mismatch_reason(actual.data_type(), expected.data_type())
+                    }
                 })
+            }
         }
         (DataType::List(actual), DataType::List(expected))
         | (DataType::LargeList(actual), DataType::LargeList(expected))
         | (DataType::ListView(actual), DataType::ListView(expected))
         | (DataType::LargeListView(actual), DataType::LargeListView(expected)) => {
-            actual.is_nullable() == expected.is_nullable()
-                && is_view_compatible(actual.data_type(), expected.data_type())
+            if actual.is_nullable() != expected.is_nullable() {
+                Some("backend_nullability_mismatch")
+            } else {
+                view_type_mismatch_reason(actual.data_type(), expected.data_type())
+            }
         }
         (DataType::Map(actual, actual_ordered), DataType::Map(expected, expected_ordered)) => {
-            actual_ordered == expected_ordered
-                && actual.is_nullable() == expected.is_nullable()
-                && is_view_compatible(actual.data_type(), expected.data_type())
+            if actual_ordered != expected_ordered {
+                Some("backend_field_type_mismatch")
+            } else if actual.is_nullable() != expected.is_nullable() {
+                Some("backend_nullability_mismatch")
+            } else {
+                view_type_mismatch_reason(actual.data_type(), expected.data_type())
+            }
         }
-        _ => false,
+        _ => Some("backend_field_type_mismatch"),
     }
 }
 
@@ -319,19 +339,30 @@ mod tests {
             .expect("StringView output");
         assert_eq!(values.iter().collect::<Vec<_>>(), [Some("safe"), None]);
 
-        for hostile_schema in [
-            Schema::new(vec![Field::new("renamed", DataType::Utf8View, true)]),
-            Schema::new(vec![Field::new("text", DataType::Utf8View, false)]),
-            Schema::new(vec![Field::new("text", DataType::Int32, true)]),
+        for (hostile_schema, reason) in [
+            (Schema::empty(), "backend_field_count_mismatch"),
+            (
+                Schema::new(vec![Field::new("secret_name", DataType::Utf8View, true)]),
+                "backend_field_name_mismatch",
+            ),
+            (
+                Schema::new(vec![Field::new("text", DataType::Utf8View, false)]),
+                "backend_nullability_mismatch",
+            ),
+            (
+                Schema::new(vec![Field::new("text", DataType::Int32, true)]),
+                "backend_field_type_mismatch",
+            ),
         ] {
-            assert!(
-                align_batch_to_logical_schema(
-                    source.clone(),
-                    &Arc::new(hostile_schema),
-                    "hostile schema mismatch",
-                )
-                .is_err()
-            );
+            let error = align_batch_to_logical_schema(
+                source.clone(),
+                &Arc::new(hostile_schema),
+                "secret schema mismatch",
+            )
+            .expect_err("incompatible schema must fail");
+            assert_eq!(error.code(), "data_file_read");
+            assert_eq!(error.reason(), reason);
+            assert!(!format!("{error} {error:?}").contains("secret"));
         }
 
         let partition_source = RecordBatch::try_new(
@@ -392,5 +423,48 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn nested_schema_failures_keep_the_known_mismatch_category() {
+        let required = Arc::new(Field::new("secret_child", DataType::Utf8, false));
+        let optional = Arc::new(Field::new("secret_child", DataType::Utf8View, true));
+        for (actual, expected, reason) in [
+            (
+                DataType::Struct(vec![required.clone()].into()),
+                DataType::Struct(vec![optional.clone()].into()),
+                "backend_nullability_mismatch",
+            ),
+            (
+                DataType::Struct(vec![required.clone()].into()),
+                DataType::Struct(Vec::<Field>::new().into()),
+                "backend_field_count_mismatch",
+            ),
+            (
+                DataType::List(required.clone()),
+                DataType::List(optional),
+                "backend_nullability_mismatch",
+            ),
+            (
+                DataType::List(required),
+                DataType::List(Arc::new(Field::new("secret_child", DataType::Int64, false))),
+                "backend_field_type_mismatch",
+            ),
+        ] {
+            let source = RecordBatch::new_empty(Arc::new(Schema::new(vec![Field::new(
+                "secret_parent",
+                actual,
+                true,
+            )])));
+            let target = Arc::new(Schema::new(vec![Field::new(
+                "secret_parent",
+                expected,
+                true,
+            )]));
+            let error = align_batch_to_logical_schema(source, &target, "secret mismatch")
+                .expect_err("incompatible nested schema must fail");
+            assert_eq!(error.reason(), reason);
+            assert!(!format!("{error} {error:?}").contains("secret"));
+        }
     }
 }
