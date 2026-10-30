@@ -55,6 +55,23 @@ pub(super) async fn get_table_metadata(
     .await
 }
 
+/// Fetches a Delta API response using the same profile and subprocess limits as table lookup.
+pub(super) async fn get_delta_api_response(profile: &str, path: &str) -> Result<Vec<u8>, Error> {
+    run_databricks_cli(
+        &[
+            "api",
+            "get",
+            path,
+            &format!("--profile={profile}"),
+            "--output",
+            "json",
+        ],
+        profile,
+        |details| Error::TableMetadataRequestFailed { details },
+    )
+    .await
+}
+
 /// Requests READ credentials scoped to the table ID returned by the metadata request.
 pub(super) async fn generate_read_credentials(
     profile: &str,

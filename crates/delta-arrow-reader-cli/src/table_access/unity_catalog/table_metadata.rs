@@ -46,6 +46,12 @@ pub(super) struct TableMetadataResponse {
 }
 
 impl TableMetadataResponse {
+    pub(super) fn is_catalog_managed(&self) -> bool {
+        self.properties
+            .get("delta.feature.catalogManaged")
+            .is_some_and(|value| value == "supported")
+    }
+
     /// Decodes a response and checks that it describes the requested, directly readable table.
     pub(super) fn parse(metadata_json: &[u8], requested_table_name: &str) -> Result<Self, Error> {
         let metadata = serde_json::from_slice::<JsonObject<Self>>(metadata_json)
@@ -94,15 +100,19 @@ impl TableMetadataResponse {
         // The local reader cannot apply UC row filters or column masks.
         let has_read_policy =
             self.row_filter.is_some() || self.columns.iter().any(|column| column.mask.is_some());
-        let requires_commit_coordinator = self.properties.keys().any(|key| {
-            key == "delta.feature.catalogManaged" || key.starts_with("delta.coordinatedCommits.")
-        });
+        let requires_commit_coordinator = self
+            .properties
+            .keys()
+            .any(|key| key.starts_with("delta.coordinatedCommits."));
+        let invalid_catalog_feature = self.properties.contains_key("delta.feature.catalogManaged")
+            && (!self.is_catalog_managed() || self.table_type != "MANAGED");
         if !is_supported_table_kind
             || has_invalid_capability
             || has_read_policy
             || self.pipeline_id.is_some()
             || self.browse_only
             || requires_commit_coordinator
+            || invalid_catalog_feature
         {
             return Err(Error::UnsupportedDirectRead);
         }

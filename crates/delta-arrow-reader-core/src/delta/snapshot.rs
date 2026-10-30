@@ -11,9 +11,11 @@ use super::{
     protocol::{DeltaProtocol, validate_protocol},
 };
 use crate::{
-    DeltaReaderError, DeltaSnapshotSelection, DeltaStorageCredentialProvider, DeltaStorageOptions,
+    DeltaCatalogSnapshot, DeltaReaderError, DeltaSnapshotSelection, DeltaStorageCredentialProvider,
+    DeltaStorageOptions,
     error::{
-        ScanPlanningSnafu, SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu,
+        InvalidConfigurationSnafu, ScanPlanningSnafu, SchemaConversionSnafu, SnapshotLoadSnafu,
+        StorageInitializationSnafu,
     },
     operation_tracing::SharedOperationFields,
 };
@@ -35,6 +37,7 @@ pub(crate) struct ArrowTableSnapshot {
     protocol: DeltaProtocol,
     schema: SchemaRef,
     engine_context: Arc<DeltaKernelEngineContext>,
+    catalog_confirmed: bool,
     eager_scan_metadata: Option<Arc<[RecordBatch]>>,
 }
 
@@ -42,6 +45,7 @@ pub(crate) struct KernelTableSnapshot {
     snapshot: KernelSnapshot,
     protocol: DeltaProtocol,
     engine_context: Arc<DeltaKernelEngineContext>,
+    catalog_confirmed: bool,
 }
 
 impl KernelTableSnapshot {
@@ -69,6 +73,7 @@ impl KernelTableSnapshot {
             protocol: self.protocol,
             schema,
             engine_context: self.engine_context,
+            catalog_confirmed: self.catalog_confirmed,
             eager_scan_metadata: None,
         })
     }
@@ -170,6 +175,12 @@ impl ArrowTableSnapshot {
         &self,
         operation_fields: &SharedOperationFields,
     ) -> Result<Self, DeltaReaderError> {
+        if self.catalog_confirmed {
+            return InvalidConfigurationSnafu {
+                reason: "catalog_refresh_requires_new_catalog_snapshot",
+            }
+            .fail();
+        }
         let snapshot = self
             .engine_context
             .refresh_snapshot(&self.snapshot)
@@ -213,6 +224,7 @@ impl ArrowTableSnapshot {
             protocol,
             schema,
             engine_context: Arc::clone(&self.engine_context),
+            catalog_confirmed: self.catalog_confirmed,
             eager_scan_metadata,
         })
     }
@@ -224,13 +236,14 @@ pub(crate) fn load_delta_table_snapshot_blocking(
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
-    load_arrow_snapshot_blocking(table_location, storage_options, None, selection, None)
+    load_arrow_snapshot_blocking(table_location, storage_options, None, None, selection, None)
 }
 
 fn load_arrow_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     credential_provider: Option<&DeltaStorageCredentialProvider>,
+    catalog_snapshot: Option<&DeltaCatalogSnapshot>,
     selection: DeltaSnapshotSelection,
     operation_fields: Option<&SharedOperationFields>,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
@@ -240,6 +253,7 @@ fn load_arrow_snapshot_blocking(
         table_location,
         storage_options,
         credential_provider,
+        catalog_snapshot,
         selection,
     )
     .and_then(|snapshot| {
@@ -260,6 +274,7 @@ pub(crate) fn load_kernel_table_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     credential_provider: Option<&DeltaStorageCredentialProvider>,
+    catalog_snapshot: Option<&DeltaCatalogSnapshot>,
     selection: DeltaSnapshotSelection,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
@@ -268,6 +283,7 @@ pub(crate) fn load_kernel_table_snapshot_blocking(
         table_location,
         storage_options,
         credential_provider,
+        catalog_snapshot,
         selection,
     );
 
@@ -282,6 +298,7 @@ fn build_kernel_table_snapshot(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     credential_provider: Option<&DeltaStorageCredentialProvider>,
+    catalog_snapshot: Option<&DeltaCatalogSnapshot>,
     selection: DeltaSnapshotSelection,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let table_url = normalize_table_location(table_location)?;
@@ -305,7 +322,7 @@ fn build_kernel_table_snapshot(
         DeltaSnapshotSelection::Version(version) => Some(version),
     };
     let snapshot = engine_context
-        .load_snapshot(version)
+        .load_snapshot(version, catalog_snapshot)
         .boxed()
         .context(SnapshotLoadSnafu {
             reason: snapshot_load_failed_reason(s3_auth_mode_hint),
@@ -316,6 +333,7 @@ fn build_kernel_table_snapshot(
         snapshot,
         protocol,
         engine_context,
+        catalog_confirmed: catalog_snapshot.is_some(),
     })
 }
 
@@ -328,6 +346,7 @@ pub(crate) async fn load_delta_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
     credential_provider: Option<DeltaStorageCredentialProvider>,
+    catalog_snapshot: Option<DeltaCatalogSnapshot>,
     selection: DeltaSnapshotSelection,
     operation_fields: SharedOperationFields,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
@@ -341,6 +360,7 @@ pub(crate) async fn load_delta_table_snapshot(
                     &table_location,
                     &storage_options,
                     credential_provider.as_ref(),
+                    catalog_snapshot.as_ref(),
                     selection,
                     Some(&operation_fields),
                 )
@@ -366,6 +386,7 @@ pub(crate) async fn load_kernel_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
     credential_provider: Option<DeltaStorageCredentialProvider>,
+    catalog_snapshot: Option<DeltaCatalogSnapshot>,
     selection: DeltaSnapshotSelection,
     operation_fields: SharedOperationFields,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
@@ -379,6 +400,7 @@ pub(crate) async fn load_kernel_table_snapshot(
                     &table_location,
                     &storage_options,
                     credential_provider.as_ref(),
+                    catalog_snapshot.as_ref(),
                     selection,
                 )?;
                 operation_fields.record_snapshot_version(snapshot.version());
@@ -985,6 +1007,7 @@ mod tests {
         let kernel_snapshot = load_kernel_table_snapshot_blocking(
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
+            None,
             None,
             DeltaSnapshotSelection::Latest,
         )?;
@@ -1796,12 +1819,14 @@ mod tests {
                 table_uri.clone(),
                 DeltaStorageOptions::new(),
                 None,
+                None,
                 DeltaSnapshotSelection::Latest,
                 crate::operation_tracing::SharedOperationFields::default(),
             ),
             load_delta_table_snapshot(
                 table_uri,
                 DeltaStorageOptions::new(),
+                None,
                 None,
                 DeltaSnapshotSelection::Version(0),
                 crate::operation_tracing::SharedOperationFields::default(),

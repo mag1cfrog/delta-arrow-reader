@@ -171,6 +171,7 @@ for direct-storage tables, additional fields, and path rules.
 | `uc_table_request_failed` or `uc_credential_request_failed` | Read the accompanying Databricks error. `uc_authentication_failed` means check the selected profile's login; `uc_permission_denied` means ask an administrator to check access and any named privilege. If the cause remains unclear, [check Databricks directly](#check-databricks-directly). |
 | `uc_s3_region_required` | Supply the [S3 region file](reference/unity-catalog.md#s3-region). |
 | `unsupported_uc_table` | Check the [supported tables](reference/unity-catalog.md#table-access) and [credential forms](reference/unity-catalog.md#storage-backends-and-credentials). |
+| `unsupported_uc_catalog_protocol` | The workspace does not advertise Delta API 1.0 table reads. Additional grants do not add this protocol support. |
 | `uc_credentials_expired` | Check the system clock and [renew user OAuth](#user-oauth-login) if needed, then retry. |
 | Failure after output was written | Discard failed stdout results. In file mode, preserve existing output and retry with an unused path at the same version if completion is uncertain. With `--manifest`, follow the [manifest checks](cli-automation.md#save-provenance-for-replay). |
 

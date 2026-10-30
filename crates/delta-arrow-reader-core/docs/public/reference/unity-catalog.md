@@ -27,12 +27,17 @@ The metastore must allow external data access. The requesting principal needs
 Selecting a profile does not grant additional permissions. Administrators can
 follow [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
 
-DAR accepts ordinary managed or external Delta tables that permit direct
+DAR accepts managed or external Delta tables that permit direct
 external-engine reads and use a supported Delta read protocol. It rejects:
 
 - Views, pipeline tables, and shallow clones.
 - Row filters and column masks.
-- Catalog commits (`catalogManaged`) and coordinated commits.
+- Coordinated commits using `delta.coordinatedCommits.*`.
+
+Managed Delta tables with catalog commits (`catalogManaged`) need no additional
+DAR flag. The workspace must support Delta API 1.0 table reads. DAR gets the
+confirmed version and commit list from UC before reading storage. An explicit
+`--table-version` must not exceed the version confirmed by the catalog.
 
 Tables in [Databricks default storage](https://docs.databricks.com/aws/en/storage/default-storage)
 cannot vend the credentials needed for this path. Delta Sharing/OpenSharing
@@ -40,7 +45,7 @@ also uses a different authorization flow and is unsupported by this integration.
 
 Reader-protocol validation accepts versions 1, 2, and 3. Supported reader features
 are `timestampNtz`, `deletionVectors`, `columnMapping`, `v2Checkpoint`,
-`vacuumProtocolCheck`, `typeWidening`, and `typeWidening-preview`. The table and
+`vacuumProtocolCheck`, `typeWidening`, `typeWidening-preview`, and `catalogManaged`. The table and
 policy restrictions above still apply.
 
 Run the [inspection step](../unity-catalog.md#inspect-and-pin-the-table) to check
@@ -136,18 +141,25 @@ the CLI token cache. The executable must support:
 
 - `tables get --include-manifest-capabilities`
 - `temporary-table-credentials generate-temporary-table-credentials --operation READ`
+- `api get` for catalog-managed tables
 
-These commands and flags were checked with CLI 1.6.0; live Azure validation used
-1.15.0. This does not establish a minimum supported version.
+The table and credential commands were checked with CLI 1.6.0; live Azure and
+catalog-managed validation used 1.15.0. This does not establish a minimum
+supported version.
 
 <details markdown="1">
 <summary id="validation-coverage">Live validation limits</summary>
 
-The live-validated path is an Azure managed Delta table using user OAuth and
+Live validation covers an Azure managed Delta table using user OAuth and
 user-delegation SAS on macOS and Linux ARM64. Coverage includes inspection,
 Arrow scans, SQL aggregation, and UC/local joins.
 
-Previews, JSON queries, other storage backends, Azure bearer credentials,
+Catalog-managed S3 reads were also checked using Databricks CLI 1.15.0:
+inspection, preview, and complete JSON query results for current and pinned
+snapshots matched Databricks SQL reference results. Reads where confirmed
+commits exist only in staged files are covered by local tests, not live validation.
+
+GCS, R2, Azure bearer credentials,
 other authentication modes, live renewal, and the full release platform matrix
 remain unverified online. Build and environment details are in the
 [Azure validation record](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/uc-azure-validation-2026-10-22.md).

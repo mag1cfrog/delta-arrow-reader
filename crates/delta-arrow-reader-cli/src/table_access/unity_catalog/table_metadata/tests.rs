@@ -36,7 +36,7 @@ fn admission_rejects_unsupported_and_mismatched_tables() {
         ("pipeline_id", json!("pipeline")),
         (
             "properties",
-            json!({"delta.feature.catalogManaged": "supported"}),
+            json!({"delta.feature.catalogManaged": "unknown"}),
         ),
         (
             "properties",
@@ -95,7 +95,7 @@ fn capability_only_manifests_require_direct_read_support_and_preserve_policy_che
         ("columns", json!([{"mask": {}}])),
         (
             "properties",
-            json!({"delta.feature.catalogManaged": "supported"}),
+            json!({"delta.feature.catalogManaged": "unknown"}),
         ),
         (
             "securable_kind_manifest",
@@ -126,6 +126,31 @@ fn capability_only_manifests_require_direct_read_support_and_preserve_policy_che
             )
             .is_err(),
             "{field}"
+        );
+    }
+}
+
+#[test]
+fn catalog_managed_metadata_still_requires_a_managed_table_without_read_policies() {
+    let mut value = table_metadata_response();
+    value["properties"] = json!({"delta.feature.catalogManaged": "supported"});
+    let metadata =
+        TableMetadataResponse::parse(&serde_json::to_vec(&value).unwrap(), "main.sales.orders")
+            .unwrap();
+    assert!(metadata.is_catalog_managed());
+    for (field, invalid) in [
+        ("table_type", json!("EXTERNAL")),
+        ("row_filter", json!({})),
+        ("columns", json!([{"mask":{}}])),
+    ] {
+        let mut invalid_response = value.clone();
+        invalid_response[field] = invalid;
+        assert!(
+            TableMetadataResponse::parse(
+                &serde_json::to_vec(&invalid_response).unwrap(),
+                "main.sales.orders"
+            )
+            .is_err()
         );
     }
 }

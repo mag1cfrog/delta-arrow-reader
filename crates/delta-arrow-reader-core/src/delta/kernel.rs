@@ -39,8 +39,8 @@ use url::Url;
 
 use super::location::{file_resolution_url, object_store_path, with_object_store_path};
 use crate::{
-    DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageCredentialProvider,
-    DeltaStorageOptions,
+    DeltaCatalogSnapshot, DeltaComparison, DeltaPredicate, DeltaScalar,
+    DeltaStorageCredentialProvider, DeltaStorageOptions,
 };
 use versioned_engine::VersionedEngine;
 
@@ -707,13 +707,36 @@ impl DeltaKernelEngineContext {
     pub(crate) fn load_snapshot(
         &self,
         version: Option<u64>,
+        catalog_snapshot: Option<&DeltaCatalogSnapshot>,
     ) -> delta_kernel::DeltaResult<KernelSnapshot> {
         // Kernel's URL path must be relative to the already configured store.
         let store_relative_table_url = with_object_store_path(
             self.file_resolution_url.clone(),
             &object_store_path(&self.file_resolution_url)?,
         )?;
-        let builder = Snapshot::builder_for(store_relative_table_url);
+        let mut builder = Snapshot::builder_for(store_relative_table_url.clone());
+        if let Some(catalog) = catalog_snapshot {
+            builder = builder
+                .with_log_tail(catalog.kernel_log_tail(&store_relative_table_url)?)
+                .with_max_catalog_version(catalog.max_version);
+            if let Some(version) = version {
+                builder = builder.at_version(version);
+            }
+            let result = builder.build(self.engine().as_ref());
+            // shortcut: Kernel 0.25 rejects catalog caps on pre-enablement history; remove
+            // this bounded retry when Kernel can load those versions with catalog confirmation.
+            if let (Some(version), Err(delta_kernel::Error::Generic(message))) = (version, &result)
+                && version < catalog.max_version
+                && catalog
+                    .commits
+                    .first()
+                    .is_none_or(|commit| version < commit.version)
+                && message == "max_catalog_version must not be set for non-catalog-managed tables."
+            {
+                return self.load_snapshot(Some(version), None);
+            }
+            return result.map(KernelSnapshot);
+        }
         let snapshot = match version {
             None => builder.build(self.engine().as_ref())?,
             Some(version) => {

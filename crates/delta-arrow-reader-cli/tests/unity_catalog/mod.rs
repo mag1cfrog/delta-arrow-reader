@@ -1,3 +1,4 @@
+mod catalog_managed;
 #[cfg(target_os = "linux")]
 mod deadlines;
 mod failure_diagnostics;
@@ -29,7 +30,7 @@ use super::{
     run_with_timeout,
 };
 
-type TestResult = Result<(), Box<dyn std::error::Error>>;
+type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const TABLE_ID: &str = "12345678-1234-1234-1234-123456789abc";
 const TABLE_NAME: &str = "main.sales.orders";
 const PROFILE: &str = "secret profile $(do-not-run)";
@@ -251,6 +252,12 @@ if [ "${DAR_TEST_SUCCESS_STDERR:-}" = 1 ]; then
 fi
 case "$1" in
   tables) /bin/cat "$response_directory/metadata.json" ;;
+  api)
+    case "$3" in
+      */config\?*) /bin/cat "$response_directory/delta-api-config.json" ;;
+      *) /bin/cat "$response_directory/catalog-snapshot.json" ;;
+    esac
+    ;;
   temporary-table-credentials)
     if [ "${DAR_TEST_DENIED:-}" = 1 ]; then printf 'secret-sentinel\n' >&2; exit 1; fi
     if [ -n "${DAR_TEST_REFRESH:-}" ]; then

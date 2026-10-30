@@ -8,6 +8,7 @@ use crate::{DeltaReaderError, error::UnsupportedProtocolSnafu};
 
 #[allow(dead_code)]
 const SUPPORTED_READER_FEATURES: &[&str] = &[
+    "catalogManaged",
     "timestampNtz",
     "deletionVectors",
     "columnMapping",
