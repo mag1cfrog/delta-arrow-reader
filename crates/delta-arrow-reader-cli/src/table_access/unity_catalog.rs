@@ -5,6 +5,7 @@
 //! explanation; successful credential responses never enter diagnostics. Raw responses
 //! and credential values omit `Debug`; caches and providers omit their stored credentials.
 
+mod catalog_snapshot;
 mod credential_cache;
 mod databricks_cli;
 mod error;
@@ -92,6 +93,19 @@ impl UnityCatalogTableTarget {
             &storage_options,
             Some(storage_location.backend),
         )?;
+        let catalog_snapshot = if table_metadata.is_catalog_managed() {
+            Some(
+                catalog_snapshot::load_catalog_snapshot(
+                    &self.databricks_profile,
+                    &self.full_table_name,
+                    &table_metadata,
+                    &storage_location,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         let credentials_json = databricks_cli::generate_read_credentials(
             &self.databricks_profile,
             &table_metadata.table_id,
@@ -104,6 +118,7 @@ impl UnityCatalogTableTarget {
             self.databricks_profile,
             table_metadata.table_id,
             credentials,
+            catalog_snapshot,
         )
     }
 }

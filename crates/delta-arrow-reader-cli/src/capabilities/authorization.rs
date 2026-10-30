@@ -377,7 +377,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             "notes": [
                 UNITY_CATALOG_PROFILE_USAGE,
                 UNITY_CATALOG_ACCESS_REQUIREMENTS,
-                "Only ordinary managed/external Delta tables with a supported read protocol are accepted. Views, pipeline tables, shallow clones, row filters, column masks, catalog-managed commits, and coordinated commits are rejected.",
+                "Managed/external Delta tables with a supported read protocol are accepted. Catalog-managed commits require workspace Delta API 1.0 reads. Views, pipeline tables, shallow clones, row filters, column masks, and coordinated commits are rejected.",
                 "Credentials are renewed for the same table ID and profile without changing the selected snapshot. Renewal failure stops the command.",
             ],
         },

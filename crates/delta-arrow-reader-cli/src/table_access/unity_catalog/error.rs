@@ -39,6 +39,10 @@ pub(crate) enum Error {
     ))]
     UnsupportedDirectRead,
     #[snafu(display(
+        "This workspace does not advertise Delta API 1.0 table reads required for catalog-managed tables. Additional grants do not add protocol support."
+    ))]
+    UnsupportedCatalogProtocol,
+    #[snafu(display(
         "Unity Catalog returned expired credentials. Check the profile login and system clock, then retry."
     ))]
     CredentialsExpired,
@@ -59,6 +63,7 @@ impl Error {
             Self::TableMetadataRequestFailed { .. } => "uc_table_request_failed",
             Self::ReadCredentialsRequestFailed { .. } => "uc_credential_request_failed",
             Self::UnsupportedDirectRead => "unsupported_uc_table",
+            Self::UnsupportedCatalogProtocol => "unsupported_uc_catalog_protocol",
             Self::CredentialsExpired => "uc_credentials_expired",
             Self::Cancelled { .. } => "uc_cancelled",
         }

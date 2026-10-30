@@ -299,7 +299,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `configuration` | `databricks_cli_missing` | Databricks CLI is unavailable on PATH |
 | `execution` | `databricks_cli_failed`, `databricks_cli_timeout` | Child process failed or exceeded its timeout |
 | `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
-| `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
+| `execution` | `invalid_databricks_response`, `unsupported_uc_table`, `unsupported_uc_catalog_protocol` | Response, table, or catalog protocol is malformed, oversized, or unsupported |
 | `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
 | `execution` | `uc_cancelled` | A UC inspect, scan, query, or explain command was interrupted |
 

@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use delta_arrow_reader::{
-    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, WarmupMode,
+    DeltaCatalogSnapshot, DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable,
+    DeltaTableBuilder, WarmupMode,
 };
 use url::Url;
 
@@ -23,6 +24,7 @@ pub(crate) struct AuthorizedTableAccess {
     storage_options: DeltaStorageOptions,
     /// Retains the redacted refresh failure even if a dependency flattens its error source.
     credential_cache: Arc<TableCredentialCache>,
+    catalog_snapshot: Option<DeltaCatalogSnapshot>,
 }
 
 impl AuthorizedTableAccess {
@@ -33,6 +35,7 @@ impl AuthorizedTableAccess {
         profile: String,
         table_id: String,
         credentials: TemporaryTableCredentials,
+        catalog_snapshot: Option<DeltaCatalogSnapshot>,
     ) -> Result<Self, Error> {
         let storage_url = storage_location.as_url().clone();
         let credential_cache =
@@ -41,6 +44,7 @@ impl AuthorizedTableAccess {
             storage_url,
             storage_options,
             credential_cache,
+            catalog_snapshot,
         })
     }
 
@@ -51,11 +55,14 @@ impl AuthorizedTableAccess {
         &self,
         snapshot_selection: DeltaSnapshotSelection,
     ) -> Result<DeltaTable, CliError> {
-        let builder = DeltaTableBuilder::new(self.storage_url.as_str())
+        let mut builder = DeltaTableBuilder::new(self.storage_url.as_str())
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(snapshot_selection)
             .with_credential_provider(self.credential_cache.credential_provider())
             .with_storage_options(self.storage_options.clone());
+        if let Some(snapshot) = &self.catalog_snapshot {
+            builder = builder.with_catalog_snapshot(snapshot.clone());
+        }
         let table = match builder.load_table().await {
             Ok(table) => table,
             Err(source) => return Err(self.map_read_error(CliError::Reader { source }).await),
@@ -64,10 +71,11 @@ impl AuthorizedTableAccess {
         let protocol = table.protocol();
         if !matches!(protocol.min_reader_version(), 1..=3)
             || protocol.first_unsupported_reader_feature().is_some()
-            || protocol
-                .writer_features()
-                .iter()
-                .any(|feature| feature == "catalogManaged")
+            || (self.catalog_snapshot.is_none()
+                && protocol
+                    .writer_features()
+                    .iter()
+                    .any(|feature| feature == "catalogManaged"))
         {
             return Err(CliError::UnityCatalog {
                 source: Error::UnsupportedDirectRead,

@@ -1,6 +1,7 @@
 //! Public Delta-to-Arrow reader and optional DataFusion adapter.
 
 pub(crate) mod backend;
+mod catalog;
 mod credentials;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
@@ -14,6 +15,7 @@ pub(crate) mod predicate;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
+pub use catalog::{DeltaCatalogCommit, DeltaCatalogSnapshot};
 pub use credentials::DeltaStorageCredentialProvider;
 #[doc(hidden)]
 pub use metrics::ParquetRangePlanningDiagnosticSnapshot;
@@ -166,6 +168,7 @@ pub struct DeltaTableBuilder {
     table_location: String,
     storage_options: DeltaStorageOptions,
     credential_provider: Option<DeltaStorageCredentialProvider>,
+    catalog_snapshot: Option<DeltaCatalogSnapshot>,
     snapshot_selection: DeltaSnapshotSelection,
     execution_options: DeltaScanExecutionOptions,
     warmup: WarmupMode,
@@ -178,6 +181,7 @@ impl DeltaTableBuilder {
             table_location: table_location.into(),
             storage_options: DeltaStorageOptions::new(),
             credential_provider: None,
+            catalog_snapshot: None,
             snapshot_selection: DeltaSnapshotSelection::Latest,
             execution_options: DeltaScanExecutionOptions::new(),
             warmup: WarmupMode::Automatic,
@@ -233,6 +237,17 @@ impl DeltaTableBuilder {
     /// ```
     pub fn with_credential_provider(mut self, provider: DeltaStorageCredentialProvider) -> Self {
         self.credential_provider = Some(provider);
+        self
+    }
+
+    /// Uses catalog-confirmed commits and a version ceiling for a catalog-managed table.
+    ///
+    /// Latest loads stop at the catalog version; explicit versions must not exceed it.
+    /// The caller must bind this information to the same table and storage root.
+    /// To load newer catalog state, obtain fresh confirmation and use a new builder;
+    /// [`DeltaTable::refresh`] cannot resolve the catalog on the caller's behalf.
+    pub fn with_catalog_snapshot(mut self, snapshot: DeltaCatalogSnapshot) -> Self {
+        self.catalog_snapshot = Some(snapshot);
         self
     }
 
@@ -297,6 +312,7 @@ impl DeltaTableBuilder {
                 self.table_location,
                 self.storage_options,
                 self.credential_provider,
+                self.catalog_snapshot,
                 self.snapshot_selection,
                 operation.shared_fields(),
             )
@@ -374,6 +390,7 @@ impl DeltaTableBuilder {
                 self.table_location,
                 self.storage_options,
                 self.credential_provider,
+                self.catalog_snapshot,
                 self.snapshot_selection,
                 operation.shared_fields(),
             )
@@ -573,6 +590,8 @@ impl DeltaTable {
     ///
     /// Returns an error if the newer snapshot, schema, or retained query-planning metadata cannot
     /// be loaded. No partially refreshed table is returned.
+    /// Catalog-managed tables require fresh catalog confirmation through
+    /// [`DeltaTableBuilder::with_catalog_snapshot`] and reject this filesystem-only refresh.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
         let operation = OperationTrace::start(
             OperationKind::Refresh,

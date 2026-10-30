@@ -14,6 +14,7 @@ categories = ["asynchronous", "database"]
 exclude = [
     "benches/**",
     "tests/benchmark_harness.rs",
+    "tests/catalog_managed.rs",
     "tests/cloud_table_locations.rs",
     "tests/incremental_refresh_benchmark_harness.rs",
     "tests/page_index_benchmark_harness.rs",
