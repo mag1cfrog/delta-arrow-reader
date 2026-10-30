@@ -6,7 +6,7 @@ query, start with the [quickstart](cli-quickstart.md) or
 
 ## Save a complete result
 
-Run your SQL file at the chosen snapshot version, adding `--output`:
+Run your SQL file with the same inputs, adding `--output`:
 
 ```sh
 dar query /path/to/table --table-version 0 --sql-file totals.sql \
@@ -16,6 +16,10 @@ dar query /path/to/table --table-version 0 --sql-file totals.sql \
 Replace the table, version, and SQL file with yours. Keep the SQL and
 [authorization](cli-storage.md) unchanged. For a join, keep your `--tables-file`
 with its pinned versions instead of a positional table and `--table-version`.
+
+For a binding with `time_travel: false`, omit version selection. Each command
+reads its latest published snapshot; to reuse those exact rows, reopen the saved
+file. See [latest-only reads](unity-catalog.md#read-the-latest-published-result).
 
 Remote file exports require an explicit credential file, source, or Databricks
 profile for every table. If a stdout query relied on implicit authorization,
@@ -75,7 +79,7 @@ results, process each batch instead of collecting the entire file in memory.
 A nonzero exit status means the invocation failed. A complete file may already
 exist at the destination if saving finished before the failure. Preserve that
 file. If completion is uncertain, fix the reported error and retry with an
-unused filename and the same SQL, versions, and authorization.
+unused filename and the same SQL, snapshot selection, and authorization.
 
 See [Fix a failed command](cli-recovery.md) for output limits and other errors.
 For a program that consumes receipts and completion records, continue with

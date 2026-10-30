@@ -244,7 +244,9 @@ Consumers must check exit status 0, valid stdout, and the completion record.
 `dar capabilities --schema completion --full` return the JSON Schemas for these
 stderr records; extract each response's `schema` field
 for validation. Both commands work offline.
-Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
+Records are at most 8 KiB, or 10 KiB when any binding includes `time_travel: false`.
+The latter bound retains all 64 allowed aliases, their observed versions, and
+their replay restrictions. Ignore additional fields and JSON key order; reject
 unsupported `format_version` values for each record kind. Incompatible field meanings or types
 require a new version.
 

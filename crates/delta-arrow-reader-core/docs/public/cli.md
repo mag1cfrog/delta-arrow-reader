@@ -33,7 +33,10 @@ dar inspect --view summary --auth-source json --storage-options-file ./storage.j
 dar inspect --view summary -- './-table with spaces, and commas'
 ```
 
-Use the reported `table_version` for follow-up lookups. `--column-prefix` returns
+Use the reported `table_version` for follow-up lookups unless `time_travel` is
+`false`. In that case, omit version selection; each command reads the
+[latest published snapshot](unity-catalog.md#read-the-latest-published-result).
+`--column-prefix` returns
 only matching top-level names, in schema order. Matching is case-sensitive; an
 empty prefix matches every name. `--column` returns the exact name, type, and
 nullability of each selected top-level column, in request order. Repeat it for
@@ -307,7 +310,9 @@ dar --diagnostics=json explain /data/orders --sql-file query.sql --table-version
 
 The first command returns actual `bindings`, `node_count`, `scan_count`, and the
 root's `column_count`. Replace `42` with its reported snapshot version. For
-multiple tables, use `--tables-file` and pin each entry's `table_version`.
+multiple tables, use `--tables-file` and pin each entry's `table_version`, except
+bindings with `time_travel: false`. Omit version selection for those bindings;
+another command can observe a newer published snapshot.
 Keep SQL and options unchanged for subsequent selections.
 
 | Selection | Returned detail |

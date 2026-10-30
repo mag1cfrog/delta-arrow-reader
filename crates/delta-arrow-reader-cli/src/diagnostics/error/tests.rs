@@ -170,30 +170,36 @@ fn cli_failures_preserve_safe_causes_without_formatting_sources() {
 
 #[test]
 fn failed_query_bindings_fit_the_terminal_record_limit() {
-    let source = Error::OutputLimit {
-        reason: "json_output_limit_exceeded",
-    };
-    let expected = source.to_json_diagnostic();
-    let bindings: Vec<_> = (0..input::MAX_TABLES)
-        .map(|index| {
-            json!({
-                "alias": format!("table_{index:057}"),
-                "table_version": u64::MAX.to_string(),
+    for (latest_only_count, limit) in [(0, 8192), (1, 10240), (64, 10240)] {
+        let source = Error::OutputLimit {
+            reason: "json_output_limit_exceeded",
+        };
+        let expected = source.to_json_diagnostic();
+        let bindings: Vec<_> = (0..input::MAX_TABLES)
+            .map(|index| {
+                let mut binding = json!({
+                    "alias": format!("table_{index:057}"),
+                    "table_version": u64::MAX.to_string(),
+                });
+                if index < latest_only_count {
+                    binding["time_travel"] = json!(false);
+                }
+                binding
             })
-        })
-        .collect();
-    let error = Error::WithResolvedBindings {
-        source: Box::new(source),
-        bindings: bindings.clone(),
-    };
-    assert_eq!(error.exit_code(), ExitCode::from(1));
-    let mut record = error.to_json_diagnostic();
-    assert!(record.to_string().len() < 8192);
-    assert_eq!(
-        record.as_object_mut().unwrap().remove("bindings"),
-        Some(json!(bindings))
-    );
-    assert_eq!(record, expected);
+            .collect();
+        let error = Error::WithResolvedBindings {
+            source: Box::new(source),
+            bindings: bindings.clone(),
+        };
+        assert_eq!(error.exit_code(), ExitCode::from(1));
+        let mut record = error.to_json_diagnostic();
+        assert!(record.to_string().len() < limit);
+        assert_eq!(
+            record.as_object_mut().unwrap().remove("bindings"),
+            Some(json!(bindings))
+        );
+        assert_eq!(record, expected);
+    }
 }
 
 #[test]

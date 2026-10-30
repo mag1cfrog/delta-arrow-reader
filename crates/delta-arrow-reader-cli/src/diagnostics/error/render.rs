@@ -282,18 +282,27 @@ impl Error {
 }
 
 fn truncate_upstream_message_for_record_limit(record: &mut Value) {
-    const MAX_RECORD_BYTES: usize = 8 * 1024;
+    // Keep every binding's version and replay restriction, including 64 maximum-length aliases.
+    let max_record_bytes: usize = if record["bindings"].as_array().is_some_and(|bindings| {
+        bindings
+            .iter()
+            .any(|binding| binding["time_travel"] == false)
+    }) {
+        10 * 1024
+    } else {
+        8 * 1024
+    };
     let Some(message) = record.get("upstream_message").and_then(Value::as_str) else {
         return;
     };
-    if record.to_string().len() < MAX_RECORD_BYTES {
+    if record.to_string().len() < max_record_bytes {
         return;
     }
     let message = message.to_owned();
     record["upstream_message"] = "".into();
     record["upstream_message_truncated"] = true.into();
     // Reserve the newline and all other fields before measuring the escaped excerpt.
-    let available = MAX_RECORD_BYTES.saturating_sub(record.to_string().len() + 1);
+    let available = max_record_bytes.saturating_sub(record.to_string().len() + 1);
     let (mut start, mut end) = (0, message.len());
     while start < end {
         let midpoint = (start + end).div_ceil(2);
@@ -313,42 +322,54 @@ mod tests {
 
     #[test]
     fn uc_excerpts_fit_with_all_snapshot_bindings_without_discarding_recovery() {
-        for version in [0, u64::MAX] {
-            let bindings: Vec<_> = (0..crate::input::MAX_TABLES)
-                .map(|index| json!({"alias": format!("table_{index:057}"), "table_version": version.to_string()}))
-                .collect();
-            for message in ["x".repeat(1024), "\"".repeat(1024), "界".repeat(341)] {
-                let mut source = unity_catalog::Error::ReadCredentialsRequestFailed {
-                    details: Default::default(),
-                };
-                if let unity_catalog::Error::ReadCredentialsRequestFailed { details } = &mut source
-                {
-                    details.message = Some(message.clone());
-                    details.source_kind = Some("permission_denied");
-                }
-                let error = Error::WithResolvedBindings {
-                    source: Box::new(Error::UnityCatalog { source }),
-                    bindings: bindings.clone(),
-                };
-                let mut record = error.to_json_diagnostic();
-                assert!(record.to_string().len() < 8192);
-                assert_eq!(record["bindings"], json!(bindings));
-                assert_eq!(record["reason"], "uc_permission_denied");
-                assert_eq!(record["recovery"], "request_access");
-                assert_eq!(record["retryable"], false);
-                assert!(record["hint"].is_string());
-                let kept = record["upstream_message"].as_str().unwrap();
-                assert!(!kept.is_empty() && message.starts_with(kept));
-                if let Some(next) = message[kept.len()..].chars().next() {
-                    assert_eq!(record["upstream_message_truncated"], true);
-                    let longer = format!("{kept}{next}");
-                    record["upstream_message"] = longer.into();
-                    assert!(
-                        record.to_string().len() >= 8192,
-                        "discarded an excerpt character that would fit"
-                    );
-                } else {
-                    assert!(record.get("upstream_message_truncated").is_none());
+        for (latest_only_count, limit) in [(0, 8192), (1, 10240), (64, 10240)] {
+            for version in [0, u64::MAX] {
+                let bindings: Vec<_> = (0..crate::input::MAX_TABLES)
+                    .map(|index| {
+                        let mut binding = json!({
+                            "alias": format!("table_{index:057}"),
+                            "table_version": version.to_string(),
+                        });
+                        if index < latest_only_count {
+                            binding["time_travel"] = json!(false);
+                        }
+                        binding
+                    })
+                    .collect();
+                for message in ["x".repeat(1024), "\"".repeat(1024), "界".repeat(341)] {
+                    let mut source = unity_catalog::Error::ReadCredentialsRequestFailed {
+                        details: Default::default(),
+                    };
+                    if let unity_catalog::Error::ReadCredentialsRequestFailed { details } =
+                        &mut source
+                    {
+                        details.message = Some(message.clone());
+                        details.source_kind = Some("permission_denied");
+                    }
+                    let error = Error::WithResolvedBindings {
+                        source: Box::new(Error::UnityCatalog { source }),
+                        bindings: bindings.clone(),
+                    };
+                    let mut record = error.to_json_diagnostic();
+                    assert!(record.to_string().len() < limit);
+                    assert_eq!(record["bindings"], json!(bindings));
+                    assert_eq!(record["reason"], "uc_permission_denied");
+                    assert_eq!(record["recovery"], "request_access");
+                    assert_eq!(record["retryable"], false);
+                    assert!(record["hint"].is_string());
+                    let kept = record["upstream_message"].as_str().unwrap();
+                    assert!(!kept.is_empty() && message.starts_with(kept));
+                    if let Some(next) = message[kept.len()..].chars().next() {
+                        assert_eq!(record["upstream_message_truncated"], true);
+                        let longer = format!("{kept}{next}");
+                        record["upstream_message"] = longer.into();
+                        assert!(
+                            record.to_string().len() >= limit,
+                            "discarded an excerpt character that would fit"
+                        );
+                    } else {
+                        assert!(record.get("upstream_message_truncated").is_none());
+                    }
                 }
             }
         }

@@ -163,11 +163,14 @@ so a refresh between commands can change the result. Save the output if you need
 to reuse those exact rows. The optional `--manifest` replay record is unavailable
 because it requires selectable historical snapshots.
 
-### Join with a local Delta table
+## Join with a local Delta table
 
 Declare each table and its authorization in `tables.json`. Replace the UC name,
 profile, and both versions with your own. Inspect the local table only if its
 version was not supplied. Here, `customers` is a Delta directory beside the manifest:
+
+For a materialized view or streaming table, omit that entry's `table_version`.
+The other table can still select a version.
 
 ```json
 {"format_version":1,"tables":[

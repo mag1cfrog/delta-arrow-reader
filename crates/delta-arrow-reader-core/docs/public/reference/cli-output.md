@@ -43,7 +43,8 @@ list. Individual field and encoding lookups remain available, including
 
 The default 8 KiB stdout budget covers the entire response. For larger results,
 use `--output PATH` with an explicit byte budget when needed. Keep the same SQL, authorization, table bindings, and
-snapshot versions when recovering the same result. Selecting fewer columns,
+snapshot versions where selectable when recovering the same result. Latest-only
+bindings can read newer data on retry. Selecting fewer columns,
 aggregating, or adding SQL `LIMIT` changes the requested result. `--max-rows`
 never truncates a successful result.
 
