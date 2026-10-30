@@ -4,6 +4,8 @@
 //! stop the deadline or signal listener. Completion is published only after that
 //! worker finishes; cancellation first gives owned credential children time to exit.
 
+#[cfg(test)]
+mod tests;
 mod worker;
 
 use std::{
@@ -17,6 +19,7 @@ use std::{
 };
 
 use futures_util::future::AbortHandle;
+use serde_json::Value;
 use snafu::ResultExt;
 
 use super::{signals, stdout_monitor};
@@ -113,22 +116,26 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
             },
             Err(error) => Err(error),
         };
-        if !worker_finished {
+        let worker_result = if !worker_finished {
             // Stop output first; credential runners own their children through cleanup.
             abort.abort();
             let cleanup = async {
                 crate::table_access::unity_catalog::cancel_pending_requests().await;
-                let _ = receiver.await;
+                receiver.await.ok()
             };
-            let _ = tokio::time::timeout(CLEANUP_GRACE, cleanup).await;
-        }
+            tokio::time::timeout(CLEANUP_GRACE, cleanup).await.ok().flatten()
+        } else { None };
         outcome.map_err(|error| {
-            if publication_started.load(Ordering::Acquire)
+            let error = if publication_started.load(Ordering::Acquire)
                 && matches!(error, Error::Cancelled { .. } | Error::DeadlineExceeded | Error::Output { .. }
                     | Error::UnityCatalog { source: crate::table_access::unity_catalog::Error::Cancelled { .. } })
             {
                 Error::ArtifactPublicationInterrupted { source: Box::new(error), manifest_requested }
-            } else { error }
+            } else { error };
+            match worker_result {
+                Some(result) => with_worker_diagnostics(error, result),
+                None => error,
+            }
         })
     });
     runtime.shutdown_background();
@@ -136,4 +143,51 @@ pub(crate) fn run_table_command(command: Command, diagnostic_format: DiagnosticF
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => diagnostic_format.report_failure_with_timeout(error),
     }
+}
+
+fn with_worker_diagnostics(mut error: Error, result: Result<Value, Error>) -> Error {
+    let mut bindings = None;
+    let mut cleanup = None;
+    match result {
+        Ok(completion) => bindings = completion["bindings"].as_array().cloned(),
+        Err(mut worker_error) => loop {
+            match worker_error {
+                Error::WithResolvedBindings {
+                    source,
+                    bindings: resolved,
+                } => {
+                    bindings = Some(resolved);
+                    worker_error = *source;
+                }
+                Error::WithCleanupFailure {
+                    source,
+                    cleanup: failure,
+                } => {
+                    cleanup = Some(failure);
+                    worker_error = *source;
+                }
+                failure @ Error::Query {
+                    source: crate::query::QueryError::SpillCleanup { .. },
+                } => {
+                    cleanup = Some(Box::new(failure));
+                    break;
+                }
+                // The supervisor's interruption determines the primary error and exit status.
+                _ => break,
+            }
+        },
+    }
+    if let Some(bindings) = bindings {
+        error = Error::WithResolvedBindings {
+            source: Box::new(error),
+            bindings,
+        };
+    }
+    if let Some(cleanup) = cleanup {
+        error = Error::WithCleanupFailure {
+            source: Box::new(error),
+            cleanup,
+        };
+    }
+    error
 }

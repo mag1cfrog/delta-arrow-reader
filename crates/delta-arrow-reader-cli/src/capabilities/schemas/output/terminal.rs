@@ -32,7 +32,7 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             },
             "cleanup_error": {
                 "type": "object",
-                "description": "Spill cleanup also failed. The top-level diagnostic retains the original command failure and its recovery advice.",
+                "description": "Spill cleanup also failed. The top-level diagnostic retains the original command failure and its recovery advice. Optional expected and hint fields may be omitted to fit the record byte limit.",
                 "required": ["phase", "code", "reason", "source_kind", "retryable", "recovery"],
                 "properties": {
                     "phase": {"const": "datafusion"},
