@@ -43,6 +43,18 @@ pub(crate) enum Error {
     ))]
     UnsupportedCatalogProtocol,
     #[snafu(display(
+        "Unity Catalog did not publish a Delta representation. Enable pipelines.externalMetadata.enabled and refresh the dataset. This external-access path does not support catalog commits."
+    ))]
+    PipelineExternalAccessUnavailable,
+    #[snafu(display(
+        "Unity Catalog materialized views and streaming tables support only the latest published snapshot. Omit --table-version or the table_version entry."
+    ))]
+    PipelineTimeTravelUnsupported,
+    #[snafu(display(
+        "Unity Catalog materialized views and streaming tables cannot replay pinned snapshots. Save the result with --output without --manifest."
+    ))]
+    PipelineReplayUnsupported,
+    #[snafu(display(
         "Unity Catalog returned expired credentials. Check the profile login and system clock, then retry."
     ))]
     CredentialsExpired,
@@ -64,6 +76,9 @@ impl Error {
             Self::ReadCredentialsRequestFailed { .. } => "uc_credential_request_failed",
             Self::UnsupportedDirectRead => "unsupported_uc_table",
             Self::UnsupportedCatalogProtocol => "unsupported_uc_catalog_protocol",
+            Self::PipelineExternalAccessUnavailable => "uc_pipeline_external_access_unavailable",
+            Self::PipelineTimeTravelUnsupported => "uc_pipeline_time_travel_unsupported",
+            Self::PipelineReplayUnsupported => "uc_pipeline_replay_unsupported",
             Self::CredentialsExpired => "uc_credentials_expired",
             Self::Cancelled { .. } => "uc_cancelled",
         }
@@ -95,6 +110,8 @@ impl Error {
             Self::InvalidTableTarget
             | Self::InvalidStorageOptions
             | Self::MissingS3Region
+            | Self::PipelineTimeTravelUnsupported
+            | Self::PipelineReplayUnsupported
             | Self::DatabricksCliNotFound => 2,
             Self::Cancelled { status } => *status,
             _ => 1,

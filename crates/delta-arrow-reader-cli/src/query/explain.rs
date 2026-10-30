@@ -67,14 +67,17 @@ impl ExplainArgs {
             async move {
                 let mut tables = Vec::with_capacity(requests.len());
                 let mut authorized_access = Vec::new();
+                let mut bindings = Vec::with_capacity(requests.len());
                 for (alias, request) in requests {
                     let (table, access) = request.load_table().await?;
+                    bindings.push(crate::table_access::resolved_snapshot_binding(
+                        &alias,
+                        table.version(),
+                        access.as_ref(),
+                    ));
                     authorized_access.extend(access);
                     tables.push((alias, table));
                 }
-                let bindings: Vec<_> = tables.iter()
-                    .map(|(alias, table)| json!({"alias": alias, "table_version": table.version().to_string()}))
-                    .collect();
                 let result = async {
                     let (state, logical) = sql.plan(tables, runtime).await?.into_parts();
                     let optimized = state

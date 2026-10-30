@@ -2,6 +2,7 @@ mod catalog_managed;
 #[cfg(target_os = "linux")]
 mod deadlines;
 mod failure_diagnostics;
+mod pipeline_datasets;
 mod preview;
 mod queries;
 mod scans;
@@ -254,6 +255,7 @@ case "$1" in
   tables) /bin/cat "$response_directory/metadata.json" ;;
   api)
     case "$3" in
+      /api/2.1/unity-catalog/tables/*) /bin/cat "$response_directory/external-delta.json" ;;
       */config\?*) /bin/cat "$response_directory/delta-api-config.json" ;;
       *) /bin/cat "$response_directory/catalog-snapshot.json" ;;
     esac

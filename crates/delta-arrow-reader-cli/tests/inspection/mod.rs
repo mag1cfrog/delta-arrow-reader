@@ -441,7 +441,7 @@ fn projection_and_predicate_repairs_use_selected_names_and_types() -> TestResult
             let hint = error["hint"].as_str().unwrap();
             assert!(
                 hint.contains("--view summary --column-prefix PREFIX")
-                    && hint.contains("--table-version N")
+                    && hint.contains("snapshot selection")
             );
             let names = assert_summary_success(
                 &inspect(

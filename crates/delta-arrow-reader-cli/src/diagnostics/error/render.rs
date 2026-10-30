@@ -219,7 +219,7 @@ impl Error {
             | Self::UnityCatalog {
                 source: unity_catalog::Error::Cancelled { .. },
             } => {
-                record["hint"] = "Discard stdout. Retry only if intended, preserving the request, pinned snapshots, authorization and limits.".into();
+                record["hint"] = "Discard stdout. Retry only if intended, preserving the request, snapshot selection, authorization and limits.".into();
             }
             Self::UnityCatalog { source } => {
                 if let Some(details) = source.command_error_details() {

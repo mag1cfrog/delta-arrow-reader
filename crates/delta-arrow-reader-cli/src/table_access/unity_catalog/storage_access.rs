@@ -10,7 +10,6 @@ use url::Url;
 
 use super::{
     Error, credential_cache::TableCredentialCache, storage_location::TableStorageLocation,
-    temporary_credentials::TemporaryTableCredentials,
 };
 use crate::diagnostics::Error as CliError;
 
@@ -18,34 +17,44 @@ use crate::diagnostics::Error as CliError;
 ///
 /// The location and credentials must never be logged.
 pub(crate) struct AuthorizedTableAccess {
-    /// Table root shared by the metadata and credential responses.
+    /// Delta log location returned by the catalog; pipeline datasets can publish a separate root.
     storage_url: Url,
     /// The caller's permitted transport and region settings.
     storage_options: DeltaStorageOptions,
     /// Retains the redacted refresh failure even if a dependency flattens its error source.
     credential_cache: Arc<TableCredentialCache>,
     catalog_snapshot: Option<DeltaCatalogSnapshot>,
+    latest_only: bool,
 }
 
 impl AuthorizedTableAccess {
-    /// Binds renewal to the selected profile, immutable table ID, and canonical root.
+    /// Connects the published snapshot location to credentials for its validated storage scope.
     pub(super) fn new(
         storage_location: TableStorageLocation,
         storage_options: DeltaStorageOptions,
-        profile: String,
-        table_id: String,
-        credentials: TemporaryTableCredentials,
+        credential_cache: Arc<TableCredentialCache>,
         catalog_snapshot: Option<DeltaCatalogSnapshot>,
-    ) -> Result<Self, Error> {
+        latest_only: bool,
+    ) -> Self {
         let storage_url = storage_location.as_url().clone();
-        let credential_cache =
-            TableCredentialCache::new(profile, table_id, storage_location, credentials)?;
-        Ok(Self {
+        Self {
             storage_url,
             storage_options,
             credential_cache,
             catalog_snapshot,
-        })
+            latest_only,
+        }
+    }
+
+    pub(crate) fn supports_time_travel(&self) -> bool {
+        !self.latest_only
+    }
+
+    pub(crate) fn validate_versioned_replay(&self) -> Result<(), Error> {
+        if self.latest_only {
+            return Err(Error::PipelineReplayUnsupported);
+        }
+        Ok(())
     }
 
     /// Loads the requested snapshot with credentials renewed on demand by the storage clients.

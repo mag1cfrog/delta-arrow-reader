@@ -2,7 +2,7 @@
 //!
 //! `inspect TABLE --view summary` reports the version and read checks. Add
 //! `--column-prefix ord` to find names, or `--column order_id` for that column's
-//! type. Pin follow-ups with `--table-version N`. Each lookup returns only the
+//! type. Pin follow-ups unless `time_travel` is false. Each lookup returns only the
 //! requested information; metadata requires `--include-metadata`.
 //!
 //! The legacy full view remains the default for existing consumers.
@@ -71,27 +71,36 @@ impl InspectionArgs {
         table: &TableArgs,
         uc_target: Option<UnityCatalogTableTarget>,
     ) -> Result<Value, Error> {
-        let (table, _authorized_access) = table.load_table(uc_target).await?;
+        let (table, authorized_access) = table.load_table(uc_target).await?;
         let version = table.version();
-        let output = self.encode_json(&table)?;
+        let supports_time_travel = authorized_access
+            .as_ref()
+            .is_none_or(|access| access.supports_time_travel());
+        let output = self.encode_json(&table, supports_time_travel)?;
         let output_stats = OutputStats {
             bytes_written: output.len() as u64,
             ..Default::default()
         };
         write_stdout(&output)?;
-        Ok(build_completion_record(
-            "inspect",
-            Some(version),
-            output_stats,
-            None,
-        ))
+        let mut completion = build_completion_record("inspect", Some(version), output_stats, None);
+        completion["bindings"] = json!([crate::table_access::resolved_snapshot_binding(
+            "t",
+            version,
+            authorized_access.as_ref()
+        )]);
+        Ok(completion)
     }
 
-    pub(crate) fn encode_json(&self, table: &DeltaTable) -> Result<Vec<u8>, Error> {
+    pub(crate) fn encode_json(
+        &self,
+        table: &DeltaTable,
+        supports_time_travel: bool,
+    ) -> Result<Vec<u8>, Error> {
         if self.view == InspectionView::Full {
             return Ok(encode_inspection_json(
                 table.version(),
                 table.schema().as_ref(),
+                supports_time_travel,
             ));
         }
         let mut result = json!({
@@ -100,6 +109,9 @@ impl InspectionArgs {
             "table_version": table.version().to_string(),
         });
         let schema = table.schema();
+        if !supports_time_travel {
+            result["time_travel"] = json!(false);
+        }
         if let Some(prefix) = &self.column_prefix {
             result["column_names"] = json!(
                 schema
@@ -144,7 +156,7 @@ impl InspectionArgs {
             let mut matches = schema.fields().iter().filter(|field| field.name() == name);
             let field = matches.next().ok_or_else(|| invalid_selection(
                 "--column", "an exact top-level column name in this snapshot",
-                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N to find names.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and snapshot selection to find names.",
             ))?;
             if matches.next().is_some() {
                 return Err(invalid_selection(
@@ -159,16 +171,22 @@ impl InspectionArgs {
     }
 }
 
-pub(crate) fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
+pub(crate) fn encode_inspection_json(
+    version: u64,
+    schema: &Schema,
+    supports_time_travel: bool,
+) -> Vec<u8> {
     // Arrow Schema's Serde representation contains only JSON-compatible types.
     // Keep upstream serialization, including metadata and nested field order.
-    let mut output = json!({
+    let mut result = json!({
         "format_version": 1,
         "table_version": version.to_string(),
         "schema": schema,
-    })
-    .to_string()
-    .into_bytes();
+    });
+    if !supports_time_travel {
+        result["time_travel"] = json!(false);
+    }
+    let mut output = result.to_string().into_bytes();
     output.push(b'\n');
     output
 }

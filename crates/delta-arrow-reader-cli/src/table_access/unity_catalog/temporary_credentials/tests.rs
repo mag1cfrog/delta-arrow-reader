@@ -17,6 +17,37 @@ fn aws_credentials_response() -> Value {
 }
 
 #[test]
+fn pipeline_grants_must_cover_the_published_location_and_renew_at_the_same_root() {
+    let response = aws_credentials_response();
+    let read_location =
+        TableStorageLocation::parse("s3a://bucket/table/_external_metadata").unwrap();
+    let bytes = serde_json::to_vec(&response).unwrap();
+    let (_, scope) = parse_pipeline_credentials(&bytes, &read_location).unwrap();
+    assert_eq!(scope.as_url().as_str(), "s3://bucket/table/");
+    assert!(parse_temporary_credentials(&bytes, &scope).is_ok());
+    assert!(parse_temporary_credentials(&bytes, &read_location).is_err());
+    for wrong_scope in [
+        "s3://other/table",
+        "s3://bucket/tabl",
+        "s3://bucket/table2",
+        "s3://bucket/table/_external_metadata/subdir",
+        "gs://bucket/table",
+        "s3://bucket/table?token=secret",
+    ] {
+        let mut wrong = response.clone();
+        wrong["url"] = json!(wrong_scope);
+        let bytes = serde_json::to_vec(&wrong).unwrap();
+        assert!(
+            parse_pipeline_credentials(&bytes, &read_location).is_err(),
+            "{wrong_scope}"
+        );
+    }
+    let mut wider = response;
+    wider["url"] = json!("s3://bucket/");
+    assert!(parse_temporary_credentials(&serde_json::to_vec(&wider).unwrap(), &scope).is_err());
+}
+
+#[test]
 fn r2_credentials_require_the_same_root_and_exactly_one_credential_kind() {
     let mut response = aws_credentials_response();
     let credentials = response

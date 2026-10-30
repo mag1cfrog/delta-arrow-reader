@@ -120,19 +120,26 @@ impl QueryArgs {
         let execution = async move {
             let mut tables = Vec::with_capacity(requests.len());
             let mut authorized_access = Vec::new();
+            let mut bindings = Vec::with_capacity(requests.len());
             for (alias, request) in requests {
                 let (table, access) = request.load_table().await?;
+                if self.manifest
+                    && let Some(access) = &access
+                {
+                    access
+                        .validate_versioned_replay()
+                        .map_err(|source| Error::UnityCatalog { source })?;
+                }
+                bindings.push(crate::table_access::resolved_snapshot_binding(
+                    &alias,
+                    table.version(),
+                    access.as_ref(),
+                ));
                 authorized_access.extend(access);
                 tables.push((alias, table));
             }
-            let bindings: Vec<_> = tables
-                .iter()
-                .map(|(alias, table)| json!({"alias": alias, "table_version": table.version().to_string()}))
-                .collect();
             let query_result = async {
-                let stream = sql_query
-                    .execute_stream(tables, runtime)
-                    .await?;
+                let stream = sql_query.execute_stream(tables, runtime).await?;
                 let schema = stream.schema();
                 let stream = stream.map_err(|source| Error::Query {
                     source: QueryError::Execution { source },
@@ -142,7 +149,9 @@ impl QueryArgs {
                     max_bytes: self.output_byte_limit() as u64,
                 };
                 if let Some(staged) = artifact.take() {
-                    let (staged, stats) = staged.write_rows(schema, stream, bindings.clone(), Some(limits)).await?;
+                    let (staged, stats) = staged
+                        .write_rows(schema, stream, bindings.clone(), Some(limits))
+                        .await?;
                     artifact = Some(staged);
                     return Ok(stats);
                 }
@@ -152,8 +161,13 @@ impl QueryArgs {
                             .await
                     }
                     RowOutputFormat::Json => {
-                        output::json::write_query_to_stdout(schema, stream, bindings.clone(), limits)
-                            .await
+                        output::json::write_query_to_stdout(
+                            schema,
+                            stream,
+                            bindings.clone(),
+                            limits,
+                        )
+                        .await
                     }
                 }
             }
@@ -177,9 +191,16 @@ impl QueryArgs {
             if let Some(staged) = artifact {
                 let mut completion = build_completion_record("query", None, result_stats, None);
                 completion["bindings"] = bindings.into();
-                *pending_artifact = Some(staged.prepare_publication(&completion).map_err(|source| Error::WithResolvedBindings {
-                    source: Box::new(source), bindings: completion["bindings"].as_array().cloned().unwrap_or_default(),
-                })?);
+                *pending_artifact =
+                    Some(staged.prepare_publication(&completion).map_err(|source| {
+                        Error::WithResolvedBindings {
+                            source: Box::new(source),
+                            bindings: completion["bindings"]
+                                .as_array()
+                                .cloned()
+                                .unwrap_or_default(),
+                        }
+                    })?);
                 return Ok(completion);
             }
             let completion = match self.output_format {
@@ -193,7 +214,8 @@ impl QueryArgs {
                 }
             };
             Ok(completion)
-        }.boxed_local();
+        }
+        .boxed_local();
         Ok((uses_unity_catalog, execution))
     }
 }

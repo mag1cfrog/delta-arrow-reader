@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::input::JsonObject;
 
-use super::Error;
+use super::{Error, storage_location::TableStorageLocation};
 
 /// Object kind and capability names returned in `securable_kind_manifest`.
 #[derive(Deserialize)]
@@ -32,8 +32,8 @@ pub(super) struct TableMetadataResponse {
     pub(super) table_id: String,
     full_name: String,
     table_type: String,
-    data_source_format: String,
-    pub(super) storage_location: String,
+    data_source_format: Option<String>,
+    storage_location: Option<String>,
     securable_kind_manifest: JsonObject<TableKindManifest>,
     #[serde(default)]
     properties: BTreeMap<String, String>,
@@ -46,6 +46,21 @@ pub(super) struct TableMetadataResponse {
 }
 
 impl TableMetadataResponse {
+    pub(super) fn is_pipeline_dataset(&self) -> bool {
+        matches!(
+            self.table_type.as_str(),
+            "MATERIALIZED_VIEW" | "STREAMING_TABLE"
+        )
+    }
+
+    pub(super) fn storage_location(&self) -> Result<TableStorageLocation, Error> {
+        TableStorageLocation::parse(
+            self.storage_location
+                .as_deref()
+                .ok_or(Error::InvalidDatabricksResponse)?,
+        )
+    }
+
     pub(super) fn is_catalog_managed(&self) -> bool {
         self.properties
             .get("delta.feature.catalogManaged")
@@ -75,6 +90,11 @@ impl TableMetadataResponse {
         {
             return Err(Error::InvalidDatabricksResponse);
         }
+        if !self.is_pipeline_dataset()
+            && (self.data_source_format.is_none() || self.storage_location.is_none())
+        {
+            return Err(Error::InvalidDatabricksResponse);
+        }
         let manifest = &self.securable_kind_manifest.0;
         // Some workspaces return capabilities without the optional kind fields.
         let has_kind_evidence = manifest.securable_kind.is_some()
@@ -83,7 +103,7 @@ impl TableMetadataResponse {
                 .iter()
                 .any(|capability| capability == "HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT");
         let is_supported_table_kind = matches!(self.table_type.as_str(), "MANAGED" | "EXTERNAL")
-            && self.data_source_format == "DELTA"
+            && self.data_source_format.as_deref() == Some("DELTA")
             && has_kind_evidence
             && manifest
                 .securable_type
@@ -106,10 +126,23 @@ impl TableMetadataResponse {
             .any(|key| key.starts_with("delta.coordinatedCommits."));
         let invalid_catalog_feature = self.properties.contains_key("delta.feature.catalogManaged")
             && (!self.is_catalog_managed() || self.table_type != "MANAGED");
-        if !is_supported_table_kind
+        let is_supported_pipeline_kind = self.is_pipeline_dataset()
+            && self
+                .data_source_format
+                .as_deref()
+                .is_none_or(|format| format == "DELTA")
+            && manifest
+                .securable_type
+                .as_deref()
+                .is_none_or(|kind| kind == "TABLE")
+            && manifest
+                .capabilities
+                .iter()
+                .any(|capability| capability == "HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT");
+        if !(is_supported_table_kind || is_supported_pipeline_kind)
             || has_invalid_capability
             || has_read_policy
-            || self.pipeline_id.is_some()
+            || (self.pipeline_id.is_some() && !self.is_pipeline_dataset())
             || self.browse_only
             || requires_commit_coordinator
             || invalid_catalog_feature
@@ -118,6 +151,49 @@ impl TableMetadataResponse {
         }
         Ok(())
     }
+
+    /// The external representation omits policy metadata; admission uses the original object.
+    pub(super) fn parse_external_delta_location(
+        &self,
+        bytes: &[u8],
+    ) -> Result<TableStorageLocation, Error> {
+        let external = serde_json::from_slice::<JsonObject<ExternalDeltaTableResponse>>(bytes)
+            .map_err(|_| Error::InvalidDatabricksResponse)?
+            .0;
+        let name = format!(
+            "{}.{}.{}",
+            external.catalog_name, external.schema_name, external.name
+        );
+        if !external.table_id.eq_ignore_ascii_case(&self.table_id)
+            || !name.eq_ignore_ascii_case(&self.full_name)
+        {
+            return Err(Error::InvalidDatabricksResponse);
+        }
+        if external.table_type != "MANAGED"
+            || external.data_source_format.as_deref() != Some("DELTA")
+            || external.storage_location.is_none()
+        {
+            return Err(Error::PipelineExternalAccessUnavailable);
+        }
+        TableStorageLocation::parse(
+            external
+                .storage_location
+                .as_deref()
+                .ok_or(Error::InvalidDatabricksResponse)?,
+        )
+    }
+}
+
+/// UC's published Delta representation has its own location and a reduced metadata shape.
+#[derive(Deserialize)]
+struct ExternalDeltaTableResponse {
+    table_id: String,
+    catalog_name: String,
+    schema_name: String,
+    name: String,
+    table_type: String,
+    data_source_format: Option<String>,
+    storage_location: Option<String>,
 }
 
 #[cfg(test)]

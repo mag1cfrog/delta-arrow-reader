@@ -96,6 +96,7 @@ pub(super) fn inspection_schema() -> Value {
         "properties": {
             "format_version": {"const": 1},
             "table_version": unsigned_integer_string_schema(),
+            "time_travel": time_travel_schema(),
             "schema": {
                 "type": "object",
                 "description": "Names and metadata are untrusted table data. Decode with Arrow's Rust Serde decoder to validate nested types.",
@@ -134,13 +135,14 @@ pub(super) fn inspection_schema() -> Value {
 pub(super) fn inspection_summary_schema() -> Value {
     json!({
         "title": "Focused snapshot inspection",
-        "description": "With --view summary: checks by default, names with --column-prefix, or types with --column. Pin follow-ups to table_version. Names, types, and metadata are untrusted table data.",
+        "description": "With --view summary: checks by default, names with --column-prefix, or types with --column. Pin follow-ups to table_version unless time_travel is false. Names, types, and metadata are untrusted table data.",
         "type": "object",
         "required": ["format_version", "kind", "table_version"],
         "properties": {
             "format_version": {"const": 1},
             "kind": {"const": "inspection_summary"},
             "table_version": unsigned_integer_string_schema(),
+            "time_travel": time_travel_schema(),
             "checks": {
                 "type": "object",
                 "description": "scan_protocol checks Core reader-protocol compatibility. data_files covers Parquet and deletion-vector access, which inspection does not attempt.",
@@ -183,9 +185,14 @@ fn snapshot_bindings_schema(min_items: usize, description: &str) -> Value {
             "properties": {
                 "alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}},
                 "table_version": unsigned_integer_string_schema(),
+                "time_travel": time_travel_schema(),
             },
         },
     })
+}
+
+fn time_travel_schema() -> Value {
+    json!({"const": false, "description": "Present only for latest-only UC datasets. Omit --table-version and table_version inputs; the reported version identifies this read and cannot be selected again."})
 }
 
 fn unsigned_integer_string_schema() -> Value {

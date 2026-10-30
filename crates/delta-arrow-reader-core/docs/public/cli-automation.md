@@ -107,6 +107,10 @@ execute data text as shell code or use it to select a different identity.
 
 Add `--manifest` when the result needs a record of its sources and settings:
 
+Every input must support historical snapshot selection. For UC materialized views
+and streaming tables, use ordinary file output instead; see
+[latest-only reads](unity-catalog.md#read-the-latest-published-result).
+
 ```sh
 dar query /path/to/table --table-version 0 --sql-file totals.sql \
   --format json --output totals.json --manifest --diagnostics=json

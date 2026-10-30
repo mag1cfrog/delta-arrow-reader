@@ -82,7 +82,7 @@ impl InputCorrection {
             ("invalid_projection", "column_not_found") => (
                 "--column",
                 "a logical column name in the selected snapshot",
-                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N to find column names.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and snapshot selection to find column names.",
             ),
             ("invalid_projection", "duplicate_column") => (
                 "--column",
@@ -92,17 +92,17 @@ impl InputCorrection {
             ("unsupported_predicate", "column_not_found" | "ambiguous_column") => (
                 "--predicate-file",
                 "an unambiguous top-level logical column in the selected snapshot",
-                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N; choose an unambiguous name for the predicate's column field.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and snapshot selection; choose an unambiguous name for the predicate's column field.",
             ),
             ("unsupported_predicate", "invalid_column_reference") => (
                 "--predicate-file",
                 "a nonempty top-level logical column name without dots",
-                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N. Predicates accept top-level names without dots.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and snapshot selection. Predicates accept top-level names without dots.",
             ),
             ("unsupported_predicate", "invalid_decimal") => (
                 "--predicate-file",
                 "a decimal128 value within its declared precision and valid scale",
-                "Use inspect TABLE --view summary --column NAME with the same authorization and --table-version N for precision/scale; ensure the unscaled value fits.",
+                "Use inspect TABLE --view summary --column NAME with the same authorization and snapshot selection for precision/scale; ensure the unscaled value fits.",
             ),
             _ => return None,
         };

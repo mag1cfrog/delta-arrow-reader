@@ -23,7 +23,7 @@ pub(in crate::capabilities) fn build_command_guide(name: &str) -> Result<Value, 
             "example": [executable, "--diagnostics=json", "inspect", "./table", "--view", "summary"],
             "stdout": "json",
             "notes": [
-                "Pin lookups with --table-version N: --column-prefix PREFIX finds names; --column NAME returns only selected types.",
+                "Pin lookups with --table-version N unless time_travel is false: --column-prefix PREFIX finds names; --column NAME returns only selected types.",
                 "--include-metadata requires --column and adds metadata to every selected column. Select only columns whose metadata you need; get other columns' types separately.",
                 "Summary checks scan protocol support, not Parquet or deletion-vector access. Names/types lookups omit checks.",
                 "Summary defaults to 4096 stdout bytes and 30000 ms; adjust --max-output-bytes or --deadline-ms explicitly. Full inspection has neither default; redirect it and select a deadline.",
@@ -42,7 +42,7 @@ pub(in crate::capabilities) fn build_command_guide(name: &str) -> Result<Value, 
             "stdout": "json",
             "completion_format_version": 2,
             "notes": [
-                "Choose only needed columns and rows. Find names with inspect --view summary --column-prefix PREFIX; pin --table-version N.",
+                "Choose only needed columns and rows. Find names with inspect --view summary --column-prefix PREFIX; pin --table-version N unless time_travel is false.",
                 "Always a sample: end_of_input/has_more=false proves exhaustion; row_limit/null does not; byte_limit/true means an observed row was omitted.",
                 "Schema or first row too large fails with empty stdout. The deadline includes inputs, authorization and output.",
             ],
@@ -71,7 +71,7 @@ pub(in crate::capabilities) fn build_command_guide(name: &str) -> Result<Value, 
             "example": [executable, "--diagnostics=json", "explain", "./table", "--sql-file", "query.sql"],
             "stdout": "json", "completion_format_version": 3,
             "notes": [
-                "Loads snapshot metadata and plans; never executes result rows or reads data files. Default: counts and actual bindings. Pin snapshots and preserve SQL/options for follow-ups. Memory bounds the DataFusion pool, not metadata, planning buffers or process RSS.",
+                "Loads snapshot metadata and plans; never executes result rows or reads data files. Default: counts and actual bindings. Pin snapshots unless time_travel is false; preserve SQL/options for follow-ups. Memory bounds the DataFusion pool, not metadata, planning buffers or process RSS.",
                 "Physical plan: combine --node N (operator/children), repeated --field N (exact output types), and --statistics. Fields/statistics default to root node 0; estimates are not observed results.",
                 "Add --scan N for source projection and pushdown. Physical nodes and logical scans have separate zero-based preorder IDs; selectors can be combined within one output budget.",
             ],
@@ -244,7 +244,7 @@ pub(in crate::capabilities) fn build_command_detail(
             "spill": "Disabled by default. Enable with --spill-limit-bytes BYTES > 0 and --spill-dir PATH, an existing writable directory. DataFusion checks total spill file sizes after writes and can temporarily overshoot; it is not a filesystem hard cap.",
             "privacy": "Spill contains table data. Query-specific storage is owner-only on Unix; on Windows choose a parent with a private inherited ACL.",
             "cleanup": "Removes query temporary files on success, handled failure and cancellation; retains the parent. Cleanup errors fail the command. SIGKILL, crashes and OS-uninterruptible IO cannot guarantee cleanup.",
-            "retry": "Preserve SQL, table bindings and pinned snapshots when changing a budget.",
+            "retry": "Preserve SQL, table bindings and snapshot selection when changing a budget.",
         }));
     }
     if detail != "runtime" {
@@ -279,7 +279,7 @@ pub(in crate::capabilities) fn build_command_detail(
         "failure_reporting_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
         "signals": "Unix SIGINT exits 130; SIGTERM exits 143, including Linux PID 1. Windows Ctrl+C exits 130.",
         "output": "Require exit 0; with --diagnostics=json, also validate the stderr completion for its command and format_version. Otherwise discard stdout, even if it looks complete.",
-        "retry": if is_table_command { "Retry only if intended. Preserve the request, pinned snapshots, authorization and other limits; choose any larger deadline explicitly." } else { "Drain stdout and stderr before retrying the same discovery request." },
+        "retry": if is_table_command { "Retry only if intended. Preserve the request, snapshot selection, authorization and other limits; choose any larger deadline explicitly." } else { "Drain stdout and stderr before retrying the same discovery request." },
         "termination_limits": "SIGKILL and OS-uninterruptible IO cannot guarantee cleanup. Closed or blocked stderr can prevent a complete diagnostic.",
         "broken_pipe": if is_table_command { "Exit 3. Unix detects a closed stdout pipe during work; other platforms detect it on the next write, with the selected deadline still applying." } else { "Exit 3 when an output write fails." },
     }))

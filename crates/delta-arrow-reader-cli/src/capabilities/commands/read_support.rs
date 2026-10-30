@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::query;
 
-pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. JSON results include bindings; --diagnostics=json reports them for query stdout results or SQL planning/row output failures after snapshots load. Versions are decimal strings in declaration order. Pin every alias on retry. Snapshots are not a cross-table transaction.";
+pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. JSON results include bindings; --diagnostics=json reports them for query stdout results or SQL planning/row output failures after snapshots load. Versions are decimal strings in declaration order. Pin aliases on retry unless their time_travel is false. Snapshots are not a cross-table transaction.";
 pub(super) const QUERY_ROW_ORDERING: &str =
     "Use ORDER BY with tie-breaking columns for repeatable row order.";
 

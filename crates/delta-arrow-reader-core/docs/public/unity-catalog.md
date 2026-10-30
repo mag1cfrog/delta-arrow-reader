@@ -18,6 +18,9 @@ The examples use Bash.
   storage must be reachable. See the [access requirements](reference/unity-catalog.md#table-access)
   if the table has policies or uses a special table type.
 
+For a materialized view or streaming table, follow
+[Read the latest published result](#read-the-latest-published-result) below.
+
 The Python and Rust APIs do not resolve `uc://` names; this guide uses the CLI.
 
 <details markdown="1">
@@ -59,7 +62,9 @@ dar inspect "$table" --view summary --databricks-profile "$profile"
 ```
 
 Inspection prints JSON containing `table_version` and read checks. It loads
-snapshot metadata; it does not prove that every data file is readable. Set
+snapshot metadata; it does not prove that every data file is readable. If it
+includes `time_travel: false`, use the [latest-only workflow](#read-the-latest-published-result)
+instead of selecting a version. Otherwise, set
 `version` to the supplied version or returned `table_version`:
 
 ```sh
@@ -127,6 +132,37 @@ and uses the same authorization as a scan. See [query limits](cli.md#query-a-sna
 for output and memory budgets, and the [JSON reference](reference/cli-output.md#read-a-small-result-as-typed-json)
 for the response format.
 
+## Read the latest published result
+
+Materialized views and streaming tables use the same `uc://` name and Databricks
+profile. Their owner must first enable external metadata and refresh the object;
+see the [requirements](reference/unity-catalog.md#materialized-views-and-streaming-tables).
+DAR reads that published result locally. It does not refresh a view or start a
+streaming job.
+
+For example, use a materialized view named `main.sales.daily_orders`:
+
+```sh
+dar inspect uc://main.sales.daily_orders --databricks-profile work --view summary
+dar preview uc://main.sales.daily_orders --databricks-profile work --limit 3
+```
+
+For S3, add the [region file](reference/unity-catalog.md#s3-region) to both commands.
+Use `--column NAME` when you know which column you need. A streaming table uses
+the same commands with its own name.
+
+These objects support only the latest published snapshot. Inspection includes
+`time_travel: false`; result and plan bindings carry the same marker. The returned
+`table_version` records what was read, but cannot be selected in another command.
+Omit `--table-version`, including on retries. In a `--tables-file` entry, omit
+`table_version` for this object; other entries can still select versions.
+
+You can run SQL with `query`, inspect a plan with `explain`, or save a result with
+`scan --output` or `query --output`. Each command resolves its own latest snapshot,
+so a refresh between commands can change the result. Save the output if you need
+to reuse those exact rows. The optional `--manifest` replay record is unavailable
+because it requires selectable historical snapshots.
+
 ### Join with a local Delta table
 
 Declare each table and its authorization in `tables.json`. Replace the UC name,
@@ -172,8 +208,11 @@ for direct-storage tables, additional fields, and path rules.
 | `uc_s3_region_required` | Supply the [S3 region file](reference/unity-catalog.md#s3-region). |
 | `unsupported_uc_table` | Check the [supported tables](reference/unity-catalog.md#table-access) and [credential forms](reference/unity-catalog.md#storage-backends-and-credentials). |
 | `unsupported_uc_catalog_protocol` | The workspace does not advertise Delta API 1.0 table reads. Additional grants do not add this protocol support. |
+| `uc_pipeline_external_access_unavailable` | Ask the owner to enable external metadata and refresh the materialized view or streaming table. Check the [external access requirements](reference/unity-catalog.md#materialized-views-and-streaming-tables). |
+| `uc_pipeline_time_travel_unsupported` | Omit `--table-version` or this object's `table_version` entry. Only the latest published snapshot is available. |
+| `uc_pipeline_replay_unsupported` | Keep `--output` and omit `--manifest`. Saved rows remain reusable; historical snapshot replay is unavailable. |
 | `uc_credentials_expired` | Check the system clock and [renew user OAuth](#user-oauth-login) if needed, then retry. |
-| Failure after output was written | Discard failed stdout results. In file mode, preserve existing output and retry with an unused path at the same version if completion is uncertain. With `--manifest`, follow the [manifest checks](cli-automation.md#save-provenance-for-replay). |
+| Failure after output was written | Discard failed stdout results. In file mode, preserve existing output and retry with an unused path if completion is uncertain. Keep the selected version where supported; latest-only objects can change between attempts. With `--manifest`, follow the [manifest checks](cli-automation.md#save-provenance-for-replay). |
 
 DAR renews storage credentials during a command. If renewal fails, the command
 fails; it never switches to another identity. See the

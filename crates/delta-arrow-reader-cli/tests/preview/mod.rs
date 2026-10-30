@@ -238,7 +238,7 @@ fn first_row_byte_failure_can_be_repaired_without_changing_the_read() -> TestRes
     let hint = diagnostic["hint"].as_str().unwrap();
     assert!(hint.contains("Explicitly increase --max-output-bytes"));
     assert!(hint.contains("same projection, predicate, row limit, authorization"));
-    assert!(hint.contains("--table-version N") && hint.contains("--deadline-ms"));
+    assert!(hint.contains("snapshot selection") && hint.contains("--deadline-ms"));
     assert!(!hint.contains("scan"));
     let recovered = run_with_timeout(pinned_preview_command().args([
         diagnostic["argument"].as_str().unwrap(),

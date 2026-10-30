@@ -55,8 +55,8 @@ pub(super) async fn get_table_metadata(
     .await
 }
 
-/// Fetches a Delta API response using the same profile and subprocess limits as table lookup.
-pub(super) async fn get_delta_api_response(profile: &str, path: &str) -> Result<Vec<u8>, Error> {
+/// Fetches a catalog API response using the same profile and subprocess limits as table lookup.
+pub(super) async fn get_catalog_api_response(profile: &str, path: &str) -> Result<Vec<u8>, Error> {
     run_databricks_cli(
         &[
             "api",

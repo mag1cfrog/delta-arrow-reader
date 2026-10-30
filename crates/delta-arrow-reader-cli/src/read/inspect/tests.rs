@@ -33,7 +33,7 @@ fn inspection_format_preserves_nested_schema_and_all_metadata() {
         ],
         HashMap::from([("owner".into(), "table author".into())]),
     );
-    let encoded = encode_inspection_json(u64::MAX, &schema);
+    let encoded = encode_inspection_json(u64::MAX, &schema, true);
     assert_eq!(encoded.last(), Some(&b'\n'));
     assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
     let actual: Value = serde_json::from_slice(&encoded).unwrap();

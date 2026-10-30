@@ -95,6 +95,34 @@ pub(super) fn parse_temporary_credentials(
         serde_json::from_slice::<JsonObject<TemporaryCredentialsResponse>>(credentials_json)
             .map_err(|_| Error::InvalidDatabricksResponse)?
             .0;
+    credentials_for_location(response, storage_location)
+}
+
+/// Published pipeline metadata can be below the granted data root; renewals keep that exact root.
+pub(super) fn parse_pipeline_credentials(
+    credentials_json: &[u8],
+    read_location: &TableStorageLocation,
+) -> Result<(TemporaryTableCredentials, TableStorageLocation), Error> {
+    let response =
+        serde_json::from_slice::<JsonObject<TemporaryCredentialsResponse>>(credentials_json)
+            .map_err(|_| Error::InvalidDatabricksResponse)?
+            .0;
+    let scope = TableStorageLocation::parse(&response.url)?;
+    let scope_url = scope.as_url();
+    let read_url = read_location.as_url();
+    if scope_url[..url::Position::BeforePath] != read_url[..url::Position::BeforePath]
+        || !read_url.path().starts_with(scope_url.path())
+    {
+        return Err(Error::InvalidDatabricksResponse);
+    }
+    let credentials = credentials_for_location(response, &scope)?;
+    Ok((credentials, scope))
+}
+
+fn credentials_for_location(
+    response: TemporaryCredentialsResponse,
+    storage_location: &TableStorageLocation,
+) -> Result<TemporaryTableCredentials, Error> {
     if TableStorageLocation::parse(&response.url)?.as_url() != storage_location.as_url() {
         return Err(Error::InvalidDatabricksResponse);
     }

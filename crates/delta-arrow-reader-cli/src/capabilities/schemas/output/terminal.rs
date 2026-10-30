@@ -49,7 +49,7 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             "column": {"type": "integer", "minimum": 0},
             "io_kind": {"type": "string"},
             "os_error": {"type": ["integer", "null"]},
-            "bindings": snapshot_bindings_schema(1, "Present for SQL or result errors after all snapshots load. Pin each manifest entry's table_version to this version before retrying; positional input uses --table-version."),
+            "bindings": snapshot_bindings_schema(1, "Present for SQL or result errors after all snapshots load. For retries, use the reported version in table_version or --table-version unless time_travel is false."),
         },
         "examples": [{
             "format_version": DIAGNOSTIC_FORMAT_VERSION, "kind": "diagnostic", "terminal": true,

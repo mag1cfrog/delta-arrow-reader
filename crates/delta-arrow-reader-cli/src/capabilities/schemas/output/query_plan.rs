@@ -60,12 +60,12 @@ pub(in crate::capabilities::schemas) fn query_plan_schema() -> Value {
     });
     json!({
         "title": "Query plan selection",
-        "description": "explain returns counts by default, or selected node and/or scan details. No result rows execute; metadata IO and planning do occur. IDs are zero-based preorder positions within separate physical-node and logical-scan lists. Keep SQL/options and pinned bindings for follow-ups. Select nested details with dots, e.g. node.statistics.",
+        "description": "explain returns counts by default, or selected node and/or scan details. No result rows execute; metadata IO and planning do occur. IDs are zero-based preorder positions within separate physical-node and logical-scan lists. Keep SQL/options and bindings for follow-ups; omit version selection when time_travel is false. Select nested details with dots, e.g. node.statistics.",
         "type": "object", "required": ["format_version", "kind", "bindings", "execution"],
         "properties": {
             "format_version": {"const": 1}, "kind": {"const": "query_plan"},
             "execution": {"const": "not_started"},
-            "bindings": snapshot_bindings_schema(1, "Actual snapshots in declaration order, including unused inputs. Pin every alias before follow-ups. No locations or credentials are returned."),
+            "bindings": snapshot_bindings_schema(1, "Actual snapshots in declaration order, including unused inputs. Pin aliases before follow-ups unless time_travel is false. No locations or credentials are returned."),
             "node_count": position, "scan_count": position, "column_count": position,
             "node": node,
             "scan": {
