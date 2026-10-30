@@ -258,7 +258,10 @@ if [ "${DAR_TEST_SUCCESS_STDERR:-}" = 1 ]; then
   printf 'Error: token=secret-sentinel\n' >&2
 fi
 case "$1" in
-  tables) /bin/cat "$response_directory/metadata.json" ;;
+  tables)
+    if [ -n "${DAR_TEST_METADATA_DELAY:-}" ]; then /bin/sleep "$DAR_TEST_METADATA_DELAY"; fi
+    /bin/cat "$response_directory/metadata.json"
+    ;;
   api)
     case "$3" in
       /api/2.1/unity-catalog/tables/*) /bin/cat "$response_directory/external-delta.json" ;;

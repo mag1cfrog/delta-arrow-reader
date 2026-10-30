@@ -314,12 +314,18 @@ fn catalog_log_discovery_stops_at_the_command_deadline() -> TestResult {
             thread::sleep(Duration::from_millis(20));
         })?;
     fixture.use_storage_endpoint(StorageCredentialKind::S3, &server.endpoint)?;
-    let output =
-        run_with_timeout(
-            fixture
-                .inspect()
-                .args(["--deadline-ms", "500", "--diagnostics=json"]),
-        )?;
+    let started = std::time::Instant::now();
+    // Allow slow authorization to finish before testing interruption during storage discovery.
+    let output = run_with_timeout(
+        fixture
+            .inspect()
+            .args(["--deadline-ms", "5000", "--diagnostics=json"])
+            .env("DAR_TEST_METADATA_DELAY", "1"),
+    )?;
+    assert!(
+        started.elapsed() < Duration::from_secs(8),
+        "catalog discovery exceeded the deadline and cleanup/reporting grace periods"
+    );
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
