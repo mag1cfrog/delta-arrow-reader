@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.9.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.1...v0.9.2) - 2026-10-30
+
+### Added
+
+- *(cli)* read Hive and Glue foreign Delta tables ([#592](https://github.com/mag1cfrog/delta-arrow-reader/pull/592))
+- read UC materialized views and streaming tables ([#590](https://github.com/mag1cfrog/delta-arrow-reader/pull/590))
+- read catalog-managed Delta snapshots ([#588](https://github.com/mag1cfrog/delta-arrow-reader/pull/588))
+
+### Documentation
+
+- highlight Databricks login reuse and CLI onboarding ([#595](https://github.com/mag1cfrog/delta-arrow-reader/pull/595))
+
+### Fixed
+
+- preserve error context across reader, Python, and CLI ([#594](https://github.com/mag1cfrog/delta-arrow-reader/pull/594))
+- preserve actionable Unity Catalog request errors ([#586](https://github.com/mag1cfrog/delta-arrow-reader/pull/586))
+- preserve reader causes in SQL diagnostics ([#584](https://github.com/mag1cfrog/delta-arrow-reader/pull/584))
+- align Parquet field nullability with Delta schema ([#581](https://github.com/mag1cfrog/delta-arrow-reader/pull/581))
+
 ## [0.9.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.0...v0.9.1) - 2026-10-29
 
 ### Documentation
