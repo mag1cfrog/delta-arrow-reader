@@ -118,8 +118,12 @@ correcting the cause.
 
 Each Databricks subprocess has a 30-second timeout, no interactive stdin, and a
 1 MiB limit on each output stream. This is a subprocess limit, not a total read
-deadline. DAR captures and discards child diagnostics. Its stderr errors omit
-profile names, table names, storage URLs, and credentials. See
+deadline. On failure, DAR includes a filtered error explanation of at most 1024
+UTF-8 bytes. It removes SDK request logs and configuration summaries, redacts
+known credential fields and bearer values, and removes URL userinfo, queries,
+and fragments. The explanation can still name tables, workspaces, or principals;
+review it before sharing. Unlabelled secret values cannot be reliably identified.
+Successful child diagnostics are discarded. See
 [troubleshooting](../unity-catalog.md#if-a-command-fails) for next actions and
 [CLI diagnostics](cli-diagnostics.md) for exits, signals, and completion records.
 

@@ -66,6 +66,9 @@ impl Error {
             .map(|value| value.hint)
             .or_else(|| match source_error {
                 Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
+                Self::UnityCatalog { source } => source
+                    .command_error_details()
+                    .and_then(|details| details.hint()),
                 _ => None,
             });
         let ErrorClassification {
@@ -217,6 +220,19 @@ impl Error {
                 source: unity_catalog::Error::Cancelled { .. },
             } => {
                 record["hint"] = "Discard stdout. Retry only if intended, preserving the request, pinned snapshots, authorization and limits.".into();
+            }
+            Self::UnityCatalog { source } => {
+                if let Some(details) = source.command_error_details() {
+                    if let Some(message) = &details.message {
+                        record["upstream_message"] = message.clone().into();
+                    }
+                    if details.message_truncated {
+                        record["upstream_message_truncated"] = true.into();
+                    }
+                    if let Some(hint) = details.hint() {
+                        record["hint"] = hint.into();
+                    }
+                }
             }
             Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();

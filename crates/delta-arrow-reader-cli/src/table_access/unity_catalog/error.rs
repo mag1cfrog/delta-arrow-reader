@@ -1,11 +1,12 @@
-//! Unity Catalog failure codes and messages that omit table identifiers and credentials.
+//! Unity Catalog failure categories and filtered Databricks error explanations.
 
 use std::fmt;
 
+use super::databricks_cli::DatabricksErrorDetails;
 use snafu::Snafu;
 
-/// Failures that the CLI can report without exposing Databricks responses or credentials.
-#[derive(Clone, Copy, PartialEq, Eq, Snafu)]
+/// Failures from input validation, metadata lookup, and read authorization.
+#[derive(Clone, PartialEq, Eq, Snafu)]
 pub(crate) enum Error {
     #[snafu(display(
         "Use uc://catalog.schema.table with an explicit Databricks profile; profiles are invalid for other targets."
@@ -29,14 +30,10 @@ pub(crate) enum Error {
     DatabricksCommandTimedOut,
     #[snafu(display("The Databricks CLI returned an invalid or oversized response."))]
     InvalidDatabricksResponse,
-    #[snafu(display(
-        "Could not fetch Unity Catalog metadata. Check the CLI version, profile login, and table permissions."
-    ))]
-    TableMetadataRequestFailed,
-    #[snafu(display(
-        "Could not obtain read credentials. Check the profile login, external access setting, and EXTERNAL USE SCHEMA grant."
-    ))]
-    ReadCredentialsRequestFailed,
+    #[snafu(display("Could not fetch Unity Catalog metadata{details}"))]
+    TableMetadataRequestFailed { details: DatabricksErrorDetails },
+    #[snafu(display("Could not obtain Unity Catalog read credentials{details}"))]
+    ReadCredentialsRequestFailed { details: DatabricksErrorDetails },
     #[snafu(display(
         "This Unity Catalog table, storage location, or credential type is not supported for direct reads."
     ))]
@@ -59,11 +56,32 @@ impl Error {
             Self::DatabricksCommandFailed => "databricks_cli_failed",
             Self::DatabricksCommandTimedOut => "databricks_cli_timeout",
             Self::InvalidDatabricksResponse => "invalid_databricks_response",
-            Self::TableMetadataRequestFailed => "uc_table_request_failed",
-            Self::ReadCredentialsRequestFailed => "uc_credential_request_failed",
+            Self::TableMetadataRequestFailed { .. } => "uc_table_request_failed",
+            Self::ReadCredentialsRequestFailed { .. } => "uc_credential_request_failed",
             Self::UnsupportedDirectRead => "unsupported_uc_table",
             Self::CredentialsExpired => "uc_credentials_expired",
             Self::Cancelled { .. } => "uc_cancelled",
+        }
+    }
+
+    pub(crate) fn command_error_details(&self) -> Option<&DatabricksErrorDetails> {
+        match self {
+            Self::TableMetadataRequestFailed { details }
+            | Self::ReadCredentialsRequestFailed { details } => Some(details),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn source_kind(&self) -> Option<&'static str> {
+        self.command_error_details()
+            .and_then(|details| details.source_kind)
+    }
+
+    pub(crate) fn reason(&self) -> &'static str {
+        match self.source_kind() {
+            Some("unauthenticated") => "uc_authentication_failed",
+            Some("permission_denied") => "uc_permission_denied",
+            _ => self.code(),
         }
     }
 

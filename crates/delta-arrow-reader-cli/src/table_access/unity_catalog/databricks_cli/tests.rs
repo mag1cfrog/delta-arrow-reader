@@ -32,7 +32,9 @@ async fn dropping_the_request_waiter_keeps_the_child_owned_until_cleanup() {
         return;
     };
     tokio::time::timeout(Duration::from_secs(3), async {
-        let request = tokio::spawn(run_databricks_cli(&[]));
+        let request = tokio::spawn(run_databricks_cli(&[], "test", |details| {
+            Error::ReadCredentialsRequestFailed { details }
+        }));
         let pid_file = PathBuf::from(pid_file);
         let pid = loop {
             if let Some(pid) = fs::read_to_string(&pid_file)
@@ -71,7 +73,7 @@ async fn subprocess_output_is_bounded_and_timeout_reaps_child() {
         Duration::from_millis(200),
     )
     .await;
-    assert_eq!(result, Err(Error::DatabricksCommandTimedOut));
+    assert!(matches!(result, Err(Error::DatabricksCommandTimedOut)));
     let pid = std::fs::read_to_string(pid_file).unwrap();
     let status = std::process::Command::new("/bin/kill")
         .args(["-0", &pid])
@@ -85,12 +87,13 @@ async fn subprocess_output_is_bounded_and_timeout_reaps_child() {
         read_bounded_output(bytes.as_slice()).await,
         Err(Error::InvalidDatabricksResponse)
     );
-    assert_eq!(
-        run_command_with_timeout(
-            Command::new("/bin/sh").args(["-c", "printf secret-sentinel >&2; exit 1"]),
-            Duration::from_secs(2)
-        )
-        .await,
-        Err(Error::DatabricksCommandFailed)
-    );
+    let output = run_command_with_timeout(
+        Command::new("/bin/sh").args(["-c", "printf secret-sentinel >&2; exit 1"]),
+        Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"secret-sentinel");
 }

@@ -1,9 +1,9 @@
 //! Databricks CLI authorization for local Delta reads and SQL queries.
 //!
 //! The CLI supplies table metadata and temporary storage credentials. Core then reads
-//! the Delta log and data files directly. Table identifiers, credentials, and raw command output
-//! must stay out of diagnostics. Raw responses and credential values omit `Debug`;
-//! credential caches and providers expose only redacted `Debug` output.
+//! the Delta log and data files directly. Failed requests retain a filtered error
+//! explanation; successful credential responses never enter diagnostics. Raw responses
+//! and credential values omit `Debug`; caches and providers omit their stored credentials.
 
 mod credential_cache;
 mod databricks_cli;

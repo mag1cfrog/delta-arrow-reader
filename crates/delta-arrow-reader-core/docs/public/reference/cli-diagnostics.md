@@ -44,10 +44,22 @@ statuses are unchanged. A handled failure produces:
 
 Core failures retain their typed phase, code, reason, and source category.
 `source_kind` is null when absent. Safe optional fields include `argument_kind`,
-`json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. No raw dependency
-errors, arbitrary input values, paths, credentials, or captured child output are included.
-Diagnostic version 2 has no `message` field. Use the classification fields for
-decisions.
+`json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. Diagnostic version
+2 has no general `message` field. Use the classification fields for decisions.
+
+Failed Databricks requests may include `upstream_message`, a filtered explanation
+of at most 1024 UTF-8 bytes. `upstream_message_truncated: true` marks a shortened
+excerpt. It is guidance, not a stable identifier, and can contain table or
+workspace names. See the [filtering limits](unity-catalog.md#credential-renewal-and-failures)
+before sharing diagnostics. Other dependency errors and captured child output
+are omitted.
+
+When DAR recognizes the CLI's authentication or permission footer, `reason` is
+`uc_authentication_failed` or `uc_permission_denied`, with recovery `authorize` or
+`request_access` respectively. Both set `retryable: false`. The operation `code`
+remains `uc_table_request_failed` or `uc_credential_request_failed`. Unknown
+formats keep their generic reason and unknown recovery. A privilege name in an
+error does not by itself establish that the privilege is missing.
 
 For a reader failure during SQL, the outer `phase`, `code`, and `reason` describe
 the SQL operation. The optional `cause` contains the reader's `phase`, `code`,
@@ -291,8 +303,8 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
 | `execution` | `uc_cancelled` | A UC inspect, scan, query, or explain command was interrupted |
 
-Diagnostics omit argument values, file paths, URLs, input contents, credential
-names and values, and dependency messages. Argument failures include the
+Input diagnostics omit argument values, file paths, URLs, input contents, and
+credential names and values. Argument failures include the
 parser's `argument_kind`. JSON failures include `json_kind` (`Syntax`, `Data`, or
 `Eof`), `json_line`, and `json_column` in human mode (`line` and `column` in
 machine mode). Oversized input and predicate validation

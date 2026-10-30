@@ -1,6 +1,13 @@
 //! Databricks CLI requests with bounded output, deadlines, and child cleanup.
 
-use std::{io, process::Stdio, sync::LazyLock, time::Duration};
+mod error_details;
+
+use std::{
+    io,
+    process::{Output, Stdio},
+    sync::LazyLock,
+    time::Duration,
+};
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -9,6 +16,7 @@ use tokio::{
 };
 
 use super::Error;
+pub(super) use error_details::DatabricksErrorDetails;
 
 pub(crate) const MAX_COMMAND_OUTPUT_BYTES: u64 = 1024 * 1024;
 pub(crate) const DATABRICKS_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -30,21 +38,21 @@ pub(super) async fn get_table_metadata(
     full_table_name: &str,
 ) -> Result<Vec<u8>, Error> {
     let profile_arg = format!("--profile={profile}");
-    run_databricks_cli(&[
-        "tables",
-        "get",
-        "--include-manifest-capabilities",
-        &profile_arg,
-        "--output",
-        "json",
-        "--",
-        full_table_name,
-    ])
+    run_databricks_cli(
+        &[
+            "tables",
+            "get",
+            "--include-manifest-capabilities",
+            &profile_arg,
+            "--output",
+            "json",
+            "--",
+            full_table_name,
+        ],
+        profile,
+        |details| Error::TableMetadataRequestFailed { details },
+    )
     .await
-    .map_err(|error| match error {
-        Error::DatabricksCommandFailed => Error::TableMetadataRequestFailed,
-        error => error,
-    })
 }
 
 /// Requests READ credentials scoped to the table ID returned by the metadata request.
@@ -53,22 +61,22 @@ pub(super) async fn generate_read_credentials(
     table_id: &str,
 ) -> Result<Vec<u8>, Error> {
     let profile_arg = format!("--profile={profile}");
-    run_databricks_cli(&[
-        "temporary-table-credentials",
-        "generate-temporary-table-credentials",
-        "--table-id",
-        table_id,
-        "--operation",
-        "READ",
-        &profile_arg,
-        "--output",
-        "json",
-    ])
+    run_databricks_cli(
+        &[
+            "temporary-table-credentials",
+            "generate-temporary-table-credentials",
+            "--table-id",
+            table_id,
+            "--operation",
+            "READ",
+            &profile_arg,
+            "--output",
+            "json",
+        ],
+        profile,
+        |details| Error::ReadCredentialsRequestFailed { details },
+    )
     .await
-    .map_err(|error| match error {
-        Error::DatabricksCommandFailed => Error::ReadCredentialsRequestFailed,
-        error => error,
-    })
 }
 
 /// Caps each captured stream; the extra byte distinguishes an oversized response from EOF.
@@ -85,24 +93,38 @@ async fn read_bounded_output(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, 
     Ok(bytes)
 }
 
-async fn run_databricks_cli(args: &[&str]) -> Result<Vec<u8>, Error> {
+async fn run_databricks_cli(
+    args: &[&str],
+    profile: &str,
+    request_failure: fn(DatabricksErrorDetails) -> Error,
+) -> Result<Vec<u8>, Error> {
     let mut command = Command::new("databricks");
     command.args(args);
     // Keep the child owner alive after a read future drops, until command cleanup reaps it.
-    tokio::spawn(
-        async move { run_command_with_timeout(&mut command, DATABRICKS_COMMAND_TIMEOUT).await },
-    )
+    let output = tokio::spawn(async move {
+        run_command_with_timeout(&mut command, DATABRICKS_COMMAND_TIMEOUT).await
+    })
     .await
-    .map_err(|_| Error::DatabricksCommandFailed)?
+    .unwrap_or(Err(Error::DatabricksCommandFailed))
+    .map_err(|error| match error {
+        Error::DatabricksCommandFailed => request_failure(DatabricksErrorDetails::default()),
+        error => error,
+    })?;
+    if !output.status.success() {
+        return Err(request_failure(DatabricksErrorDetails::from_stderr(
+            &output.stderr,
+            profile,
+        )));
+    }
+    Ok(output.stdout)
 }
 
-/// Captures stdout, drains stderr, and stops the child on timeout or read failure.
-///
-/// stderr can contain secrets, so callers receive only a redacted error on failure.
+/// Captures both streams and stops the child on timeout or read failure.
+/// Only the request wrapper may turn captured stderr into diagnostic details.
 async fn run_command_with_timeout(
     command: &mut Command,
     timeout: Duration,
-) -> Result<Vec<u8>, Error> {
+) -> Result<Output, Error> {
     let mut cancellation = REQUEST_CANCELLATION_SIGNAL.subscribe();
     if *cancellation.borrow() {
         drop(cancellation);
@@ -126,7 +148,7 @@ async fn run_command_with_timeout(
     let stderr = child.stderr.take().ok_or(Error::DatabricksCommandFailed)?;
     let read_response = tokio::time::timeout(timeout, async {
         // Drain both pipes while waiting so a full stderr pipe cannot block the child.
-        let (stdout, _, status) = tokio::try_join!(
+        let (stdout, stderr, status) = tokio::try_join!(
             read_bounded_output(stdout),
             read_bounded_output(stderr),
             async {
@@ -136,10 +158,11 @@ async fn run_command_with_timeout(
                     .map_err(|_| Error::DatabricksCommandFailed)
             }
         )?;
-        if !status.success() {
-            return Err(Error::DatabricksCommandFailed);
-        }
-        Ok(stdout)
+        Ok(Output {
+            status,
+            stdout,
+            stderr,
+        })
     });
     let result = tokio::select! {
         biased;

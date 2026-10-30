@@ -1381,6 +1381,7 @@ dependencies = [
  "num-traits",
  "object_store",
  "parquet",
+ "regex",
  "serde",
  "serde-value",
  "serde_json",
