@@ -10,6 +10,19 @@ use crate::{
 };
 
 #[test]
+fn replay_manifest_bindings_do_not_advertise_latest_only_inputs() {
+    let document = DiscoverySchema::ResultManifest.schema_document();
+    let binding = &document["schema"]["properties"]["bindings"]["items"];
+    assert!(binding["properties"].get("time_travel").is_none());
+    assert!(jsonschema::is_valid(
+        binding,
+        &json!({
+            "alias":"t", "table_version":"42", "future_field":true,
+        })
+    ));
+}
+
+#[test]
 fn latest_only_snapshots_are_explicit_in_inspection_and_binding_schemas() {
     let inspection: Value =
         serde_json::from_slice(&encode_inspection_json(42, &Schema::empty(), false)).unwrap();

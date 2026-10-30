@@ -2,6 +2,23 @@ use super::*;
 use crate::input::{PredicateInput, parse_json};
 
 #[test]
+fn focused_binding_guides_explain_latest_only_versions_without_suggesting_replay() {
+    for format in [
+        DiscoverySchema::Rows,
+        DiscoverySchema::Completion,
+        DiscoverySchema::Diagnostic,
+    ] {
+        let guide = format.build_schema_guide(Some("bindings")).unwrap();
+        let marker = &guide["definition"]["items"]["properties"]["time_travel"];
+        assert_eq!(marker["const"], false);
+        let meaning = marker["description"].as_str().unwrap();
+        assert!(meaning.contains("Omit --table-version and table_version inputs"));
+        assert!(meaning.contains("cannot be selected again"));
+        assert!(!guide.to_string().contains("--manifest"));
+    }
+}
+
+#[test]
 fn manifest_file_guides_defer_integrity_metadata_to_the_full_schema() {
     let format = DiscoverySchema::ResultManifest;
     for field in [None, Some("result"), Some("replay"), Some("replay.inputs")] {
