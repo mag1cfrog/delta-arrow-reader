@@ -66,17 +66,24 @@ fn admission_rejects_unsupported_and_mismatched_tables() {
                 "{field}"
             );
     }
-    for field in ["table_id", "storage_location", "securable_kind_manifest"] {
+    for field in [
+        "table_id",
+        "data_source_format",
+        "storage_location",
+        "securable_kind_manifest",
+    ] {
         let mut value = table_metadata_response();
         value.as_object_mut().unwrap().remove(field);
         assert!(
+            matches!(
                 TableMetadataResponse::parse(
                     &serde_json::to_vec(&value).unwrap(),
                     "main.sales.orders",
-                )
-                .is_err(),
-                "{field}"
-            );
+                ),
+                Err(Error::InvalidDatabricksResponse)
+            ),
+            "{field}"
+        );
     }
 }
 
@@ -152,5 +159,89 @@ fn catalog_managed_metadata_still_requires_a_managed_table_without_read_policies
             )
             .is_err()
         );
+    }
+}
+
+#[test]
+fn pipeline_admission_uses_original_policies_and_checks_the_published_identity() {
+    for kind in ["MATERIALIZED_VIEW", "STREAMING_TABLE"] {
+        let mut original = table_metadata_response();
+        original["table_type"] = json!(kind);
+        original["data_source_format"] = Value::Null;
+        original["storage_location"] = Value::Null;
+        original["pipeline_id"] = json!("pipeline-id");
+        original["securable_kind_manifest"] = json!({
+            "capabilities": ["HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT"]
+        });
+        let metadata = TableMetadataResponse::parse(
+            &serde_json::to_vec(&original).unwrap(),
+            "main.sales.orders",
+        )
+        .unwrap();
+        assert!(metadata.is_pipeline_dataset());
+        let published = json!({
+            "table_id": original["table_id"], "catalog_name": "main", "schema_name": "sales", "name": "orders",
+            "table_type": "MANAGED", "data_source_format": "DELTA", "storage_location": "s3://bucket/table/_external_metadata"
+        });
+        assert_eq!(
+            metadata
+                .parse_external_delta_location(&serde_json::to_vec(&published).unwrap())
+                .unwrap()
+                .as_url()
+                .as_str(),
+            "s3://bucket/table/_external_metadata/"
+        );
+        for (field, value) in [
+            ("row_filter", json!({})),
+            ("columns", json!([{"mask":{}}])),
+            ("browse_only", json!(true)),
+            ("table_type", json!("VIEW")),
+            ("securable_kind_manifest", json!({"capabilities":[]})),
+            ("data_source_format", json!("ICEBERG")),
+            (
+                "properties",
+                json!({"delta.feature.catalogManaged":"supported"}),
+            ),
+        ] {
+            let mut denied = original.clone();
+            denied[field] = value;
+            assert!(
+                TableMetadataResponse::parse(
+                    &serde_json::to_vec(&denied).unwrap(),
+                    "main.sales.orders"
+                )
+                .is_err(),
+                "{kind}: {field}"
+            );
+        }
+        for (field, value) in [
+            ("table_id", json!("12345678-1234-1234-1234-123456789abd")),
+            ("name", json!("other")),
+            ("catalog_name", json!("other")),
+            ("schema_name", json!("other")),
+            ("storage_location", json!("s3://bucket/table?secret=token")),
+        ] {
+            let mut wrong = published.clone();
+            wrong[field] = value;
+            assert!(
+                matches!(
+                    metadata.parse_external_delta_location(&serde_json::to_vec(&wrong).unwrap()),
+                    Err(Error::InvalidDatabricksResponse)
+                ),
+                "{kind}: {field}"
+            );
+        }
+        for (field, value) in [
+            ("table_type", json!(kind)),
+            ("data_source_format", Value::Null),
+            ("storage_location", Value::Null),
+        ] {
+            let mut unavailable = published.clone();
+            unavailable[field] = value;
+            assert!(matches!(
+                metadata.parse_external_delta_location(&serde_json::to_vec(&unavailable).unwrap()),
+                Err(Error::PipelineExternalAccessUnavailable)
+            ));
+        }
     }
 }

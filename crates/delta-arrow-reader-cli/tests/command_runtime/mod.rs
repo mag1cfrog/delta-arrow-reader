@@ -48,12 +48,7 @@ fn assert_deadline_failure(output: &Output) {
     assert_eq!(error["recovery"], "adjust_budget");
     assert_eq!(error["retryable"], false);
     let hint = error["hint"].as_str().unwrap();
-    for required in [
-        "Discard stdout",
-        "pinned request",
-        "authorization",
-        "limits",
-    ] {
+    for required in ["Discard stdout", "same request", "authorization", "limits"] {
         assert!(hint.contains(required), "{error}");
     }
     assert!(output.stderr.len() < 1024);

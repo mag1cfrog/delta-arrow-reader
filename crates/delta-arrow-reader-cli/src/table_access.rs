@@ -10,6 +10,7 @@ use clap::Args;
 use delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, WarmupMode,
 };
+use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
 
 use direct_credentials::CredentialSource;
@@ -45,7 +46,7 @@ impl TableLoadRequest {
                 snapshot_selection,
             } => {
                 let access = target
-                    .request_read_access(storage_options)
+                    .request_read_access(storage_options, snapshot_selection)
                     .await
                     .context(UnityCatalogSnafu)?;
                 let table = access.load_table(snapshot_selection).await?;
@@ -53,6 +54,19 @@ impl TableLoadRequest {
             }
         }
     }
+}
+
+/// Records the version read, marking UC pipeline snapshots that cannot be selected again.
+pub(crate) fn resolved_snapshot_binding(
+    alias: &str,
+    version: u64,
+    access: Option<&AuthorizedTableAccess>,
+) -> Value {
+    let mut binding = json!({"alias": alias, "table_version": version.to_string()});
+    if access.is_some_and(|access| !access.supports_time_travel()) {
+        binding["time_travel"] = json!(false);
+    }
+    binding
 }
 
 /// Required location and settings for inspect, scan, and preview.

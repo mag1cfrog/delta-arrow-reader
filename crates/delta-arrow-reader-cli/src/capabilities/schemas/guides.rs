@@ -106,12 +106,13 @@ impl DiscoverySchema {
                                 "type": "string",
                                 "description": "Exact uint64 decimal string; check range 0..18446744073709551615 on conversion.",
                             },
+                            "time_travel": definition["items"]["properties"]["time_travel"],
                         },
                     },
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "v1/v2 only; v3 omits bindings from stderr. JSON results and query_plan stdout (explain) contain bindings. Saved Arrow has no bindings; request --manifest when those versions must be recorded. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "v1/v2 only; v3 omits bindings from stderr. JSON results and query_plan stdout (explain) contain bindings. Saved Arrow has no bindings. Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {

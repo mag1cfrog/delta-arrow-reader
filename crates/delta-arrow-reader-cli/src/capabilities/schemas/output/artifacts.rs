@@ -24,6 +24,14 @@ pub(in crate::capabilities::schemas) fn result_artifact_schema() -> Value {
 pub(in crate::capabilities::schemas) fn result_manifest_schema() -> Value {
     let integer = unsigned_integer_string_schema();
     let digest = json!({"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256, 64 lowercase hexadecimal characters."});
+    let mut bindings = snapshot_bindings_schema(
+        1,
+        "Actual versions in declaration order. Replay must pin every alias to its recorded version; independent tables are not a transaction.",
+    );
+    // Replay manifests reject latest-only inputs before publishing any result.
+    if let Some(properties) = bindings["items"]["properties"].as_object_mut() {
+        properties.remove("time_travel");
+    }
     json!({
         "title": "Result completion manifest", "type": "object",
         "description": "Optional provenance from --output PATH --manifest. Only this mode requires a matching complete manifest; publication is not a two-file transaction.",
@@ -34,7 +42,7 @@ pub(in crate::capabilities::schemas) fn result_manifest_schema() -> Value {
             "scope": {"enum": ["scan", "limited_scan", "query"], "description": "limited_scan covers the selected prefix; query covers the SQL result, including SQL LIMIT."},
             "stop_reason": {"enum": ["end_of_input", "row_limit"]},
             "has_more": {"enum": [false, null], "description": "Null when a scan reaches its row limit without lookahead; false at exhaustion."},
-            "bindings": snapshot_bindings_schema(1, "Actual versions in declaration order. Replay must pin every alias to its recorded version; independent tables are not a transaction."),
+            "bindings": bindings,
             "rows": integer, "batches": integer, "output_bytes": integer,
             "result": {
                 "type": "object", "required": ["path", "format", "sha256"],

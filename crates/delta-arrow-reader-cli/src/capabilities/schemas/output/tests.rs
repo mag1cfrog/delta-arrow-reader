@@ -10,6 +10,43 @@ use crate::{
 };
 
 #[test]
+fn replay_manifest_bindings_do_not_advertise_latest_only_inputs() {
+    let document = DiscoverySchema::ResultManifest.schema_document();
+    let binding = &document["schema"]["properties"]["bindings"]["items"];
+    assert!(binding["properties"].get("time_travel").is_none());
+    assert!(jsonschema::is_valid(
+        binding,
+        &json!({
+            "alias":"t", "table_version":"42", "future_field":true,
+        })
+    ));
+}
+
+#[test]
+fn latest_only_snapshots_are_explicit_in_inspection_and_binding_schemas() {
+    let inspection: Value =
+        serde_json::from_slice(&encode_inspection_json(42, &Schema::empty(), false)).unwrap();
+    assert_eq!(inspection["time_travel"], false);
+    assert!(jsonschema::is_valid(&inspection_schema(), &inspection));
+    for schema in [inspection_schema(), inspection_summary_schema()] {
+        let mut example = schema["examples"][0].clone();
+        example["time_travel"] = json!(false);
+        assert!(jsonschema::is_valid(&schema, &example));
+        example["time_travel"] = json!("false");
+        assert!(!jsonschema::is_valid(&schema, &example));
+    }
+    let schema = snapshot_bindings_schema(1, "Resolved snapshots");
+    assert!(jsonschema::is_valid(
+        &schema,
+        &json!([{"alias":"t", "table_version":"42", "time_travel":false}]),
+    ));
+    assert!(!jsonschema::is_valid(
+        &schema,
+        &json!([{"alias":"t", "table_version":"42", "time_travel":"false"}]),
+    ));
+}
+
+#[test]
 fn diagnostic_schema_validates_the_optional_reader_cause() {
     let schema = diagnostic_schema();
     let validator = jsonschema::validator_for(&schema).unwrap();
@@ -76,7 +113,8 @@ fn output_examples_match_the_serializers() {
     let schema = inspection_schema();
     let inspection = &schema["examples"][0];
     let arrow_schema: Schema = serde_json::from_value(inspection["schema"].clone()).unwrap();
-    let actual: Value = serde_json::from_slice(&encode_inspection_json(42, &arrow_schema)).unwrap();
+    let actual: Value =
+        serde_json::from_slice(&encode_inspection_json(42, &arrow_schema, true)).unwrap();
     assert_eq!(&actual, inspection);
 
     let error = Error::Argument {

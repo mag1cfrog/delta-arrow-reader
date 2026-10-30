@@ -17,7 +17,7 @@ async fn encode_and_check_preview_batch(
     encode_preview(
         batch.schema(),
         stream::iter([Ok(batch)]),
-        42,
+        json!({"alias": "t", "table_version": "42"}),
         OutputLimits {
             max_rows,
             max_bytes,
@@ -55,7 +55,7 @@ async fn sample_state_distinguishes_exhaustion_from_limit_without_lookahead() {
     let (bytes, _) = encode_preview(
         schema,
         never_poll,
-        0,
+        json!({"alias": "t", "table_version": "0"}),
         OutputLimits {
             max_rows: 0,
             max_bytes: 8192,
@@ -111,7 +111,7 @@ async fn oversized_row_returns_only_the_valid_prefix_and_stops_reading() {
     let (bytes, _) = encode_preview(
         schema,
         input,
-        0,
+        json!({"alias": "t", "table_version": "0"}),
         OutputLimits {
             max_rows: 20,
             max_bytes: 8192,
@@ -146,7 +146,7 @@ async fn a_row_that_cannot_fit_its_footer_does_not_wait_for_another_batch() {
     let (bytes, _) = encode_preview(
         schema,
         stream,
-        0,
+        json!({"alias": "t", "table_version": "0"}),
         OutputLimits {
             max_rows: 20,
             max_bytes,
@@ -228,7 +228,7 @@ async fn metadata_is_omitted_and_late_stream_errors_discard_the_sample() {
         encode_preview(
             schema,
             stream,
-            0,
+            json!({"alias": "t", "table_version": "0"}),
             OutputLimits {
                 max_rows: 20,
                 max_bytes: 8192

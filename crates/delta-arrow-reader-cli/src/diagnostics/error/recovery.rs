@@ -20,9 +20,9 @@ impl Error {
                     hint: "",
                 });
                 correction.hint = if *manifest_requested {
-                    "Check PATH and PATH.manifest.json before retrying; a matching manifest with completion=complete may already exist. Otherwise choose unused names and preserve the pinned request and authorization; adjust only the reported budget."
+                    "Check PATH and PATH.manifest.json before retrying; a matching manifest with completion=complete may already exist. Otherwise choose unused names and preserve the request and authorization; adjust only the reported budget."
                 } else {
-                    "A complete result may already exist at PATH. Preserve it; retry with an unused output path if completion is uncertain. Keep the pinned request and authorization; adjust only the reported budget."
+                    "A complete result may already exist at PATH. Preserve it; retry with an unused output path if completion is uncertain. Keep the request and authorization; adjust only the reported budget."
                 };
                 return Some(correction);
             }
@@ -191,6 +191,34 @@ impl Error {
                     supplied: None,
                 });
             }
+            Self::UnityCatalog { source } => {
+                use crate::table_access::unity_catalog::Error as UcError;
+                let (argument, expected, hint) = match source {
+                    UcError::PipelineTimeTravelUnsupported => (
+                        "--table-version",
+                        "no explicit version for this UC dataset",
+                        "Omit --table-version or the table_version entry in --tables-file. Each command reads the latest published snapshot.",
+                    ),
+                    UcError::PipelineReplayUnsupported => (
+                        "--manifest",
+                        "result output without a replay manifest",
+                        "Keep --output and omit --manifest; this UC dataset does not support replaying historical snapshots.",
+                    ),
+                    UcError::PipelineExternalAccessUnavailable => (
+                        "TABLE",
+                        "a UC dataset with published external Delta metadata",
+                        "Ask the dataset owner to enable pipelines.externalMetadata.enabled and refresh it. This external-access path does not support catalog commits.",
+                    ),
+                    _ => return None,
+                };
+                return Some(InputCorrection {
+                    argument: argument.into(),
+                    expected: expected.into(),
+                    field_path: None,
+                    supplied: None,
+                    hint,
+                });
+            }
             Self::Reader { source } => return InputCorrection::from_reader(source),
             Self::OutputLimit {
                 reason: "plan_output_limit_exceeded",
@@ -212,7 +240,7 @@ impl Error {
                         .to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "For types only, omit --include-metadata. Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                    hint: "For types only, omit --include-metadata. Narrow the selection or increase --max-output-bytes; keep the same authorization and snapshot selection.",
                 });
             }
             Self::OutputLimit {
@@ -245,7 +273,7 @@ impl Error {
                     expected: "a selected schema within the preview byte budget".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Select fewer --column values, or explicitly increase --max-output-bytes for the required schema; preserve authorization and --table-version N.",
+                    hint: "Select fewer --column values, or explicitly increase --max-output-bytes for the required schema; preserve authorization and snapshot selection.",
                 });
             }
             Self::OutputLimit {
@@ -267,7 +295,7 @@ impl Error {
                     expected: "enough bytes for the selected schema and first row".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Explicitly increase --max-output-bytes; keep the same projection, predicate, row limit, authorization, --table-version N, and --deadline-ms.",
+                    hint: "Explicitly increase --max-output-bytes; keep the same projection, predicate, row limit, authorization, snapshot selection, and --deadline-ms.",
                 });
             }
             Self::UnsupportedJsonType { command: "preview" } => {
@@ -276,7 +304,7 @@ impl Error {
                     expected: "selected values that fit typed JSON".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Use scan with redirected stdout and the same projection, predicate, row limit, authorization, and --table-version N.",
+                    hint: "Use scan with redirected stdout and the same projection, predicate, row limit, authorization, and snapshot selection.",
                 });
             }
             Self::DeadlineExceeded => {
@@ -285,7 +313,7 @@ impl Error {
                     expected: "enough milliseconds to finish the command".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Discard stdout; check source responsiveness, then retry the same pinned request with an explicit --deadline-ms. Keep authorization and all other limits.",
+                    hint: "Discard stdout; check source responsiveness, then retry the same request with an explicit --deadline-ms. Keep authorization and all other limits.",
                 });
             }
             Self::UnsupportedJsonType { .. } => {

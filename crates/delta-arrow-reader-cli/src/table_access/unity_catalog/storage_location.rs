@@ -19,6 +19,7 @@ pub(super) enum StorageBackend {
 }
 
 /// A validated table storage URL, normalized for comparing metadata and credential responses.
+#[derive(Clone)]
 pub(super) struct TableStorageLocation {
     url: Url,
     pub(super) backend: StorageBackend,

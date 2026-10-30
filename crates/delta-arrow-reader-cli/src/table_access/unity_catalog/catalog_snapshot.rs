@@ -55,7 +55,7 @@ pub(super) async fn load_catalog_snapshot(
     let [catalog, schema, table] = full_table_name.split('.').collect::<Vec<_>>()[..] else {
         return Err(Error::InvalidTableTarget);
     };
-    let configuration = databricks_cli::get_delta_api_response(
+    let configuration = databricks_cli::get_catalog_api_response(
         profile,
         &format!("{DELTA_API}/config?catalog={catalog}&protocol-versions=1.0"),
     )
@@ -71,7 +71,7 @@ pub(super) async fn load_catalog_snapshot(
     {
         return Err(Error::UnsupportedCatalogProtocol);
     }
-    let response = databricks_cli::get_delta_api_response(
+    let response = databricks_cli::get_catalog_api_response(
         profile,
         &format!("{DELTA_API}/catalogs/{catalog}/schemas/{schema}/tables/{table}"),
     )

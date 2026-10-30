@@ -44,3 +44,35 @@ pub(crate) fn build_json_read_completion(
         "output_bytes": output_stats.bytes_written.to_string(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_completions_keep_every_binding_within_the_documented_limits() {
+        for (latest_only_count, limit) in [(0, 8192), (1, 10240), (64, 10240)] {
+            let bindings: Vec<_> = (0..crate::input::MAX_TABLES).map(|index| {
+                let mut binding = json!({"alias": format!("table_{index:057}"), "table_version": u64::MAX.to_string()});
+                if index < latest_only_count { binding["time_travel"] = json!(false); }
+                binding
+            }).collect();
+            let stats = OutputStats {
+                rows_written: u64::MAX,
+                batches_written: u64::MAX,
+                bytes_written: u64::MAX,
+            };
+            let mut arrow = build_completion_record("query", None, stats, None);
+            arrow["bindings"] = json!(bindings);
+            let json = build_json_read_completion("query", bindings.clone(), stats);
+            for record in [arrow, json] {
+                assert!(
+                    record.to_string().len() < limit,
+                    "{latest_only_count}: {record}"
+                );
+                assert_eq!(record["bindings"], json!(bindings));
+                assert_eq!(record["rows"], u64::MAX.to_string());
+            }
+        }
+    }
+}

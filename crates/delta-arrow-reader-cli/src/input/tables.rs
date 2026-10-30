@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-// Even with 63-byte aliases and full u64 versions, provenance fits one 8 KiB completion record.
+// Full-width bindings fit 8 KiB, or 10 KiB when they also carry latest-only markers.
 pub(crate) const MAX_TABLES: usize = 64;
 
 /// On-disk declarations, never credentials or already loaded snapshots.

@@ -8,7 +8,7 @@ use arrow::array::RecordBatch;
 use arrow_schema::SchemaRef;
 use futures_util::{Stream, StreamExt};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::Value;
 
 use super::{BoundedJsonBuffer, JsonRow, OutputLimits, write_on_output_thread};
 use crate::{
@@ -51,11 +51,11 @@ fn append_sample_footer(
 pub(crate) async fn write_preview_to_stdout(
     schema: SchemaRef,
     stream: impl Stream<Item = Result<RecordBatch, Error>> + Send + 'static,
-    table_version: u64,
+    binding: Value,
     limits: OutputLimits,
 ) -> Result<OutputStats, Error> {
     write_on_output_thread(move || async move {
-        let (bytes, stats) = encode_preview(schema, stream, table_version, limits).await?;
+        let (bytes, stats) = encode_preview(schema, stream, binding, limits).await?;
         write_stdout(&bytes)?;
         Ok(stats)
     })
@@ -65,21 +65,17 @@ pub(crate) async fn write_preview_to_stdout(
 async fn encode_preview(
     schema: SchemaRef,
     stream: impl Stream<Item = Result<RecordBatch, Error>>,
-    table_version: u64,
+    binding: Value,
     limits: OutputLimits,
 ) -> Result<(Vec<u8>, OutputStats), Error> {
-    let mut output = BoundedJsonBuffer::with_rows_header(
-        &schema,
-        &[json!({"alias": "t", "table_version": table_version.to_string()})],
-        limits.max_bytes,
-        "preview",
-    )
-    .map_err(|error| match error {
-        Error::OutputLimit { .. } => Error::OutputLimit {
-            reason: "preview_schema_limit_exceeded",
-        },
-        error => error,
-    })?;
+    let mut output =
+        BoundedJsonBuffer::with_rows_header(&schema, &[binding], limits.max_bytes, "preview")
+            .map_err(|error| match error {
+                Error::OutputLimit { .. } => Error::OutputLimit {
+                    reason: "preview_schema_limit_exceeded",
+                },
+                error => error,
+            })?;
     let mut row_offsets = Vec::new();
     let mut stream = Box::pin(stream);
     let mut stop_reason = SampleStopReason::RowLimit;

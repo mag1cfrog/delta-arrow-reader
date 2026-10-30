@@ -18,13 +18,12 @@ pub(crate) use databricks_cli::{
     DATABRICKS_COMMAND_TIMEOUT, MAX_COMMAND_OUTPUT_BYTES, cancel_pending_requests,
 };
 
-use delta_arrow_reader::DeltaStorageOptions;
+use delta_arrow_reader::{DeltaSnapshotSelection, DeltaStorageOptions};
 
 pub(crate) use error::Error;
 pub(crate) use storage_access::AuthorizedTableAccess;
-use storage_location::TableStorageLocation;
 use table_metadata::TableMetadataResponse;
-use temporary_credentials::parse_temporary_credentials;
+use temporary_credentials::{parse_pipeline_credentials, parse_temporary_credentials};
 
 /// A validated `uc://catalog.schema.table` target and the profile used to request access.
 pub(crate) struct UnityCatalogTableTarget {
@@ -81,6 +80,7 @@ impl UnityCatalogTableTarget {
     pub(crate) async fn request_read_access(
         self,
         storage_options: DeltaStorageOptions,
+        snapshot_selection: DeltaSnapshotSelection,
     ) -> Result<AuthorizedTableAccess, Error> {
         // Reject identity overrides before starting a subprocess, even before the backend is known.
         validate_storage_options(&storage_options)?;
@@ -88,7 +88,19 @@ impl UnityCatalogTableTarget {
             databricks_cli::get_table_metadata(&self.databricks_profile, &self.full_table_name)
                 .await?;
         let table_metadata = TableMetadataResponse::parse(&metadata_json, &self.full_table_name)?;
-        let storage_location = TableStorageLocation::parse(&table_metadata.storage_location)?;
+        let latest_only = table_metadata.is_pipeline_dataset();
+        if latest_only && matches!(snapshot_selection, DeltaSnapshotSelection::Version(_)) {
+            return Err(Error::PipelineTimeTravelUnsupported);
+        }
+        let storage_location = if latest_only {
+            let external = databricks_cli::get_catalog_api_response(
+                &self.databricks_profile,
+                &format!("/api/2.1/unity-catalog/tables/{}?read_materialized_view_as_managed=true&read_streaming_table_as_managed=true", self.full_table_name),
+            ).await?;
+            table_metadata.parse_external_delta_location(&external)?
+        } else {
+            table_metadata.storage_location()?
+        };
         storage_location::validate_storage_options(
             &storage_options,
             Some(storage_location.backend),
@@ -111,15 +123,27 @@ impl UnityCatalogTableTarget {
             &table_metadata.table_id,
         )
         .await?;
-        let credentials = parse_temporary_credentials(&credentials_json, &storage_location)?;
-        AuthorizedTableAccess::new(
-            storage_location,
-            storage_options,
+        let (credentials, credential_scope) = if latest_only {
+            parse_pipeline_credentials(&credentials_json, &storage_location)?
+        } else {
+            (
+                parse_temporary_credentials(&credentials_json, &storage_location)?,
+                storage_location.clone(),
+            )
+        };
+        let credential_cache = credential_cache::TableCredentialCache::new(
             self.databricks_profile,
             table_metadata.table_id,
+            credential_scope,
             credentials,
+        )?;
+        Ok(AuthorizedTableAccess::new(
+            storage_location,
+            storage_options,
+            credential_cache,
             catalog_snapshot,
-        )
+            latest_only,
+        ))
     }
 }
 

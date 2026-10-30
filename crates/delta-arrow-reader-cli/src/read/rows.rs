@@ -87,7 +87,16 @@ pub(super) async fn execute(
         _ => None,
     };
     let (table, authorized_access) = read.table.load_table(uc_target).await?;
+    if matches!(command, Command::Scan { manifest: true, .. })
+        && let Some(access) = &authorized_access
+    {
+        access
+            .validate_versioned_replay()
+            .map_err(|source| Error::UnityCatalog { source })?;
+    }
     let version = table.version();
+    let binding =
+        crate::table_access::resolved_snapshot_binding("t", version, authorized_access.as_ref());
     let limit = match command {
         Command::Scan { limit, .. } => *limit,
         Command::Preview(args) => Some(args.limit),
@@ -121,7 +130,7 @@ pub(super) async fn execute(
             let stats = output::json::write_preview_to_stdout(
                 schema,
                 stream,
-                version,
+                binding.clone(),
                 output::OutputLimits {
                     max_rows: args.limit as u64,
                     max_bytes: args.max_output_bytes.get() as u64,
@@ -130,7 +139,7 @@ pub(super) async fn execute(
             .await?;
             Ok(build_json_read_completion(
                 "preview",
-                vec![json!({"alias": "t", "table_version": version.to_string()})],
+                vec![binding.clone()],
                 stats,
             ))
         } else if let Some(staged) = artifact.take() {
@@ -152,12 +161,15 @@ pub(super) async fn execute(
                     },
                 )
                 .await?;
-            let completion = build_completion_record("scan", Some(version), stats, limit);
+            let mut completion = build_completion_record("scan", Some(version), stats, limit);
+            completion["bindings"] = json!([binding]);
             *pending_artifact = Some(staged.prepare_publication(&completion)?);
             Ok(completion)
         } else {
             let stats = output::arrow::write_arrow_stream_to_stdout(schema, stream, None).await?;
-            Ok(build_completion_record("scan", Some(version), stats, limit))
+            let mut completion = build_completion_record("scan", Some(version), stats, limit);
+            completion["bindings"] = json!([binding]);
+            Ok(completion)
         }
     }
     .await;
@@ -176,7 +188,7 @@ pub(super) async fn execute(
     ) {
         result.map_err(|source| Error::WithResolvedBindings {
             source: Box::new(source),
-            bindings: vec![json!({"alias": "t", "table_version": version.to_string()})],
+            bindings: vec![binding],
         })
     } else {
         result

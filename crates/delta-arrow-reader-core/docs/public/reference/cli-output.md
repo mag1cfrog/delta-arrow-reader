@@ -21,6 +21,11 @@ string. Success reports `completion: "complete"` and `scope: "query"`. An empty 
 schema. Fields retain names, nullability, and Arrow type parameters; optional
 metadata and physical dictionary IDs are omitted.
 
+A binding with `time_travel: false` identifies a latest-only UC materialized view
+or streaming table. Its version records the snapshot read; do not copy that
+version into a later request. Inspection records use the same optional marker.
+See [latest-only reads](unity-catalog.md#materialized-views-and-streaming-tables).
+
 Rows and nested structs use arrays in field order, preserving duplicate names.
 Integer and decimal values are strings; decimals store the unscaled integer.
 Dates, times, timestamps, and durations are integer strings in their Arrow unit.
@@ -38,7 +43,8 @@ list. Individual field and encoding lookups remain available, including
 
 The default 8 KiB stdout budget covers the entire response. For larger results,
 use `--output PATH` with an explicit byte budget when needed. Keep the same SQL, authorization, table bindings, and
-snapshot versions when recovering the same result. Selecting fewer columns,
+snapshot versions where selectable when recovering the same result. Latest-only
+bindings can read newer data on retry. Selecting fewer columns,
 aggregating, or adding SQL `LIMIT` changes the requested result. `--max-rows`
 never truncates a successful result.
 
@@ -80,6 +86,9 @@ Add `--manifest` to save `PATH.manifest.json` with the sources and options neede
 for replay. This flag requires `--output`; both destinations must be unused.
 The receipt uses `format_version: 1` and includes absolute `result` and `manifest`
 paths.
+
+This mode requires historical snapshot selection for every input. UC materialized
+views and streaming tables support ordinary `--output`, but reject `--manifest`.
 
 This mode stages both files and publishes the manifest after the result. The two
 publications are not one atomic transaction. This pair requires a matching

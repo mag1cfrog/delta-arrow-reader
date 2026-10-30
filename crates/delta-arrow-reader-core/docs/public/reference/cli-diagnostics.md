@@ -142,7 +142,7 @@ that location. Paths contain only known schema field names and indexes.
 Unknown or repeated projection columns and supported predicate planning errors
 also include correction fields. For unknown columns, run
 `inspect TABLE --view summary --column-prefix PREFIX` with the same authorization
-and `--table-version N`. Use the returned names to correct `--column` or the
+and snapshot selection. Use the returned names to correct `--column` or the
 predicate file. Query a type with `--column NAME` instead of `--column-prefix`.
 
 Scalar type mismatches include `expected`, `supplied`, and the failing scalar's
@@ -177,7 +177,16 @@ and keep the same SQL, authorization, table bindings, and snapshot versions.
 For SQL planning or result errors after all snapshots load, the diagnostic includes `bindings`
 with the validated aliases and actual versions. Set each manifest entry's
 `table_version` from those bindings before retrying. For positional input, set
-`--table-version` from the `t` binding. Snapshot-loading failures and cancellation omit these fields. A retry without pinned versions can read newer commits.
+`--table-version` from the `t` binding. If a binding includes `time_travel: false`,
+omit version selection for that object; a retry resolves its latest published
+snapshot and can read newer data. Snapshot-loading failures and cancellation omit
+these fields. A retry without pinned versions can read newer commits.
+
+UC materialized views and streaming tables reject explicit versions with
+`uc_pipeline_time_travel_unsupported` and pinned replay manifests with
+`uc_pipeline_replay_unsupported` (exit 2). If UC does not return a published Delta
+representation, `uc_pipeline_external_access_unavailable` exits 1 and directs the
+caller to the [publishing requirements](unity-catalog.md#materialized-views-and-streaming-tables).
 For large JSON results, use `--output PATH` and an explicit byte budget when
 needed, then require exit 0 and the command's completion record. Adding
 SQL `LIMIT` changes the result and is not a repair for the same request.
@@ -235,7 +244,9 @@ Consumers must check exit status 0, valid stdout, and the completion record.
 `dar capabilities --schema completion --full` return the JSON Schemas for these
 stderr records; extract each response's `schema` field
 for validation. Both commands work offline.
-Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
+Records are at most 8 KiB, or 10 KiB when any binding includes `time_travel: false`.
+The latter bound retains all 64 allowed aliases, their observed versions, and
+their replay restrictions. Ignore additional fields and JSON key order; reject
 unsupported `format_version` values for each record kind. Incompatible field meanings or types
 require a new version.
 

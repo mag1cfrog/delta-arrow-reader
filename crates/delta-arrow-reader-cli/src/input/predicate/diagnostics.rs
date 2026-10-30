@@ -59,7 +59,7 @@ pub(crate) fn predicate_type_mismatch_correction(
     let hint = if expected_description.is_none() {
         "This column type cannot be compared by a predicate scalar; use a supported column or a SQL query."
     } else if field == "timezone" {
-        "Use inspect TABLE --view summary --column NAME with the same authorization and --table-version N for the exact timezone; timezone text is omitted here."
+        "Use inspect TABLE --view summary --column NAME with the same authorization and snapshot selection for the exact timezone; timezone text is omitted here."
     } else {
         "Match the scalar type and parameters to expected; use capabilities --schema predicate --detail TYPE for its encoding."
     };

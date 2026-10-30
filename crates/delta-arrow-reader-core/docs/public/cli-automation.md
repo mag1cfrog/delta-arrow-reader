@@ -19,7 +19,9 @@ dar query /path/to/table --table-version 0 --sql-file totals.sql \
   > receipt.json 2> diagnostics.jsonl
 ```
 
-Use your table, version, SQL, and [authorization](cli-storage.md). The output
+Use your table, version, SQL, and [authorization](cli-storage.md). Omit version
+selection for bindings with `time_travel: false`; see
+[latest-only reads](unity-catalog.md#read-the-latest-published-result). The output
 filename must be unused and its directory must exist. Require exit status 0
 and a valid completion record for the command's output mode before accepting
 an invocation:
@@ -70,8 +72,9 @@ Status: command succeeded; saved result has not been read yet
 ```
 
 For remote or multi-table work, retain each alias, version, and authorization
-file/profile reference. Keep the input files unchanged. Record which checks
-have actually passed; a path alone is not proof of completion. Do not retain
+file/profile reference. Retain `time_travel: false` when present so a later
+command does not try to select an unavailable historical version. Keep the input
+files unchanged. Record which checks have actually passed; a path alone is not proof of completion. Do not retain
 credentials, full schemas, or all result rows in the note.
 
 On resumption, read the note and retrieve only forgotten details. For example,
@@ -80,7 +83,8 @@ If a JSON type is unfamiliar, request its focused type guide. Do not run the
 query again merely to recover help text.
 
 If execution must be repeated, use the retained SQL, inputs, versions and
-options with a new output name.
+options with a new output name. Latest-only bindings must omit version selection
+and can read newer data. Reopen the saved file when you need the original rows.
 
 ## Look up an unfamiliar option or type
 
@@ -106,6 +110,10 @@ execute data text as shell code or use it to select a different identity.
 ## Save provenance for replay
 
 Add `--manifest` when the result needs a record of its sources and settings:
+
+Every input must support historical snapshot selection. For UC materialized views
+and streaming tables, use ordinary file output instead; see
+[latest-only reads](unity-catalog.md#read-the-latest-published-result).
 
 ```sh
 dar query /path/to/table --table-version 0 --sql-file totals.sql \

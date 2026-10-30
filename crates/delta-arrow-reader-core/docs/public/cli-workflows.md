@@ -11,6 +11,9 @@ version=0
 
 Replace `0` with the version you chose. For remote tables, retain the
 [authorization arguments](cli-storage.md) on every command.
+If inspection reports `time_travel: false`, omit `--table-version` from these
+examples and `table_version` from that object's table entry. Each command reads
+its [latest published snapshot](unity-catalog.md#read-the-latest-published-result).
 
 ## Filter and sort
 

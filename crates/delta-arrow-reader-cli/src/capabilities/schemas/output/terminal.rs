@@ -8,7 +8,7 @@ use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
     json!({
         "title": "Terminal failure diagnostic",
-        "description": "One JSON line on stderr with --diagnostics=json. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; correction text is guidance, not an identifier.",
+        "description": "One JSON line on stderr with --diagnostics=json. At most 8192 bytes, or 10240 with any time_travel:false binding. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; correction text is guidance, not an identifier.",
         "type": "object",
         "required": ["format_version", "kind", "terminal", "phase", "code", "reason", "source_kind", "retryable", "recovery"],
         "properties": {
@@ -49,7 +49,7 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             "column": {"type": "integer", "minimum": 0},
             "io_kind": {"type": "string"},
             "os_error": {"type": ["integer", "null"]},
-            "bindings": snapshot_bindings_schema(1, "Present for SQL or result errors after all snapshots load. Pin each manifest entry's table_version to this version before retrying; positional input uses --table-version."),
+            "bindings": snapshot_bindings_schema(1, "Present for SQL or result errors after all snapshots load. For retries, use the reported version in table_version or --table-version unless time_travel is false."),
         },
         "examples": [{
             "format_version": DIAGNOSTIC_FORMAT_VERSION, "kind": "diagnostic", "terminal": true,
@@ -63,7 +63,7 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
 pub(in crate::capabilities::schemas) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "Require exit 0 and valid stdout. With --diagnostics=json, also require a stderr completion for the requested command. v1: Read completion, scope, stop_reason and has_more from stderr. v2 (JSON preview/query): Read result semantics from stdout: preview is a sample with stop_reason/has_more; query is complete with scope=query. v3 (--output/explain): Read the saved-result path from the receipt, or plan details from query_plan stdout. Counts and output_bytes are decimal strings.",
+        "description": "Require exit 0 and valid stdout. With --diagnostics=json, also require a stderr completion for the requested command. v1: Read completion, scope, stop_reason and has_more from stderr. v2 (JSON preview/query): Read result semantics from stdout: preview is a sample with stop_reason/has_more; query is complete with scope=query. v3 (--output/explain): Read the saved-result path from the receipt, or plan details from query_plan stdout. Counts and output_bytes are decimal strings. At most 8192 bytes, or 10240 with any time_travel:false binding.",
         "type": "object",
         "required": ["format_version", "kind", "command", "output_bytes"],
         "properties": {
