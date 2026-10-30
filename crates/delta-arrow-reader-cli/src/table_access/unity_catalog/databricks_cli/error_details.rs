@@ -129,57 +129,103 @@ fn auth_footer_source_kind(footer: &str, profile: &str) -> Option<&'static str> 
 
 fn redact_credentials(message: &str) -> Option<String> {
     // shortcut: unlabelled opaque secrets cannot be identified; extend known formats with evidence.
-    static URL: LazyLock<Result<Regex, regex::Error>> =
-        LazyLock::new(|| Regex::new(r"(?i)\b[a-z][a-z0-9+.-]*:(?://|\\/\\/)[^\s<>]+"));
+    static URL: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+        Regex::new(concat!(
+            r#"(?i)"[a-z][a-z0-9+.-]*:(?://|\\/\\/)(?:[^"\\]|\\.)*"|"#,
+            r"\b[a-z][a-z0-9+.-]*:(?://|\\/\\/)[^\s<>]+",
+        ))
+    });
     static PRIVATE_KEY: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
         Regex::new(
             r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\z)",
         )
-    });
-    static CREDENTIAL: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
-        Regex::new(concat!(
-            // Accept environment prefixes and the SDKs' snake_case/camelCase spellings.
-            r#"(?i)(\b(?:[a-z][a-z0-9]*[_-])*(?:token|access[_-]?token|refresh[_-]?token|id[_-]?token|token[_-]?value|password|"#,
-            r#"client[_-]?secret|azure[_-]?client[_-]?secret|google[_-]?credentials|private[_-]?key|authorization|"#,
-            r#"access[_-]?key[_-]?id|secret[_-]?access[_-]?key|session[_-]?token|sas[_-]?token|aad[_-]?token|oauth[_-]?token|sig)"#,
-            r#"\b["']?\s*[:=]\s*)(?:\[redacted\]|"(?:[^"\\]|\\.)*(?:"|$)|'(?:[^'\\]|\\.)*(?:'|$)|[^,;}\]\r\n]+)"#,
-        ))
     });
     static BEARER: LazyLock<Result<Regex, regex::Error>> =
         LazyLock::new(|| Regex::new(r"(?i)\bBearer\s+[a-z0-9._~+/=-]+"));
     // If a filter cannot compile, omit the excerpt instead of returning unfiltered text.
     let urls = URL.as_ref().ok()?;
     let private_keys = PRIVATE_KEY.as_ref().ok()?;
-    let credentials = CREDENTIAL.as_ref().ok()?;
     let bearer = BEARER.as_ref().ok()?;
-    let message = private_keys.replace_all(message, "[redacted]");
-    let message = urls.replace_all(&message, |captures: &regex::Captures<'_>| {
-        let raw = captures[0].trim_end_matches(['\'', '"', ')', ']', '}', ',', ';']);
-        let trailing_punctuation = &captures[0][raw.len()..];
-        let normalized = raw.replace(r"\/", "/");
-        let Ok(mut url) = Url::parse(&normalized) else {
-            return "[URL omitted]".to_owned();
-        };
-        if url.query().is_none()
-            && url.fragment().is_none()
-            && url.username().is_empty()
-            && url.password().is_none()
-        {
-            return captures[0].to_owned();
-        }
-        if url.set_username("").is_err() || url.set_password(None).is_err() {
-            return "[URL omitted]".to_owned();
-        }
-        url.set_query(None);
-        url.set_fragment(None);
-        format!("{url}[URL details removed]{trailing_punctuation}")
-    });
-    let message = credentials.replace_all(&message, "${1}[redacted]");
+    // Redact labels before URL normalization can percent-encode them.
+    let message = redact_credential_assignments(message)?;
+    let message = private_keys.replace_all(&message, "[redacted]");
+    let message = bearer.replace_all(&message, "Bearer [redacted]");
     Some(
-        bearer
-            .replace_all(&message, "Bearer [redacted]")
-            .into_owned(),
+        urls.replace_all(&message, |captures: &regex::Captures<'_>| {
+            if captures[0].starts_with('"') {
+                return serde_json::from_str::<String>(&captures[0])
+                    .map(|url| serde_json::json!(redact_url(&url)).to_string())
+                    .unwrap_or_else(|_| "[URL omitted]".into());
+            }
+            redact_url(&captures[0])
+        })
+        .into_owned(),
     )
+}
+
+fn redact_credential_assignments(message: &str) -> Option<String> {
+    static CREDENTIAL_LABEL: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+        Regex::new(concat!(
+            // Accept environment prefixes and the SDKs' snake_case/camelCase spellings.
+            r#"(?i)\b(?:[a-z][a-z0-9]*[_-])*(?:token|access[_-]?token|refresh[_-]?token|id[_-]?token|token[_-]?value|password|"#,
+            r#"client[_-]?secret|azure[_-]?client[_-]?secret|google[_-]?credentials|private[_-]?key|authorization|"#,
+            r#"access[_-]?key[_-]?id|secret[_-]?access[_-]?key|session[_-]?token|sas[_-]?token|aad[_-]?token|oauth[_-]?token|sig)"#,
+            r#"\b["']?\s*[:=]\s*"#,
+        ))
+    });
+    static SINGLE_QUOTED_VALUE: LazyLock<Result<Regex, regex::Error>> =
+        LazyLock::new(|| Regex::new(r"^'(?:[^'\\]|\\.)*'"));
+    let labels = CREDENTIAL_LABEL.as_ref().ok()?;
+    let single_quoted = SINGLE_QUOTED_VALUE.as_ref().ok()?;
+    let mut output = String::new();
+    let mut consumed_bytes = 0;
+    for label in labels.find_iter(message) {
+        if label.start() < consumed_bytes {
+            continue;
+        }
+        output.push_str(&message[consumed_bytes..label.end()]);
+        output.push_str("[redacted]");
+        let value = &message[label.end()..];
+        let value_bytes = if value.starts_with(['"', '{', '[']) {
+            let mut values =
+                serde_json::Deserializer::from_str(value).into_iter::<serde_json::Value>();
+            values
+                .next()
+                .and_then(Result::ok)
+                .map(|_| values.byte_offset())
+        } else {
+            single_quoted.find(value).map(|quoted| quoted.end())
+        };
+        let value_bytes = value_bytes.filter(|end| {
+            value[*end..].chars().next().is_none_or(|next| {
+                next.is_whitespace() || matches!(next, ',' | ';' | '}' | ']' | ')')
+            })
+        });
+        // An ambiguous/unquoted value can include separators or nested data; omit the remainder.
+        consumed_bytes = label.end() + value_bytes.unwrap_or(value.len());
+    }
+    output.push_str(&message[consumed_bytes..]);
+    Some(output)
+}
+
+fn redact_url(text: &str) -> String {
+    let normalized = text.replace(r"\/", "/");
+    let Ok(mut url) = Url::parse(&normalized) else {
+        return "[URL omitted]".to_owned();
+    };
+    if url.query().is_none()
+        && url.fragment().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+    {
+        return text.to_owned();
+    }
+    if url.set_username("").is_err() || url.set_password(None).is_err() {
+        return "[URL omitted]".to_owned();
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    format!("{url}[URL details removed]")
 }
 
 #[cfg(test)]
@@ -356,5 +402,30 @@ mod tests {
             );
             assert!(!format!("{details:?} {details}").contains("fixture-secret"));
         }
+    }
+
+    #[test]
+    fn complete_credential_values_are_redacted_before_url_conversion() {
+        for stderr in [
+            r#"Error: {"url":"https://user:fixture-first@example.invalid/a","access_token":"fixture-second"}"#,
+            r#"Error: {"url":"https://user:fixture-first@example.invalid/a","authorization":"Bearer fixture-second"}"#,
+            r#"Error: {"url":"https:\/\/user:fixture-first@example.invalid/a","access_token":"fixture-second"}"#,
+            "Error: password=[redacted]fixture-second",
+            "Error: password=\"[redacted]\"fixture-second",
+            "Error: password='[redacted]'fixture-second",
+            r#"Error: google_credentials={"refresh_token":"fixture-first,fixture-second"}"#,
+            r#"Error: google_credentials={"client_secret":"fixture-first;fixture-second"}"#,
+            "Error: google_credentials={\n\"opaque\":\"fixture-first\",\n\"nested\":[{\"opaque\":\"fixture-second\"}]}\nNext action: check login.",
+            "Error: google_credentials={malformed \n opaque=fixture-first",
+        ] {
+            let message = parse(stderr).message.unwrap();
+            assert!(!message.contains("fixture-"), "{message}");
+        }
+        let message = parse(r#"Error: {"url":"https://user:fixture-first@example.invalid/a","access_token":"fixture-second","reason":"Check login."}"#).message.unwrap();
+        assert!(message.contains(r#""reason":"Check login.""#), "{message}");
+        assert!(
+            message.contains(r#""access_token":[redacted]"#),
+            "{message}"
+        );
     }
 }

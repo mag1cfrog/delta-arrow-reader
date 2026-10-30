@@ -121,7 +121,8 @@ Each Databricks subprocess has a 30-second timeout, no interactive stdin, and a
 deadline. On failure, DAR includes a filtered error explanation of at most 1024
 UTF-8 bytes. It removes SDK request logs and configuration summaries, redacts
 known credential fields and bearer values, and removes URL userinfo, queries,
-and fragments. The explanation can still name tables, workspaces, or principals;
+and fragments. If a credential value has no clear boundary, DAR omits the remaining
+text. The explanation can still name tables, workspaces, or principals;
 review it before sharing. Unlabelled secret values cannot be reliably identified.
 Successful child diagnostics are discarded. See
 [troubleshooting](../unity-catalog.md#if-a-command-fails) for next actions and
