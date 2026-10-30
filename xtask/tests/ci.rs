@@ -1260,6 +1260,55 @@ fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
 }
 
 #[test]
+fn cache_maintenance_jobs_reuse_the_linux_warmup_binary() -> Result<()> {
+    let workflow: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let core = &workflow["jobs"]["core"];
+    let upload = core["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["uses"] == "actions/upload-artifact@v6")
+        .unwrap();
+    assert_eq!(upload["if"], "runner.os == 'Linux'");
+    assert_eq!(upload["with"]["path"], "target/debug/xtask");
+    assert_eq!(upload["with"]["if-no-files-found"], "error");
+    for name in ["prune", "selective-read-fixtures"] {
+        let job = &workflow["jobs"][name];
+        assert_eq!(job["needs"], "core");
+        assert_eq!(job["runs-on"], "ubuntu-latest");
+        let steps = job["steps"].as_array().unwrap();
+        let download = steps
+            .iter()
+            .find(|step| step["uses"] == "actions/download-artifact@v6")
+            .unwrap();
+        assert_eq!(download["with"]["name"], upload["with"]["name"]);
+        assert_eq!(download["with"]["path"], "${{ runner.temp }}/cache-tools");
+        assert!(download["with"]["run-id"].is_null());
+        assert!(download["with"]["repository"].is_null());
+        let commands: Vec<_> = steps
+            .iter()
+            .filter_map(|step| step["run"].as_str())
+            .flat_map(str::lines)
+            .collect();
+        assert!(commands.contains(&"chmod +x \"$RUNNER_TEMP/cache-tools/xtask\""));
+        let subcommand = if name == "prune" {
+            "prune-ci-caches"
+        } else {
+            "check-cache-writes"
+        };
+        let invocation = format!("\"$RUNNER_TEMP/cache-tools/xtask\" {subcommand}");
+        let expected_calls = if name == "prune" { 1 } else { 2 };
+        assert_eq!(
+            commands.iter().filter(|line| **line == invocation).count(),
+            expected_calls
+        );
+        assert!(commands.iter().all(|line| !line.contains("cargo xtask")));
+    }
+    Ok(())
+}
+
+#[test]
 fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
     let scripts = [
         workflow_script(
@@ -1501,7 +1550,10 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
             .filter_map(|step| step["run"].as_str())
             .flat_map(str::lines);
         for command in commands {
-            if command.starts_with("cargo clippy ") || command.starts_with("RUSTDOCFLAGS=") {
+            if command.starts_with("cargo clippy ")
+                || command.starts_with("cargo package ")
+                || command.starts_with("RUSTDOCFLAGS=")
+            {
                 assert!(
                     script.lines().any(|line| line.trim() == command),
                     "{command}"
@@ -1519,6 +1571,7 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
         ];
         if runner == "Linux" {
             commands.extend([
+                "package --locked",
                 "test --locked -p delta-arrow-reader-python --no-run",
                 "clippy --locked --all-targets --all-features -- -D warnings",
                 "clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings",

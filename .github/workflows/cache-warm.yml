@@ -57,7 +57,7 @@ jobs:
       RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       AWS_LC_SYS_USE_SYSTEM: "0"
-      CI_TARGET_CACHE_VERSION: "3"
+      CI_TARGET_CACHE_VERSION: "4"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       SCCACHE_LOG: sccache::server=debug
@@ -94,18 +94,12 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: ${{ runner.os == 'Linux' && 'clippy,rust-docs' || '' }}
-      - name: Cache Cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: core-ci
-          cache-targets: false
       - name: Cache compiled dependencies
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
           env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
-          # This action saves first; keep Cargo available for the registry cache save.
           cache-bin: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -114,6 +108,7 @@ jobs:
         run: |
           rustc -vV | grep -F "host: ${{ matrix.target }}"
       - name: Set up Python
+        if: runner.os == 'Linux'
         uses: actions/setup-python@v6
         with:
           python-version: "3.10"
@@ -147,6 +142,7 @@ jobs:
           cargo test --locked --package xtask --bin xtask --test unity_catalog_live --no-run
           cargo test --locked -p delta-arrow-reader-cli --no-run
           if [ "$RUNNER_OS" = "Linux" ]; then
+            cargo package --locked
             cargo test --locked -p delta-arrow-reader-python --no-run
             cargo clippy --locked --all-targets --all-features -- -D warnings
             cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
@@ -182,6 +178,14 @@ jobs:
         run: cargo xtask check-cache-writes
         env:
           RUSTC_WRAPPER: ""
+      - name: Share cache maintenance tool
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: cache-maintenance-tool
+          path: target/debug/xtask
+          if-no-files-found: error
+          retention-days: 1
 
   prune:
     name: Retain current build caches
@@ -195,9 +199,13 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo xtask prune-ci-caches
+      - uses: actions/download-artifact@v6
+        with:
+          name: cache-maintenance-tool
+          path: ${{ runner.temp }}/cache-tools
+      - run: |
+          chmod +x "$RUNNER_TEMP/cache-tools/xtask"
+          "$RUNNER_TEMP/cache-tools/xtask" prune-ci-caches
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -221,6 +229,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          name: cache-maintenance-tool
+          path: ${{ runner.temp }}/cache-tools
+      - name: Make cache maintenance tool executable
+        run: chmod +x "$RUNNER_TEMP/cache-tools/xtask"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.98.1'
@@ -241,10 +255,7 @@ jobs:
         id: cache-writes
         continue-on-error: true
         working-directory: .
-        run: cargo xtask check-cache-writes
-        env:
-          RUSTC_WRAPPER: ""
-          CARGO_TARGET_DIR: ${{ runner.temp }}/benchmark-cache-check
+        run: '"$RUNNER_TEMP/cache-tools/xtask" check-cache-writes'
       - name: Prepare benchmark cache write retry
         if: steps.cache-writes.outcome == 'failure'
         env:
@@ -259,10 +270,7 @@ jobs:
       - name: Check retried benchmark cache writes
         if: steps.cache-writes.outcome == 'failure'
         working-directory: .
-        run: cargo xtask check-cache-writes
-        env:
-          RUSTC_WRAPPER: ""
-          CARGO_TARGET_DIR: ${{ runner.temp }}/benchmark-cache-check
+        run: '"$RUNNER_TEMP/cache-tools/xtask" check-cache-writes'
 
   wheels:
     name: Warm Python wheel caches
