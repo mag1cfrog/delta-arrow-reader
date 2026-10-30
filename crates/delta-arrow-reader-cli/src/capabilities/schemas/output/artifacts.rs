@@ -29,10 +29,9 @@ pub(in crate::capabilities::schemas) fn result_manifest_schema() -> Value {
         "Actual versions in declaration order. Replay must pin every alias to its recorded version; independent tables are not a transaction.",
     );
     // Replay manifests reject latest-only inputs before publishing any result.
-    bindings["items"]["properties"]
-        .as_object_mut()
-        .unwrap()
-        .remove("time_travel");
+    if let Some(properties) = bindings["items"]["properties"].as_object_mut() {
+        properties.remove("time_travel");
+    }
     json!({
         "title": "Result completion manifest", "type": "object",
         "description": "Optional provenance from --output PATH --manifest. Only this mode requires a matching complete manifest; publication is not a two-file transaction.",
