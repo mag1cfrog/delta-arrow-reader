@@ -226,6 +226,11 @@ impl DatabricksCliFixture {
             r#"#!/bin/sh
 set -eu
 response_directory=$DAR_TEST_DIR
+# Readers use the PID file's existence as a readiness signal.
+publish_pid() {
+  printf '%s' "$$" > "$response_directory/pid.tmp"
+  /bin/mv "$response_directory/pid.tmp" "$response_directory/pid"
+}
 if [ -n "${DAR_TEST_SECOND_PROFILE:-}" ]; then
   for argument in "$@"; do
     if [ "$argument" = "--profile=$DAR_TEST_SECOND_PROFILE" ]; then
@@ -242,7 +247,7 @@ if [ -n "${DAR_TEST_PID1_SIGNAL:-}" ]; then
   exec /bin/sleep 60
 fi
 if [ "${DAR_TEST_HANG:-}" = 1 ]; then
-  printf '%s' "$$" > "$response_directory/pid"
+  publish_pid
   exec /bin/sleep 60
 fi
 if [ "$1" = "${DAR_TEST_FAILURE_STAGE:-}" ]; then
@@ -273,7 +278,7 @@ case "$1" in
               printf 'secret-sentinel\n' >&2
             fi
             exit 1 ;;
-          hang) printf '%s' "$$" > "$response_directory/pid"; exec /bin/sleep 60 ;;
+          hang) publish_pid; exec /bin/sleep 60 ;;
           rotate) ;;
           *) exit 97 ;;
         esac
