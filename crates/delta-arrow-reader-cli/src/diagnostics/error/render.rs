@@ -66,6 +66,9 @@ impl Error {
             .map(|value| value.hint)
             .or_else(|| match source_error {
                 Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
+                Self::UnityCatalog { source } => source
+                    .command_error_details()
+                    .and_then(|details| details.hint()),
                 _ => None,
             });
         let ErrorClassification {
@@ -218,6 +221,19 @@ impl Error {
             } => {
                 record["hint"] = "Discard stdout. Retry only if intended, preserving the request, pinned snapshots, authorization and limits.".into();
             }
+            Self::UnityCatalog { source } => {
+                if let Some(details) = source.command_error_details() {
+                    if let Some(message) = &details.message {
+                        record["upstream_message"] = message.clone().into();
+                    }
+                    if details.message_truncated {
+                        record["upstream_message_truncated"] = true.into();
+                    }
+                    if let Some(hint) = details.hint() {
+                        record["hint"] = hint.into();
+                    }
+                }
+            }
             Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();
                 record["hint"] = diagnostics::argument_error_hint(*kind).into();
@@ -260,6 +276,81 @@ impl Error {
                 record["field_path"] = path.into();
             }
         }
+        truncate_upstream_message_for_record_limit(&mut record);
         record
+    }
+}
+
+fn truncate_upstream_message_for_record_limit(record: &mut Value) {
+    const MAX_RECORD_BYTES: usize = 8 * 1024;
+    let Some(message) = record.get("upstream_message").and_then(Value::as_str) else {
+        return;
+    };
+    if record.to_string().len() < MAX_RECORD_BYTES {
+        return;
+    }
+    let message = message.to_owned();
+    record["upstream_message"] = "".into();
+    record["upstream_message_truncated"] = true.into();
+    // Reserve the newline and all other fields before measuring the escaped excerpt.
+    let available = MAX_RECORD_BYTES.saturating_sub(record.to_string().len() + 1);
+    let (mut start, mut end) = (0, message.len());
+    while start < end {
+        let midpoint = (start + end).div_ceil(2);
+        let prefix = &message[..message.floor_char_boundary(midpoint)];
+        if json!(prefix).to_string().len() - 2 <= available {
+            start = midpoint;
+        } else {
+            end = midpoint - 1;
+        }
+    }
+    record["upstream_message"] = message[..message.floor_char_boundary(start)].into();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uc_excerpts_fit_with_all_snapshot_bindings_without_discarding_recovery() {
+        for version in [0, u64::MAX] {
+            let bindings: Vec<_> = (0..crate::input::MAX_TABLES)
+                .map(|index| json!({"alias": format!("table_{index:057}"), "table_version": version.to_string()}))
+                .collect();
+            for message in ["x".repeat(1024), "\"".repeat(1024), "界".repeat(341)] {
+                let mut source = unity_catalog::Error::ReadCredentialsRequestFailed {
+                    details: Default::default(),
+                };
+                if let unity_catalog::Error::ReadCredentialsRequestFailed { details } = &mut source
+                {
+                    details.message = Some(message.clone());
+                    details.source_kind = Some("permission_denied");
+                }
+                let error = Error::WithResolvedBindings {
+                    source: Box::new(Error::UnityCatalog { source }),
+                    bindings: bindings.clone(),
+                };
+                let mut record = error.to_json_diagnostic();
+                assert!(record.to_string().len() < 8192);
+                assert_eq!(record["bindings"], json!(bindings));
+                assert_eq!(record["reason"], "uc_permission_denied");
+                assert_eq!(record["recovery"], "request_access");
+                assert_eq!(record["retryable"], false);
+                assert!(record["hint"].is_string());
+                let kept = record["upstream_message"].as_str().unwrap();
+                assert!(!kept.is_empty() && message.starts_with(kept));
+                if let Some(next) = message[kept.len()..].chars().next() {
+                    assert_eq!(record["upstream_message_truncated"], true);
+                    let longer = format!("{kept}{next}");
+                    record["upstream_message"] = longer.into();
+                    assert!(
+                        record.to_string().len() >= 8192,
+                        "discarded an excerpt character that would fit"
+                    );
+                } else {
+                    assert!(record.get("upstream_message_truncated").is_none());
+                }
+            }
+        }
     }
 }

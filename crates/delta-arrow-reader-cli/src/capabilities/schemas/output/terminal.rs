@@ -40,6 +40,8 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             "expected": {"type": "string"},
             "supplied": {"type": "string", "description": "Safe type description for a rejected predicate scalar; excludes literal values and timezone text."},
             "hint": {"type": "string"},
+            "upstream_message": {"type": "string", "description": "Filtered Databricks CLI error excerpt, at most 1024 UTF-8 bytes. Guidance only; may contain workspace or table identifiers."},
+            "upstream_message_truncated": {"const": true, "description": "The upstream excerpt was shortened."},
             "resource_details_command": {"type": "array", "items": {"type": "string"}, "description": "Optional focused lookup for SQL memory and spill policy."},
             "field_path": {"type": "string", "description": "JSON Pointer; an empty string identifies the input root."},
             "json_kind": {"type": "string"},

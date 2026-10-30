@@ -125,7 +125,7 @@ impl TableCredentialCache {
 
     /// Recover the UC category if a dependency has converted the provider error to a string.
     pub(super) async fn refresh_failure(&self) -> Option<Error> {
-        self.state.lock().await.as_ref().err().copied()
+        self.state.lock().await.as_ref().err().cloned()
     }
 
     async fn get_credentials(&self) -> object_store::Result<CloudCredentials> {
@@ -140,7 +140,7 @@ impl TableCredentialCache {
         Fut: Future<Output = Result<TemporaryTableCredentials, Error>>,
     {
         let mut state = self.state.lock().await;
-        let cached = state.as_ref().map_err(|error| *error)?;
+        let cached = state.as_ref().map_err(Clone::clone)?;
         if cached.is_fresh() {
             return Ok(cached.grant.credentials.clone());
         }
@@ -154,7 +154,7 @@ impl TableCredentialCache {
         state
             .as_ref()
             .map(|cached| cached.grant.credentials.clone())
-            .map_err(|error| *error)
+            .map_err(Clone::clone)
     }
 }
 

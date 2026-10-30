@@ -168,7 +168,7 @@ for direct-storage tables, additional fields, and path rules.
 | --- | --- |
 | `databricks_cli_missing` | Make `databricks` available on `PATH` in the environment running DAR, including inside a container. |
 | `databricks_cli_failed` or `databricks_cli_timeout` | Run the [Databricks check below](#check-databricks-directly) in the same environment. Check workspace connectivity and [CLI compatibility](reference/unity-catalog.md#databricks-cli-compatibility). |
-| `uc_table_request_failed` or `uc_credential_request_failed` | Check the selected profile with the [Databricks command below](#check-databricks-directly). [Renew user OAuth](#user-oauth-login) if needed, then ask the administrator to check the grants and external access setting. Login cannot grant access. |
+| `uc_table_request_failed` or `uc_credential_request_failed` | Read the accompanying Databricks error. `uc_authentication_failed` means check the selected profile's login; `uc_permission_denied` means ask an administrator to check access and any named privilege. If the cause remains unclear, [check Databricks directly](#check-databricks-directly). |
 | `uc_s3_region_required` | Supply the [S3 region file](reference/unity-catalog.md#s3-region). |
 | `unsupported_uc_table` | Check the [supported tables](reference/unity-catalog.md#table-access) and [credential forms](reference/unity-catalog.md#storage-backends-and-credentials). |
 | `uc_credentials_expired` | Check the system clock and [renew user OAuth](#user-oauth-login) if needed, then retry. |
@@ -182,8 +182,8 @@ for scripting and machine-readable errors.
 
 ### Check Databricks directly
 
-DAR discards the Databricks subprocess's diagnostics. To see its own error
-message, run this read-only metadata request with the failing table and profile:
+If DAR's filtered error does not explain the failure, run this read-only metadata
+request with the failing table and profile:
 
 ```sh
 databricks tables get main.sales.orders --profile work \

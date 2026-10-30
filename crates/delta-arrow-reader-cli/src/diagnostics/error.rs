@@ -223,8 +223,8 @@ impl Error {
             Self::UnityCatalog { source } => ErrorClassification {
                 phase: source.phase(),
                 code: source.code(),
-                reason: source.code(),
-                source_kind: None,
+                reason: source.reason(),
+                source_kind: source.source_kind(),
             },
             Self::Query { source } => source.classification(),
             Self::OutputLimit { reason } => ErrorClassification {

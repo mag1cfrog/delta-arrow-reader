@@ -94,27 +94,35 @@ async fn failed_refresh_is_shared_without_fallback_or_repeated_subprocesses() {
     tokio::time::advance(Duration::from_secs(271)).await;
     let refreshes = Arc::new(AtomicUsize::new(0));
     let mut readers = JoinSet::new();
+    let expected_failure = Error::ReadCredentialsRequestFailed {
+        details: databricks_cli::DatabricksErrorDetails {
+            message: Some("Access refused.".into()),
+            source_kind: Some("permission_denied"),
+            message_truncated: false,
+        },
+    };
     for _ in 0..32 {
         let cache = Arc::clone(&cache);
         let refreshes = Arc::clone(&refreshes);
+        let failure = expected_failure.clone();
         readers.spawn(async move {
             cache
                 .get_or_refresh(|| async {
                     refreshes.fetch_add(1, Ordering::SeqCst);
                     tokio::task::yield_now().await;
-                    Err(Error::ReadCredentialsRequestFailed)
+                    Err(failure)
                 })
                 .await
                 .err()
         });
     }
     while let Some(result) = readers.join_next().await {
-        assert_eq!(result.unwrap(), Some(Error::ReadCredentialsRequestFailed));
+        assert_eq!(result.unwrap(), Some(expected_failure.clone()));
     }
     assert_eq!(refreshes.load(Ordering::SeqCst), 1);
     assert_eq!(
         cache.refresh_failure().await,
-        Some(Error::ReadCredentialsRequestFailed)
+        Some(expected_failure.clone())
     );
     let DeltaStorageCredentialProvider::Aws(provider) = cache.credential_provider() else {
         panic!("expected AWS provider");
@@ -123,7 +131,7 @@ async fn failed_refresh_is_shared_without_fallback_or_repeated_subprocesses() {
     use std::error::Error as _;
     assert_eq!(
         error.source().unwrap().downcast_ref::<Error>(),
-        Some(&Error::ReadCredentialsRequestFailed)
+        Some(&expected_failure)
     );
     let diagnostics = format!("{provider:?} {error} {error:?}");
     assert!(!diagnostics.contains("secret"), "{diagnostics}");

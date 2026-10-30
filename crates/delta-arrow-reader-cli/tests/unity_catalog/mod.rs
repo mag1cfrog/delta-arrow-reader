@@ -1,5 +1,6 @@
 #[cfg(target_os = "linux")]
 mod deadlines;
+mod failure_diagnostics;
 mod preview;
 mod queries;
 mod scans;
@@ -241,6 +242,13 @@ if [ "${DAR_TEST_HANG:-}" = 1 ]; then
   printf '%s' "$$" > "$response_directory/pid"
   exec /bin/sleep 60
 fi
+if [ "$1" = "${DAR_TEST_FAILURE_STAGE:-}" ]; then
+  /bin/cat "$response_directory/failure.txt" >&2
+  exit 1
+fi
+if [ "${DAR_TEST_SUCCESS_STDERR:-}" = 1 ]; then
+  printf 'Error: token=secret-sentinel\n' >&2
+fi
 case "$1" in
   tables) /bin/cat "$response_directory/metadata.json" ;;
   temporary-table-credentials)
@@ -248,7 +256,13 @@ case "$1" in
     if [ -n "${DAR_TEST_REFRESH:-}" ]; then
       if [ -e "$response_directory/initial_grant_issued" ]; then
         case "$DAR_TEST_REFRESH" in
-          deny) printf 'secret-sentinel\n' >&2; exit 1 ;;
+          deny)
+            if [ -f "$response_directory/failure.txt" ]; then
+              /bin/cat "$response_directory/failure.txt" >&2
+            else
+              printf 'secret-sentinel\n' >&2
+            fi
+            exit 1 ;;
           hang) printf '%s' "$$" > "$response_directory/pid"; exec /bin/sleep 60 ;;
           rotate) ;;
           *) exit 97 ;;
@@ -485,6 +499,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                 .arg(fixture.directory.path().join("options.json"));
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
+                .env("DAR_TEST_SUCCESS_STDERR", "1")
                 .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret")
                 .env("AZURE_STORAGE_TOKEN", "ambient-token")
                 .env("AZURE_STORAGE_SAS_KEY", "sig=ambient-signature")
@@ -922,6 +937,12 @@ fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> Tes
         ),
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
+        if matches!(failure, CredentialRefreshFailure::PermissionDenied) {
+            fs::write(
+                fixture.directory.path().join("failure.txt"),
+                failure_diagnostics::permission_error(),
+            )?;
+        }
         let _server =
             fixture.storage_with_credential_expiry_and_invalid_metadata(kind, |replacement| {
                 failure.apply_to_response(replacement);
@@ -943,6 +964,11 @@ fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> Tes
         let record =
             super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(record["code"], failure.expected_error_code());
+        if matches!(failure, CredentialRefreshFailure::PermissionDenied) {
+            assert_eq!(record["reason"], "uc_permission_denied");
+            assert_eq!(record["recovery"], "request_access");
+            assert_eq!(record["upstream_message"], "Read access was denied.");
+        }
         assert_eq!(
             fixture
                 .recorded_arguments()
