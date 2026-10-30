@@ -20,6 +20,8 @@ The examples use Bash.
 
 For a materialized view or streaming table, follow
 [Read the latest published result](#read-the-latest-published-result) below.
+A Delta table federated from Hive or AWS Glue uses the same commands, with
+[external location access](reference/unity-catalog.md#hive-and-glue-foreign-tables).
 
 The Python and Rust APIs do not resolve `uc://` names; this guide uses the CLI.
 
@@ -208,6 +210,7 @@ for direct-storage tables, additional fields, and path rules.
 | `databricks_cli_missing` | Make `databricks` available on `PATH` in the environment running DAR, including inside a container. |
 | `databricks_cli_failed` or `databricks_cli_timeout` | Run the [Databricks check below](#check-databricks-directly) in the same environment. Check workspace connectivity and [CLI compatibility](reference/unity-catalog.md#databricks-cli-compatibility). |
 | `uc_table_request_failed` or `uc_credential_request_failed` | Read the accompanying Databricks error. `uc_authentication_failed` means check the selected profile's login; `uc_permission_denied` means ask an administrator to check access and any named privilege. If the cause remains unclear, [check Databricks directly](#check-databricks-directly). |
+| `uc_permission_denied` naming `EXTERNAL USE LOCATION` | Ask the owner of the named external location to grant that privilege, then retry the same command. This privilege belongs to the external location, not the table. |
 | `uc_s3_region_required` | Supply the [S3 region file](reference/unity-catalog.md#s3-region). |
 | `unsupported_uc_table` | Check the [supported tables](reference/unity-catalog.md#table-access) and [credential forms](reference/unity-catalog.md#storage-backends-and-credentials). |
 | `unsupported_uc_catalog_protocol` | The workspace does not advertise Delta API 1.0 table reads. Additional grants do not add this protocol support. |

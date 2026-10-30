@@ -15,7 +15,7 @@ fn aws_grant(token: &str, lifetime: Duration) -> TemporaryTableCredentials {
 fn cache(grant: TemporaryTableCredentials) -> Arc<TableCredentialCache> {
     TableCredentialCache::new(
         "secret-profile".into(),
-        "secret-table-id".into(),
+        ReadCredentialTarget::TableId("secret-table-id".into()),
         TableStorageLocation::parse("s3://secret-bucket/secret-table").unwrap(),
         grant,
     )
@@ -161,7 +161,7 @@ async fn expired_replacements_and_changed_azure_credential_kinds_are_rejected() 
     ] {
         let cache = TableCredentialCache::new(
             "profile".into(),
-            "table-id".into(),
+            ReadCredentialTarget::TableId("table-id".into()),
             TableStorageLocation::parse("abfss://container@account.dfs.core.windows.net/table")
                 .unwrap(),
             TemporaryTableCredentials {

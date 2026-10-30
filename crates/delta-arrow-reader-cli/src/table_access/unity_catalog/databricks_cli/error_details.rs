@@ -69,6 +69,18 @@ impl DatabricksErrorDetails {
             Some("unauthenticated") => {
                 Some("Check the login for the same Databricks CLI profile, then retry.")
             }
+            Some("permission_denied")
+                if self.message.as_deref().is_some_and(|message| {
+                    // Observed path-vending 403; naming a privilege alone does not imply it is missing.
+                    message.starts_with(
+                        "User does not have EXTERNAL USE LOCATION on External Location '",
+                    )
+                }) =>
+            {
+                Some(
+                    "Ask the owner of the named external location to grant EXTERNAL USE LOCATION, then retry.",
+                )
+            }
             Some("permission_denied") => Some(
                 "Ask an administrator to check table access and any privilege named in the upstream error.",
             ),
@@ -299,6 +311,34 @@ mod tests {
             DatabricksErrorDetails::from_stderr(b"Error: \xff", "work"),
             DatabricksErrorDetails::default()
         );
+    }
+
+    #[test]
+    fn missing_location_privilege_hint_requires_the_observed_permission_error() {
+        let message =
+            "User does not have EXTERNAL USE LOCATION on External Location 'test_location'.";
+        let mut details = DatabricksErrorDetails {
+            message: Some(message.into()),
+            source_kind: Some("permission_denied"),
+            ..Default::default()
+        };
+        let location_hint = details.hint().unwrap();
+        assert!(location_hint.contains("owner of the named external location"));
+        assert!(location_hint.contains("EXTERNAL USE LOCATION"));
+
+        for unrelated in [
+            "EXTERNAL USE LOCATION is already granted; SELECT is missing.",
+            "Invalid column EXTERNAL_USE_LOCATION.",
+            "User does not have SELECT on Table 'orders'.",
+        ] {
+            details.message = Some(unrelated.into());
+            assert_ne!(details.hint(), Some(location_hint));
+        }
+        details.message = Some(message.into());
+        details.source_kind = None;
+        assert_eq!(details.hint(), None);
+        details.source_kind = Some("unauthenticated");
+        assert_ne!(details.hint(), Some(location_hint));
     }
 
     #[test]

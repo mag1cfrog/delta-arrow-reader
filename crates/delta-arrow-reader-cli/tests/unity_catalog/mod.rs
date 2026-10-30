@@ -2,6 +2,7 @@ mod catalog_managed;
 #[cfg(target_os = "linux")]
 mod deadlines;
 mod failure_diagnostics;
+mod foreign_tables;
 mod pipeline_datasets;
 mod preview;
 mod queries;
@@ -260,7 +261,7 @@ case "$1" in
       *) /bin/cat "$response_directory/catalog-snapshot.json" ;;
     esac
     ;;
-  temporary-table-credentials)
+  temporary-table-credentials|temporary-path-credentials)
     if [ "${DAR_TEST_DENIED:-}" = 1 ]; then printf 'secret-sentinel\n' >&2; exit 1; fi
     if [ -n "${DAR_TEST_REFRESH:-}" ]; then
       if [ -e "$response_directory/initial_grant_issued" ]; then
@@ -314,6 +315,17 @@ esac
             .env("PATH", self.directory.path())
             .env("DAR_TEST_DIR", self.directory.path());
         command
+    }
+
+    fn use_foreign_delta_metadata(&self) -> TestResult {
+        let path = self.directory.path().join("metadata.json");
+        let mut metadata: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        metadata["table_type"] = json!("FOREIGN");
+        metadata["securable_kind_manifest"] = json!({
+            "capabilities": ["HAS_HIVE_METASTORE_FOREIGN_CONNECTION_SUPPORT", "HAS_STORAGE"]
+        });
+        fs::write(path, serde_json::to_vec(&metadata)?)?;
+        Ok(())
     }
 
     fn inspect(&self) -> Command {

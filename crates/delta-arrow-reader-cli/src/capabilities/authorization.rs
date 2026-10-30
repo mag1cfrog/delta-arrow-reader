@@ -367,6 +367,7 @@ pub(super) fn build_authorization_capabilities() -> Value {
             "executable_bundled": false,
             "interactive_login": false,
             "credential_operation": "READ",
+            "foreign_delta_credential_operation": "PATH_READ",
             "credential_backends": ["s3", "r2", "azure-blob", "gcs"],
             "credential_refresh": true,
             "fallback_to_other_identity": false,
@@ -378,7 +379,8 @@ pub(super) fn build_authorization_capabilities() -> Value {
                 UNITY_CATALOG_PROFILE_USAGE,
                 UNITY_CATALOG_ACCESS_REQUIREMENTS,
                 "Managed/external Delta tables need a supported read protocol. Catalog-managed commits need Delta API 1.0. Materialized views and streaming tables need published external Delta metadata and allow only latest reads, without --table-version or --manifest. Ordinary views, shallow clones, row filters, column masks, and coordinated commits are rejected.",
-                "Credentials are renewed for the same table ID and profile without changing the selected snapshot. Renewal failure stops the command.",
+                "Hive/Glue external Delta foreign tables use the same UC target and profile, with EXTERNAL USE LOCATION on the containing external location.",
+                "Credentials renew for the original table ID or external path and profile without changing the selected snapshot. Renewal failure stops the command.",
             ],
         },
     })

@@ -72,14 +72,20 @@ pub(super) async fn get_catalog_api_response(profile: &str, path: &str) -> Resul
     .await
 }
 
-/// Requests READ credentials scoped to the table ID returned by the metadata request.
+/// The catalog identity or external storage path used for initial and renewed read grants.
+pub(super) enum ReadCredentialTarget {
+    TableId(String),
+    ExternalPath(url::Url),
+}
+
+/// Requests read-only credentials using the target selected from validated table metadata.
 pub(super) async fn generate_read_credentials(
     profile: &str,
-    table_id: &str,
+    target: &ReadCredentialTarget,
 ) -> Result<Vec<u8>, Error> {
     let profile_arg = format!("--profile={profile}");
-    run_databricks_cli(
-        &[
+    let args = match target {
+        ReadCredentialTarget::TableId(table_id) => vec![
             "temporary-table-credentials",
             "generate-temporary-table-credentials",
             "--table-id",
@@ -90,9 +96,20 @@ pub(super) async fn generate_read_credentials(
             "--output",
             "json",
         ],
-        profile,
-        |details| Error::ReadCredentialsRequestFailed { details },
-    )
+        ReadCredentialTarget::ExternalPath(path) => vec![
+            "temporary-path-credentials",
+            "generate-temporary-path-credentials",
+            &profile_arg,
+            "--output",
+            "json",
+            "--",
+            path.as_str(),
+            "PATH_READ",
+        ],
+    };
+    run_databricks_cli(&args, profile, |details| {
+        Error::ReadCredentialsRequestFailed { details }
+    })
     .await
 }
 
