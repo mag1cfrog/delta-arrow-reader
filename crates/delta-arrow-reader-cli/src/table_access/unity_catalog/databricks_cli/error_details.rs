@@ -8,7 +8,7 @@ use std::{fmt, sync::LazyLock};
 use regex::Regex;
 use url::Url;
 
-// Leave room for JSON escaping and the other fields in the 8 KiB terminal record.
+// The renderer can shorten this further when snapshot bindings fill the terminal record.
 const MAX_MESSAGE_BYTES: usize = 1024;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -130,23 +130,34 @@ fn auth_footer_source_kind(footer: &str, profile: &str) -> Option<&'static str> 
 fn redact_credentials(message: &str) -> Option<String> {
     // shortcut: unlabelled opaque secrets cannot be identified; extend known formats with evidence.
     static URL: LazyLock<Result<Regex, regex::Error>> =
-        LazyLock::new(|| Regex::new(r#"(?i)\b[a-z][a-z0-9+.-]*://[^\s<>"']+"#));
+        LazyLock::new(|| Regex::new(r"(?i)\b[a-z][a-z0-9+.-]*:(?://|\\/\\/)[^\s<>]+"));
+    static PRIVATE_KEY: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+        Regex::new(
+            r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\z)",
+        )
+    });
     static CREDENTIAL: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
         Regex::new(concat!(
-            r#"(?i)(\b(?:token|access_token|refresh_token|id_token|token_value|password|"#,
-            r#"client_secret|azure_client_secret|google_credentials|private_key|authorization|"#,
-            r#"access_key_id|secret_access_key|session_token|sas_token|aad_token|oauth_token|sig)"#,
-            r#"\b["']?\s*[:=]\s*)(?:"(?:[^"\\]|\\.)*(?:"|$)|'(?:[^'\\]|\\.)*(?:'|$)|[^,;}\]\r\n]+)"#,
+            // Accept environment prefixes and the SDKs' snake_case/camelCase spellings.
+            r#"(?i)(\b(?:[a-z][a-z0-9]*[_-])*(?:token|access[_-]?token|refresh[_-]?token|id[_-]?token|token[_-]?value|password|"#,
+            r#"client[_-]?secret|azure[_-]?client[_-]?secret|google[_-]?credentials|private[_-]?key|authorization|"#,
+            r#"access[_-]?key[_-]?id|secret[_-]?access[_-]?key|session[_-]?token|sas[_-]?token|aad[_-]?token|oauth[_-]?token|sig)"#,
+            r#"\b["']?\s*[:=]\s*)(?:\[redacted\]|"(?:[^"\\]|\\.)*(?:"|$)|'(?:[^'\\]|\\.)*(?:'|$)|[^,;}\]\r\n]+)"#,
         ))
     });
     static BEARER: LazyLock<Result<Regex, regex::Error>> =
         LazyLock::new(|| Regex::new(r"(?i)\bBearer\s+[a-z0-9._~+/=-]+"));
     // If a filter cannot compile, omit the excerpt instead of returning unfiltered text.
     let urls = URL.as_ref().ok()?;
+    let private_keys = PRIVATE_KEY.as_ref().ok()?;
     let credentials = CREDENTIAL.as_ref().ok()?;
     let bearer = BEARER.as_ref().ok()?;
-    let message = urls.replace_all(message, |captures: &regex::Captures<'_>| {
-        let Ok(mut url) = Url::parse(&captures[0]) else {
+    let message = private_keys.replace_all(message, "[redacted]");
+    let message = urls.replace_all(&message, |captures: &regex::Captures<'_>| {
+        let raw = captures[0].trim_end_matches(['\'', '"', ')', ']', '}', ',', ';']);
+        let trailing_punctuation = &captures[0][raw.len()..];
+        let normalized = raw.replace(r"\/", "/");
+        let Ok(mut url) = Url::parse(&normalized) else {
             return "[URL omitted]".to_owned();
         };
         if url.query().is_none()
@@ -161,7 +172,7 @@ fn redact_credentials(message: &str) -> Option<String> {
         }
         url.set_query(None);
         url.set_fragment(None);
-        format!("{url}[URL details removed]")
+        format!("{url}[URL details removed]{trailing_punctuation}")
     });
     let message = credentials.replace_all(&message, "${1}[redacted]");
     Some(
@@ -322,5 +333,28 @@ mod tests {
                 .as_deref(),
             Some("token=[redacted]")
         );
+    }
+
+    #[test]
+    fn credential_aliases_private_keys_and_quoted_urls_are_filtered() {
+        for stderr in [
+            "Error: DATABRICKS_TOKEN=fixture-secret-env",
+            "Error: AWS_SECRET_ACCESS_KEY=fixture-secret-env",
+            r#"Error: {"SecretAccessKey":"fixture-secret-camel"}"#,
+            "Error: private_key=-----BEGIN PRIVATE KEY-----\nfixture-secret-pem\n-----END PRIVATE KEY-----",
+            "Error: -----BEGIN RSA PRIVATE KEY-----\nfixture-secret-pem",
+            r#"Error: {"url":"https:\/\/user:fixture-secret-url@example.invalid/a?x=fixture-secret-query"}"#,
+            "Error: https://user:fixture-secret-'apostrophe@example.invalid/a?x=fixture-secret-query",
+            "Error: https://user:fixture-secret-\"quote@example.invalid/a?x=fixture-secret-query",
+        ] {
+            let details = parse(stderr);
+            let message = details.message.as_ref().unwrap();
+            assert!(!message.contains("fixture-secret"), "{message}");
+            assert!(
+                message.contains("[redacted]") || message.contains("[URL details removed]"),
+                "{message}"
+            );
+            assert!(!format!("{details:?} {details}").contains("fixture-secret"));
+        }
     }
 }
