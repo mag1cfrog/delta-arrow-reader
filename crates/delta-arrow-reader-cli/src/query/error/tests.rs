@@ -1,5 +1,6 @@
 use super::*;
 use crate::diagnostics::Error;
+use std::sync::Arc;
 
 #[test]
 fn sql_diagnostics_preserve_wrapped_reader_causes_and_bindings() {

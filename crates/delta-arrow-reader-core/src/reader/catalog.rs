@@ -6,6 +6,26 @@ use delta_kernel::{
 };
 use url::Url;
 
+#[derive(Debug, snafu::Snafu)]
+pub(crate) enum CatalogCommitError {
+    #[snafu(display("invalid catalog commit metadata"))]
+    InvalidMetadata,
+    #[snafu(display("invalid catalog commit filename"))]
+    InvalidFilename { source: delta_kernel::Error },
+    #[snafu(display("catalog commit version mismatch"))]
+    VersionMismatch,
+}
+
+impl CatalogCommitError {
+    pub(crate) fn source_kind(&self) -> &'static str {
+        match self {
+            Self::InvalidMetadata => "invalid_catalog_commit_metadata",
+            Self::InvalidFilename { .. } => "invalid_catalog_commit_filename",
+            Self::VersionMismatch => "catalog_commit_version_mismatch",
+        }
+    }
+}
+
 /// One staged commit confirmed by the table's catalog.
 #[derive(Clone, Debug)]
 pub struct DeltaCatalogCommit {
@@ -55,8 +75,8 @@ impl DeltaCatalogSnapshot {
                     || commit.file_size == 0
                     || commit.last_modified_ms < 0
                 {
-                    return Err(delta_kernel::Error::generic(
-                        "invalid catalog commit metadata",
+                    return Err(delta_kernel::Error::generic_err(
+                        CatalogCommitError::InvalidMetadata,
                     ));
                 }
                 let path = LogPath::staged_commit(
@@ -65,13 +85,15 @@ impl DeltaCatalogSnapshot {
                     commit.last_modified_ms,
                     commit.file_size,
                 )
-                .map_err(|_| delta_kernel::Error::generic("invalid catalog commit filename"))?;
+                .map_err(|source| {
+                    delta_kernel::Error::generic_err(CatalogCommitError::InvalidFilename { source })
+                })?;
                 let parsed = ParsedLogPath::from(path.clone());
                 if parsed.version != commit.version
                     || parsed.file_type != LogPathFileType::StagedCommit
                 {
-                    return Err(delta_kernel::Error::generic(
-                        "catalog commit version mismatch",
+                    return Err(delta_kernel::Error::generic_err(
+                        CatalogCommitError::VersionMismatch,
                     ));
                 }
                 Ok(path)

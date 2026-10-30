@@ -158,10 +158,12 @@ pub(super) fn build_schema_alignment(
                     field_plan: root_match.field_plan.clone(),
                 })
                 .ok_or_else(|| {
-                    delta_kernel::Error::generic("matched Parquet root was not projected")
+                    delta_kernel::Error::InternalError(
+                        "matched Parquet root was not projected".into(),
+                    )
                 }),
             None if target_field.is_nullable() => Ok(TargetColumnPlan::Null),
-            None => Err(delta_kernel::Error::generic(format!(
+            None => Err(delta_kernel::Error::MissingColumn(format!(
                 "non-nullable target field '{}' is missing from the Parquet file",
                 target_field.name()
             ))),
@@ -224,7 +226,7 @@ fn match_target_field_to_parquet_root(
             }
             [] => {}
             _ => {
-                return Err(delta_kernel::Error::generic(format!(
+                return Err(delta_kernel::Error::Schema(format!(
                     "multiple Parquet fields matched target field id {field_id}"
                 )));
             }
@@ -343,13 +345,13 @@ fn map_entry_fields<'a>(
     path: &str,
 ) -> Result<(&'a Field, &'a Field), delta_kernel::Error> {
     let DataType::Struct(fields) = entries.data_type() else {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected map entries struct but has type {}",
             entries.data_type()
         )));
     };
     if fields.len() != 2 {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected map entries to contain key and value fields but found {}",
             fields.len()
         )));
@@ -364,19 +366,19 @@ fn parquet_map_entry_field<'a>(
 ) -> Result<&'a parquet::schema::types::Type, delta_kernel::Error> {
     let parquet_children = parquet_field.get_fields();
     let Some(repeated_child) = parquet_children.first() else {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected Parquet map entry metadata"
         )));
     };
     if parquet_children.len() != 1 {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected one Parquet map entry child but found {}",
             parquet_children.len()
         )));
     }
     let entry_children = repeated_child.get_fields();
     if entry_children.len() != 2 {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected Parquet map entry to contain two fields but found {}",
             entry_children.len()
         )));
@@ -385,7 +387,7 @@ fn parquet_map_entry_field<'a>(
         .get(entry_index)
         .map(AsRef::as_ref)
         .ok_or_else(|| {
-            delta_kernel::Error::generic(format!(
+            delta_kernel::Error::Schema(format!(
                 "target field '{path}' expected Parquet map entry key and value fields"
             ))
         })
@@ -434,25 +436,25 @@ fn parquet_list_element_field<'a>(
         return Ok(parquet_field);
     }
     let Type::GroupType { fields, .. } = parquet_field else {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected a Parquet list group or repeated element"
         )));
     };
     if is_repeated(parquet_field)
         && parquet_field.get_basic_info().converted_type() == ConvertedType::LIST
     {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected a required or optional Parquet list group"
         )));
     }
     let [repeated_child] = fields.as_slice() else {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected one Parquet list child but found {}",
             fields.len()
         )));
     };
     if !is_repeated(repeated_child) {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected a repeated Parquet list child"
         )));
     }
@@ -460,7 +462,7 @@ fn parquet_list_element_field<'a>(
         return Ok(repeated_child);
     };
     if fields.is_empty() {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected a non-empty Parquet list element group"
         )));
     }
@@ -494,7 +496,7 @@ fn build_matched_struct_field_plan(
 ) -> Result<FieldPlan, delta_kernel::Error> {
     let parquet_children = parquet_field.get_fields();
     if parquet_children.len() != file_fields.len() {
-        return Err(delta_kernel::Error::generic(format!(
+        return Err(delta_kernel::Error::Schema(format!(
             "target field '{path}' expected Parquet struct field metadata to match Arrow child count"
         )));
     }
@@ -553,7 +555,7 @@ fn match_target_struct_child(
         match matches.as_slice() {
             [index] => {
                 let file_child = file_fields.get(*index).ok_or_else(|| {
-                    delta_kernel::Error::generic(format!(
+                    delta_kernel::Error::Schema(format!(
                         "target field '{path}' matched Parquet field id {field_id} without Arrow metadata"
                     ))
                 })?;
@@ -569,7 +571,7 @@ fn match_target_struct_child(
             }
             [] => {}
             _ => {
-                return Err(delta_kernel::Error::generic(format!(
+                return Err(delta_kernel::Error::Schema(format!(
                     "multiple Parquet fields matched target field id {field_id} at '{path}'"
                 )));
             }
@@ -583,7 +585,7 @@ fn match_target_struct_child(
         return if target_child.is_nullable() {
             Ok(StructChildPlan::Null)
         } else {
-            Err(delta_kernel::Error::generic(format!(
+            Err(delta_kernel::Error::MissingColumn(format!(
                 "non-nullable target field '{path}' is missing from the Parquet file"
             )))
         };
@@ -660,7 +662,7 @@ fn arrow_field_id(field: &Field) -> Result<Option<i32>, delta_kernel::Error> {
         .get(PARQUET_FIELD_ID_META_KEY)
         .map(|field_id| {
             field_id.parse::<i32>().map_err(|error| {
-                delta_kernel::Error::generic(format!(
+                delta_kernel::Error::Schema(format!(
                     "invalid target field id metadata on '{}': {error}",
                     field.name()
                 ))
@@ -720,7 +722,7 @@ fn reshape_array_to_target_field(
         }
         FieldPlan::Struct { child_plans } => {
             let DataType::Struct(target_fields) = target_field.data_type() else {
-                return Err(delta_kernel::Error::generic(format!(
+                return Err(delta_kernel::Error::Schema(format!(
                     "target field '{}' expected struct reshape plan but has type {}",
                     target_field.name(),
                     target_field.data_type()
@@ -730,7 +732,7 @@ fn reshape_array_to_target_field(
                 .as_any()
                 .downcast_ref::<StructArray>()
                 .ok_or_else(|| {
-                    delta_kernel::Error::generic(format!(
+                    delta_kernel::Error::Schema(format!(
                         "target field '{}' expected Parquet struct array but found {}",
                         target_field.name(),
                         array.data_type()
@@ -761,14 +763,14 @@ fn reshape_array_to_target_field(
         }
         FieldPlan::List { element_plan } => {
             let DataType::List(target_element) = target_field.data_type() else {
-                return Err(delta_kernel::Error::generic(format!(
+                return Err(delta_kernel::Error::Schema(format!(
                     "target field '{}' expected list reshape plan but has type {}",
                     target_field.name(),
                     target_field.data_type()
                 )));
             };
             let list_array = array.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
-                delta_kernel::Error::generic(format!(
+                delta_kernel::Error::Schema(format!(
                     "target field '{}' expected Parquet list array but found {}",
                     target_field.name(),
                     array.data_type()
@@ -793,14 +795,14 @@ fn reshape_array_to_target_field(
             value_plan,
         } => {
             let DataType::Map(target_entries, target_ordered) = target_field.data_type() else {
-                return Err(delta_kernel::Error::generic(format!(
+                return Err(delta_kernel::Error::Schema(format!(
                     "target field '{}' expected map reshape plan but has type {}",
                     target_field.name(),
                     target_field.data_type()
                 )));
             };
             let map_array = array.as_any().downcast_ref::<MapArray>().ok_or_else(|| {
-                delta_kernel::Error::generic(format!(
+                delta_kernel::Error::Schema(format!(
                     "target field '{}' expected Parquet map array but found {}",
                     target_field.name(),
                     array.data_type()
@@ -986,11 +988,50 @@ mod tests {
             let error = super::parquet_list_element_field(&schema.get_fields()[0], "outer.items")
                 .err()
                 .ok_or("invalid list layout was accepted")?;
+            assert_eq!(crate::error_source_kind(&error), "schema");
             let message_text = error.to_string();
             assert!(
                 message_text.contains("outer.items") && message_text.contains(message),
                 "{field}: {message_text}"
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_and_duplicate_field_ids_keep_schema_categories()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let invalid = Field::new("secret_target", DataType::Int32, false).with_metadata(
+            HashMap::from([(PARQUET_FIELD_ID_META_KEY.into(), "secret-invalid-id".into())]),
+        );
+        let error = super::arrow_field_id(&invalid)
+            .err()
+            .ok_or("invalid field id was accepted")?;
+        assert_eq!(crate::error_source_kind(&error), "schema");
+        assert!(error.to_string().contains("secret_target"));
+
+        for nested in [false, true] {
+            let mut file_fields = vec![
+                field_with_id("secret_first", DataType::Int32, true, 1),
+                field_with_id("secret_second", DataType::Int32, true, 1),
+            ];
+            let mut target_fields = vec![field_with_id("secret_target", DataType::Int32, false, 1)];
+            if nested {
+                file_fields = vec![struct_field("secret_parent", file_fields, true)];
+                target_fields = vec![struct_field("secret_parent", target_fields, true)];
+            }
+            let file_schema = Arc::new(Schema::new(file_fields));
+            let parquet = ArrowSchemaConverter::new().convert(&file_schema)?;
+            let target = Arc::new(Schema::new(target_fields));
+            let source = super::build_schema_alignment(&parquet, &file_schema, target)
+                .err()
+                .ok_or("duplicate field ids were accepted")?;
+            let error = crate::DeltaReaderError::DataFileRead {
+                reason: "parquet_schema_match_failed",
+                source: Box::new(source),
+            };
+            assert_eq!(error.source_kind(), Some("schema"));
+            assert!(!format!("{error} {error:?}").contains("secret"));
         }
         Ok(())
     }
@@ -2321,7 +2362,10 @@ mod tests {
             target_schema,
         ) {
             Ok(_) => return Err("missing non-nullable list struct child must fail".into()),
-            Err(error) => error.to_string(),
+            Err(error) => {
+                assert_eq!(crate::error_source_kind(error.as_ref()), "missing_column");
+                error.to_string()
+            }
         };
 
         assert!(error.contains("non-nullable target field"), "{error}");
@@ -2574,7 +2618,10 @@ mod tests {
             target_schema,
         ) {
             Ok(_) => return Err("missing non-nullable map key struct child must fail".into()),
-            Err(error) => error.to_string(),
+            Err(error) => {
+                assert_eq!(crate::error_source_kind(error.as_ref()), "missing_column");
+                error.to_string()
+            }
         };
 
         assert!(error.contains("non-nullable target field"), "{error}");
@@ -3242,7 +3289,10 @@ mod tests {
             target_schema,
         ) {
             Ok(_) => return Err("missing non-nullable map value struct child must fail".into()),
-            Err(error) => error.to_string(),
+            Err(error) => {
+                assert_eq!(crate::error_source_kind(error.as_ref()), "missing_column");
+                error.to_string()
+            }
         };
 
         assert!(error.contains("non-nullable target field"), "{error}");
@@ -3289,6 +3339,7 @@ mod tests {
             Ok(_) => return Err("missing nested required child must fail".into()),
             Err(error) => error,
         };
+        assert_eq!(crate::error_source_kind(error.as_ref()), "missing_column");
         let display = error.to_string();
 
         assert!(display.contains("non-nullable target field"), "{display}");
@@ -3409,6 +3460,14 @@ mod tests {
                 Err(error) => error,
             };
             assert_eq!(error.code(), "data_file_read");
+            assert_eq!(
+                error.source_kind(),
+                Some(if target_schema.field(0).name() == "required" {
+                    "missing_column"
+                } else {
+                    "unexpected_column_type"
+                })
+            );
             assert_eq!(
                 error.to_string(),
                 "delta reader error: phase=data_file_read code=data_file_read reason=parquet_schema_match_failed"
