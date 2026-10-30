@@ -54,6 +54,12 @@ workspace names. See the [filtering limits](unity-catalog.md#credential-renewal-
 before sharing diagnostics. Other dependency errors and captured child output
 are omitted.
 
+Databricks subprocess failures also report `command_operation`. Local I/O failures
+include `io_kind` and `os_error`; a nonzero exit includes `command_exit_code`, or
+`command_signal` when a Unix signal terminated the process. A permission failure
+while spawning the executable uses `reason=databricks_cli_spawn_failed` and
+`recovery=fix_input`. Check local executable permissions before retrying.
+
 When DAR recognizes the CLI's authentication or permission footer, `reason` is
 `uc_authentication_failed` or `uc_permission_denied`, with recovery `authorize` or
 `request_access` respectively. Both set `retryable: false`. The operation `code`
@@ -79,6 +85,13 @@ When checking a backend batch against the logical schema, the reader distinguish
 Other alignment failures retain `backend_logical_schema_mismatch`.
 The CLI omits `cause` when it cannot identify a typed reader error. These fields
 contain categories, not dependency messages or data values.
+
+If spill cleanup fails after a command error, the original diagnostic and its
+snapshot bindings remain at the top level. `cleanup_error` contains the cleanup
+failure's classification and recovery advice. If the query succeeded but cleanup
+failed, `spill_cleanup` is the primary error and no success completion is emitted.
+To keep the terminal record within its byte limit, `cleanup_error` may omit its
+optional `expected` and `hint` fields. Its classification and `recovery` remain.
 
 ### Correct rejected input
 
@@ -179,8 +192,9 @@ with the validated aliases and actual versions. Set each manifest entry's
 `table_version` from those bindings before retrying. For positional input, set
 `--table-version` from the `t` binding. If a binding includes `time_travel: false`,
 omit version selection for that object; a retry resolves its latest published
-snapshot and can read newer data. Snapshot-loading failures and cancellation omit
-these fields. A retry without pinned versions can read newer commits.
+snapshot and can read newer data. Snapshot-loading failures omit these fields.
+After interruption, bindings are included only if the worker returns them within
+the cleanup grace period. A retry without pinned versions can read newer commits.
 
 UC materialized views and streaming tables reject explicit versions with
 `uc_pipeline_time_travel_unsupported` and pinned replay manifests with
@@ -377,6 +391,9 @@ Table commands allow at most one additional second for cleanup, then all command
 allow at most one second for failure reporting. Pending initial or renewal
 Databricks children started by the CLI are terminated and reaped during cleanup.
 The CLI does not wait indefinitely for blocked worker threads during shutdown.
+If the worker reports a spill cleanup failure within that grace period, the
+interruption diagnostic includes `cleanup_error` and any returned bindings.
+The deadline, signal, or output failure still determines the primary error and exit status.
 For example, `dar --diagnostics=json scan ./table --table-version 0 --deadline-ms 1000`
 can leave partial stdout after expiry. Discard it; any permitted retry must keep
 the request, snapshot, authorization, and other limits, with a larger deadline

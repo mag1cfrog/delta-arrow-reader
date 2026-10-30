@@ -20,7 +20,22 @@ pub fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
     let mut fallback = "unknown";
     // External source implementations can contain cycles or arbitrarily deep chains.
     for _ in 0..16 {
-        if let Some(reader) = error.downcast_ref::<crate::DeltaReaderError>() {
+        if let Some(catalog) = error.downcast_ref::<crate::reader::CatalogCommitError>() {
+            return catalog.source_kind();
+        }
+        if let Some(reader) = error
+            .downcast_ref::<crate::DeltaReaderError>()
+            .or_else(|| {
+                error
+                    .downcast_ref::<Box<crate::DeltaReaderError>>()
+                    .map(AsRef::as_ref)
+            })
+            .or_else(|| {
+                error
+                    .downcast_ref::<std::sync::Arc<crate::DeltaReaderError>>()
+                    .map(AsRef::as_ref)
+            })
+        {
             match reader.source() {
                 Some(source) => {
                     error = source;
@@ -466,11 +481,33 @@ mod tests {
         }
 
         assert_eq!(source_kind(&Cycle), "source_chain_limit");
+        assert!(DeltaReaderError::find_source(&Cycle).is_none());
         let mut error: Box<dyn Error + Send + Sync> = Box::new(KernelError::MissingVersion);
         for _ in 0..32 {
             error = Box::new(ArrowError::ExternalError(error));
         }
         assert_eq!(source_kind(error.as_ref()), "source_chain_limit");
+        assert!(DeltaReaderError::find_source(error.as_ref()).is_none());
+    }
+
+    #[test]
+    fn reader_sources_survive_boxed_and_shared_error_boundaries() {
+        for wrapper in 0..3 {
+            let reader = DeltaReaderError::InvalidConfiguration {
+                reason: "invalid_test_option",
+            };
+            let source: Box<dyn Error + Send + Sync> = match wrapper {
+                0 => Box::new(reader),
+                1 => Box::new(Box::new(reader)),
+                _ => Box::new(std::sync::Arc::new(reader)),
+            };
+            let error = ArrowError::ExternalError(source);
+            assert_eq!(source_kind(&error), "invalid_configuration");
+            let cause = DeltaReaderError::find_source(&error)
+                .unwrap_or_else(|| panic!("reader cause missing"));
+            assert_eq!(cause.reason(), "invalid_test_option");
+        }
+        assert!(DeltaReaderError::find_source(&Unprintable).is_none());
     }
 
     #[cfg(feature = "datafusion")]

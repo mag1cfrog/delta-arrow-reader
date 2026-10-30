@@ -26,7 +26,9 @@ impl Error {
                 };
                 return Some(correction);
             }
-            Self::WithResolvedBindings { source, .. } => return source.input_correction(),
+            Self::WithResolvedBindings { source, .. } | Self::WithCleanupFailure { source, .. } => {
+                return source.input_correction();
+            }
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. }
             | Self::CredentialFileValidation { correction, .. } => return Some(correction.clone()),

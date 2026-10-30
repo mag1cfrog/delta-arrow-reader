@@ -92,6 +92,11 @@ pub(crate) enum Error {
         source: Box<Error>,
         bindings: Vec<Value>,
     },
+    #[snafu(display("{source} Cleanup also failed: {cleanup}"))]
+    WithCleanupFailure {
+        source: Box<Error>,
+        cleanup: Box<Error>,
+    },
     #[snafu(display("{source}"))]
     ArtifactPublicationInterrupted {
         source: Box<Error>,
@@ -135,6 +140,7 @@ impl Error {
             Self::ManifestAuthorizationInput { source, .. }
             | Self::CredentialFileValidation { source, .. }
             | Self::ArtifactPublicationInterrupted { source, .. }
+            | Self::WithCleanupFailure { source, .. }
             | Self::WithResolvedBindings { source, .. } => source.classification(),
             Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
                 phase: source.phase().as_str(),
@@ -253,6 +259,7 @@ impl Error {
             Self::ManifestAuthorizationInput { source, .. }
             | Self::CredentialFileValidation { source, .. }
             | Self::ArtifactPublicationInterrupted { source, .. }
+            | Self::WithCleanupFailure { source, .. }
             | Self::WithResolvedBindings { source, .. } => return source.exit_code(),
             Self::Argument { .. }
             | Self::TerminalOutput

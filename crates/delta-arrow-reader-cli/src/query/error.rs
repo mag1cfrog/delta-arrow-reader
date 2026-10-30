@@ -1,6 +1,6 @@
 //! Query failures, safe classifications, and exit statuses.
 
-use std::{error::Error as _, fmt, sync::Arc};
+use std::{error::Error as _, fmt};
 
 use datafusion::common::{DataFusionError, SchemaError};
 use delta_arrow_reader::{DeltaReaderError, error_source_kind};
@@ -36,27 +36,7 @@ impl fmt::Debug for QueryError {
 
 impl QueryError {
     pub(crate) fn reader_cause(&self) -> Option<&DeltaReaderError> {
-        let mut source = self.source()?;
-        // Match the core classifier's bound on external error chains.
-        for _ in 0..16 {
-            if let Some(reader) = source
-                .downcast_ref::<DeltaReaderError>()
-                .or_else(|| {
-                    source
-                        .downcast_ref::<Arc<DeltaReaderError>>()
-                        .map(AsRef::as_ref)
-                })
-                .or_else(|| {
-                    source
-                        .downcast_ref::<Box<DeltaReaderError>>()
-                        .map(AsRef::as_ref)
-                })
-            {
-                return Some(reader);
-            }
-            source = source.source()?;
-        }
-        None
+        DeltaReaderError::find_source(self.source()?)
     }
 
     pub(crate) fn classification(&self) -> ErrorClassification {

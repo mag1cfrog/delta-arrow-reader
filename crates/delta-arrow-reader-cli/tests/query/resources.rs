@@ -344,10 +344,14 @@ fn full_spill_storage_and_write_errors_fail_without_leaking_temporary_files() ->
 
 #[cfg(target_os = "linux")]
 #[test]
-fn cleanup_failure_prevents_success_and_preserves_snapshot_bindings() -> TestResult {
+fn cleanup_failure_prevents_success_and_preserves_the_query_error_and_bindings() -> TestResult {
     let fixture = large_table_fixture()?;
     let library = compile_spill_fault_library(fixture.directory.path())?;
-    for sql in ["SELECT count(*) FROM t", "SELECT nonexistent FROM t"] {
+    for sql in [
+        "SELECT count(*) FROM t",
+        "SELECT secret_missing FROM t",
+        "SELECT id / (id - id) FROM t",
+    ] {
         fs::write(fixture.directory.path().join("query.sql"), sql)?;
         let spill = tempfile::tempdir()?;
         let marker = spill.path().join("fault-was-injected");
@@ -360,13 +364,213 @@ fn cleanup_failure_prevents_success_and_preserves_snapshot_bindings() -> TestRes
         assert!(marker.exists());
         assert_eq!(output.status.code(), Some(1));
         let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "spill_cleanup");
-        assert_eq!(record["source_kind"], "permission_denied");
+        let cleanup = match sql {
+            "SELECT secret_missing FROM t" => {
+                assert_eq!(record["code"], "sql_planning");
+                assert_eq!(record["reason"], "column_not_found");
+                assert_eq!(record["source_kind"], "schema");
+                assert_eq!(record["argument"], "--sql-file");
+                assert_eq!(record["recovery"], "fix_input");
+                &record["cleanup_error"]
+            }
+            "SELECT id / (id - id) FROM t" => {
+                assert_eq!(record["code"], "sql_execution");
+                assert_eq!(record["source_kind"], "divide_by_zero");
+                &record["cleanup_error"]
+            }
+            _ => {
+                assert!(record.get("cleanup_error").is_none());
+                &record
+            }
+        };
+        assert_eq!(cleanup["code"], "spill_cleanup");
+        assert_eq!(cleanup["source_kind"], "permission_denied");
+        assert_eq!(cleanup["recovery"], "request_access");
         assert_eq!(
             record["bindings"],
             serde_json::json!([{"alias":"t","table_version":"0"}])
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains(spill.path().to_str().unwrap()));
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret_missing"));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cleanup_failure_with_large_snapshot_bindings_fits_the_diagnostic_limit() -> TestResult {
+    use serde_json::json;
+
+    let fixture = large_table_fixture()?;
+    let version = (u64::MAX - 1).to_string();
+    fs::rename(
+        fixture.table.join("_delta_log/00000000000000000000.json"),
+        fixture.table.join(format!("_delta_log/{version}.json")),
+    )?;
+    let tables: Vec<_> = (0..64)
+        .map(|index| {
+            json!({
+                "alias": format!("table_{index:057}"), "location": fixture.table,
+            })
+        })
+        .collect();
+    let manifest = fixture.directory.path().join("tables.json");
+    fs::write(
+        &manifest,
+        json!({"format_version": 1, "tables": tables}).to_string(),
+    )?;
+    fs::write(
+        fixture.directory.path().join("query.sql"),
+        format!("SELECT id FROM table_{:057} ORDER BY payload", 0),
+    )?;
+    let library = compile_spill_fault_library(fixture.directory.path())?;
+    let spill = tempfile::tempdir()?;
+    let marker = spill.path().join("fault-was-injected");
+    let output = run_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_dar"))
+            .args(["query", "--diagnostics=json", "--tables-file"])
+            .arg(&manifest)
+            .arg("--sql-file")
+            .arg(fixture.directory.path().join("query.sql"))
+            .args([
+                "--memory-limit-bytes",
+                "1",
+                "--spill-limit-bytes",
+                "268435456",
+                "--spill-dir",
+            ])
+            .arg(spill.path())
+            .env("LD_PRELOAD", library)
+            .env("DAR_STORAGE_FAULT_MARKER", &marker)
+            .env("DAR_STORAGE_FAULT_REMOVE", "1")
+            .env("DAR_STORAGE_FAULT_REMOVE_ERRNO", libc::ENOSPC.to_string()),
+    )?;
+    assert!(marker.exists());
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.len() <= 8192, "{} bytes", output.stderr.len());
+    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+    assert_eq!(record["reason"], "memory_limit_exceeded");
+    assert_eq!(record["cleanup_error"]["code"], "spill_cleanup");
+    assert_eq!(record["cleanup_error"]["source_kind"], "storage_full");
+    assert_eq!(record["cleanup_error"]["recovery"], "fix_input");
+    assert_eq!(
+        record["bindings"],
+        json!(
+            (0..64)
+                .map(|index| json!({
+                    "alias": format!("table_{index:057}"), "table_version": version,
+                }))
+                .collect::<Vec<_>>()
+        )
+    );
+    crate::capabilities::assert_output_matches_schema("diagnostic", &record);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn interruption_reports_spill_cleanup_failure_without_replacing_the_primary_error() -> TestResult {
+    use std::{
+        os::fd::AsRawFd,
+        process::Stdio,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    let fixture = SqlCommandFixture::new(
+        fixture_path("partitioned").join("table"),
+        "SELECT repeat('x', 1048576) AS text FROM t LIMIT 1",
+    )?;
+    let library = compile_spill_fault_library(fixture.directory.path())?;
+    for (stop, exit, code) in [
+        ("deadline", 1, "deadline_exceeded"),
+        ("-INT", 130, "command_cancelled"),
+        ("-TERM", 143, "command_cancelled"),
+        ("disconnect", 3, "output_write"),
+    ] {
+        let spill = tempfile::tempdir()?;
+        let marker = spill.path().join("fault-was-injected");
+        let (reader, writer) = std::io::pipe()?;
+        let observer = writer.try_clone()?;
+        let mut child = fixture
+            .command()
+            .args([
+                "--max-output-bytes",
+                "2097152",
+                "--spill-limit-bytes",
+                "268435456",
+                "--spill-dir",
+            ])
+            .arg(spill.path())
+            .args([
+                "--deadline-ms",
+                if stop == "deadline" { "2000" } else { "300000" },
+            ])
+            .env_remove("RUST_LOG")
+            .env("LD_PRELOAD", &library)
+            .env("DAR_STORAGE_FAULT_MARKER", &marker)
+            .env("DAR_STORAGE_FAULT_REMOVE", "1")
+            // Give the supervisor time to observe disconnect before cleanup returns.
+            .env("DAR_STORAGE_FAULT_REMOVE_DELAY_MS", "100")
+            .stdout(Stdio::from(writer))
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let started = Instant::now();
+        loop {
+            let mut available = 0;
+            // SAFETY: ioctl writes one integer for this live pipe descriptor.
+            assert_eq!(
+                unsafe { libc::ioctl(reader.as_raw_fd(), libc::FIONREAD, &mut available) },
+                0
+            );
+            let mut writable = libc::pollfd {
+                fd: observer.as_raw_fd(),
+                events: libc::POLLOUT,
+                revents: 0,
+            };
+            // SAFETY: poll examines this live write descriptor without blocking.
+            let ready = unsafe { libc::poll(&mut writable, 1, 0) };
+            assert!(ready >= 0);
+            if available >= 4096 && ready == 0 {
+                break;
+            }
+            if started.elapsed() > Duration::from_secs(10) || child.try_wait()?.is_some() {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("query did not reach blocked output".into());
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        if stop == "disconnect" {
+            drop(reader);
+        } else if stop != "deadline" {
+            assert!(
+                Command::new("kill")
+                    .args([stop, &child.id().to_string()])
+                    .status()?
+                    .success()
+            );
+        }
+        assert_eq!(
+            crate::wait_for_exit_or_kill(&mut child, Duration::from_secs(3))?.code(),
+            Some(exit)
+        );
+        let output = child.wait_with_output()?;
+        assert!(
+            marker.exists(),
+            "cleanup fault was not exercised for {stop}"
+        );
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], code, "{stop}: {record}");
+        assert_eq!(
+            record["cleanup_error"]["code"], "spill_cleanup",
+            "{stop}: {record}"
+        );
+        assert_eq!(record["cleanup_error"]["source_kind"], "permission_denied");
+        assert_eq!(record["cleanup_error"]["recovery"], "request_access");
+        assert!(record["hint"].as_str().unwrap().contains("Discard stdout"));
+        assert!(!String::from_utf8_lossy(&output.stderr).contains(spill.path().to_str().unwrap()));
+        crate::capabilities::assert_output_matches_schema("diagnostic", &record);
     }
     Ok(())
 }

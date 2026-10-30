@@ -15,6 +15,7 @@ pub(crate) mod predicate;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
+pub(crate) use catalog::CatalogCommitError;
 pub use catalog::{DeltaCatalogCommit, DeltaCatalogSnapshot};
 pub use credentials::DeltaStorageCredentialProvider;
 #[doc(hidden)]

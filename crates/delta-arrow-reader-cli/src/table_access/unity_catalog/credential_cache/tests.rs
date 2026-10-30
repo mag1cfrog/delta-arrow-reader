@@ -99,6 +99,7 @@ async fn failed_refresh_is_shared_without_fallback_or_repeated_subprocesses() {
             message: Some("Access refused.".into()),
             source_kind: Some("permission_denied"),
             message_truncated: false,
+            ..Default::default()
         },
     };
     for _ in 0..32 {

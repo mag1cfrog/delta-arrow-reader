@@ -275,7 +275,17 @@ fn public_errors_preserve_fields_and_validation_logs() -> PyResult<()> {
         ] {
             records.call_method0("clear")?;
             let error = assert_error::<DeltaReaderError>(session.call_method1("sql", (query,)));
-            assert_exception_fields(&error, "datafusion", "sql_planning", None, None)?;
+            assert_exception_fields(
+                &error,
+                "datafusion",
+                "sql_planning",
+                Some(if category == "schema" {
+                    "column_not_found"
+                } else {
+                    "sql_planning"
+                }),
+                Some(category),
+            )?;
             assert_eq!(records.len(), 1);
             let record = records.get_item(0)?;
             assert_eq!(record.getattr("levelno")?.extract::<u8>()?, 40);
@@ -300,6 +310,47 @@ fn public_errors_preserve_fields_and_validation_logs() -> PyResult<()> {
             assert!(!rendered.to_str()?.contains("secret"), "{rendered}");
         }
         temporary.call_method0("cleanup")?;
+        Ok(())
+    })
+}
+
+#[test]
+fn sql_exception_preserves_a_wrapped_reader_cause_without_formatting_dependency_text()
+-> PyResult<()> {
+    use datafusion::common::DataFusionError;
+    Python::initialize();
+    Python::attach(|py| {
+        let reader = ::delta_arrow_reader::DeltaScanExecutionOptions::new()
+            .with_parquet_metadata_size_hint_bytes(Some(0))
+            .unwrap_err();
+        let source = DataFusionError::Context(
+            "secret SQL".into(),
+            Box::new(DataFusionError::External(Box::new(Arc::new(reader)))),
+        );
+        let error = crate::diagnostics::SqlErrorDiagnostic {
+            code: "sql_planning",
+            source: &source,
+        }
+        .to_exception(py);
+        assert_exception_fields(
+            &error,
+            "datafusion",
+            "sql_planning",
+            Some("sql_planning"),
+            Some("invalid_configuration"),
+        )?;
+        let cause = error.value(py).getattr("cause")?;
+        assert!(cause.get_item("source_kind")?.is_none());
+        for (name, expected) in [
+            ("phase", "configuration"),
+            ("code", "invalid_configuration"),
+            (
+                "reason",
+                "parquet_metadata_size_hint_bytes_must_be_positive",
+            ),
+        ] {
+            assert_eq!(cause.get_item(name)?.extract::<String>()?, expected);
+        }
         Ok(())
     })
 }

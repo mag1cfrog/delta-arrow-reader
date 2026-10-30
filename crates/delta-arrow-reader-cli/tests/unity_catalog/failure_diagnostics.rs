@@ -171,3 +171,96 @@ fn long_unicode_explanations_remain_one_bounded_terminal_record() -> TestResult 
     assert!(record["upstream_message"].as_str().unwrap().len() <= 1024);
     Ok(())
 }
+
+#[test]
+fn local_command_failures_keep_io_and_exit_details_without_service_access_advice() -> TestResult {
+    let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
+    let executable = fixture.directory.path().join("databricks");
+    for (script, executable_mode, reason, kind, exit_code, signal) in [
+        (
+            "#!/bin/sh\nexit 0\n",
+            0o644,
+            "databricks_cli_spawn_failed",
+            Some("permission_denied"),
+            None,
+            None,
+        ),
+        (
+            "#!/bin/sh\nexit 42\n",
+            0o755,
+            "uc_table_request_failed",
+            None,
+            Some(42),
+            None,
+        ),
+        (
+            "#!/bin/sh\nkill -TERM $$\n",
+            0o755,
+            "uc_table_request_failed",
+            None,
+            None,
+            Some(15),
+        ),
+    ] {
+        fs::write(&executable, script)?;
+        fs::set_permissions(&executable, fs::Permissions::from_mode(executable_mode))?;
+        for json_diagnostics in [false, true] {
+            let mut command = fixture.inspect();
+            if json_diagnostics {
+                command.arg("--diagnostics=json");
+            }
+            let output = run_with_timeout(&mut command)?;
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = std::str::from_utf8(&output.stderr)?;
+            assert!(!text.contains(PROFILE), "{text}");
+            assert!(
+                !text.contains(fixture.directory.path().to_str().unwrap()),
+                "{text}"
+            );
+            assert!(!text.contains("uc_permission_denied"), "{text}");
+            assert!(!text.contains("administrator"), "{text}");
+            if json_diagnostics {
+                let record = super::super::diagnostics::assert_single_terminal_record(
+                    &output.stderr,
+                    "diagnostic",
+                );
+                assert_eq!(record["code"], "uc_table_request_failed");
+                assert_eq!(record["reason"], reason);
+                assert_eq!(record["source_kind"], json!(kind));
+                assert_eq!(record["command_exit_code"], json!(exit_code));
+                assert_eq!(record["command_signal"], json!(signal));
+                if kind.is_some() {
+                    assert_eq!(record["command_operation"], "spawn");
+                    assert_eq!(record["io_kind"], "PermissionDenied");
+                    assert!(record["os_error"].as_i64().is_some());
+                    assert_eq!(record["recovery"], "fix_input");
+                    assert!(
+                        record["hint"]
+                            .as_str()
+                            .unwrap()
+                            .contains("executable is runnable")
+                    );
+                } else {
+                    assert_eq!(record["command_operation"], "exit");
+                    assert!(record.get("io_kind").is_none());
+                }
+            } else {
+                assert!(text.contains(reason), "{text}");
+                if let Some(code) = exit_code {
+                    assert!(
+                        text.contains(&format!("command_exit_code={code}")),
+                        "{text}"
+                    );
+                }
+                if let Some(signal) = signal {
+                    assert!(text.contains(&format!("command_signal={signal}")), "{text}");
+                }
+                if kind.is_some() {
+                    assert!(text.contains("io_kind=PermissionDenied"), "{text}");
+                }
+            }
+        }
+    }
+    Ok(())
+}

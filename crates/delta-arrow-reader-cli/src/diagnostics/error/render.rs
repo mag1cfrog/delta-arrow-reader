@@ -17,6 +17,11 @@ impl Error {
         let mut manifest_field_path = None;
         loop {
             match source_error {
+                Self::WithCleanupFailure { source, cleanup } => {
+                    source.emit_tracing_diagnostic();
+                    cleanup.emit_tracing_diagnostic();
+                    return;
+                }
                 Self::ManifestAuthorizationInput { source, field_path } => {
                     source_error = source;
                     manifest_field_path = Some(field_path.as_str());
@@ -205,6 +210,16 @@ impl Error {
                 record = source.to_json_diagnostic();
                 record["bindings"] = bindings.clone().into();
             }
+            Self::WithCleanupFailure { source, cleanup } => {
+                record = source.to_json_diagnostic();
+                let mut cleanup = cleanup.to_json_diagnostic();
+                if let Some(fields) = cleanup.as_object_mut() {
+                    for field in ["format_version", "kind", "terminal"] {
+                        fields.remove(field);
+                    }
+                }
+                record["cleanup_error"] = cleanup;
+            }
             Self::ManifestAuthorizationInput { source, field_path } => {
                 record = source.to_json_diagnostic();
                 record["argument"] = "--tables-file".into();
@@ -223,6 +238,22 @@ impl Error {
             }
             Self::UnityCatalog { source } => {
                 if let Some(details) = source.command_error_details() {
+                    if let Some(operation) = details.operation {
+                        record["command_operation"] = operation.into();
+                    }
+                    if let Some(kind) = details.io_kind {
+                        record["io_kind"] = format!("{kind:?}").into();
+                        record["os_error"] = json!(details.os_error);
+                        if kind == std::io::ErrorKind::PermissionDenied {
+                            record["recovery"] = "fix_input".into();
+                        }
+                    }
+                    if let Some(code) = details.exit_code {
+                        record["command_exit_code"] = code.into();
+                    }
+                    if let Some(signal) = details.signal {
+                        record["command_signal"] = signal.into();
+                    }
                     if let Some(message) = &details.message {
                         record["upstream_message"] = message.clone().into();
                     }
@@ -276,12 +307,12 @@ impl Error {
                 record["field_path"] = path.into();
             }
         }
-        truncate_upstream_message_for_record_limit(&mut record);
+        limit_diagnostic_record(&mut record);
         record
     }
 }
 
-fn truncate_upstream_message_for_record_limit(record: &mut Value) {
+fn limit_diagnostic_record(record: &mut Value) {
     // Keep every binding's version and replay restriction, including 64 maximum-length aliases.
     let max_record_bytes: usize = if record["bindings"].as_array().is_some_and(|bindings| {
         bindings
@@ -292,6 +323,18 @@ fn truncate_upstream_message_for_record_limit(record: &mut Value) {
     } else {
         8 * 1024
     };
+    // Prefer the primary failure's details over optional cleanup guidance.
+    for field in ["expected", "hint"] {
+        if record.to_string().len() < max_record_bytes {
+            return;
+        }
+        if let Some(cleanup) = record
+            .get_mut("cleanup_error")
+            .and_then(Value::as_object_mut)
+        {
+            cleanup.remove(field);
+        }
+    }
     let Some(message) = record.get("upstream_message").and_then(Value::as_str) else {
         return;
     };
@@ -321,8 +364,84 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uc_excerpts_fit_with_all_snapshot_bindings_without_discarding_recovery() {
+    fn cleanup_diagnostics_fit_with_maximum_snapshot_bindings() {
         for (latest_only_count, limit) in [(0, 8192), (1, 10240), (64, 10240)] {
+            for kind in [
+                std::io::ErrorKind::StorageFull,
+                std::io::ErrorKind::QuotaExceeded,
+            ] {
+                let bindings: Vec<_> = (0..crate::input::MAX_TABLES)
+                    .map(|index| {
+                        let mut binding = json!({
+                            "alias": format!("table_{index:057}"),
+                            "table_version": (u64::MAX - 1).to_string(),
+                        });
+                        if index < latest_only_count {
+                            binding["time_travel"] = json!(false);
+                        }
+                        binding
+                    })
+                    .collect();
+                let source = Error::Query {
+                    source: crate::query::QueryError::Execution {
+                        source: datafusion::common::DataFusionError::ResourcesExhausted(
+                            "Failed to allocate additional memory".into(),
+                        ),
+                    },
+                };
+                let expected = source.to_json_diagnostic();
+                let cleanup = Error::Query {
+                    source: crate::query::QueryError::SpillCleanup {
+                        source: kind.into(),
+                    },
+                };
+                let expected_cleanup = cleanup.to_json_diagnostic();
+                let error = Error::WithCleanupFailure {
+                    source: Box::new(Error::WithResolvedBindings {
+                        source: Box::new(source),
+                        bindings: bindings.clone(),
+                    }),
+                    cleanup: Box::new(cleanup),
+                };
+                let mut record = error.to_json_diagnostic();
+                assert!(record.to_string().len() < limit, "{record}");
+                assert_eq!(record["bindings"], json!(bindings));
+                for field in [
+                    "phase",
+                    "code",
+                    "reason",
+                    "source_kind",
+                    "retryable",
+                    "recovery",
+                    "argument",
+                ] {
+                    assert_eq!(record["cleanup_error"][field], expected_cleanup[field]);
+                }
+                if latest_only_count > 0 {
+                    assert_eq!(record["cleanup_error"]["hint"], expected_cleanup["hint"]);
+                    assert_eq!(
+                        record["cleanup_error"]["expected"],
+                        expected_cleanup["expected"]
+                    );
+                }
+                let fields = record.as_object_mut().unwrap();
+                fields.remove("bindings");
+                fields.remove("cleanup_error");
+                assert_eq!(record, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn uc_excerpts_fit_with_all_snapshot_bindings_without_discarding_recovery() {
+        for (latest_only_count, limit, with_cleanup) in [
+            (0, 8192, false),
+            (1, 10240, false),
+            (64, 10240, false),
+            (0, 8192, true),
+            (1, 10240, true),
+            (64, 10240, true),
+        ] {
             for version in [0, u64::MAX] {
                 let bindings: Vec<_> = (0..crate::input::MAX_TABLES)
                     .map(|index| {
@@ -350,6 +469,18 @@ mod tests {
                         source: Box::new(Error::UnityCatalog { source }),
                         bindings: bindings.clone(),
                     };
+                    let error = if with_cleanup {
+                        Error::WithCleanupFailure {
+                            source: Box::new(error),
+                            cleanup: Box::new(Error::Query {
+                                source: crate::query::QueryError::SpillCleanup {
+                                    source: std::io::ErrorKind::StorageFull.into(),
+                                },
+                            }),
+                        }
+                    } else {
+                        error
+                    };
                     let mut record = error.to_json_diagnostic();
                     assert!(record.to_string().len() < limit);
                     assert_eq!(record["bindings"], json!(bindings));
@@ -357,6 +488,11 @@ mod tests {
                     assert_eq!(record["recovery"], "request_access");
                     assert_eq!(record["retryable"], false);
                     assert!(record["hint"].is_string());
+                    if with_cleanup {
+                        assert_eq!(record["cleanup_error"]["code"], "spill_cleanup");
+                        assert_eq!(record["cleanup_error"]["source_kind"], "storage_full");
+                        assert_eq!(record["cleanup_error"]["recovery"], "fix_input");
+                    }
                     let kept = record["upstream_message"].as_str().unwrap();
                     assert!(!kept.is_empty() && message.starts_with(kept));
                     if let Some(next) = message[kept.len()..].chars().next() {

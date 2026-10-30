@@ -3,7 +3,7 @@
 //! For example, a 403 keeps the service's explanation and identifies an access
 //! problem. An unfamiliar error keeps its explanation without guessing a cause.
 
-use std::{fmt, sync::LazyLock};
+use std::{fmt, io, process::Output, sync::LazyLock};
 
 use regex::Regex;
 use url::Url;
@@ -16,9 +16,36 @@ pub(crate) struct DatabricksErrorDetails {
     pub(crate) message: Option<String>,
     pub(crate) message_truncated: bool,
     pub(crate) source_kind: Option<&'static str>,
+    pub(crate) operation: Option<&'static str>,
+    pub(crate) io_kind: Option<io::ErrorKind>,
+    pub(crate) os_error: Option<i32>,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) signal: Option<i32>,
 }
 
 impl DatabricksErrorDetails {
+    pub(super) fn from_io(operation: &'static str, source: &io::Error) -> Self {
+        Self {
+            operation: Some(operation),
+            io_kind: Some(source.kind()),
+            os_error: source.raw_os_error(),
+            source_kind: Some(delta_arrow_reader::error_source_kind(source)),
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn from_output(output: &Output, profile: &str) -> Self {
+        let mut details = Self::from_stderr(&output.stderr, profile);
+        details.operation = Some("exit");
+        details.exit_code = output.status.code();
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            details.signal = output.status.signal();
+        }
+        details
+    }
+
     pub(super) fn from_stderr(stderr: &[u8], profile: &str) -> Self {
         let Ok(stderr) = std::str::from_utf8(stderr) else {
             return Self::default();
@@ -65,6 +92,14 @@ impl DatabricksErrorDetails {
     }
 
     pub(crate) fn hint(&self) -> Option<&'static str> {
+        if self.io_kind.is_some() {
+            return match (self.operation, self.io_kind) {
+                (Some("spawn"), Some(io::ErrorKind::PermissionDenied)) => Some(
+                    "Check that the Databricks CLI executable is runnable by this user, then retry.",
+                ),
+                _ => None,
+            };
+        }
         match self.source_kind {
             Some("unauthenticated") => {
                 Some("Check the login for the same Databricks CLI profile, then retry.")
@@ -98,6 +133,22 @@ impl fmt::Display for DatabricksErrorDetails {
             }
         } else {
             formatter.write_str(".")?;
+        }
+        if let Some(operation) = self.operation {
+            write!(formatter, " [command_operation={operation}")?;
+            if let Some(kind) = self.io_kind {
+                write!(formatter, " io_kind={kind:?}")?;
+            }
+            if let Some(code) = self.os_error {
+                write!(formatter, " os_error={code}")?;
+            }
+            if let Some(code) = self.exit_code {
+                write!(formatter, " command_exit_code={code}")?;
+            }
+            if let Some(signal) = self.signal {
+                write!(formatter, " command_signal={signal}")?;
+            }
+            formatter.write_str("]")?;
         }
         Ok(())
     }

@@ -49,7 +49,10 @@ static int deny_spill_removal(const char *path) {
     name = name ? name + 1 : path;
     if (!getenv("DAR_STORAGE_FAULT_REMOVE") || strncmp(name, "dar-query-", 10)) return 0;
     mark_fault();
-    errno = EACCES;
+    const char *delay = getenv("DAR_STORAGE_FAULT_REMOVE_DELAY_MS");
+    if (delay) usleep(atoi(delay) * 1000);
+    const char *error = getenv("DAR_STORAGE_FAULT_REMOVE_ERRNO");
+    errno = error ? atoi(error) : EACCES;
     return 1;
 }
 

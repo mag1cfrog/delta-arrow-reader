@@ -304,3 +304,43 @@ async fn catalog_tail_order_gaps_and_version_limit_are_validated() -> TestResult
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn invalid_catalog_commits_keep_safe_categories_through_snapshot_loading() -> TestResult {
+    let fixture = CatalogTableFixture::new()?;
+    for (case, expected) in [
+        (0, "invalid_catalog_commit_metadata"),
+        (1, "invalid_catalog_commit_metadata"),
+        (2, "invalid_catalog_commit_metadata"),
+        (3, "invalid_catalog_commit_metadata"),
+        (4, "invalid_catalog_commit_filename"),
+        (5, "catalog_commit_version_mismatch"),
+    ] {
+        let mut snapshot = fixture.catalog_snapshot();
+        let commit = &mut snapshot.commits[0];
+        match case {
+            0 => commit.file_name = "../secret-catalog-path?token=secret".into(),
+            1 => commit.file_size = 0,
+            2 => commit.last_modified_ms = -1,
+            3 => commit.version = snapshot.max_version + 1,
+            4 => commit.file_name = "secret-invalid-filename.json".into(),
+            _ => {
+                commit.file_name =
+                    "00000000000000000002.aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.json".into()
+            }
+        }
+        let error = fixture
+            .builder()
+            .with_catalog_snapshot(snapshot)
+            .load_table()
+            .await
+            .unwrap_err();
+        assert_eq!(error.phase().as_str(), "snapshot");
+        assert_eq!(error.code(), "snapshot_load");
+        assert_eq!(error.reason(), "snapshot_load_failed");
+        assert_eq!(error.source_kind(), Some(expected));
+        assert!(!format!("{error} {error:?}").contains("secret"));
+        assert!(error.source().is_some());
+    }
+    Ok(())
+}

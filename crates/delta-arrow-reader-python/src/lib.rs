@@ -48,12 +48,15 @@ Messages omit sensitive details such as table paths and storage credentials.
 Attributes:
     phase: The stage that failed, such as `schema` or `datafusion`.
     code: The error category, such as `schema_conversion` or `sql_planning`.
-    reason: The Core failure reason, or `None` for a binding-owned failure.
-    source_kind: The safe Core source category, or `None` when unavailable.
+    reason: The safe failure reason, or `None` when unavailable.
+    source_kind: The safe source category, or `None` when unavailable.
+    cause: A reader failure inside SQL, with `phase`, `code`, `reason`, and
+        `source_kind` entries, or `None` when no typed reader cause is available.
 
 Invalid Python arguments can raise built-in exceptions such as `TypeError`
 or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
-exceptions; catch those around iteration or `read_all()` as well.
+exceptions; catch those around iteration or `read_all()` as well. Their messages
+retain safe source categories and reader causes; they do not carry these attributes.
 "#
 );
 
@@ -68,6 +71,7 @@ fn core_error_to_python_exception<T: PyTypeInfo>(
         .and_then(|()| value.setattr("code", error.code()))
         .and_then(|()| value.setattr("reason", error.reason()))
         .and_then(|()| value.setattr("source_kind", error.source_kind()))
+        .and_then(|()| value.setattr("cause", py.None()))
     {
         return error;
     }
@@ -82,6 +86,7 @@ fn new_binding_exception(py: Python<'_>, message: String, phase: &str, code: &st
         .and_then(|()| value.setattr("code", code))
         .and_then(|()| value.setattr("reason", py.None()))
         .and_then(|()| value.setattr("source_kind", py.None()))
+        .and_then(|()| value.setattr("cause", py.None()))
     {
         return error;
     }

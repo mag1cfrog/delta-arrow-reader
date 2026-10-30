@@ -339,6 +339,28 @@ impl DeltaReaderError {
     pub fn source_kind(&self) -> Option<&'static str> {
         self.source().map(source_kind)
     }
+
+    /// Finds the first reader error in a source chain, including boxed or shared errors.
+    ///
+    /// Inspects at most 16 links without formatting messages. Returns `None` for
+    /// chains without a reader error or when the traversal limit is reached.
+    pub fn find_source<'a>(mut source: &'a (dyn std::error::Error + 'static)) -> Option<&'a Self> {
+        for _ in 0..16 {
+            if let Some(reader) = source
+                .downcast_ref::<Self>()
+                .or_else(|| source.downcast_ref::<Box<Self>>().map(AsRef::as_ref))
+                .or_else(|| {
+                    source
+                        .downcast_ref::<std::sync::Arc<Self>>()
+                        .map(AsRef::as_ref)
+                })
+            {
+                return Some(reader);
+            }
+            source = source.source()?;
+        }
+        None
+    }
 }
 
 impl fmt::Debug for DeltaReaderError {

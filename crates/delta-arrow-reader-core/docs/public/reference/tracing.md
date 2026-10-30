@@ -468,6 +468,7 @@ category, such as `invalid_projection`.
 | Source family | Categories |
 | --- | --- |
 | Delta snapshot and log | `missing_version`, `missing_metadata`, `missing_protocol`, `missing_metadata_and_protocol`, `invalid_protocol`, `invalid_checkpoint`, `invalid_log_path`, `missing_log_history` |
+| Catalog commit validation | `invalid_catalog_commit_metadata`, `invalid_catalog_commit_filename`, `catalog_commit_version_mismatch` |
 | Schema and values | `schema`, `missing_column`, `unexpected_column_type`, `invalid_partition_values`, `missing_data`, `engine_data_type`, `type_extraction`, `invalid_scalar`, `invalid_decimal`, `invalid_struct_data`, `invalid_expression`, `invalid_column_mapping`, `invalid_utf8`, `invalid_integer`, `invalid_interval`, `literal_transform`, `invalid_statistics` |
 | Storage and configuration | `not_found`, `permission_denied`, `unauthenticated`, `invalid_path`, `invalid_table_location`, `invalid_storage_configuration`, `already_exists`, `precondition`, `not_modified`, `unsupported` |
 | I/O and transport | `timeout`, `connection_refused`, `connection_reset`, `connection_aborted`, `not_connected`, `broken_pipe`, `unexpected_eof`, `invalid_data`, `invalid_input`, `interrupted`, `out_of_memory`, `storage_full`, `storage_quota_exceeded`, `http_connect`, `http_request`, `http_decode`, `http_parse`, `connection_closed`, `http_cancelled` |

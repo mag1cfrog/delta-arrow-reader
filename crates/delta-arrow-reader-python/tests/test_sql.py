@@ -2,13 +2,14 @@ from collections import defaultdict
 from functools import partial
 import gc
 import importlib.util
+import logging
 from pathlib import Path
 from threading import Event
 import unittest
 
 import pyarrow as pa
 
-from delta_arrow_reader import DeltaTable, Session
+from delta_arrow_reader import DeltaReaderError, DeltaTable, Session
 
 
 class SqlTests(unittest.TestCase):
@@ -26,6 +27,46 @@ class SqlTests(unittest.TestCase):
         with self.session.sql(sql) as reader:
             self.assertIsInstance(reader, pa.RecordBatchReader)
             return reader.read_all().to_pylist()
+
+    def test_planning_errors_keep_categories_with_logging_disabled(self):
+        logger = logging.getLogger("delta_arrow_reader")
+        self.addCleanup(setattr, logger, "disabled", logger.disabled)
+        logger.disabled = True
+        for query, reason, category in [
+            ("SELEC private_query FROM events", "sql_planning", "sql_parse"),
+            ("SELECT private_column FROM events", "column_not_found", "schema"),
+            ("SELECT id FROM events a JOIN events b ON a.id = b.id", "ambiguous_column", "schema"),
+        ]:
+            with self.subTest(reason=reason):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    self.session.sql(query)
+                error = caught.exception
+                self.assertEqual((error.phase, error.code, error.reason, error.source_kind),
+                                 ("datafusion", "sql_planning", reason, category))
+                self.assertIsNone(error.cause)
+                self.assertIsNone(error.__cause__)
+                self.assertIsNone(error.__context__)
+                self.assertNotIn("private_", str(error) + repr(vars(error)))
+
+    def test_operator_errors_cross_arrow_boundary_with_logging_disabled(self):
+        logger = logging.getLogger("delta_arrow_reader")
+        self.addCleanup(setattr, logger, "disabled", logger.disabled)
+        logger.disabled = True
+        for query, category in [
+            ("SELECT id / (id - id) FROM events", "divide_by_zero"),
+            ("SELECT CAST('private_literal' AS INT)", "arrow_cast"),
+        ]:
+            with self.subTest(category=category), self.session.sql(query) as reader:
+                messages = []
+                for _ in range(2):
+                    with self.assertRaises(pa.ArrowInvalid) as caught:
+                        reader.read_next_batch()
+                    messages.append(str(caught.exception))
+                self.assertEqual(messages[0], messages[1])
+                self.assertIn("code=sql_execution", messages[0])
+                self.assertIn(f"source_kind={category}", messages[0])
+                self.assertNotIn("private_", messages[0])
+                self.assertNotIn("cause={", messages[0])
 
     def test_installed_sql_join_aggregate_and_order(self):
         self.session.register_table("details", self.table)
