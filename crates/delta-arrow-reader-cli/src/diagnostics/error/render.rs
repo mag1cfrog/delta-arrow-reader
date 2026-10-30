@@ -17,6 +17,11 @@ impl Error {
         let mut manifest_field_path = None;
         loop {
             match source_error {
+                Self::WithCleanupFailure { source, cleanup } => {
+                    source.emit_tracing_diagnostic();
+                    cleanup.emit_tracing_diagnostic();
+                    return;
+                }
                 Self::ManifestAuthorizationInput { source, field_path } => {
                     source_error = source;
                     manifest_field_path = Some(field_path.as_str());
@@ -205,6 +210,16 @@ impl Error {
                 record = source.to_json_diagnostic();
                 record["bindings"] = bindings.clone().into();
             }
+            Self::WithCleanupFailure { source, cleanup } => {
+                record = source.to_json_diagnostic();
+                let mut cleanup = cleanup.to_json_diagnostic();
+                if let Some(fields) = cleanup.as_object_mut() {
+                    for field in ["format_version", "kind", "terminal"] {
+                        fields.remove(field);
+                    }
+                }
+                record["cleanup_error"] = cleanup;
+            }
             Self::ManifestAuthorizationInput { source, field_path } => {
                 record = source.to_json_diagnostic();
                 record["argument"] = "--tables-file".into();
@@ -223,6 +238,22 @@ impl Error {
             }
             Self::UnityCatalog { source } => {
                 if let Some(details) = source.command_error_details() {
+                    if let Some(operation) = details.operation {
+                        record["command_operation"] = operation.into();
+                    }
+                    if let Some(kind) = details.io_kind {
+                        record["io_kind"] = format!("{kind:?}").into();
+                        record["os_error"] = json!(details.os_error);
+                        if kind == std::io::ErrorKind::PermissionDenied {
+                            record["recovery"] = "fix_input".into();
+                        }
+                    }
+                    if let Some(code) = details.exit_code {
+                        record["command_exit_code"] = code.into();
+                    }
+                    if let Some(signal) = details.signal {
+                        record["command_signal"] = signal.into();
+                    }
                     if let Some(message) = &details.message {
                         record["upstream_message"] = message.clone().into();
                     }

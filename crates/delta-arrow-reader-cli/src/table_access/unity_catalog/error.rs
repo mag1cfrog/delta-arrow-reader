@@ -24,8 +24,8 @@ pub(crate) enum Error {
         "Install the Databricks CLI and make the databricks executable available on PATH, then retry with the same --databricks-profile or manifest databricks_profile."
     ))]
     DatabricksCliNotFound,
-    #[snafu(display("Could not run the Databricks CLI."))]
-    DatabricksCommandFailed,
+    #[snafu(display("Could not run the Databricks CLI{details}"))]
+    DatabricksCommandFailed { details: DatabricksErrorDetails },
     #[snafu(display("The Databricks CLI request timed out."))]
     DatabricksCommandTimedOut,
     #[snafu(display("The Databricks CLI returned an invalid or oversized response."))]
@@ -69,7 +69,7 @@ impl Error {
             Self::InvalidStorageOptions => "invalid_uc_storage_options",
             Self::MissingS3Region => "uc_s3_region_required",
             Self::DatabricksCliNotFound => "databricks_cli_missing",
-            Self::DatabricksCommandFailed => "databricks_cli_failed",
+            Self::DatabricksCommandFailed { .. } => "databricks_cli_failed",
             Self::DatabricksCommandTimedOut => "databricks_cli_timeout",
             Self::InvalidDatabricksResponse => "invalid_databricks_response",
             Self::TableMetadataRequestFailed { .. } => "uc_table_request_failed",
@@ -87,6 +87,7 @@ impl Error {
     pub(crate) fn command_error_details(&self) -> Option<&DatabricksErrorDetails> {
         match self {
             Self::TableMetadataRequestFailed { details }
+            | Self::DatabricksCommandFailed { details }
             | Self::ReadCredentialsRequestFailed { details } => Some(details),
             _ => None,
         }
@@ -98,6 +99,16 @@ impl Error {
     }
 
     pub(crate) fn reason(&self) -> &'static str {
+        if let Some(details) = self.command_error_details() {
+            match details.operation {
+                Some("spawn") => return "databricks_cli_spawn_failed",
+                Some("read_stdout") => return "databricks_cli_stdout_read_failed",
+                Some("read_stderr") => return "databricks_cli_stderr_read_failed",
+                Some("wait") => return "databricks_cli_wait_failed",
+                Some("worker") => return "databricks_cli_worker_failed",
+                _ => {}
+            }
+        }
         match self.source_kind() {
             Some("unauthenticated") => "uc_authentication_failed",
             Some("permission_denied") => "uc_permission_denied",

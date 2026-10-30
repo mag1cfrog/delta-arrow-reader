@@ -344,10 +344,14 @@ fn full_spill_storage_and_write_errors_fail_without_leaking_temporary_files() ->
 
 #[cfg(target_os = "linux")]
 #[test]
-fn cleanup_failure_prevents_success_and_preserves_snapshot_bindings() -> TestResult {
+fn cleanup_failure_prevents_success_and_preserves_the_query_error_and_bindings() -> TestResult {
     let fixture = large_table_fixture()?;
     let library = compile_spill_fault_library(fixture.directory.path())?;
-    for sql in ["SELECT count(*) FROM t", "SELECT nonexistent FROM t"] {
+    for sql in [
+        "SELECT count(*) FROM t",
+        "SELECT secret_missing FROM t",
+        "SELECT id / (id - id) FROM t",
+    ] {
         fs::write(fixture.directory.path().join("query.sql"), sql)?;
         let spill = tempfile::tempdir()?;
         let marker = spill.path().join("fault-was-injected");
@@ -360,13 +364,34 @@ fn cleanup_failure_prevents_success_and_preserves_snapshot_bindings() -> TestRes
         assert!(marker.exists());
         assert_eq!(output.status.code(), Some(1));
         let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "spill_cleanup");
-        assert_eq!(record["source_kind"], "permission_denied");
+        let cleanup = match sql {
+            "SELECT secret_missing FROM t" => {
+                assert_eq!(record["code"], "sql_planning");
+                assert_eq!(record["reason"], "column_not_found");
+                assert_eq!(record["source_kind"], "schema");
+                assert_eq!(record["argument"], "--sql-file");
+                assert_eq!(record["recovery"], "fix_input");
+                &record["cleanup_error"]
+            }
+            "SELECT id / (id - id) FROM t" => {
+                assert_eq!(record["code"], "sql_execution");
+                assert_eq!(record["source_kind"], "divide_by_zero");
+                &record["cleanup_error"]
+            }
+            _ => {
+                assert!(record.get("cleanup_error").is_none());
+                &record
+            }
+        };
+        assert_eq!(cleanup["code"], "spill_cleanup");
+        assert_eq!(cleanup["source_kind"], "permission_denied");
+        assert_eq!(cleanup["recovery"], "request_access");
         assert_eq!(
             record["bindings"],
             serde_json::json!([{"alias":"t","table_version":"0"}])
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains(spill.path().to_str().unwrap()));
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret_missing"));
     }
     Ok(())
 }

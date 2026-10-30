@@ -247,3 +247,46 @@ fn output_schemas_reject_wrong_known_field_types_and_missing_scan_counts() {
     record.as_object_mut().unwrap().remove("rows");
     assert!(!validator.is_valid(&record), "v2 query requires rows");
 }
+
+#[test]
+fn diagnostic_schema_validates_cleanup_and_command_details() {
+    let schema = diagnostic_schema();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let mut record = schema["examples"][0].clone();
+    let cleanup = json!({
+        "phase": "datafusion", "code": "spill_cleanup", "reason": "spill_cleanup",
+        "source_kind": "permission_denied", "retryable": false, "recovery": "request_access",
+    });
+    record["cleanup_error"] = cleanup.clone();
+    record["command_operation"] = json!("spawn");
+    record["io_kind"] = json!("PermissionDenied");
+    record["os_error"] = json!(13);
+    record["command_exit_code"] = json!(42);
+    record["command_signal"] = json!(15);
+    assert!(validator.is_valid(&record));
+    for field in [
+        "command_operation",
+        "command_exit_code",
+        "command_signal",
+        "cleanup_error",
+    ] {
+        let mut invalid = record.clone();
+        invalid[field] = json!([]);
+        assert!(!validator.is_valid(&invalid));
+    }
+    for field in [
+        "phase",
+        "code",
+        "reason",
+        "source_kind",
+        "retryable",
+        "recovery",
+    ] {
+        let mut invalid = record.clone();
+        invalid["cleanup_error"]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(!validator.is_valid(&invalid));
+    }
+}

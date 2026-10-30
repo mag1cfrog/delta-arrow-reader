@@ -324,3 +324,65 @@ fn snafu_retains_io_sources_without_exposing_them_in_diagnostics() {
     assert!(!text.contains("secret"));
     assert_eq!(format!("{error:?}"), error.to_string());
 }
+
+#[test]
+fn cleanup_failure_keeps_primary_cause_exit_status_and_text_diagnostics() {
+    use datafusion::common::DataFusionError;
+    for source in [
+        Error::Query {
+            source: query::QueryError::Execution {
+                source: DataFusionError::External(Box::new(
+                    delta_arrow_reader::DeltaScanExecutionOptions::new()
+                        .with_parquet_metadata_size_hint_bytes(Some(0))
+                        .unwrap_err(),
+                )),
+            },
+        },
+        Error::Output {
+            source: io::Error::new(io::ErrorKind::BrokenPipe, "secret output path"),
+        },
+    ] {
+        let expected = source.to_json_diagnostic();
+        let expected_exit = source.exit_code();
+        let bindings: Vec<_> = (0..input::MAX_TABLES)
+            .map(|index| {
+                json!({
+                    "alias": format!("table_{index:057}"), "table_version": u64::MAX.to_string(),
+                })
+            })
+            .collect();
+        let error = Error::WithCleanupFailure {
+            source: Box::new(Error::WithResolvedBindings {
+                source: Box::new(source),
+                bindings: bindings.clone(),
+            }),
+            cleanup: Box::new(Error::Query {
+                source: query::QueryError::SpillCleanup {
+                    source: io::Error::new(io::ErrorKind::PermissionDenied, "secret spill path"),
+                },
+            }),
+        };
+        assert_eq!(error.exit_code(), expected_exit);
+        let mut record = error.to_json_diagnostic();
+        assert!(record.to_string().len() < 8192);
+        let schema = crate::capabilities::DiscoverySchema::Diagnostic.schema_document();
+        assert!(
+            jsonschema::validator_for(&schema["schema"])
+                .unwrap()
+                .is_valid(&record)
+        );
+        assert_eq!(record["cleanup_error"]["code"], "spill_cleanup");
+        assert_eq!(record["cleanup_error"]["source_kind"], "permission_denied");
+        assert_eq!(record["cleanup_error"]["recovery"], "request_access");
+        assert_eq!(record["bindings"], json!(bindings));
+        let fields = record.as_object_mut().unwrap();
+        fields.remove("cleanup_error");
+        fields.remove("bindings");
+        assert_eq!(record, expected);
+        let text = diagnostics::capture_tracing_output("warn", || error.emit_tracing_diagnostic());
+        assert!(text.contains(expected["code"].as_str().unwrap()), "{text}");
+        assert!(text.contains("spill_cleanup"), "{text}");
+        assert!(text.contains("permission_denied"), "{text}");
+        assert!(!format!("{text} {error:?} {record}").contains("secret"));
+    }
+}

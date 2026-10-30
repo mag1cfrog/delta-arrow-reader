@@ -60,20 +60,19 @@ pub(super) fn run(
     let result = if let Some(directory) = spill_directory {
         match crate::query::resources::remove_spill_files(directory) {
             Ok(()) => result,
-            Err(source) => {
-                let bindings = match result {
-                    Ok(completion) => completion["bindings"].as_array().cloned(),
-                    Err(Error::WithResolvedBindings { bindings, .. }) => Some(bindings),
-                    _ => None,
-                };
-                Err(match bindings {
+            Err(cleanup) => Err(match result {
+                Err(source) => Error::WithCleanupFailure {
+                    source: Box::new(source),
+                    cleanup: Box::new(cleanup),
+                },
+                Ok(completion) => match completion["bindings"].as_array().cloned() {
                     Some(bindings) => Error::WithResolvedBindings {
-                        source: Box::new(source),
+                        source: Box::new(cleanup),
                         bindings,
                     },
-                    None => source,
-                })
-            }
+                    None => cleanup,
+                },
+            }),
         }
     } else {
         result

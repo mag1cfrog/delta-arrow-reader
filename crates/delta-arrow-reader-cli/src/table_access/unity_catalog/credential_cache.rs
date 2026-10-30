@@ -50,8 +50,16 @@ impl TableCredentialRefresher {
         );
         task.join_next()
             .await
-            .ok_or(Error::DatabricksCommandFailed)?
-            .map_err(|_| Error::DatabricksCommandFailed)?
+            .ok_or_else(|| Error::DatabricksCommandFailed {
+                details: Default::default(),
+            })?
+            .map_err(|source| Error::DatabricksCommandFailed {
+                details: databricks_cli::DatabricksErrorDetails {
+                    operation: Some("worker"),
+                    source_kind: Some(delta_arrow_reader::error_source_kind(&source)),
+                    ..Default::default()
+                },
+            })?
     }
 }
 

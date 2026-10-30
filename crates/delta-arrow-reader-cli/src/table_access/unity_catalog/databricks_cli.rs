@@ -114,13 +114,18 @@ pub(super) async fn generate_read_credentials(
 }
 
 /// Caps each captured stream; the extra byte distinguishes an oversized response from EOF.
-async fn read_bounded_output(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, Error> {
+async fn read_bounded_output(
+    reader: impl AsyncRead + Unpin,
+    operation: &'static str,
+) -> Result<Vec<u8>, Error> {
     let mut bytes = Vec::new();
     reader
         .take(MAX_COMMAND_OUTPUT_BYTES + 1)
         .read_to_end(&mut bytes)
         .await
-        .map_err(|_| Error::DatabricksCommandFailed)?;
+        .map_err(|source| Error::DatabricksCommandFailed {
+            details: DatabricksErrorDetails::from_io(operation, &source),
+        })?;
     if bytes.len() as u64 > MAX_COMMAND_OUTPUT_BYTES {
         return Err(Error::InvalidDatabricksResponse);
     }
@@ -139,15 +144,20 @@ async fn run_databricks_cli(
         run_command_with_timeout(&mut command, DATABRICKS_COMMAND_TIMEOUT).await
     })
     .await
-    .unwrap_or(Err(Error::DatabricksCommandFailed))
+    .map_err(|source| {
+        request_failure(DatabricksErrorDetails {
+            operation: Some("worker"),
+            source_kind: Some(delta_arrow_reader::error_source_kind(&source)),
+            ..Default::default()
+        })
+    })?
     .map_err(|error| match error {
-        Error::DatabricksCommandFailed => request_failure(DatabricksErrorDetails::default()),
+        Error::DatabricksCommandFailed { details } => request_failure(details),
         error => error,
     })?;
     if !output.status.success() {
-        return Err(request_failure(DatabricksErrorDetails::from_stderr(
-            &output.stderr,
-            profile,
+        return Err(request_failure(DatabricksErrorDetails::from_output(
+            &output, profile,
         )));
     }
     Ok(output.stdout)
@@ -175,21 +185,35 @@ async fn run_command_with_timeout(
             if error.kind() == io::ErrorKind::NotFound {
                 Error::DatabricksCliNotFound
             } else {
-                Error::DatabricksCommandFailed
+                Error::DatabricksCommandFailed {
+                    details: DatabricksErrorDetails::from_io("spawn", &error),
+                }
             }
         })?;
-    let stdout = child.stdout.take().ok_or(Error::DatabricksCommandFailed)?;
-    let stderr = child.stderr.take().ok_or(Error::DatabricksCommandFailed)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| Error::DatabricksCommandFailed {
+            details: Default::default(),
+        })?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| Error::DatabricksCommandFailed {
+            details: Default::default(),
+        })?;
     let read_response = tokio::time::timeout(timeout, async {
         // Drain both pipes while waiting so a full stderr pipe cannot block the child.
         let (stdout, stderr, status) = tokio::try_join!(
-            read_bounded_output(stdout),
-            read_bounded_output(stderr),
+            read_bounded_output(stdout, "read_stdout"),
+            read_bounded_output(stderr, "read_stderr"),
             async {
                 child
                     .wait()
                     .await
-                    .map_err(|_| Error::DatabricksCommandFailed)
+                    .map_err(|source| Error::DatabricksCommandFailed {
+                        details: DatabricksErrorDetails::from_io("wait", &source),
+                    })
             }
         )?;
         Ok(Output {

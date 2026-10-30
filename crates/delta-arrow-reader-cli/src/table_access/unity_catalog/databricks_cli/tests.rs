@@ -84,7 +84,7 @@ async fn subprocess_output_is_bounded_and_timeout_reaps_child() {
     assert!(!status.success(), "timed-out child was not reaped");
     let bytes = vec![b'x'; MAX_COMMAND_OUTPUT_BYTES as usize + 1];
     assert_eq!(
-        read_bounded_output(bytes.as_slice()).await,
+        read_bounded_output(bytes.as_slice(), "read_stdout").await,
         Err(Error::InvalidDatabricksResponse)
     );
     let output = run_command_with_timeout(
@@ -96,4 +96,40 @@ async fn subprocess_output_is_bounded_and_timeout_reaps_child() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     assert_eq!(output.stderr, b"secret-sentinel");
+}
+
+#[tokio::test]
+async fn pipe_read_failures_keep_operation_and_safe_io_category() {
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
+    struct FailingPipe;
+    impl AsyncRead for FailingPipe {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            _: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "secret pipe path and token",
+            )))
+        }
+    }
+    for (operation, reason) in [
+        ("read_stdout", "databricks_cli_stdout_read_failed"),
+        ("read_stderr", "databricks_cli_stderr_read_failed"),
+    ] {
+        let error = read_bounded_output(FailingPipe, operation)
+            .await
+            .unwrap_err();
+        assert_eq!(error.reason(), reason);
+        assert_eq!(error.source_kind(), Some("broken_pipe"));
+        let details = error.command_error_details().unwrap();
+        assert_eq!(details.operation, Some(operation));
+        assert_eq!(details.io_kind, Some(io::ErrorKind::BrokenPipe));
+        assert_eq!(details.os_error, None);
+        assert!(!format!("{error} {error:?}").contains("secret"));
+    }
 }
