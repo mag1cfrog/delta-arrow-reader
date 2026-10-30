@@ -197,8 +197,11 @@ fn redact_credential_assignments(message: &str) -> Option<String> {
             single_quoted.find(value).map(|quoted| quoted.end())
         };
         let value_bytes = value_bytes.filter(|end| {
-            value[*end..].chars().next().is_none_or(|next| {
+            let suffix = &value[*end..];
+            suffix.chars().next().is_none_or(|next| {
                 next.is_whitespace() || matches!(next, ',' | ';' | '}' | ']' | ')')
+            }) || suffix.strip_prefix('.').is_some_and(|after_period| {
+                after_period.chars().next().is_none_or(char::is_whitespace)
             })
         });
         // An ambiguous/unquoted value can include separators or nested data; omit the remainder.
@@ -413,6 +416,7 @@ mod tests {
             "Error: password=[redacted]fixture-second",
             "Error: password=\"[redacted]\"fixture-second",
             "Error: password='[redacted]'fixture-second",
+            "Error: password=\"[redacted]\".fixture-second",
             r#"Error: google_credentials={"refresh_token":"fixture-first,fixture-second"}"#,
             r#"Error: google_credentials={"client_secret":"fixture-first;fixture-second"}"#,
             "Error: google_credentials={\n\"opaque\":\"fixture-first\",\n\"nested\":[{\"opaque\":\"fixture-second\"}]}\nNext action: check login.",
@@ -427,5 +431,12 @@ mod tests {
             message.contains(r#""access_token":[redacted]"#),
             "{message}"
         );
+        for value in [r#""fixture-first""#, "'fixture-first'"] {
+            let explanation = ". EXTERNAL_USE_SCHEMA is required on catalog.schema.";
+            let message = parse(&format!("Error: Rejected token={value}{explanation}"))
+                .message
+                .unwrap();
+            assert_eq!(message, format!("Rejected token=[redacted]{explanation}"));
+        }
     }
 }
