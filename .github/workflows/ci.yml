@@ -13,7 +13,7 @@ env:
   # Keep Python's pkg-config path from invalidating the bundled AWS-LC build.
   AWS_LC_SYS_USE_SYSTEM: "0"
   # Bump when cache warming adds build variants without dependency changes.
-  CI_TARGET_CACHE_VERSION: "3"
+  CI_TARGET_CACHE_VERSION: "4"
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_GHA_RW_MODE: READ_ONLY
   RUSTC_WRAPPER: sccache
@@ -148,6 +148,9 @@ jobs:
         run: cargo test --locked --all-features
       - name: Test CLI
         if: needs.changes.outputs.cli == 'true'
+        env: &cli-test-concurrency
+          # Let pipe, timeout, and credential-expiry waits overlap on small runners.
+          RUST_TEST_THREADS: "8"
         run: cargo test --locked -p delta-arrow-reader-cli
       - name: Test offline Unity Catalog validation
         if: needs.changes.outputs.tooling == 'true'
@@ -411,6 +414,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
       - run: cargo test --locked -p delta-arrow-reader-cli
+        env: *cli-test-concurrency
 
   release-approval:
     name: Approve release checks
