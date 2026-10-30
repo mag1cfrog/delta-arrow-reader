@@ -17,13 +17,22 @@
   <a href="https://github.com/mag1cfrog/delta-arrow-reader/actions/workflows/docs.yml?query=branch%3Amain%20event%3Apush"><img alt="Documentation build and deployment" src="https://img.shields.io/github/actions/workflow/status/mag1cfrog/delta-arrow-reader/docs.yml?branch=main&amp;event=push&amp;style=flat-square&amp;label=docs"></a>
 </p>
 
-Delta Arrow Reader is a fast, memory-efficient Delta Lake reader.
+Delta Arrow Reader reads Delta Lake tables from your terminal, Python, or Rust.
+
+> **Bring your Databricks login.**
+>
+> Use your existing Databricks CLI profile to read Unity Catalog tables and run
+> SQL locally. No separate cloud credentials to configure, no cluster or SQL
+> warehouse to start.
+>
+> See the [Unity Catalog guide](https://mag1cfrog.github.io/delta-arrow-reader/unity-catalog/)
+> for access requirements and supported tables.
 
 - **Get results faster.** Spend less time downloading and processing data your
   query doesn't need.
 - **Use less memory.** Process results as they arrive, without keeping the whole
   result in RAM.
-- **Skip the cluster setup.** Read and filter Delta tables in your own
+- **Skip the cluster setup.** Read and filter Delta tables in your terminal or
   application, without running Spark.
 
 **Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
@@ -41,7 +50,48 @@ times for the first complete query after table initialization, excluding startup
 
 ## Get started
 
-Start with [Python](#python), the [command line](#cli), or [Rust](#rust).
+Start with the [command line](#cli), [Python](#python), or [Rust](#rust).
+
+### CLI
+
+Preview rows as JSON, run SQL to filter, group, or join tables, and save results
+as Arrow or JSON. Queries run locally.
+
+Choose one option with [uv](https://docs.astral.sh/uv/getting-started/installation/)
+or [pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html):
+
+| Use | Command |
+| --- | --- |
+| Try it with uv, without installing DAR first | `uvx --no-build --from delta-arrow-reader dar --help` |
+| Install with uv | `uv tool install --no-build delta-arrow-reader` |
+| Install with pipx | `pipx install delta-arrow-reader` |
+
+After installing, use `dar` directly. For a one-off run with uvx, prefix the
+examples below with `uvx --no-build --from delta-arrow-reader`.
+
+Use a working Databricks CLI profile to preview a Unity Catalog table:
+
+```bash
+dar preview uc://main.sales.orders --databricks-profile work --limit 3
+```
+
+Replace the table name and `work` with your own. The `databricks` command must be
+on your `PATH`. Unity Catalog must allow external data access, and your identity
+needs the [required table and schema permissions](https://mag1cfrog.github.io/delta-arrow-reader/reference/unity-catalog/#table-access),
+including `EXTERNAL USE SCHEMA`. For S3 tables, also pass a
+[region options file](https://mag1cfrog.github.io/delta-arrow-reader/reference/unity-catalog/#s3-region)
+with `--storage-options-file storage.json`.
+
+For a local Delta table, supply its directory:
+
+```bash
+dar preview /path/to/delta-table --limit 3
+```
+
+Continue with the [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)
+or [SQL examples](https://mag1cfrog.github.io/delta-arrow-reader/cli-workflows/).
+See [installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#command-line)
+for supported platforms, standalone `dar` binaries, and containers.
 
 ### Python
 
@@ -91,20 +141,6 @@ Save this as `src/main.rs`, replace the table path, and run `cargo run`.
 [Read a table](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and methods.
-
-### CLI
-
-Try the CLI with [uv](https://docs.astral.sh/uv/getting-started/installation/):
-
-```console
-uvx --from delta-arrow-reader dar --help
-```
-
-Install with [pipx](https://mag1cfrog.github.io/delta-arrow-reader/installation/#install-cli-with-pipx),
-or use a [standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
-The [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)
-shows how to preview rows and run SQL with JSON results. Queries can also stream
-results as Arrow IPC for other programs.
 
 For development and benchmark setup, see the
 [repository documentation](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/README.md).
