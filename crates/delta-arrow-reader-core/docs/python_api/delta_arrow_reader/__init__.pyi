@@ -20,17 +20,21 @@ Messages omit sensitive details such as table paths and storage credentials.
 Attributes:
     phase: The stage that failed, such as `schema` or `datafusion`.
     code: The error category, such as `schema_conversion` or `sql_planning`.
-    reason: The Core failure reason, or `None` for a binding-owned failure.
-    source_kind: The safe Core source category, or `None` when unavailable.
+    reason: The safe failure reason, or `None` when unavailable.
+    source_kind: The safe source category, or `None` when unavailable.
+    cause: A reader failure inside SQL, with `phase`, `code`, `reason`, and
+        `source_kind` entries, or `None` when no typed reader cause is available.
 
 Invalid Python arguments can raise built-in exceptions such as `TypeError`
 or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
-exceptions; catch those around iteration or `read_all()` as well.
+exceptions; catch those around iteration or `read_all()` as well. Their messages
+retain safe source categories and reader causes; they do not carry these attributes.
 """
     phase: str
     code: str
     reason: str | None
     source_kind: str | None
+    cause: dict[str, str | None] | None
 
 class ScanExecutionOptions:
     """Control how a scan reads files and buffers results.
@@ -456,9 +460,11 @@ Raises:
     TypeError: The query is not a string.
     DeltaReaderError: The query is invalid, unsupported or cannot be
         planned, or its schema cannot be exported. Planning failures have
-        phase `datafusion` and code `sql_planning`.
+        phase `datafusion` and code `sql_planning`; `reason` and
+        `source_kind` distinguish failures without exposing query text.
 
 Execution errors are raised by PyArrow while consuming results, with
 `code=sql_execution` in the message. A failed reader remains failed.
+The message includes a safe `source_kind` and any typed reader cause.
 SQL error messages omit query text, literal values and table paths."""
         ...

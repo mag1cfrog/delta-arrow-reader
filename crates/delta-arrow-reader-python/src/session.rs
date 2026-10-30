@@ -154,10 +154,12 @@ impl Session {
     ///     TypeError: The query is not a string.
     ///     DeltaReaderError: The query is invalid, unsupported or cannot be
     ///         planned, or its schema cannot be exported. Planning failures have
-    ///         phase `datafusion` and code `sql_planning`.
+    ///         phase `datafusion` and code `sql_planning`; `reason` and
+    ///         `source_kind` distinguish failures without exposing query text.
     ///
     /// Execution errors are raised by PyArrow while consuming results, with
     /// `code=sql_execution` in the message. A failed reader remains failed.
+    /// The message includes a safe `source_kind` and any typed reader cause.
     /// SQL error messages omit query text, literal values and table paths.
     fn sql<'py>(&self, py: Python<'py>, query: &str) -> PyResult<Bound<'py, PyAny>> {
         crate::logging::reject_logging_reentry()?;
@@ -178,7 +180,10 @@ impl Session {
                         error_reason = "sql_planning_failed", error_source_kind = error_source_kind(error));
                 })
             })?
-            .map_err(|_| new_sql_exception(py, "sql_planning"))?;
+            .map_err(|source| crate::diagnostics::SqlErrorDiagnostic {
+                code: "sql_planning",
+                source: &source,
+            }.to_exception(py))?;
         export_schema(py, frame.schema().as_arrow())?;
         RecordBatchStream::from_sql(frame, Arc::clone(&self.state)).into_reader(py)
     }

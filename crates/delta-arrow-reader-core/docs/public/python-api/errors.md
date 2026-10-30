@@ -37,6 +37,16 @@ For cloud tables, also check the storage settings for
 work even when logging is disabled; you can include them when reporting a
 problem.
 
+For SQL planning failures, `source_kind` distinguishes syntax (`sql_parse`),
+schema (`schema`), and other planning failures (`datafusion_plan`). Unknown or
+ambiguous columns use `reason=column_not_found` or `reason=ambiguous_column`.
+If SQL wraps a reader failure, `cause` contains its `phase`, `code`, `reason`,
+and `source_kind`; otherwise `cause` is `None`.
+
+PyArrow exceptions raised during consumption include the safe source category
+and any typed reader cause in their messages. For example, division by zero has
+`source_kind=divide_by_zero`. These exceptions do not expose the attributes above.
+
 ::: delta_arrow_reader.DeltaReaderError
 
 ## Get more context

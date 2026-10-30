@@ -72,10 +72,15 @@ Before row consumption, the binding converts core errors into Python exceptions
 with the core's `phase`, `code`, `reason`, and safe `source_kind` attributes.
 `source_kind` is `None` when the core error has no underlying source. These
 attributes remain available when logging is disabled. Core scan-option validation
-keeps its `ValueError` type and carries the same attributes. Binding-owned
-`DeltaReaderError` exceptions, such as SQL planning and schema export failures,
-have `reason = None` and `source_kind = None`; their diagnostic events carry the
-available details.
+keeps its `ValueError` type and carries the same attributes. SQL planning errors
+also expose `reason` and `source_kind`. Their `cause` attribute contains the
+reader's classification when a typed reader error is available, otherwise `None`.
+Other binding-owned errors, such as schema export failures, have `reason = None`
+and `source_kind = None`; their diagnostic events carry the available details.
+
+During consumption, PyArrow exceptions carry the safe source category and any
+typed reader cause in their messages. Arrow's C stream interface transports an
+error string, so those exceptions do not have the `DeltaReaderError` attributes.
 
 ## Failures reported by the binding
 

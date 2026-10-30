@@ -347,10 +347,17 @@ enum BatchReadError {
 impl fmt::Display for BatchReadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Delta(error) => fmt::Display::fmt(error, formatter),
-            Self::Sql(_) => {
-                formatter.write_str("delta reader error: phase=datafusion code=sql_execution")
+            Self::Delta(error) => {
+                fmt::Display::fmt(error, formatter)?;
+                if let Some(kind) = error.source_kind() {
+                    write!(formatter, " source_kind={kind}")?;
+                }
+                Ok(())
             }
+            Self::Sql(source) => fmt::Display::fmt(&crate::diagnostics::SqlErrorDiagnostic {
+                code: "sql_execution",
+                source,
+            }, formatter),
             Self::Interrupted => formatter.write_str(
                 "delta reader error: phase=execution code=python_signal reason=reader_wait_interrupted",
             ),
@@ -645,7 +652,9 @@ mod tests {
                 let error = reader.next().unwrap().unwrap_err();
                 assert_eq!(
                     error.to_string(),
-                    "External error: delta reader error: phase=datafusion code=sql_execution"
+                    format!(
+                        "External error: delta reader error: phase=datafusion code=sql_execution reason=sql_execution source_kind={kind}"
+                    )
                 );
                 assert!(!format!("{error:?}").contains("secret"));
                 assert_eq!(error_source_kind(&error), kind);

@@ -22,6 +22,7 @@ class DeltaReaderError(Exception):
     code: str
     reason: str | None
     source_kind: str | None
+    cause: dict[str, str | None] | None
 
 class ScanExecutionOptions:
     """Immutable execution settings for a table or an individual scan."""

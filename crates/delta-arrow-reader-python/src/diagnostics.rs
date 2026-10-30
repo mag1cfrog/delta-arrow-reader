@@ -3,9 +3,82 @@
 //! Core operation failures already emit their own events. These helpers cover
 //! return-only validation errors and binding-owned failures such as schema export.
 
-use pyo3::PyErr;
+use std::fmt;
+
+use datafusion::common::{DataFusionError, SchemaError};
+use delta_arrow_reader::{DeltaReaderError, error_source_kind};
+use pyo3::{prelude::*, types::PyDict};
 
 use crate::logging;
+
+pub(crate) struct SqlErrorDiagnostic<'a> {
+    pub(crate) code: &'static str,
+    pub(crate) source: &'a DataFusionError,
+}
+
+impl SqlErrorDiagnostic<'_> {
+    fn reason(&self) -> &'static str {
+        if self.code == "sql_planning"
+            && DeltaReaderError::find_source(self.source).is_none()
+            && let DataFusionError::SchemaError(error, _) = self.source.find_root()
+        {
+            match error.as_ref() {
+                SchemaError::FieldNotFound { .. } => return "column_not_found",
+                SchemaError::AmbiguousReference { .. } => return "ambiguous_column",
+                _ => {}
+            }
+        }
+        self.code
+    }
+
+    pub(crate) fn to_exception(&self, py: Python<'_>) -> PyErr {
+        let exception = crate::new_binding_exception(py, self.to_string(), "datafusion", self.code);
+        let value = exception.value(py);
+        let set_details = || -> PyResult<()> {
+            value.setattr("reason", self.reason())?;
+            value.setattr("source_kind", error_source_kind(self.source))?;
+            if let Some(reader) = DeltaReaderError::find_source(self.source) {
+                let cause = PyDict::new(py);
+                cause.set_item("phase", reader.phase().as_str())?;
+                cause.set_item("code", reader.code())?;
+                cause.set_item("reason", reader.reason())?;
+                cause.set_item("source_kind", reader.source_kind())?;
+                value.setattr("cause", cause)?;
+            }
+            Ok(())
+        };
+        match set_details() {
+            Ok(()) => exception,
+            Err(error) => error,
+        }
+    }
+}
+
+impl fmt::Display for SqlErrorDiagnostic<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "delta reader error: phase=datafusion code={} reason={} source_kind={}",
+            self.code,
+            self.reason(),
+            error_source_kind(self.source)
+        )?;
+        if let Some(reader) = DeltaReaderError::find_source(self.source) {
+            write!(
+                formatter,
+                " cause={{phase={} code={} reason={}",
+                reader.phase().as_str(),
+                reader.code(),
+                reader.reason()
+            )?;
+            if let Some(kind) = reader.source_kind() {
+                write!(formatter, " source_kind={kind}")?;
+            }
+            formatter.write_str("}")?;
+        }
+        Ok(())
+    }
+}
 
 /// Emit a failure under the Python subscriber and return the exception to raise.
 ///

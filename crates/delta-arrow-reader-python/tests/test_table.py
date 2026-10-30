@@ -9,6 +9,7 @@ import importlib.util
 import inspect
 from itertools import product
 import json
+import logging
 import operator
 from pathlib import Path
 import sys
@@ -21,7 +22,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from delta_arrow_reader import (
-    DeltaReaderError, DeltaTable, RecordBatchStream, ScanExecutionOptions,
+    DeltaReaderError, DeltaTable, RecordBatchStream, ScanExecutionOptions, Session,
 )
 
 
@@ -91,6 +92,38 @@ class TableTests(unittest.TestCase):
             "path": name, "partitionValues": {}, "size": path.stat().st_size,
             "modificationTime": 0, "dataChange": True,
         }}
+
+    def test_reader_causes_cross_arrow_boundary_with_logging_disabled(self):
+        logger = logging.getLogger("delta_arrow_reader")
+        self.addCleanup(setattr, logger, "disabled", logger.disabled)
+        logger.disabled = True
+        for values, category in [
+            (pa.table({"id": ["private_value"]}), "unexpected_column_type"),
+            (pa.table({"private_column": [1]}), "missing_column"),
+        ]:
+            self.write_log(1, self.write_parquet("private_values.parquet", values))
+            table = DeltaTable(self.location, warmup="none")
+            session = Session()
+            session.register_table("private_table", table)
+            for sql in [False, True]:
+                reader = (session.sql("SELECT * FROM private_table") if sql
+                          else table.to_reader())
+                with self.subTest(category=category, sql=sql), reader:
+                    messages = []
+                    for _ in range(2):
+                        with self.assertRaises(pa.ArrowInvalid) as caught:
+                            reader.read_next_batch()
+                        messages.append(str(caught.exception))
+                    self.assertEqual(messages[0], messages[1])
+                    self.assertIn("reason=parquet_schema_match_failed", messages[0])
+                    self.assertIn(f"source_kind={category}", messages[0])
+                    if sql:
+                        self.assertIn("code=sql_execution", messages[0])
+                        self.assertIn("cause={phase=data_file_read code=data_file_read", messages[0])
+                    else:
+                        self.assertIn("phase=data_file_read code=data_file_read", messages[0])
+                    self.assertNotIn("private_", messages[0])
+                    self.assertNotIn(str(self.location), messages[0])
 
     def filter_table(self, columns):
         fields = [{"name": name, "type": delta_type, "nullable": True, "metadata": {}}
