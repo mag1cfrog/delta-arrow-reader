@@ -22,14 +22,16 @@ different workspaces. Each binding retains its own identity and snapshot.
 
 ## Table access
 
-The metastore must allow external data access. The requesting principal needs
+The metastore must allow external data access. Table credential requests require
 `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit `EXTERNAL USE SCHEMA`.
+Foreign tables use the [path authorization requirements below](#hive-and-glue-foreign-tables).
 Selecting a profile does not grant additional permissions. Administrators can
 follow [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
 
-DAR accepts managed or external Delta tables and the published Delta snapshots
-of [materialized views and streaming tables](#materialized-views-and-streaming-tables).
-Each must permit direct external-engine reads and use a supported Delta read protocol.
+DAR accepts managed or external Delta tables,
+[Hive/Glue external Delta foreign tables](#hive-and-glue-foreign-tables), and the
+published Delta snapshots of [materialized views and streaming tables](#materialized-views-and-streaming-tables).
+Each must permit external access and use a supported Delta read protocol.
 It rejects:
 
 - Ordinary SQL views and shallow clones.
@@ -57,12 +59,33 @@ the table or its read protocol; a successful summary reports
 every data file. An unsupported result means that DAR cannot read the selected
 snapshot; changing login credentials cannot add protocol support.
 
-DAR gets the storage location and READ credentials from Unity Catalog. It reads
+DAR gets the storage location and read-only credentials from Unity Catalog. It reads
 the Delta log for the snapshot version and Arrow schema; UC column metadata
 does not define the output schema. It submits no SQL or compute workload to
 Databricks. UC scans and previews accept the same projection, predicate, row
 limit, and execution options as direct-path reads. Snapshot selection is available
 except for the latest-only objects below.
+
+### Hive and Glue foreign tables
+
+External Delta tables exposed through Hive Metastore or AWS Glue federation use
+the same `uc://` name, profile, and snapshot options. UC must identify the object
+as `FOREIGN` with format `DELTA` and advertise Hive Metastore storage support.
+An explicit kind must be `TABLE_FOREIGN_HIVE_METASTORE_EXTERNAL`; other advertised
+foreign kinds are unsupported. Workspaces that return only capabilities are also
+accepted, subject to path authorization below.
+
+The table's storage path must be covered by a UC external location, and your
+principal needs `EXTERNAL USE LOCATION` on that location. The
+[Databricks path credential API](https://docs.databricks.com/api/uc-credentials/v1/generate-temporary-path-credential)
+also requires `EXTERNAL USE SCHEMA` for paths registered as external tables.
+If the error names a missing `EXTERNAL USE LOCATION` privilege, ask the owner of
+the named location to grant it, then retry the same DAR command.
+
+DAR selects path credential vending from the table metadata and requests only
+`PATH_READ` for that table's root. A rejected table credential request does not
+switch to path authorization. Row filters, column masks, and catalog-managed
+commits are unsupported for foreign tables.
 
 ### Materialized views and streaming tables
 
@@ -145,9 +168,10 @@ generic endpoint option is rejected because the R2 URL would override it.
 ## Credential renewal and failures
 
 Credentials stay in memory for one command. Storage requests reuse the grant
-until it approaches expiry, then request new READ credentials for the original
-table ID and profile. Concurrent requests share one refresh. A replacement must
-keep the same storage root and credential type and have a future expiry.
+until it approaches expiry, then request read-only credentials for the original
+table ID or external path using the same profile. Concurrent requests share one
+refresh. A replacement must keep the same storage root and credential type and
+have a future expiry.
 
 Renewal preserves the selected Delta snapshot. It does not restart a scan or
 repeat rows already written. If renewal fails, the command fails without using
@@ -176,6 +200,7 @@ the CLI token cache. The executable must support:
 
 - `tables get --include-manifest-capabilities`
 - `temporary-table-credentials generate-temporary-table-credentials --operation READ`
+- `temporary-path-credentials generate-temporary-path-credentials URL PATH_READ` for Hive/Glue external Delta foreign tables
 - `api get` for catalog-managed tables, materialized views, and streaming tables
 
 The table and credential commands were checked with CLI 1.6.0; live Azure and
@@ -197,6 +222,12 @@ commits exist only in staged files are covered by local tests, not live validati
 Materialized view and streaming table reads were checked on S3 with CLI 1.6.0.
 Complete results before and after manual refresh matched Databricks SQL references.
 Their other storage backends and credential renewal are covered by local tests.
+
+AWS Glue foreign Delta reads were checked on S3 with CLI 1.6.0. Complete results
+for current and pinned snapshots matched Databricks SQL after adding rows and
+a nullable column. Coverage includes UC/local joins, Arrow export, and
+missing `EXTERNAL USE LOCATION` diagnostics before a grant and after revocation.
+Foreign table credential renewal is covered by local tests.
 
 GCS, R2, Azure bearer credentials,
 other authentication modes, live renewal, and the full release platform matrix

@@ -128,14 +128,18 @@ fn single_table_queries_preserve_values_versions_and_vended_credentials() -> Tes
     let expected = expected_partitioned_rows()?;
     let mut objects = partitioned_objects()?;
     append_west_partition_removal_commit(&mut objects);
-    for kind in [
-        StorageCredentialKind::S3,
-        StorageCredentialKind::R2,
-        StorageCredentialKind::AzureBlobSas,
-        StorageCredentialKind::AzureBlobBearer,
-        StorageCredentialKind::Gcs,
+    for (kind, foreign) in [
+        (StorageCredentialKind::S3, false),
+        (StorageCredentialKind::R2, false),
+        (StorageCredentialKind::AzureBlobSas, false),
+        (StorageCredentialKind::AzureBlobBearer, false),
+        (StorageCredentialKind::Gcs, false),
+        (StorageCredentialKind::S3, true),
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
+        if foreign {
+            fixture.use_foreign_delta_metadata()?;
+        }
         let server = MockCloudStorageServer::with_objects(
             kind.storage_protocol(),
             objects.clone(),
@@ -195,10 +199,15 @@ fn single_table_queries_preserve_values_versions_and_vended_credentials() -> Tes
         }
         let recorded = fixture.recorded_arguments();
         assert_eq!(recorded.iter().filter(|arg| *arg == "tables").count(), 2);
+        let credential_command = if foreign {
+            "temporary-path-credentials"
+        } else {
+            "temporary-table-credentials"
+        };
         assert_eq!(
             recorded
                 .iter()
-                .filter(|arg| *arg == "temporary-table-credentials")
+                .filter(|arg| *arg == credential_command)
                 .count(),
             2
         );

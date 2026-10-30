@@ -20,6 +20,7 @@ pub(crate) use databricks_cli::{
 
 use delta_arrow_reader::{DeltaSnapshotSelection, DeltaStorageOptions};
 
+use databricks_cli::ReadCredentialTarget;
 pub(crate) use error::Error;
 pub(crate) use storage_access::AuthorizedTableAccess;
 use table_metadata::TableMetadataResponse;
@@ -76,7 +77,7 @@ impl UnityCatalogTableTarget {
         }))
     }
 
-    /// Requests temporary READ credentials after fetching and validating the table metadata.
+    /// Requests read-only credentials after fetching and validating the table metadata.
     pub(crate) async fn request_read_access(
         self,
         storage_options: DeltaStorageOptions,
@@ -118,11 +119,14 @@ impl UnityCatalogTableTarget {
         } else {
             None
         };
-        let credentials_json = databricks_cli::generate_read_credentials(
-            &self.databricks_profile,
-            &table_metadata.table_id,
-        )
-        .await?;
+        let credential_target = if table_metadata.uses_path_credentials() {
+            ReadCredentialTarget::ExternalPath(storage_location.as_url().clone())
+        } else {
+            ReadCredentialTarget::TableId(table_metadata.table_id)
+        };
+        let credentials_json =
+            databricks_cli::generate_read_credentials(&self.databricks_profile, &credential_target)
+                .await?;
         let (credentials, credential_scope) = if latest_only {
             parse_pipeline_credentials(&credentials_json, &storage_location)?
         } else {
@@ -133,7 +137,7 @@ impl UnityCatalogTableTarget {
         };
         let credential_cache = credential_cache::TableCredentialCache::new(
             self.databricks_profile,
-            table_metadata.table_id,
+            credential_target,
             credential_scope,
             credentials,
         )?;

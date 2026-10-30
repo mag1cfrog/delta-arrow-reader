@@ -46,6 +46,29 @@ pub(super) struct TableMetadataResponse {
 }
 
 impl TableMetadataResponse {
+    /// Identifies Hive/Glue Delta metadata that selects path credential vending.
+    pub(super) fn uses_path_credentials(&self) -> bool {
+        let manifest = &self.securable_kind_manifest.0;
+        let has_hive_storage = match manifest.securable_kind.as_deref() {
+            Some("TABLE_FOREIGN_HIVE_METASTORE_EXTERNAL") => true,
+            // Some workspaces omit kind fields; the path API still has to authorize the location.
+            None => [
+                "HAS_HIVE_METASTORE_FOREIGN_CONNECTION_SUPPORT",
+                "HAS_STORAGE",
+            ]
+            .iter()
+            .all(|required| manifest.capabilities.iter().any(|value| value == required)),
+            _ => false,
+        };
+        self.table_type == "FOREIGN"
+            && self.data_source_format.as_deref() == Some("DELTA")
+            && has_hive_storage
+            && manifest
+                .securable_type
+                .as_deref()
+                .is_none_or(|kind| kind == "TABLE")
+    }
+
     pub(super) fn is_pipeline_dataset(&self) -> bool {
         matches!(
             self.table_type.as_str(),
@@ -139,7 +162,7 @@ impl TableMetadataResponse {
                 .capabilities
                 .iter()
                 .any(|capability| capability == "HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT");
-        if !(is_supported_table_kind || is_supported_pipeline_kind)
+        if !(is_supported_table_kind || is_supported_pipeline_kind || self.uses_path_credentials())
             || has_invalid_capability
             || has_read_policy
             || (self.pipeline_id.is_some() && !self.is_pipeline_dataset())

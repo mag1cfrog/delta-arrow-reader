@@ -44,7 +44,7 @@ struct GcsOAuthCredentials {
     oauth_token: String,
 }
 
-/// Raw response from the Databricks temporary-table-credentials command.
+/// Raw response from Databricks table or path credential vending.
 ///
 /// Separate fields allow rejection of mixed credential families.
 #[derive(Deserialize)]

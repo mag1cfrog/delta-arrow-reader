@@ -16,16 +16,17 @@ use tokio::{runtime::Handle, sync::Mutex, task::JoinSet, time::Instant};
 
 use super::{
     Error, databricks_cli,
+    databricks_cli::ReadCredentialTarget,
     storage_location::{StorageBackend, TableStorageLocation},
     temporary_credentials::{
         CloudCredentials, TemporaryTableCredentials, parse_temporary_credentials,
     },
 };
 
-/// Renews credentials on the command runtime using the original profile, table ID, and root.
+/// Renews credentials using the original profile, request target, and granted root.
 struct TableCredentialRefresher {
     profile: String,
-    table_id: String,
+    target: ReadCredentialTarget,
     storage_location: TableStorageLocation,
     /// Child processes belong to the command's runtime, even when Core calls from its own workers.
     command_runtime: Handle,
@@ -40,7 +41,7 @@ impl TableCredentialRefresher {
             async move {
                 let bytes = databricks_cli::generate_read_credentials(
                     &refresher.profile,
-                    &refresher.table_id,
+                    &refresher.target,
                 )
                 .await?;
                 parse_temporary_credentials(&bytes, &refresher.storage_location)
@@ -93,14 +94,14 @@ pub(super) struct TableCredentialCache {
 impl TableCredentialCache {
     pub(super) fn new(
         profile: String,
-        table_id: String,
+        target: ReadCredentialTarget,
         storage_location: TableStorageLocation,
         credentials: TemporaryTableCredentials,
     ) -> Result<Arc<Self>, Error> {
         Ok(Arc::new(Self {
             refresher: Arc::new(TableCredentialRefresher {
                 profile,
-                table_id,
+                target,
                 storage_location,
                 command_runtime: Handle::current(),
             }),

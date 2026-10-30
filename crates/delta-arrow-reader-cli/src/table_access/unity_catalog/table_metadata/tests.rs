@@ -17,6 +17,88 @@ fn table_metadata_response() -> Value {
 }
 
 #[test]
+fn foreign_delta_admission_requires_hive_storage_and_preserves_policies() {
+    let mut metadata = table_metadata_response();
+    metadata["table_type"] = json!("FOREIGN");
+    metadata["securable_kind_manifest"]["securable_kind"] =
+        json!("TABLE_FOREIGN_HIVE_METASTORE_EXTERNAL");
+    assert!(
+        TableMetadataResponse::parse(&serde_json::to_vec(&metadata).unwrap(), "main.sales.orders")
+            .unwrap()
+            .uses_path_credentials()
+    );
+    // The real Glue response contains capabilities without securable_type or securable_kind.
+    metadata["securable_kind_manifest"] = json!({"capabilities": [
+        "HAS_HIVE_METASTORE_FOREIGN_CONNECTION_SUPPORT", "HAS_STORAGE"
+    ]});
+    assert!(
+        TableMetadataResponse::parse(&serde_json::to_vec(&metadata).unwrap(), "main.sales.orders")
+            .unwrap()
+            .uses_path_credentials()
+    );
+    for (field, value) in [
+        ("table_type", json!("MANAGED")),
+        ("data_source_format", json!("PARQUET")),
+        ("row_filter", json!({})),
+        ("columns", json!([{"mask": {}}])),
+        ("browse_only", json!(true)),
+        ("pipeline_id", json!("pipeline")),
+        (
+            "properties",
+            json!({"delta.feature.catalogManaged":"supported"}),
+        ),
+        (
+            "properties",
+            json!({"delta.coordinatedCommits.commitCoordinator-preview":"unity-catalog"}),
+        ),
+    ] {
+        let mut denied = metadata.clone();
+        denied[field] = value;
+        assert!(
+            matches!(
+                TableMetadataResponse::parse(
+                    &serde_json::to_vec(&denied).unwrap(),
+                    "main.sales.orders"
+                ),
+                Err(Error::UnsupportedDirectRead)
+            ),
+            "{field}"
+        );
+    }
+    for (field, value) in [
+        (
+            "securable_kind",
+            json!("TABLE_FOREIGN_HIVE_METASTORE_MANAGED"),
+        ),
+        ("securable_kind", json!("TABLE_FOREIGN_POSTGRESQL")),
+        ("securable_type", json!("VIEW")),
+        ("capabilities", json!([""])),
+        ("capabilities", json!(["HAS_STORAGE"])),
+        (
+            "capabilities",
+            json!(["HAS_HIVE_METASTORE_FOREIGN_CONNECTION_SUPPORT"]),
+        ),
+        (
+            "capabilities",
+            json!(["HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT"]),
+        ),
+    ] {
+        let mut denied = metadata.clone();
+        denied["securable_kind_manifest"][field] = value;
+        assert!(
+            matches!(
+                TableMetadataResponse::parse(
+                    &serde_json::to_vec(&denied).unwrap(),
+                    "main.sales.orders"
+                ),
+                Err(Error::UnsupportedDirectRead)
+            ),
+            "{field}"
+        );
+    }
+}
+
+#[test]
 fn admission_rejects_unsupported_and_mismatched_tables() {
     for kind in ["MANAGED", "EXTERNAL"] {
         let mut value = table_metadata_response();
