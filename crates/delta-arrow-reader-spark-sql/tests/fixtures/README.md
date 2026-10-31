@@ -165,11 +165,12 @@ using 262,144 rows, two warm-ups and eleven samples per case. These inputs have
 equivalent outputs before and after the fix. Timing has no pass/fail threshold;
 local development-profile results do not establish release throughput.
 
-## IFNULL and NVL temporal results
+## Conditional temporal results
 
-`conditional-spark.jsonl` records 562 Spark 4.2.0 observations: 380 temporal and
-coercion cases, 60 CASE/IF controls, 72 fallback cases and 50 NULLIF evaluation
-cases described below. Regenerate it with `capture_conditional_spark.py`
+`conditional-spark.jsonl` records 1,382 Spark 4.2.0 observations: 380 temporal and
+coercion cases, 820 mixed-temporal cases, 60 CASE/IF controls, 72 fallback cases
+and 50 NULLIF evaluation cases described below. Regenerate it with
+`capture_conditional_spark.py`
 using the Python/Java setup above. TIMESTAMP values use UTC epoch microseconds;
 TIMESTAMP_NTZ values use microseconds of wall time since 1970-01-01. The capture
 converts PySpark's process-local TIMESTAMP values before encoding them.
@@ -193,10 +194,15 @@ following sections identify its reviewed expectation corrections.
 Non-temporal alias inputs keep the native NVL path. Its existing Decimal and
 ANSI numeric/string or Boolean/string coercion differences remain S03 work;
 these temporal references do not claim those cases are Spark-compatible.
-Mixed DATE/TIMESTAMP promotion also remains separate: shared COALESCE coercion
-selects a nanosecond timestamp without a timezone. Native NVL previously returned
-a string for these pairs. Neither behavior matches Spark's LTZ result; this is
-retained in the S03 plan rather than included among the passing references.
+Mixed DATE/LTZ/NTZ references cover COALESCE, IFNULL, NVL, IF and CASE in both
+operand orders. The common timestamp retains microsecond precision and the
+session timezone when LTZ is present; NTZ keeps wall time. Constants, all-NULL
+branches, column values and empty inputs run in both ANSI modes. New York spring
+gaps/fall overlaps and a fixed +05:45 offset check the shared local-time
+conversion used by conditional expressions, explicit CAST and SEQUENCE.
+Mixed-type invalid fallbacks check that unselected constant/column branches stay
+unused and required casts still fail in ANSI mode. Temporal logical and physical
+types must agree, including the timezone annotation and microsecond unit.
 
 ## CASE condition types
 

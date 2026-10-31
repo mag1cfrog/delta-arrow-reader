@@ -12,7 +12,9 @@ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, cast_local_timestamp_to_ltz,
+};
 
 mod nullif;
 pub(crate) use nullif::SparkNullIf;
@@ -44,7 +46,7 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             }
         }
     }
-    let branch_values = coerce_string_temporal_values(branch_values, &function_context)?;
+    let branch_values = coerce_conditional_temporal_values(branch_values, &function_context)?;
     let when_then_expr = conditions
         .into_iter()
         .zip(branch_values)
@@ -64,7 +66,7 @@ fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let (when_expr, then_expr, else_expr) = arguments.three()?;
     let (then_expr, else_expr) =
-        coerce_string_temporal_values(vec![then_expr, else_expr], &function_context)?.two()?;
+        coerce_conditional_temporal_values(vec![then_expr, else_expr], &function_context)?.two()?;
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![(Box::new(when_expr), Box::new(then_expr))],
@@ -77,7 +79,7 @@ fn coalesce(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         arguments,
         function_context,
     } = input;
-    let arguments = coerce_string_temporal_values(arguments, &function_context)?;
+    let arguments = coerce_conditional_temporal_values(arguments, &function_context)?;
     Ok(expr_fn::coalesce(arguments))
 }
 
@@ -95,7 +97,7 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }
 }
 
-fn coerce_string_temporal_values(
+fn coerce_conditional_temporal_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
 ) -> PlanResult<Vec<expr::Expr>> {
@@ -130,6 +132,12 @@ fn coerce_string_temporal_values(
         } else {
             arguments
         }
+    } else if let Some(temporal_type) = temporal_type {
+        arguments
+            .into_iter()
+            .zip(data_types.iter())
+            .map(|(arg, data_type)| coerce_to_temporal(arg, data_type, &temporal_type))
+            .collect::<PlanResult<Vec<_>>>()?
     } else {
         arguments
     };
@@ -156,6 +164,12 @@ fn coerce_to_temporal(
             }
             _ => Ok(cast(arg, target_type.clone())),
         }
+    } else if matches!(
+        data_type,
+        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
+    ) && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) = target_type
+    {
+        Ok(cast_local_timestamp_to_ltz(arg, timezone))
     } else if is_temporal_type(data_type) {
         Ok(cast(arg, target_type.clone()))
     } else {

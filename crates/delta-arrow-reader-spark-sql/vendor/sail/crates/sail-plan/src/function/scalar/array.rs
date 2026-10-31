@@ -22,15 +22,13 @@ use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::array::spark_array_compact::SparkArrayCompact;
 use sail_function::scalar::array::spark_array_min_max::{ArrayMax, ArrayMin};
 use sail_function::scalar::array::spark_sequence::{SparkSequence, SparkSequenceLazy};
-use sail_function::scalar::datetime::convert_tz::ConvertTz;
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::misc::raise_error::RaiseError;
 
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
-use crate::function::is_spark_compatible_arrow_fixed_offset;
+use crate::function::common::{ScalarFunction, ScalarFunctionInput, cast_local_timestamp_to_ltz};
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
@@ -317,20 +315,6 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }))
 }
 
-fn sequence_timestamp_ltz_cast(argument: expr::Expr, timezone: &Arc<str>) -> expr::Expr {
-    let timestamp_ntz = cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None));
-    let timestamp_ltz = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone)));
-    if is_spark_compatible_arrow_fixed_offset(timezone.as_ref()) {
-        return cast(timestamp_ntz, timestamp_ltz);
-    }
-    let instant = ScalarUDF::from(ConvertTz::new(false)).call(vec![
-        lit(timezone.to_string()),
-        lit("UTC"),
-        timestamp_ntz,
-    ]);
-    cast(cast(instant, DataType::Int64), timestamp_ltz)
-}
-
 fn sequence_trim_string(argument: expr::Expr) -> expr::Expr {
     btrim(vec![
         argument,
@@ -371,7 +355,7 @@ fn sequence_cast(
         (
             DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None),
             DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
-        ) => sequence_timestamp_ltz_cast(argument, timezone),
+        ) => cast_local_timestamp_to_ltz(argument, timezone),
         _ => cast(argument, target_type.clone()),
     })
 }

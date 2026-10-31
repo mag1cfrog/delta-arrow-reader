@@ -1,7 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{DataType, TimeUnit};
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion::prelude::SessionContext;
 use datafusion_common::tree_node::TreeNode;
@@ -12,6 +12,7 @@ use datafusion_expr::{
     WindowFunctionDefinition, WindowUDF, cast, expr, lit, try_cast,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::datetime::convert_tz::ConvertTz;
 use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
@@ -19,6 +20,22 @@ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIE
 
 use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
+use crate::function::is_spark_compatible_arrow_fixed_offset;
+
+pub(crate) fn cast_local_timestamp_to_ltz(argument: expr::Expr, timezone: &Arc<str>) -> expr::Expr {
+    let timestamp_ntz = cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None));
+    let timestamp_ltz = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone)));
+    if is_spark_compatible_arrow_fixed_offset(timezone.as_ref()) {
+        return cast(timestamp_ntz, timestamp_ltz);
+    }
+    // Spark's named-zone conversion resolves DST gaps and overlaps differently from Arrow.
+    let instant = ScalarUDF::from(ConvertTz::new(false)).call(vec![
+        lit(timezone.to_string()),
+        lit("UTC"),
+        timestamp_ntz,
+    ]);
+    cast(cast(instant, DataType::Int64), timestamp_ltz)
+}
 
 pub struct FunctionContextInput<'a> {
     /// The names of function arguments.
