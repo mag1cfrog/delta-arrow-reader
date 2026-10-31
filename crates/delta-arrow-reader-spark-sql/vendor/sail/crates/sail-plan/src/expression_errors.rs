@@ -24,6 +24,7 @@ use crate::function::scalar::math::{
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
 };
 use datafusion::functions::math::round::RoundFunc;
+use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
@@ -51,6 +52,28 @@ fn null_literal(expr: &Expr) -> bool {
             f.args.first().is_some_and(null_literal)
         }
         _ => false,
+    }
+}
+
+fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
+    match expr {
+        Expr::Alias(alias) => projected_null(&alias.expr, input),
+        Expr::Cast(cast) => projected_null(&cast.expr, input),
+        Expr::TryCast(cast) => projected_null(&cast.expr, input),
+        Expr::Column(column) => {
+            let index = input.schema().index_of_column(column)?;
+            match input {
+                LogicalPlan::Projection(project) => {
+                    projected_null(&project.expr[index], &project.input)
+                }
+                LogicalPlan::SubqueryAlias(alias) => projected_null(
+                    &Expr::Column(alias.input.schema().columns()[index].clone()),
+                    &alias.input,
+                ),
+                _ => Ok(false),
+            }
+        }
+        _ => Ok(null_literal(expr)),
     }
 }
 
@@ -118,6 +141,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         let mut check_arithmetic = false;
         let mut check_cast = false;
         let mut check_groups = false;
+        let mut has_array_contains = false;
         let mut has_groups = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
@@ -135,20 +159,27 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
                 check_cast |= has_cast(expr)?;
                 check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
+                has_array_contains |= expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<ArrayContains>()))
+                })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_array_contains {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
             })
         })?;
-        if !found && !check_arithmetic && !check_cast && !check_groups {
+        if !found && !check_arithmetic && !check_cast && !check_groups && !has_array_contains {
             return Ok(plan);
         }
         let mut props = ExecutionProps::new();
         props.config_options = Some(Arc::new(options.clone()));
-        let prepare = Prepare { props, has_groups };
+        let prepare = Prepare {
+            props,
+            has_groups,
+            has_array_contains,
+        };
         let plan = if check_groups {
             plan.transform_up_with_subqueries(prepare_foldable_groups)?
                 .data
@@ -346,12 +377,15 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             prepare.cast_reachability(plan, options, false)?
         } else if check_arithmetic {
             let prepared = prepare.prepare_distinct_limits(plan, 0)?;
-            if prepared.transformed || has_groups {
+            if prepared.transformed || has_groups || has_array_contains {
                 let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
                 prepare.prune_projections(prepared.data, &config, false)?
             } else {
                 prepared.data
             }
+        } else if has_array_contains {
+            let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
+            prepare.prune_projections(plan, &config, false)?
         } else {
             plan
         };
@@ -567,6 +601,7 @@ fn prepare_foldable_groups(plan: LogicalPlan) -> Result<Transformed<LogicalPlan>
 struct Prepare {
     props: ExecutionProps,
     has_groups: bool,
+    has_array_contains: bool,
 }
 
 // Physical row expressions only; aggregates, subqueries and outer references
@@ -690,12 +725,76 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
+    fn simplify_projected_null_array_membership(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+        // Expose only known NULLs across aliases; leave other expressions in place
+        // so pruning cannot duplicate them or change their evaluation order.
+        Ok(plan
+            .transform_up(|node| {
+                // Aggregate arguments and sort keys prepare their inputs first.
+                let input = Arc::clone(match &node {
+                    LogicalPlan::Projection(project) => &project.input,
+                    LogicalPlan::Filter(filter) => &filter.input,
+                    LogicalPlan::Window(window) => &window.input,
+                    LogicalPlan::Aggregate(aggregate) => &aggregate.input,
+                    _ => return Ok(Transformed::no(node)),
+                });
+                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                    .with_schema(Arc::clone(input.schema()))
+                    .with_config_options(Arc::clone(self.props.config_options.as_ref().unwrap()))
+                    .build();
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                let mut rewrite_expr = |expr: Expr| {
+                    if expr.exists(|expr| Ok(matches!(expr, Expr::AggregateFunction(_))))? {
+                        return Ok(Transformed::no(expr));
+                    }
+                    let name = names.save(&expr);
+                    expr.transform_down(|expr| {
+                        if let Expr::ScalarFunction(f) = &expr
+                            && f.func.inner().is::<ArrayContains>()
+                            && !expr.contains_scalar_subquery()
+                        {
+                            let args = f
+                                .args
+                                .iter()
+                                .map(|arg| {
+                                    if projected_null(arg, &input)? {
+                                        Ok(lit(ScalarValue::try_new_null(
+                                            &arg.get_type(input.schema())?,
+                                        )?))
+                                    } else {
+                                        Ok(arg.clone())
+                                    }
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+                            return prune_null(f.func.call(args), &info);
+                        }
+                        Ok(Transformed::no(expr))
+                    })
+                    .map(|expr| expr.update_data(|expr| name.restore(expr)))
+                };
+                node.map_expressions(|expr| {
+                    if matches!(expr, Expr::GroupingSet(_)) {
+                        expr.map_children(&mut rewrite_expr)
+                    } else {
+                        rewrite_expr(expr)
+                    }
+                })?
+                .transform_data(prepare_foldable_groups)
+            })?
+            .data)
+    }
+
     fn prune_projections(
         &self,
         plan: LogicalPlan,
         config: &OptimizerContext,
         exists: bool,
     ) -> Result<LogicalPlan> {
+        let plan = if self.has_array_contains {
+            self.simplify_projected_null_array_membership(plan)?
+        } else {
+            plan
+        };
         let plan = OptimizeProjections::new().rewrite(plan, config)?.data;
         if !self.has_groups {
             return Ok(plan);

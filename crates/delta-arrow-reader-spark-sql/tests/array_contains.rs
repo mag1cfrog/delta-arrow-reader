@@ -195,7 +195,7 @@ fn assert_spark_result(query: &Value, actual: &Value) -> TestResult {
                 assert_eq!(actual["stage"], "planning", "{context}");
                 assert!(message.contains("does not support type Int32"), "{context}");
             }
-            "CAST_INVALID_INPUT" => {
+            "CAST_INVALID_INPUT" | "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION" => {
                 assert!(
                     matches!(
                         actual["stage"].as_str(),
@@ -205,6 +205,19 @@ fn assert_spark_result(query: &Value, actual: &Value) -> TestResult {
                 );
                 assert!(
                     message.contains("Cannot cast string 'bad' to value of Int32 type"),
+                    "{context}"
+                );
+            }
+            "SCALAR_SUBQUERY_TOO_MANY_ROWS" => {
+                assert!(
+                    message.contains("Scalar subquery returned more than one row"),
+                    "{context}"
+                );
+            }
+            "DIVIDE_BY_ZERO" => {
+                assert!(
+                    message.to_ascii_lowercase().contains("divide by zero")
+                        || message.to_ascii_lowercase().contains("division by zero"),
                     "{context}"
                 );
             }
@@ -237,6 +250,7 @@ fn assert_spark_result(query: &Value, actual: &Value) -> TestResult {
         .iter()
         .map(|field| match field["type"].as_str() {
             Some("boolean") => Ok("Boolean"),
+            Some("byte") => Ok("Int8"),
             Some("integer") => Ok("Int32"),
             Some("long") => Ok("Int64"),
             _ => Err("unhandled reference output type"),
@@ -269,8 +283,8 @@ fn assert_retained_difference(query: &Value, actual: &Value, null_rows: usize) -
                 "{context}"
             );
         }
-        Some("nullable_projection_evaluation") => {
-            assert_eq!(query["expected"]["rows"], json!([[null], [null]]));
+        Some("inner_join_null_pruning") => {
+            assert_eq!(query["expected"]["rows"], json!([[0]]));
             assert_eq!(actual["status"], "error", "{context}");
             assert_eq!(actual["stage"], "physical_planning", "{context}");
             assert!(
@@ -315,7 +329,7 @@ async fn array_contains_values_and_input_errors() -> TestResult {
     assert_eq!(inputs.timezone, "UTC");
     assert_eq!(inputs.legacy_size_of_null, "true");
     let queries: Vec<Value> = lines.map(serde_json::from_str).collect::<Result<_, _>>()?;
-    assert_eq!(queries.len(), 166);
+    assert_eq!(queries.len(), 256);
     assert_eq!(
         queries
             .iter()
@@ -356,7 +370,7 @@ async fn array_contains_requires_two_arguments() -> TestResult {
 }
 
 #[tokio::test]
-async fn constant_arrays_evaluate_a_volatile_lookup_once_per_row() -> TestResult {
+async fn array_membership_preserves_volatile_lookup_evaluation() -> TestResult {
     let session = create_session(32);
     session.register_batch(
         "lookups",
@@ -365,8 +379,8 @@ async fn constant_arrays_evaluate_a_volatile_lookup_once_per_row() -> TestResult
             Arc::new(Int32Array::from(vec![Some(1), None, Some(2)])) as ArrayRef,
         )])?,
     )?;
-    let invocations = Arc::new(AtomicUsize::new(0));
-    let counter = invocations.clone();
+    let evaluated_rows = Arc::new(AtomicUsize::new(0));
+    let counter = evaluated_rows.clone();
     session.register_udf(create_udf(
         "count_lookup",
         vec![DataType::Int32],
@@ -378,29 +392,87 @@ async fn constant_arrays_evaluate_a_volatile_lookup_once_per_row() -> TestResult
             Ok(ColumnarValue::Array(Arc::clone(&arrays[0])))
         }),
     ));
-    for (array, expected) in [
+    let cases = [
         (
-            "CAST(ARRAY() AS ARRAY<INT>)",
-            vec![Some(false), None, Some(false)],
+            "SELECT ARRAY_CONTAINS(CAST(ARRAY() AS ARRAY<INT>), count_lookup(n)) AS r FROM lookups",
+            vec![vec![Some(false), None, Some(false)]],
+            3,
         ),
-        ("ARRAY(1, NULL)", vec![Some(true), None, None]),
-    ] {
-        invocations.store(0, Ordering::SeqCst);
-        let sql = format!("SELECT ARRAY_CONTAINS({array}, count_lookup(n)) AS r FROM lookups");
-        let query = plan_query(&session, &sql, &SparkSqlOptions::default()).await?;
-        let plan = query.create_physical_plan(&session).await?;
-        assert_eq!(
-            invocations.load(Ordering::SeqCst),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(1, NULL), count_lookup(n)) AS r FROM lookups",
+            vec![vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups) t",
+            vec![vec![None; 3]],
             0,
-            "planning must not evaluate the lookup"
-        );
-        let batches = collect(plan, session.task_ctx()).await?;
-        let values: Vec<_> = batches
-            .iter()
-            .flat_map(|batch| batch.column(0).as_boolean().iter())
-            .collect();
-        assert_eq!(values, expected);
-        assert_eq!(invocations.load(Ordering::SeqCst), 3, "{array}");
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT a,n FROM (SELECT ARRAY(count_lookup(n),NULL) AS a, CAST(NULL AS INT) AS n FROM lookups) x) y",
+            vec![vec![None; 3]],
+            0,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(1,NULL) AS a, count_lookup(n) AS n FROM lookups) t",
+            vec![vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r, ARRAY_CONTAINS(ARRAY(1,NULL),n) AS needed FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups) t",
+            vec![vec![None; 3], vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r, ARRAY_CONTAINS(a,1) AS needed FROM (SELECT ARRAY(count_lookup(n),NULL) AS a, CAST(NULL AS INT) AS n FROM lookups) t",
+            vec![vec![None; 3], vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(1,NULL),n) AS r, ARRAY_CONTAINS(ARRAY(2,NULL),n) AS other FROM (SELECT count_lookup(n) AS n FROM lookups) t",
+            vec![vec![Some(true), None, None], vec![None, None, Some(true)]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups WHERE n<0) t",
+            vec![vec![]],
+            0,
+        ),
+    ];
+    for ansi_mode in [true, false] {
+        for (sql, expected, expected_evaluated_rows) in &cases {
+            evaluated_rows.store(0, Ordering::SeqCst);
+            let query = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let plan = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                evaluated_rows.load(Ordering::SeqCst),
+                0,
+                "planning must not evaluate a volatile input: {sql}"
+            );
+            let batches = collect(plan, session.task_ctx()).await?;
+            let values: Vec<Vec<_>> = (0..expected.len())
+                .map(|column| {
+                    batches
+                        .iter()
+                        .flat_map(|batch| batch.column(column).as_boolean().iter())
+                        .collect()
+                })
+                .collect();
+            assert_eq!(&values, expected, "{sql}");
+            assert_eq!(
+                evaluated_rows.load(Ordering::SeqCst),
+                *expected_evaluated_rows,
+                "{sql}"
+            );
+        }
     }
     Ok(())
 }

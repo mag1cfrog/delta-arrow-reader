@@ -59,6 +59,53 @@ queries += [
  {'id':'size_null_control', 'sql':'SELECT SIZE(CAST(NULL AS ARRAY<INT>)) AS r'},
  {'id':'array_position_control', 'sql':'SELECT ARRAY_POSITION(ARRAY(1, NULL, 3), 2) AS r'},
 ]
+queries += [
+    {'id':'projection_nested_null_lookup', 'sql':"SELECT ARRAY_CONTAINS(a, n) AS r FROM (SELECT a, n FROM (SELECT a, n FROM (SELECT ARRAY(CAST('bad' AS INT), 2) AS a, CAST(NULL AS INT) AS n FROM range(2)) x) y) z"},
+    {'id':'projection_nested_null_array', 'sql':"SELECT ARRAY_CONTAINS(a, n) AS r FROM (SELECT a, n FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST('bad' AS INT) AS n FROM range(2)) x) y"},
+    {'id':'projection_cte_null_lookup', 'sql':"WITH source AS (SELECT ARRAY(CAST('bad' AS INT), 2) AS a, CAST(NULL AS INT) AS n FROM range(2)) SELECT ARRAY_CONTAINS(a,n) AS r FROM source"},
+    {'id':'projection_null_lookup_division', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(1 DIV 0) AS a, CAST(NULL AS BIGINT) AS n FROM range(2)) t"},
+    {'id':'projection_null_array_division', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<BIGINT>) AS a, 1 DIV 0 AS n FROM range(2)) t"},
+    {'id':'projection_cast_needed_elsewhere', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r, ARRAY_CONTAINS(a,1) AS needed FROM (SELECT ARRAY(CAST('bad' AS INT),2) AS a, CAST(NULL AS INT) AS n FROM range(2)) t"},
+    {'id':'projection_lookup_needed_elsewhere', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r, n AS needed FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST('bad' AS INT) AS n FROM range(2)) t"},
+    {'id':'projection_nullable_not_constant', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(CAST('bad' AS INT),2) AS a, CASE WHEN id=0 THEN CAST(NULL AS INT) ELSE 1 END AS n FROM range(2)) t ORDER BY r"},
+    {'id':'projection_division_needed_elsewhere', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r, n AS needed FROM (SELECT CAST(NULL AS ARRAY<BIGINT>) AS a, 1 DIV 0 AS n FROM range(2)) t"},
+    {'id':'projection_renamed_columns', 'sql':"SELECT ARRAY_CONTAINS(items, needle) AS r FROM (SELECT ARRAY(CAST('bad' AS INT),2), CAST(NULL AS INT) FROM range(2)) t(items, needle)"},
+    {'id':'projection_cast_null_column', 'sql':"SELECT ARRAY_CONTAINS(a,CAST(n AS BIGINT)) AS r FROM (SELECT ARRAY(CAST('bad' AS INT),2) AS a, CAST(NULL AS INT) AS n FROM range(2)) t"},
+    {'id':'projection_nonnull_values', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(CAST(id AS INT),NULL) AS a, CAST(id AS INT) AS n FROM range(2)) t"},
+    {'id':'projection_null_lookup_empty', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(CAST('bad' AS INT),2) AS a, CAST(NULL AS INT) AS n FROM range(0)) t"},
+    {'id':'projection_null_array_empty', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST('bad' AS INT) AS n FROM range(0)) t"},
+    {'id':'projection_values_null_lookup', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(CAST(v AS INT)) AS a, CAST(NULL AS INT) AS n FROM VALUES ('bad') t(v)) s"},
+    {'id':'projection_values_null_array', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST(v AS INT) AS n FROM VALUES ('bad') t(v)) s"},
+    {'id':'projection_inline_values_error', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM VALUES (ARRAY(CAST('bad' AS INT)), CAST(NULL AS INT)) t(a,n)"},
+    {'id':'projection_subquery_cast', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, (SELECT CAST('bad' AS INT)) AS n FROM range(2)) t"},
+    {'id':'projection_subquery_multiple_rows', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, (SELECT CAST(id AS INT) FROM range(2)) AS n FROM range(2)) t"},
+    {'id':'projection_subquery_needed', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(1,2) AS a, (SELECT CAST(id AS INT) FROM range(2)) AS n FROM range(2)) t"},
+    {'id':'projection_invalid_array_null_lookup', 'sql':"SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT 1 AS a, CAST(NULL AS INT) AS n FROM range(2)) t"},
+]
+for null_input, array, lookup in [
+    ('lookup', "ARRAY(CAST('bad' AS INT),2)", 'CAST(NULL AS INT)'),
+    ('array', 'CAST(NULL AS ARRAY<INT>)', "CAST('bad' AS INT)"),
+]:
+    source = f'(SELECT id, {array} AS a, {lookup} AS n FROM range(2)) t'
+    empty_source = source.replace('range(2)', 'range(0)')
+    for site, sql in [
+        ('filter', f'SELECT 1 AS r FROM {source} WHERE ARRAY_CONTAINS(a,n)'),
+        ('aggregate', f'SELECT COUNT(ARRAY_CONTAINS(a,n)) AS r FROM {source}'),
+        ('grouping', f'SELECT COUNT(*) AS r FROM {source} GROUP BY ARRAY_CONTAINS(a,n)'),
+        ('sort', f'SELECT id AS r FROM {source} ORDER BY ARRAY_CONTAINS(a,n), id'),
+        ('window_argument', f'SELECT COUNT(ARRAY_CONTAINS(a,n)) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS r FROM {source} ORDER BY id'),
+        ('window_partition', f'SELECT COUNT(*) OVER (PARTITION BY ARRAY_CONTAINS(a,n)) AS r FROM {source}'),
+        ('aggregate_empty', f'SELECT COUNT(ARRAY_CONTAINS(a,n)) AS r FROM {empty_source}'),
+        ('grouping_empty', f'SELECT COUNT(*) AS r FROM {empty_source} GROUP BY ARRAY_CONTAINS(a,n)'),
+        ('grouping_sets', f'SELECT COUNT(*) AS r, GROUPING(ARRAY_CONTAINS(a,n)) AS g FROM {source} GROUP BY GROUPING SETS ((ARRAY_CONTAINS(a,n)), ()) ORDER BY g'),
+        ('inner_join', f'SELECT COUNT(*) AS r FROM {source} JOIN range(1) u ON ARRAY_CONTAINS(t.a,t.n)'),
+        ('left_join', f'SELECT COUNT(*) AS r FROM {source} LEFT JOIN range(1) u ON ARRAY_CONTAINS(t.a,t.n)'),
+    ]:
+        queries.append({'id':f'projection_{site}_null_{null_input}', 'sql':sql})
+queries += [
+    {'id':'projection_filter_local_values', 'sql':"SELECT 1 AS r FROM (SELECT ARRAY(CAST(v AS INT)) AS a, CAST(NULL AS INT) AS n FROM VALUES ('bad') t(v)) s WHERE ARRAY_CONTAINS(a,n)"},
+    {'id':'projection_filter_live_error', 'sql':"SELECT 1 AS r FROM (SELECT ARRAY(CAST('bad' AS INT)) AS a, 1 AS n FROM range(2)) t WHERE ARRAY_CONTAINS(a,n)"},
+]
 assert len({case['id'] for case in queries}) == len(queries)
 spark = SparkSession.builder.master('local[1]').appName('dar-array-null-reference').config('spark.ui.enabled','false').config('spark.sql.shuffle.partitions','1').config('spark.sql.session.timeZone','UTC').config('spark.sql.legacy.sizeOfNull','true').getOrCreate()
 try:
@@ -95,8 +142,9 @@ try:
                 frame=spark.sql(case['sql']);schema=frame.schema.jsonValue();stage='execution'
                 result={'status':'ok','schema':schema,'rows':[list(row) for row in frame.collect()]}
             except Exception as error:
-                condition=getattr(error,'getCondition',lambda: None)()
-                if condition not in {'CAST_INVALID_INPUT', 'DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE', 'DATATYPE_MISMATCH.NULL_TYPE'}:
+                structured_error = error if hasattr(error, 'getCondition') else error.java_exception
+                condition = structured_error.getCondition()
+                if condition not in {'CAST_INVALID_INPUT', 'DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE', 'DATATYPE_MISMATCH.NULL_TYPE', 'DIVIDE_BY_ZERO', 'SCALAR_SUBQUERY_TOO_MANY_ROWS', 'INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION'}:
                     raise
                 result={'status':'error','stage':stage,'condition':condition}
             observations.append({**case,'ansi':ansi,'expected':result})
@@ -105,7 +153,7 @@ try:
         if case['id'].startswith(('invalid_', 'registered_null_type_'))
         or (ansi and case['id'] in {'live_bad_lookup', 'live_bad_array', 'live_bad_lookup_column', 'live_bad_array_column'})
     }
-    assert {(r['id'], r['ansi']) for r in observations if r['expected']['status'] == 'error'} == expected_errors
+    assert {(r['id'], r['ansi']) for r in observations if r['expected']['status'] == 'error' and not r['id'].startswith('projection_')} == expected_errors
     inputs = {
         "spark_version": spark.version, "timezone": spark.conf.get('spark.sql.session.timeZone'),
         "legacy_size_of_null": spark.conf.get('spark.sql.legacy.sizeOfNull'),
@@ -117,8 +165,8 @@ try:
         name, ansi = observation['id'], observation['ansi']
         if name in {'decimal_hit', 'decimal_miss', 'decimal_hit_column', 'decimal_miss_column'}:
             observation['retained_difference'] = 'mixed_decimal_coercion'
-        elif ansi and name in {'bad_array_null_lookup_column', 'null_array_bad_lookup_column'}:
-            observation['retained_difference'] = 'nullable_projection_evaluation'
+        elif ansi and name in {'projection_inner_join_null_lookup', 'projection_inner_join_null_array'}:
+            observation['retained_difference'] = 'inner_join_null_pruning'
         elif name in {'registered_null_type_array', 'registered_null_type_empty_batch'}:
             observation['retained_difference'] = 'null_type_admission'
     target = Path(__file__).with_name('array-contains-spark.jsonl')

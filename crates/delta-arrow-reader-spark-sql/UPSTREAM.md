@@ -97,7 +97,10 @@ adoption.
 Later semantic fixes are recorded in Git without rewriting the accepted source
 hashes. ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
-batch results. Its references and known remaining differences are described in
+batch results. The Spark analyzer exposes known NULLs through projection/alias
+chains before native column pruning, preserving input preparation at aggregate
+arguments/sort keys and keeping empty grouped input empty. Other expressions
+stay in place to avoid duplicate evaluation. Its references and remaining differences are described in
 the [fixture notes](tests/fixtures/README.md#array-membership).
 
 NULLIF floating comparisons reuse the existing Spark float normalization and

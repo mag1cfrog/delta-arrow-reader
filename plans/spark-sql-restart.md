@@ -21,8 +21,9 @@ passed. Searched CASE condition types, #604, merged through PR #609 as
 are reviewed and pushed as `6d0cbfe6` in PR #611, with CI running.
 Mixed-temporal promotion has a separate implementation issue, #605, in S03.
 Shared COALESCE/IFNULL/NVL evaluation, #608, is reviewed and pushed as `0425d50b`;
-its PR follows the collection-size slice. The current slice is #610, NULLIF's
-unused right operand.
+its PR follows the collection-size slice. NULLIF evaluation, #610, is reviewed
+and pushed as `f43bcf5b`; its PR follows #608. The current slice is #612, known
+NULL array membership across projections.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -74,7 +75,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | Order | Work | Existing issues | Completion evidence |
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
-| S02 | NULL and array semantics | #116, #150, #606, #608, #610 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
+| S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
@@ -367,6 +368,27 @@ because the old issue exists.
   and found no remaining actionable issue. Remote CI and staging integration
   remain pending.
 
+- #609 passed CI run `41236059809` on Linux, macOS and Windows and merged as
+  `0f2b595d`. Issue #604 is closed. Collection-size PR #611 now targets staging
+  with one issue's changes; its CI is running.
+- #610 is committed and pushed as `f43bcf5b`. #612 owns the remaining projected
+  NULL array-membership failures. A public-API probe on that baseline fails both
+  examples in `simplify_expressions`, before rows execute. The candidate follows
+  only known NULLs through projection/alias chains, reuses NULL simplification
+  and native column pruning, and leaves other expressions in place. Independent
+  Spark references add 90 observations; the original values/types/errors remain
+  unchanged. The two old retained failures now have strict assertions. Expanded
+  volatile counters cover unused and shared required inputs in both ANSI modes.
+  Review identified missing Filter/window/grouping sites, required aggregate/sort
+  error boundaries and a new empty-group regression. The candidate now shares
+  the rewrite only at supported sites and reuses the existing foldable-group
+  preparation. Grouping-set keys use native per-key name preservation. Inner-join
+  pruning remains an unchanged, independently reproduced gap with its own issue
+  #613; outer-join failure controls remain strict. All 421 workspace tests,
+  formatting and Clippy pass. The clean-context Sol/high reviewer verified the
+  repaired paths and final logs with no remaining actionable finding in this
+  slice. Remote platform CI and staging integration remain pending.
+
 ### Retained gaps found during S01 review
 
 These are follow-up compatibility items, not consolidation regressions. Confirm
@@ -385,8 +407,8 @@ each with a focused reference comparison before reopening or creating its issue.
 
 - Mixed Decimal array/lookup precision coercion remains rejected. Carry the
   focused reference cases into S03 rather than widening #116's operand types.
-- A NULL-producing column projection still fails on an unused bad cast in two
-  ANSI cases. Keep these evaluation boundaries with #150.
+- #612 addresses the two projected NULL/unused CAST cases. Its independent
+  references preserve local VALUES preparation and required-input errors.
 - Untyped NullType operands remain admitted although Spark rejects them. Track
   their admission with #156; batch NULL handling is covered by #116.
 - Legacy collection-size behavior is being resolved in #606. The Spark result in
