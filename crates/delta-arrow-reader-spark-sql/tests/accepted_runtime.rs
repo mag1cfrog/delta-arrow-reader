@@ -3,7 +3,9 @@
 //! This verifies preservation, including documented unresolved differences. It
 //! does not classify those historical outputs as Spark-compatible. Ordering is
 //! checked separately in the public API tests; this corpus compares row multisets.
+//! Explicit parallel-error alternatives are explained in fixtures/README.md.
 
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::BufRead;
 
@@ -108,10 +110,40 @@ async fn observe(query: &RecordedQuery) -> TestResult<Value> {
     }))
 }
 
+fn matches_recorded_outcome(
+    query: &RecordedQuery,
+    actual: &Value,
+    parallel_errors: &BTreeMap<String, Value>,
+) -> bool {
+    std::iter::once(&query.expected)
+        .chain(parallel_errors.get(&query.id))
+        .any(|expected| {
+            expected.as_object().is_some_and(|fields| {
+                fields.iter().all(|(field, value)| {
+                    let actual_value = actual.get(field);
+                    // Only this analyzer name changed during consolidation.
+                    let normalized_error = if field == "error" {
+                        actual_value.and_then(Value::as_str).map(|message| {
+                            Value::String(message.replace(
+                                "preserve_spark_expression_errors\n",
+                                "spark_decimal_null_propagation\n",
+                            ))
+                        })
+                    } else {
+                        None
+                    };
+                    normalized_error.as_ref().or(actual_value) == Some(value)
+                })
+            })
+        })
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn preserve_accepted_query_outcomes() -> TestResult {
     let compressed = include_bytes!("fixtures/accepted-runtime.jsonl.gz");
     let reader = std::io::BufReader::new(GzDecoder::new(&compressed[..]));
+    let parallel_errors: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
     let mut checked = 0;
     let mut failures = Vec::new();
     for line in reader.lines() {
@@ -120,33 +152,14 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
             rows.sort_by_cached_key(Value::to_string);
         }
         let actual = observe(&query).await?;
-        let expected = query
-            .expected
-            .as_object()
-            .ok_or("expected outcome object")?;
-        for (field, value) in expected {
-            let actual_value = actual.get(field);
-            // The consolidation renamed this analyzer rule; its failure cause
-            // and stage still have to match the archived observation.
-            let normalized_error = if field == "error" {
-                actual_value.and_then(Value::as_str).map(|message| {
-                    Value::String(message.replace(
-                        "preserve_spark_expression_errors\n",
-                        "spark_decimal_null_propagation\n",
-                    ))
-                })
-            } else {
-                None
-            };
-            if normalized_error.as_ref().or(actual_value) != Some(value) {
-                failures.push(format!(
-                    "{}: {field}: expected {value}, got {}\nSQL: {}\nObserved: {actual}",
-                    query.id,
-                    actual.get(field).unwrap_or(&Value::Null),
-                    query.sql,
-                ));
-                break;
-            }
+        if !matches_recorded_outcome(&query, &actual, &parallel_errors) {
+            failures.push(format!(
+                "{}: expected {} or {:?}, got {actual}\nSQL: {}",
+                query.id,
+                query.expected,
+                parallel_errors.get(&query.id),
+                query.sql,
+            ));
         }
         checked += 1;
         if checked % 1000 == 0 {
@@ -169,5 +182,84 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
         "the complete deduplicated corpus must run"
     );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[test]
+fn parallel_error_alternatives_preserve_other_guarantees() -> TestResult {
+    let parallel_errors: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    let reader = std::io::BufReader::new(GzDecoder::new(
+        &include_bytes!("fixtures/accepted-runtime.jsonl.gz")[..],
+    ));
+    let mut checked = 0;
+    for line in reader.lines() {
+        let mut query: RecordedQuery = serde_json::from_str(&line?)?;
+        let Some(alternative) = parallel_errors.get(&query.id) else {
+            continue;
+        };
+        assert!(query.ansi);
+        assert_eq!(query.batch_size, 2);
+        assert_eq!(alternative["status"], "execution_error");
+        assert_eq!(alternative["output_names"], query.expected["output_names"]);
+        assert_ne!(alternative, &query.expected);
+        assert!(matches_recorded_outcome(
+            &query,
+            &query.expected,
+            &parallel_errors
+        ));
+        assert!(matches_recorded_outcome(
+            &query,
+            alternative,
+            &parallel_errors
+        ));
+
+        for (field, value) in [
+            ("status", json!("planning_error")),
+            ("error", json!("unrelated error")),
+            (
+                "error",
+                json!(format!(
+                    "{} (different input)",
+                    alternative["error"].as_str().ok_or("missing error")?
+                )),
+            ),
+            ("output_names", json!(["wrong_name"])),
+        ] {
+            let mut wrong = alternative.clone();
+            wrong[field] = value;
+            assert!(!matches_recorded_outcome(&query, &wrong, &parallel_errors));
+        }
+        if query.expected["status"] == "ok" {
+            for (field, value) in [
+                ("rows", json!([[null]])),
+                ("rows", json!([["false"]])),
+                ("rows", json!([["0"]])),
+                ("types", json!(["Utf8"])),
+                ("output_names", json!(["wrong_name"])),
+                ("logical_nullable", json!([true])),
+                ("physical_nullable", json!([true])),
+            ] {
+                let mut wrong = query.expected.clone();
+                wrong[field] = value;
+                assert!(!matches_recorded_outcome(&query, &wrong, &parallel_errors));
+            }
+        } else {
+            let wrong = json!({"status":"ok", "rows":[[null]], "output_names":["r"]});
+            assert!(!matches_recorded_outcome(&query, &wrong, &parallel_errors));
+        }
+        query.id.push_str("/unlisted");
+        assert!(!matches_recorded_outcome(
+            &query,
+            alternative,
+            &parallel_errors
+        ));
+        checked += 1;
+    }
+    assert_eq!(
+        checked,
+        parallel_errors.len(),
+        "every exception must identify a captured query"
+    );
     Ok(())
 }

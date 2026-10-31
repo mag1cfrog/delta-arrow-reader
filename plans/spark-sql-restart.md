@@ -7,10 +7,12 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-S01 implementation, local validation and independent review are complete on
+S01 implementation and its initial local validation and independent review are complete on
 `feat/spark-sql-crate`, based on main commit
 `39884a559afc10b1d6c255197471d7eeb05760df`. PR #599 targets
-`feat/spark-sql-staging`; remote CI is in progress.
+`feat/spark-sql-staging`. The first CI run passed on all three platforms. A later
+documentation/inventory commit exposed scheduling-sensitive historical captures
+on macOS; their replay comparisons are being repaired and reviewed before merge.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Subsequent implementation branches start there and their
@@ -172,6 +174,27 @@ because the old issue exists.
   PyO3 or Sail Python runtime packages. A clean-context Sol/high review reproduced
   the source and generated counts with no actionable finding; Cargo graph counts
   were executed by the parent, not independently by that reviewer.
+- All three platform jobs passed the complete workspace tests on `a39cdcaa`.
+  The subsequent inventory/docs-only commit `e9d942a2` exposed three replay
+  differences on macOS. Frozen physical plans already admitted competing
+  partition outcomes; the importer had preserved only one observation of each.
+- Checked 26 related queries with 40 and 500 local repeats each, then executed
+  the twelve ROUND queries' two partitions and eight UNION failing branches
+  separately. Twenty exact observation IDs have evidenced alternative errors.
+  The source archive and imported captures stay unchanged; the replay now checks
+  these alternatives without accepting unrelated errors or altered success
+  metadata. Independent Spark 4.2.0 repeats also confirmed the inherited UNION
+  compatibility gap described below.
+- Reopened #167, #173 and #116 with their existing native hierarchy, assigned to
+  `mag1cfrog`. S02's ARRAY_CONTAINS prototype and independent reference captures
+  are retained separately while the S01 CI repair is completed. S02 has not been
+  accepted, committed or merged.
+- A fresh clean-context Sol/high Bulletproof Review verified all twenty
+  alternatives against the frozen plans and isolated execution evidence, checked
+  the unchanged import and comparison boundaries, and found no correctness
+  issue. Clarified that complete-query repeats observed only some alternative
+  pairs. The full local replay, matcher rejection tests, formatting and the
+  CI-equivalent Clippy check passed; the revised remote CI remains to run.
 
 ### Retained gaps found during S01 review
 
@@ -182,3 +205,7 @@ each with a focused reference comparison before reopening or creating its issue.
   change `9007199254740993` to `9007199254740992` at scale zero.
 - DOUBLE BROUND needs boundary cases for extreme scales, where its power-of-ten
   calculation can produce NaN. Keep these with the S07 arithmetic work.
+- Eight ANSI group-only UNION/LIMIT probes can return success before another
+  branch's division/cast failure, while both the frozen Spark reference and fresh
+  Spark 4.2.0 runs fail. S07 must settle evaluation/error preservation and replace
+  the replay's explicit scheduling alternatives with strict Spark expectations.

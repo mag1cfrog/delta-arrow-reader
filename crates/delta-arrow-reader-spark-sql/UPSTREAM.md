@@ -75,8 +75,11 @@ binary size or runtime cost estimates.
 - Remove unselectable precision-policy branches and a stale CAST comment.
 
 These changes are distinct from the accepted frozen source selection. The replay
-permits only the intentional analyzer-name change in error text; values, types,
-nullability, output names, other errors and failure stages still have to match.
+preserves values, types, nullability, names, errors and failure stages, with the
+intentional analyzer-name substitution. Twenty captures also have explicitly
+checked parallel-error alternatives because their frozen execution plans do not
+guarantee which partition completes first. The [fixture notes](tests/fixtures/README.md)
+describe those alternatives and the inherited Spark difference they retain.
 
 ## Licenses and maintenance
 
