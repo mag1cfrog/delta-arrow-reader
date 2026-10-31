@@ -47,6 +47,23 @@ Cargo applies dependency overrides from the consuming workspace root. A future
 CLI integration must select these same patches there; adding a path dependency
 on this crate alone does not enable them.
 
+## Source and dependency size
+
+From this crate's directory, regenerate the inventory with Python 3 and Cargo:
+
+```sh
+mkdir -p target
+cargo check --locked --workspace --message-format=json > target/build-messages.jsonl
+python3 source_inventory.py --build-messages target/build-messages.jsonl --out target/source-inventory.json
+```
+
+The report separates Sail's production, test and build-script lines, records
+generated Rust from that build, and counts the complete retained dependency
+forks. Line counts include comments and blank lines; nonblank counts are also
+reported. The dependency graph count excludes development dependencies unless
+its field name says otherwise. These are source measurements, not release
+binary size or runtime cost estimates.
+
 ## Consolidation fixes
 
 - Rename the local expression-error analyzer to describe its scope beyond Decimal

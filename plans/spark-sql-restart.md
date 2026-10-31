@@ -162,6 +162,16 @@ because the old issue exists.
 - Committed S01 as `2847b369` and opened PR #599. The user selected a separate
   staging branch for the complete frontend; #599 and subsequent slices target
   `feat/spark-sql-staging`.
+- Added the reproducible source inventory retained from the frozen experiment,
+  extended for its standalone test functions. It reports 103,985 Sail Rust lines:
+  88,140 production, 15,765 test and 80 build-script lines, plus 269 generated
+  parser lines. The 11 dependency forks retain another 403,139 Rust lines. Their
+  34 modified Rust files contain 4,048 added and 386 removed lines relative to
+  the checksum-verified published sources; the retained source is reported in
+  full, not only the patch. The Linux normal/build graph has 380 packages and no
+  PyO3 or Sail Python runtime packages. A clean-context Sol/high review reproduced
+  the source and generated counts with no actionable finding; Cargo graph counts
+  were executed by the parent, not independently by that reviewer.
 
 ### Retained gaps found during S01 review
 
