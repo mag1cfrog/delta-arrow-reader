@@ -110,6 +110,13 @@ before native VALUES construction. Precision reduction preserves integral digits
 and Decimal/floating mixtures become DOUBLE. Existing casts perform the value
 conversion; native arithmetic and non-Decimal VALUES typing are unchanged.
 
+STRING-to-BOOLEAN CAST uses Spark's whole-token and ASCII trimming rules.
+Invalid input raises a cast error in ANSI mode and returns NULL for TRY_CAST or
+legacy CAST. Its literal errors participate in the existing early-error handling;
+Arrow's native boolean casts stay unchanged. The
+[reference cases](tests/fixtures/README.md#string-to-boolean-casts) include guarded
+and empty-result behavior.
+
 NULLIF floating comparisons reuse the existing Spark float normalization and
 native comparison/validity kernels. Unmatched values retain their original bits.
 Comparison casts now operate on temporary values, preserving the first input's

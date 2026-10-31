@@ -14,6 +14,7 @@ pub mod misc;
 pub mod multi_expr;
 pub mod predicate;
 pub mod spark_cast_float_to_decimal;
+pub mod spark_cast_string_to_boolean;
 pub mod spark_cast_string_to_decimal;
 pub mod spark_cast_string_to_int32;
 pub mod spark_struct_rename;
