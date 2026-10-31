@@ -44,14 +44,14 @@ statuses are unchanged. A handled failure produces:
 
 Core failures retain their typed phase, code, reason, and source category.
 `source_kind` is null when absent. Safe optional fields include `argument_kind`,
-`json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. Diagnostic version
+`json_kind`, input `line` and `column`, `io_kind`, and `os_error`. Diagnostic version
 2 has no general `message` field. Use the classification fields for decisions.
 
 Failed Databricks requests may include `upstream_message`, a filtered explanation
 of at most 1024 UTF-8 bytes. `upstream_message_truncated: true` marks a shortened
 excerpt. It is guidance, not a stable identifier, and can contain table or
 workspace names. See the [filtering limits](unity-catalog.md#credential-renewal-and-failures)
-before sharing diagnostics. Other dependency errors and captured child output
+before sharing diagnostics. Other dependency messages and captured child output
 are omitted.
 
 Databricks subprocess failures also report `command_operation`. Local I/O failures
@@ -66,6 +66,28 @@ When DAR recognizes the CLI's authentication or permission footer, `reason` is
 remains `uc_table_request_failed` or `uc_credential_request_failed`. Unknown
 formats keep their generic reason and unknown recovery. A privilege name in an
 error does not by itself establish that the privilege is missing.
+
+For an unavailable SQL function, `query` and `explain` report
+`reason=unknown_function`, `recovery=fix_input`, and `argument=--sql-file`.
+The optional `function` identifies the rejected function; `line` and `column`
+locate it in the SQL file, starting at 1. For example, the diagnostic for
+`SELECT get_json_object(value, '$.state') FROM t` includes:
+
+```json
+{"reason":"unknown_function","function":"get_json_object","line":1,"column":8}
+```
+
+Function names are included only when they contain at most 64 ASCII letters,
+digits, or underscores and do not start with a digit. Other names are omitted
+entirely. SQL literals, column names, and dependency suggestions are not printed.
+
+When the planner reports several failures, `reason=multiple_planning_errors`
+and `planning_errors` contains their individual reasons, source categories,
+and available function names and positions. At most eight entries are included;
+fewer may fit alongside snapshot bindings. `planning_errors_truncated: true`
+means more errors were available. Correct the reported errors and retry.
+Unrecognized causes retain `reason=sql_planning`. Recovery remains unknown
+unless every cause was classified as a SQL input problem.
 
 For a reader failure during SQL, the outer `phase`, `code`, and `reason` describe
 the SQL operation. The optional `cause` contains the reader's `phase`, `code`,

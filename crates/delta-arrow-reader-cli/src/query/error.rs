@@ -1,12 +1,15 @@
 //! Query failures, safe classifications, and exit statuses.
 
+mod planning;
+
 use std::{error::Error as _, fmt};
 
-use datafusion::common::{DataFusionError, SchemaError};
+use datafusion::common::DataFusionError;
 use delta_arrow_reader::{DeltaReaderError, error_source_kind};
 use snafu::Snafu;
 
 use crate::diagnostics::ErrorClassification;
+use planning::PlanningDiagnostics;
 
 /// SQL failures retain typed sources without printing query text or dependency messages.
 #[derive(Snafu)]
@@ -37,6 +40,15 @@ impl fmt::Debug for QueryError {
 impl QueryError {
     pub(crate) fn reader_cause(&self) -> Option<&DeltaReaderError> {
         DeltaReaderError::find_source(self.source()?)
+    }
+
+    pub(crate) fn planning_diagnostics(&self) -> Option<PlanningDiagnostics<'_>> {
+        match self {
+            Self::Planning { source } if self.reader_cause().is_none() => {
+                Some(PlanningDiagnostics::from_error(source))
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn classification(&self) -> ErrorClassification {
@@ -75,15 +87,6 @@ impl QueryError {
                         error_source_kind(source)
                     };
                 let reason = match source.find_root() {
-                    DataFusionError::SchemaError(error, _)
-                        if matches!(self, Self::Planning { .. }) && self.reader_cause().is_none() =>
-                    {
-                        match error.as_ref() {
-                            SchemaError::FieldNotFound { .. } => "column_not_found",
-                            SchemaError::AmbiguousReference { .. } => "ambiguous_column",
-                            _ => code,
-                        }
-                    }
                     // DataFusion 54 uses one string variant for both budgets. Unknown messages stay unclassified.
                     DataFusionError::ResourcesExhausted(message)
                         if message.starts_with("The used disk space during the spilling process has exceeded the allowable limit of ") => "spill_limit_exceeded",
@@ -92,7 +95,7 @@ impl QueryError {
                             && message.ends_with("(DiskManager is disabled)") => "spill_disabled",
                     DataFusionError::ResourcesExhausted(message)
                         if message.starts_with("Failed to allocate additional ") => "memory_limit_exceeded",
-                    _ => code,
+                    _ => self.planning_diagnostics().map_or(code, |details| details.reason()),
                 };
                 ErrorClassification {
                     phase: "datafusion",

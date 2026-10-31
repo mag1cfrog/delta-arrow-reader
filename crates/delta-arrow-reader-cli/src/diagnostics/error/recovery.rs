@@ -146,6 +146,22 @@ impl Error {
             Self::Query { source } => {
                 let classification = source.classification();
                 let (argument, expected, hint) = match classification.reason {
+                    "unknown_function" => (
+                        "--sql-file",
+                        "a supported SQL function",
+                        "Replace the unavailable function with an expression supported by this DAR build.",
+                    ),
+                    "multiple_planning_errors"
+                        if source
+                            .planning_diagnostics()
+                            .is_some_and(|details| details.all_causes_are_input_errors()) =>
+                    {
+                        (
+                            "--sql-file",
+                            "supported SQL functions and valid column references",
+                            "Correct the reported functions and column references in --sql-file.",
+                        )
+                    }
                     "column_not_found" => (
                         "--sql-file",
                         "an existing SQL column reference",

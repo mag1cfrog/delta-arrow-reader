@@ -1,5 +1,6 @@
 use super::*;
 use crate::diagnostics::Error;
+use datafusion::common::SchemaError;
 use std::sync::Arc;
 
 #[test]

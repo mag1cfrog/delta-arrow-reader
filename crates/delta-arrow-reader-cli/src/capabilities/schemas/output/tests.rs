@@ -73,6 +73,42 @@ fn diagnostic_schema_validates_the_optional_reader_cause() {
 }
 
 #[test]
+fn diagnostic_schema_validates_sql_planning_details() {
+    let schema = diagnostic_schema();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let mut record = schema["examples"][0].clone();
+    let causes = json!([
+        {"reason":"unknown_function", "source_kind":"datafusion_plan", "function":"sha2", "line":1, "column":8},
+        {"reason":"column_not_found", "source_kind":"schema"},
+    ]);
+    record["planning_errors"] = causes.clone();
+    assert!(validator.is_valid(&record));
+    record["planning_errors_truncated"] = true.into();
+    assert!(validator.is_valid(&record));
+    for invalid in [
+        json!(null),
+        json!([]),
+        json!([{}]),
+        json!([{"reason":42, "source_kind":"schema"}]),
+    ] {
+        record["planning_errors"] = invalid;
+        assert!(!validator.is_valid(&record));
+    }
+    for invalid in [
+        json!("https://host/?token=secret"),
+        json!("x".repeat(65)),
+        json!(42),
+    ] {
+        record["planning_errors"] = causes.clone();
+        record["function"] = invalid.clone();
+        assert!(!validator.is_valid(&record));
+        record.as_object_mut().unwrap().remove("function");
+        record["planning_errors"][0]["function"] = invalid;
+        assert!(!validator.is_valid(&record));
+    }
+}
+
+#[test]
 fn output_schemas_validate_examples_and_allow_additional_fields() {
     for name in [
         DiscoverySchema::Inspection,
