@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.9.3](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.2...v0.9.3) - 2026-10-31
+
+### Fixed
+
+- retain actionable SQL planning diagnostics ([#597](https://github.com/mag1cfrog/delta-arrow-reader/pull/597))
+
 ## [0.9.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.9.1...v0.9.2) - 2026-10-30
 
 ### Added
