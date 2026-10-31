@@ -44,22 +44,20 @@ disabling parallelism is a fix.
 `capture_array_contains_spark.py` in a Python 3.12 environment containing
 `pyspark==4.2.0`, with Java 21 available. Rust tests use the committed captures.
 
-The tests compare values, output names and types for 151 supported-input cases in
+The tests compare values, output names and types for 152 supported-input cases in
 both one-row and larger batches. Returned NULLs must be representable in both
 output schemas. Logical nullability can remain conservative, and constant folding
 can narrow physical nullability; exact Spark nullability parity is separate S07
 work. The volatile-lookup and direct-function tests check evaluation count and
 all-NULL batch cardinality separately.
 
-Fifteen observations have explicit `retained_difference` labels. Their assertions
+Fourteen observations have explicit `retained_difference` labels. Their assertions
 preserve the relevant boundary without counting them as Spark-compatible:
 
 - Mixed Decimal precisions still fail coercion. Equal Decimal types are covered.
 - Two projected NULL/cast cases still evaluate the bad cast in ANSI mode.
 - Untyped NULL columns remain admitted, unlike Spark. Their membership results
   now follow the NULL rule across the complete batch; the admission gap remains.
-- `SIZE(NULL)` remains NULL in non-ANSI mode, while the captured Spark setting
-  `spark.sql.legacy.sizeOfNull=true` returns -1.
 
 For local lookup-cost comparisons, run
 `cargo bench --locked --bench array_contains --profile dev` on each revision with
@@ -69,6 +67,27 @@ reports planning and execution samples for 24 Int32 scenarios, including nullabl
 and nonnullable hits and misses and long constant arrays. Nullable misses
 intentionally change result validity; their timing measures the cost of corrected
 behavior, not equivalent-output speed.
+
+## Collection sizes
+
+`collection-size-spark.jsonl` records 288 Spark 4.2.0 observations across both
+ANSI modes and both `spark.sql.legacy.sizeOfNull` settings. Regenerate it with
+`capture_collection_size_spark.py` using the same Python/Java environment as
+the array references. Rust tests compare every capture at batch sizes 1 and 32.
+
+The [Spark collection-size contract](https://spark.apache.org/docs/4.2.0/sql-ref-functions-builtin.html#collection-functions)
+returns -1 for NULL only when ANSI mode is off and the legacy setting is on.
+`SparkSqlOptions::legacy_size_of_null` defaults to true. SIZE and CARDINALITY
+accept arrays and maps; ARRAY_SIZE accepts arrays and always returns NULL for
+NULL. The captures check values, INT output types, argument admission, untyped
+NULLs, empty inputs and live cast errors. Returned NULLs must fit both output
+schemas; exact Spark schema-nullability parity remains S07 work.
+
+Separate public-API tests cover sliced and empty List, LargeList, ListView,
+LargeListView, FixedSizeList, Map and Null arrays. A counted volatile input must
+run once per row and never during planning. A LargeList with more than `INT_MAX`
+entries must still fail its checked INT cast. Native length calculations stay
+in place; NULL replacement runs on their already computed result.
 
 ## Floating NULLIF
 

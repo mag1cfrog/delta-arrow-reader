@@ -114,3 +114,8 @@ Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
 CASE successes with independently confirmed planning failures.
+
+Collection sizes retain native length calculations and checked INT casts.
+SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
+ARRAY_SIZE always preserves NULL. The [size references](tests/fixtures/README.md#collection-sizes)
+cover modes, admission, Arrow representations, overflow and input evaluation.

@@ -301,12 +301,6 @@ fn assert_retained_difference(query: &Value, actual: &Value, null_rows: usize) -
             assert_eq!(actual["logical_nullable"], json!([true]), "{context}");
             assert_eq!(actual["physical_nullable"], json!([true]), "{context}");
         }
-        Some("legacy_size_of_null") => {
-            assert_eq!(query["expected"]["rows"], json!([[-1]]));
-            assert_eq!(actual["status"], "ok", "{context}");
-            assert_eq!(actual["rows"], json!([[null]]), "{context}");
-            assert_eq!(actual["types"], json!(["Int32"]), "{context}");
-        }
         difference => return Err(format!("unhandled retained difference {difference:?}").into()),
     }
     Ok(())
@@ -327,7 +321,7 @@ async fn array_contains_values_and_input_errors() -> TestResult {
             .iter()
             .filter(|q| q.get("retained_difference").is_some())
             .count(),
-        15
+        14
     );
     for batch_size in [1, 32] {
         let session = create_session(batch_size);

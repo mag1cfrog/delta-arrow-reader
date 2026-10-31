@@ -32,6 +32,16 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 
+fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let value = input.arguments.one()?;
+    let length = if value.get_type(input.function_context.schema)? == DataType::Null {
+        value
+    } else {
+        expr_fn::array_length(value)
+    };
+    Ok(cast(length, DataType::Int32))
+}
+
 fn array_repeat(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let (element, count) = input.arguments.two()?;
@@ -504,10 +514,7 @@ pub(super) fn list_built_in_array_functions() -> Vec<(&'static str, ScalarFuncti
         ("array_prepend", F::custom(array_prepend)),
         ("array_remove", F::binary(expr_fn::array_remove_all)),
         ("array_repeat", F::custom(array_repeat)),
-        (
-            "array_size",
-            F::unary(|array| cast(expr_fn::array_length(array), DataType::Int32)),
-        ),
+        ("array_size", F::custom(array_size)),
         ("array_union", F::binary(expr_fn::array_union)),
         ("arrays_overlap", F::custom(arrays_overlap)),
         ("arrays_zip", F::custom(arrays_zip)),
