@@ -28,9 +28,11 @@ predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
 S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
 `04b191a6`. VALUES row-width validation, #616, is reviewed and pushed as
 `28d93682`. Mixed-temporal conditional types, #605, are reviewed and pushed as
-`22151773`. The current slice is #618, NULLIF first-argument result preservation.
-Its separately confirmed comparison-policy gap is assigned to #619. The
-relational coverage tracker #170 and reference review #141 have resumed.
+`22151773`. NULLIF result preservation, #618, is reviewed and pushed as
+`d0501262`. The current slice is #619, NULLIF numeric comparison coercion. Its
+comparison audit assigned independent string, temporal and known-NULL-right
+findings to #621, #622 and #623. The relational coverage tracker #170 and
+reference review #141 have resumed.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -83,7 +85,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #621, #622, #623 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -503,8 +505,33 @@ because the old issue exists.
 - PR #617 CI run `41245115427` failed on macOS when the sccache client lost its
   server response while compiling `unicode-ident`; there was no Clippy source
   diagnostic. Linux/Windows were still running, so GitHub rejected an immediate
-  job rerun. Retry the failed job after the run completes; do not merge on this
-  attempt or change the source/workflow to disguise the infrastructure failure.
+  job rerun. Linux and Windows then passed; the macOS job was rerun on the same
+  head after the run completed. Staging merge waits for that result. Source and
+  workflow files are unchanged for the rerun.
+
+
+- #619 separates the existing numeric comparison promotion rule from its binary
+  expression caller and reuses it inside NULLIF. The initial 492-reference capture
+  exposes 44 baseline differences across two batch sizes; targeted candidate and
+  counted-evaluation tests pass. The expanded capture has 624 observations,
+  including both narrow-integer operand orders and 96 NaN/infinity cases. The
+  original 240 reference outcomes remain unchanged; two former Decimal comparison
+  exceptions become strict assertions. The full workspace passes 424 tests with
+  the 528-observation fixture, zero failures and two inherited ignored doctests.
+  The final 624-observation fixture and counted-evaluation tests pass a focused
+  rerun, with production code unchanged. The nonfinite cases trigger 96 unexpected
+  Decimal cast errors in 192 baseline executions. Warning-denying Clippy,
+  formatting and diff checks pass. Independent review found stale documentation
+  claims, now corrected and rechecked. The clean-context Sol/high review has no
+  unresolved actionable findings. The slice is ready to commit; its separate PR,
+  remote CI and staging merge follow the existing queue.
+- A separate 288-observation Spark comparison audit uses literals and VALUES,
+  both ANSI modes, and UTC/Phoenix. It confirms shared string coercion (#621),
+  mixed temporal comparison timezones (#622), and known-NULL-right simplification
+  (#623). All are assigned to `mag1cfrog` as native children of #173. They remain
+  required S03 work and are not counted as supported by #619. Dynamic NULL right
+  columns can still require a conversion that a literal NULL skips; #623 must
+  preserve that distinction.
 
 ### Retained gaps found during S01 review
 

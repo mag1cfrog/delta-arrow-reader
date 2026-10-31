@@ -224,8 +224,12 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
         ("nanvl", F::binary(expr_fn::nanvl)),
         (
             "nullif",
-            F::binary(|left, right| {
-                ScalarUDF::from(SparkNullIf::default()).call(vec![left, right])
+            F::custom(|input| {
+                let (left, right) = input.arguments.two()?;
+                Ok(ScalarUDF::from(SparkNullIf::new(
+                    input.function_context.plan_config.ansi_mode,
+                ))
+                .call(vec![left, right]))
             }),
         ),
         ("nullifzero", F::custom(nullifzero)),

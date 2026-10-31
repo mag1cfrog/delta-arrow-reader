@@ -167,11 +167,13 @@ local development-profile results do not establish release throughput.
 
 ## NULLIF result types
 
-`nullif-types-spark.jsonl` stores 240 independent Spark 4.2.0 observations from
-`capture_nullif_types_spark.py`, using the same Python/Java setup. Of these, 238
-are strict Spark comparisons and two retain the known Decimal/floating comparison
-difference. The retained assertions require the exact existing native result;
-they do not treat that result as Spark-compatible.
+`nullif-types-spark.jsonl` stores 624 independent Spark 4.2.0 observations from
+`capture_nullif_types_spark.py`, using the same Python/Java setup. Every case has
+a strict Spark result or error assertion. Numeric promotion covers Decimal with
+FLOAT/DOUBLE and signed integers with FLOAT, including positive and negative
+precision boundaries, both operand orders and ANSI modes. Ordinary equality
+controls exercise the shared promotion rule alongside NULLIF. NaN and both
+infinities must compare as floating values instead of failing a Decimal cast.
 
 Mixed numeric, Decimal and string inputs check that the comparison type does not
 replace the first argument's result type or value. Cases include a BIGINT beyond
@@ -185,8 +187,8 @@ Incomparable scalar and typed-NULL inputs must fail during planning.
 
 Mixed-type volatile counters in `conditional_evaluation.rs` check that the
 original left expression is evaluated once and right inputs run only for
-non-NULL left rows. Comparison policy remains separate: Decimal/DOUBLE equality
-still follows the native Decimal common type instead of Spark's DOUBLE choice.
+non-NULL left rows. String comparison coercion, mixed temporal comparisons and
+known-NULL-right simplification remain separate gaps in the restart plan.
 
 ## Conditional temporal results
 

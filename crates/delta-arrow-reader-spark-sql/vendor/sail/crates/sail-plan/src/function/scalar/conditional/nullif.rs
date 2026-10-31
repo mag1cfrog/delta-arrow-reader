@@ -15,22 +15,37 @@ use datafusion_expr::{
     Volatility, lit,
 };
 
-use crate::function::common::SparkComparisonFloat;
+use crate::function::common::{SparkComparisonFloat, spark_comparison_widens_to_double};
 
-#[derive(Debug, Default, PartialEq, Eq, Hash)]
-pub(crate) struct SparkNullIf(NullIfFunc);
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) struct SparkNullIf {
+    native: NullIfFunc,
+    ansi_mode: bool,
+}
 
-fn nullif_comparison_type(left: &DataType, right: &DataType) -> Result<DataType> {
-    comparison_coercion(left, right).ok_or_else(|| {
-        datafusion_common::plan_datafusion_err!(
-            "For function 'nullif' {left} and {right} is not comparable"
-        )
-    })
+impl SparkNullIf {
+    pub(crate) fn new(ansi_mode: bool) -> Self {
+        Self {
+            native: NullIfFunc::new(),
+            ansi_mode,
+        }
+    }
+
+    fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
+        if spark_comparison_widens_to_double(left, right, self.ansi_mode) {
+            return Ok(DataType::Float64);
+        }
+        comparison_coercion(left, right).ok_or_else(|| {
+            datafusion_common::plan_datafusion_err!(
+                "For function 'nullif' {left} and {right} is not comparable"
+            )
+        })
+    }
 }
 
 impl ScalarUDFImpl for SparkNullIf {
     fn name(&self) -> &str {
-        self.0.name()
+        self.native.name()
     }
 
     fn signature(&self) -> &Signature {
@@ -41,7 +56,7 @@ impl ScalarUDFImpl for SparkNullIf {
 
     fn return_type(&self, args: &[DataType]) -> Result<DataType> {
         let [left, right] = take_function_args(self.name(), args)?;
-        nullif_comparison_type(left, right)?;
+        self.comparison_type(left, right)?;
         Ok(left.clone())
     }
 
@@ -64,7 +79,7 @@ impl ScalarUDFImpl for SparkNullIf {
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         if matches!(args.first(), Some(Expr::Literal(value, _)) if value.is_null()) {
             // Keep comparability validation even when the right input is discarded.
-            let original = ScalarUDF::from(Self::default()).call(args);
+            let original = ScalarUDF::from(Self::new(self.ansi_mode)).call(args);
             return Ok(ExprSimplifyResult::Simplified(lit(
                 ScalarValue::try_new_null(&info.get_data_type(&original)?)?,
             )));
@@ -76,7 +91,7 @@ impl ScalarUDFImpl for SparkNullIf {
         let [left, right] = take_function_args(self.name(), input.args.as_slice())?;
         let left = left.clone();
         let same_type = left.data_type() == right.data_type();
-        let comparison_type = nullif_comparison_type(&left.data_type(), &right.data_type())?;
+        let comparison_type = self.comparison_type(&left.data_type(), &right.data_type())?;
         if !same_type {
             for (value, field) in input.args.iter_mut().zip(&mut input.arg_fields) {
                 *value = value.cast_to(&comparison_type, None)?;
@@ -100,7 +115,7 @@ impl ScalarUDFImpl for SparkNullIf {
                 _ => false,
             });
         if same_type && !normalize_floats {
-            return self.0.invoke_with_args(input);
+            return self.native.invoke_with_args(input);
         }
         if normalize_floats {
             let comparison_float = SparkComparisonFloat { widen: false };
@@ -140,7 +155,7 @@ mod tests {
     fn invoke(left: ColumnarValue, right: ColumnarValue, rows: usize) -> Result<ColumnarValue> {
         let field = Arc::new(Field::new("value", left.data_type(), true));
         let right_field = Arc::new(Field::new("right", right.data_type(), true));
-        SparkNullIf::default().invoke_with_args(ScalarFunctionArgs {
+        SparkNullIf::new(true).invoke_with_args(ScalarFunctionArgs {
             args: vec![left, right],
             arg_fields: vec![field.clone(), right_field],
             number_rows: rows,
@@ -180,7 +195,7 @@ mod tests {
             DataType::Int32,
             true,
         )])));
-        let functions = std::iter::once(ScalarUDF::from(SparkNullIf::default())).chain(
+        let functions = std::iter::once(ScalarUDF::from(SparkNullIf::new(true))).chain(
             [Operator::Plus, Operator::Minus, Operator::Multiply]
                 .map(|operator| ScalarUDF::from(SparkCheckedArithmetic::new(operator))),
         );
