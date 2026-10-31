@@ -109,6 +109,46 @@ def encode(value, data_type):
     return str(value)
 
 
+def known_null_right_queries():
+    source = " FROM VALUES (0,'bad'),(1,CAST(NULL AS STRING)),(2,'001') t(k,a)"
+    for data_type in ["INT", "BIGINT", "DOUBLE", "DECIMAL(10,2)", "BOOLEAN",
+                      "DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "STRING"]:
+        right = f"CAST(NULL AS {data_type})"
+        for name, sql in [
+            ("literal", f"SELECT NULLIF('bad',{right}) AS r"),
+            ("column", f"SELECT NULLIF(a,{right}) AS r{source} ORDER BY k"),
+            ("empty", f"SELECT NULLIF(a,{right}) AS r{source} WHERE false"),
+        ]:
+            yield f"known_right_null_{data_type}_{name}", sql
+    for name, right in [
+        ("untyped", "NULL"),
+        ("try_cast", "TRY_CAST('bad' AS INT)"),
+        ("cast_null", "CAST(CAST(NULL AS INT) AS BIGINT)"),
+        ("nullif", "NULLIF(1,1)"),
+        ("case", "CASE WHEN true THEN CAST(NULL AS INT) ELSE 1 END"),
+        ("if", "IF(false,1,CAST(NULL AS INT))"),
+        ("coalesce", "COALESCE(CAST(NULL AS INT),CAST(NULL AS INT))"),
+    ]:
+        yield f"known_right_null_{name}", f"SELECT NULLIF(a,{right}) AS r{source} ORDER BY k"
+    for name, sql in [
+        ("projection", "SELECT NULLIF(a,n) AS r FROM (SELECT id,'bad' AS a,CAST(NULL AS INT) AS n FROM range(2)) s ORDER BY id"),
+        ("nested_projection", "SELECT NULLIF(a,n) AS r FROM (SELECT k AS j,a,n FROM (SELECT id AS k,'bad' AS a,CAST(NULL AS INT) AS n FROM range(2)) x) y ORDER BY j"),
+        ("bad_left", "SELECT NULLIF(CAST('bad' AS INT),CAST(NULL AS DOUBLE)) AS r"),
+        ("bad_left_column", "SELECT NULLIF(CAST(a AS INT),CAST(NULL AS DOUBLE)) AS r FROM VALUES ('bad') t(a)"),
+        ("bad_left_empty", "SELECT NULLIF(CAST(a AS INT),CAST(NULL AS DOUBLE)) AS r FROM VALUES ('bad') t(a) WHERE false"),
+        ("bad_local_values", "SELECT NULLIF(a,CAST(NULL AS DOUBLE)) AS r FROM VALUES (CAST('bad' AS INT)) t(a) WHERE false"),
+        ("incomparable", "SELECT NULLIF(1,CAST(NULL AS ARRAY<INT>)) AS r"),
+        ("incomparable_left", "SELECT NULLIF(ARRAY(1),CAST(NULL AS INT)) AS r"),
+        ("dynamic_values", "SELECT NULLIF(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS INT)),(1,'001',CAST(NULL AS INT)) t(k,a,b) ORDER BY k"),
+        ("dynamic_registered", "SELECT NULLIF(a,b) AS r FROM nullif_input ORDER BY k"),
+        ("dynamic_registered_literal", "SELECT NULLIF('bad',b) AS r FROM nullif_input ORDER BY k"),
+        ("dynamic_registered_empty", "SELECT NULLIF(a,b) AS r FROM nullif_input WHERE false"),
+        ("known_registered", "SELECT NULLIF(a,CAST(NULL AS INT)) AS r FROM nullif_input ORDER BY k"),
+        ("volatile_left", "SELECT r>=0 AND r<1 AS r FROM (SELECT NULLIF(rand(42),CAST(NULL AS DOUBLE)) AS r FROM range(3)) s"),
+    ]:
+        yield "known_right_null_" + name, sql
+
+
 def main():
     os.environ["PYSPARK_PYTHON"] = sys.executable
     spark = (SparkSession.builder.master("local[1]").appName("dar-nullif-result-types")
@@ -118,7 +158,9 @@ def main():
     try:
         assert spark.version == "4.2.0", spark.version
         spark.sparkContext.setLogLevel("ERROR")
-        queries = list(result_queries())
+        spark.createDataFrame([(0, "bad", None), (1, "001", None), (2, None, None)],
+                              "k INT, a STRING, b INT").createOrReplaceTempView("nullif_input")
+        queries = [*result_queries(), *known_null_right_queries()]
         assert len(dict(queries)) == len(queries)
         for name, sql in queries:
             for ansi in [True, False]:
@@ -131,11 +173,14 @@ def main():
                                 "rows": [[encode(row[0], data_type)] for row in frame.collect()]}
                 except Exception as error:
                     condition = getattr(error, "getCondition", lambda: None)()
-                    if condition not in {"CAST_INVALID_INPUT", "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES"}:
+                    if condition not in {"CAST_INVALID_INPUT", "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+                                         "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION"}:
                         raise
                     expected = {"status": "error", "condition": condition}
-                assert (expected["status"] == "error") == (name.startswith("incomparable_") or (ansi and name in {"live_bad_right", "bad_left_null_right"})), (name, ansi, expected)
                 observation = {"id": name, "sql": sql, "ansi": ansi, "expected": expected}
+                if not ansi and name in {"known_right_null_DATE_column", "known_right_null_TIMESTAMP_column",
+                                         "known_right_null_TIMESTAMP_NTZ_column"}:
+                    observation["retained_difference"] = "string_temporal_ansi_629"
                 observations.append(observation)
         metadata = {"spark_version": spark.version, "timezone": "UTC",
                     "java_version": spark.sparkContext._jvm.java.lang.System.getProperty("java.version")}

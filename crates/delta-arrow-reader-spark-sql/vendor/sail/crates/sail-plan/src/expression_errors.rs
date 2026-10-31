@@ -144,7 +144,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         let mut check_arithmetic = false;
         let mut check_cast = false;
         let mut check_groups = false;
-        let mut has_array_contains = false;
+        let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
@@ -162,18 +162,23 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
                 check_cast |= has_cast(expr)?;
                 check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
-                has_array_contains |= expr.exists(|expr| {
-                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<ArrayContains>()))
+                has_null_sensitive_comparison |= expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<ArrayContains>() || f.func.inner().is::<SparkNullIf>()))
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_array_contains {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
             })
         })?;
-        if !found && !check_arithmetic && !check_cast && !check_groups && !has_array_contains {
+        if !found
+            && !check_arithmetic
+            && !check_cast
+            && !check_groups
+            && !has_null_sensitive_comparison
+        {
             return Ok(plan);
         }
         let mut props = ExecutionProps::new();
@@ -181,7 +186,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         let prepare = Prepare {
             props,
             has_groups,
-            has_array_contains,
+            has_null_sensitive_comparison,
         };
         let plan = if check_groups {
             plan.transform_up_with_subqueries(prepare_foldable_groups)?
@@ -380,13 +385,13 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             prepare.cast_reachability(plan, options, false)?
         } else if check_arithmetic {
             let prepared = prepare.prepare_distinct_limits(plan, 0)?;
-            if prepared.transformed || has_groups || has_array_contains {
+            if prepared.transformed || has_groups || has_null_sensitive_comparison {
                 let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
                 prepare.prune_projections(prepared.data, &config, false)?
             } else {
                 prepared.data
             }
-        } else if has_array_contains {
+        } else if has_null_sensitive_comparison {
             let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
             prepare.prune_projections(plan, &config, false)?
         } else {
@@ -604,7 +609,7 @@ fn prepare_foldable_groups(plan: LogicalPlan) -> Result<Transformed<LogicalPlan>
 struct Prepare {
     props: ExecutionProps,
     has_groups: bool,
-    has_array_contains: bool,
+    has_null_sensitive_comparison: bool,
 }
 
 // Physical row expressions only; aggregates, subqueries and outer references
@@ -684,7 +689,8 @@ fn has_cast(expr: &Expr) -> Result<bool> {
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
             || f.func.inner().is::<SparkCastStringToBoolean>()
-                || f.func.inner().is::<SparkCastStringToInteger>())))
+                || f.func.inner().is::<SparkCastStringToInteger>()
+                || f.func.inner().is::<SparkNullIf>())))
 }
 
 // Preserve string and Decimal-to-Decimal failures before local pruning.
@@ -699,6 +705,12 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
             Ok(source.is_string()
                 || matches!((source, cast.field.data_type()),
                     (DataType::Decimal128(_, _), DataType::Decimal128(_, _))))
+        }
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<SparkNullIf>() =>
+        {
+            let types = f.args.iter().map(|arg| arg.get_type(schema)).collect::<Result<Vec<_>>>()?;
+            Ok(types.iter().any(DataType::is_string) && !types.iter().all(DataType::is_string))
         }
         Expr::ScalarFunction(f)
             if f.func
@@ -732,7 +744,7 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
-    fn simplify_projected_null_array_membership(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn simplify_projected_null_comparisons(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         // Expose only known NULLs across aliases; leave other expressions in place
         // so pruning cannot duplicate them or change their evaluation order.
         Ok(plan
@@ -757,7 +769,8 @@ impl Prepare {
                     let name = names.save(&expr);
                     expr.transform_down(|expr| {
                         if let Expr::ScalarFunction(f) = &expr
-                            && f.func.inner().is::<ArrayContains>()
+                            && (f.func.inner().is::<ArrayContains>()
+                                || f.func.inner().is::<SparkNullIf>())
                             && !expr.contains_scalar_subquery()
                         {
                             let args = f
@@ -773,6 +786,16 @@ impl Prepare {
                                     }
                                 })
                                 .collect::<Result<Vec<_>>>()?;
+                            if f.func.inner().is::<SparkNullIf>() {
+                                return Ok(match f.func.simplify(args, &info)? {
+                                    datafusion_expr::simplify::ExprSimplifyResult::Simplified(
+                                        expr,
+                                    ) => Transformed::yes(expr),
+                                    datafusion_expr::simplify::ExprSimplifyResult::Original(
+                                        args,
+                                    ) => Transformed::no(f.func.call(args)),
+                                });
+                            }
                             return prune_null(f.func.call(args), &info);
                         }
                         Ok(Transformed::no(expr))
@@ -797,7 +820,7 @@ impl Prepare {
         config: &OptimizerContext,
         exists: bool,
     ) -> Result<LogicalPlan> {
-        let plan = if self.has_array_contains {
+        let plan = if self.has_null_sensitive_comparison {
             // Native join rules decide which side can discard a failing input.
             let plan = plan.transform_down(|node| {
                 if let LogicalPlan::Join(join) = &node
@@ -811,7 +834,7 @@ impl Prepare {
                     Ok(Transformed::no(node))
                 }
             })?.data;
-            self.simplify_projected_null_array_membership(plan)?
+            self.simplify_projected_null_comparisons(plan)?
         } else {
             plan
         };
@@ -1099,12 +1122,25 @@ impl Prepare {
                             .with_schema(Arc::clone(project.input.schema()))
                             .with_config_options(Arc::new(options.clone()))
                             .build();
-                        let simplifier =
-                            datafusion::optimizer::simplify_expressions::ExprSimplifier::new(info);
+                        let simplifier = ExprSimplifier::new(info);
                         for expr in &project.expr {
-                            // Lower conditional UDFs such as COALESCE before physical
-                            // evaluation; their dead branches still cannot fail folding.
-                            let expr = simplifier.simplify(expr.clone())?;
+                            // Keep local comparisons while lowering other UDFs normally.
+                            let expr = expr
+                                .clone()
+                                .transform_up(|mut expr| {
+                                    if let Expr::ScalarFunction(f) = &mut expr
+                                        && let Some(nullif) =
+                                            f.func.inner().downcast_ref::<SparkNullIf>()
+                                    {
+                                        f.func = Arc::new(datafusion_expr::ScalarUDF::from(
+                                            nullif.for_local_values(),
+                                        ));
+                                        return Ok(Transformed::yes(expr));
+                                    }
+                                    Ok(Transformed::no(expr))
+                                })?
+                                .data;
+                            let expr = simplifier.simplify(expr)?;
                             create_physical_expr(&expr, project.input.schema(), &self.props)?
                                 .evaluate(&batch)?;
                         }
@@ -1219,6 +1255,8 @@ impl Prepare {
                 };
                 let expr = if let Expr::ScalarFunction(f) = &expr
                     && f.func.short_circuits()
+                    // Local VALUES comparisons precede constant NULL propagation.
+                    && !(local && f.func.inner().is::<SparkNullIf>())
                 {
                     match f.func.simplify(f.args.clone(), &info)? {
                         datafusion_expr::simplify::ExprSimplifyResult::Simplified(lowered) => {
