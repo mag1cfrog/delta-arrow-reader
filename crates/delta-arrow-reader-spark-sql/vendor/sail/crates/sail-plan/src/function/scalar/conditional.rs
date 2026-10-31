@@ -14,6 +14,9 @@ use sail_function::scalar::spark_to_string::SparkToUtf8;
 use crate::error::PlanResult;
 use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
 
+mod nullif;
+pub(crate) use nullif::SparkNullIf;
+
 fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
         arguments,
@@ -185,7 +188,12 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
         ("if", F::custom(if_expr)),
         ("ifnull", F::binary(expr_fn::nvl)),
         ("nanvl", F::binary(expr_fn::nanvl)),
-        ("nullif", F::binary(expr_fn::nullif)),
+        (
+            "nullif",
+            F::binary(|left, right| {
+                ScalarUDF::from(SparkNullIf::default()).call(vec![left, right])
+            }),
+        ),
         ("nullifzero", F::custom(nullifzero)),
         ("nvl", F::binary(expr_fn::nvl)),
         ("nvl2", F::ternary(expr_fn::nvl2)),

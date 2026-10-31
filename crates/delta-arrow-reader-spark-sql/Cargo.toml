@@ -131,6 +131,10 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 name = "array_contains"
 harness = false
 
+[[bench]]
+name = "nullif"
+harness = false
+
 [patch.crates-io]
 arrow-arith = { path = "vendor/dependencies/arrow-arith" }
 arrow-array = { path = "vendor/dependencies/arrow-array" }

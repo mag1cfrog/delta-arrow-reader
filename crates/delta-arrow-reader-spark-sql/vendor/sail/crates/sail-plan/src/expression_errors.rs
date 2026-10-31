@@ -18,6 +18,7 @@ use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
 use datafusion_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, lit};
 
+use crate::function::scalar::conditional::SparkNullIf;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
@@ -42,6 +43,7 @@ fn null_literal(expr: &Expr) -> bool {
         Expr::Alias(alias) => null_literal(&alias.expr),
         Expr::ScalarFunction(f)
             if (f.func.inner().is::<SparkNullIfZero>()
+                || f.func.inner().is::<SparkNullIf>()
                 || f.func
                     .inner()
                     .is::<datafusion::functions::core::nullif::NullIfFunc>()) =>

@@ -4,6 +4,7 @@
 //! does not classify those historical outputs as Spark-compatible. Ordering is
 //! checked separately in the public API tests; this corpus compares row multisets.
 //! Explicit parallel-error alternatives are explained in fixtures/README.md.
+//! Reviewed fixes replace their exact historical outcomes; old bugs are not passes.
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -144,10 +145,15 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
     let reader = std::io::BufReader::new(GzDecoder::new(&compressed[..]));
     let parallel_errors: BTreeMap<String, Value> =
         serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    let mut corrections: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/reviewed-corrections.json"))?;
     let mut checked = 0;
     let mut failures = Vec::new();
     for line in reader.lines() {
         let mut query: RecordedQuery = serde_json::from_str(&line?)?;
+        if let Some(corrected) = corrections.remove(&query.id) {
+            query.expected = corrected;
+        }
         if let Some(rows) = query.expected.get_mut("rows").and_then(Value::as_array_mut) {
             rows.sort_by_cached_key(Value::to_string);
         }
@@ -174,6 +180,10 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
         }
     }
     let manifest: Value = serde_json::from_str(include_str!("fixtures/accepted-runtime.json"))?;
+    assert!(
+        corrections.is_empty(),
+        "corrections must refer to replayed observations"
+    );
     assert_eq!(
         checked,
         manifest["unique_observations"]

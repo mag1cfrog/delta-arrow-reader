@@ -69,3 +69,36 @@ reports planning and execution samples for 24 Int32 scenarios, including nullabl
 and nonnullable hits and misses and long constant arrays. Nullable misses
 intentionally change result validity; their timing measures the cost of corrected
 behavior, not equivalent-output speed.
+
+## Floating NULLIF
+
+`nullif-float-spark.jsonl` contains input bits/settings and 98 independent Spark
+4.2.0 observations. Regenerate it with `capture_nullif_float_spark.py` using the
+same Python/Java setup as the array reference. Rust tests need neither runtime.
+Float results use hexadecimal IEEE bits to retain width and zero signs; NaNs
+share one display token. Separate Rust assertions check unmatched NaN payloads.
+
+The public-API tests compare values, names and types with batches of one, three
+and 32 rows. They cover FLOAT/DOUBLE columns and scalars, zero signs, NaNs,
+infinities, NULLs, empty batches, live casts and nonfloating controls. Returned
+NULLs must be representable in both schemas; exact Spark schema-nullability
+parity is not claimed. Guarded and live multirow subqueries check integration
+with existing expression-error handling. Direct calls check sliced arrays,
+scalar/array combinations, empty results and unmatched value bits. A volatile
+input test checks one evaluation of each operand per row.
+
+`reviewed-corrections.json` replaces four exact historical outcomes in the replay
+with the independently verified NULLIF results. It does not add alternatives:
+the old negative-zero output now fails. The original compressed captures stay
+unchanged, and unused correction IDs fail the complete replay.
+
+Mixed-input return types, unused-operand errors and nested-type admission remain
+separate conditional findings. These tests do not establish full NULLIF or Spark
+compatibility.
+
+Run `cargo bench --locked --bench nullif --profile dev` on both revisions with the
+same profile and benchmark source/target declaration. It records planning and
+execution samples for nullable/nonnullable DOUBLE columns and constant operands,
+using 262,144 rows, two warm-ups and eleven samples per case. These inputs have
+equivalent outputs before and after the fix. Timing has no pass/fail threshold;
+local development-profile results do not establish release throughput.
