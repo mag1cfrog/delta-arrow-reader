@@ -1,0 +1,16 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use sail_common::spec;
+use sail_sql_parser::ast::statement::Statement;
+
+use crate::error::{SqlError, SqlResult};
+use crate::query::from_ast_query;
+
+/// Converts a query AST into a spec plan, rejecting commands before analyzing their bodies.
+pub fn from_ast_statement(statement: Statement) -> SqlResult<spec::QueryPlan> {
+    match statement {
+        Statement::Query(query) => from_ast_query(query),
+        _ => Err(SqlError::unsupported(
+            "only read-only queries are supported",
+        )),
+    }
+}

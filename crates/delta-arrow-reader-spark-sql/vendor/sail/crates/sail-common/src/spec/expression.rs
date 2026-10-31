@@ -1,0 +1,324 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+
+use crate::spec::data_type::DataType;
+use crate::spec::literal::Literal;
+use crate::spec::{QueryPlan, TimestampType};
+
+pub const DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID: &str = "__sail_default_column_value__";
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Literal(Literal),
+    UnresolvedAttribute {
+        name: ObjectName,
+        plan_id: Option<i64>,
+        is_metadata_column: bool,
+    },
+    UnresolvedFunction(UnresolvedFunction),
+    UnresolvedStar {
+        target: Option<ObjectName>,
+        plan_id: Option<i64>,
+        wildcard_options: WildcardOptions,
+    },
+    Alias {
+        expr: Box<Expr>,
+        /// A single identifier, or multiple identifiers for multi-alias.
+        name: Vec<Identifier>,
+        metadata: Option<Vec<(String, String)>>,
+    },
+    Cast {
+        expr: Box<Expr>,
+        cast_to_type: DataType,
+        /// Whether to rename the expression to `CAST(... AS ...)`.
+        rename: bool,
+        is_try: bool,
+    },
+    UnresolvedRegex {
+        /// The regular expression to match column names.
+        col_name: String,
+        plan_id: Option<i64>,
+    },
+    SortOrder(SortOrder),
+    LambdaFunction {
+        function: Box<Expr>,
+        arguments: Vec<UnresolvedNamedLambdaVariable>,
+    },
+    Window {
+        window_function: Box<Expr>,
+        window: Window,
+    },
+    UnresolvedExtractValue {
+        child: Box<Expr>,
+        extraction: Box<Expr>,
+    },
+    UpdateFields {
+        struct_expression: Box<Expr>,
+        field_name: ObjectName,
+        value_expression: Option<Box<Expr>>,
+    },
+    UnresolvedNamedLambdaVariable(UnresolvedNamedLambdaVariable),
+    /// Rejected inline UDF entrypoint; arguments retain the early-rejection check.
+    CommonInlineUserDefinedFunction {
+        arguments: Vec<Expr>,
+    },
+    CallFunction {
+        function_name: ObjectName,
+        arguments: Vec<Expr>,
+    },
+    /// A named argument expression (e.g., `func(key=value)` in Python UDF kwargs)
+    NamedArgument {
+        key: String,
+        value: Box<Expr>,
+    },
+    // extensions
+    DefaultColumnValue,
+    Placeholder(String),
+    Rollup(Vec<Expr>),
+    Cube(Vec<Expr>),
+    GroupingSets(Vec<Vec<Expr>>),
+    InSubquery {
+        expr: Box<Expr>,
+        subquery: Box<QueryPlan>,
+        negated: bool,
+    },
+    ScalarSubquery {
+        subquery: Box<QueryPlan>,
+    },
+    Exists {
+        subquery: Box<QueryPlan>,
+        negated: bool,
+    },
+    /// Subquery reference from WithRelations.
+    Subquery {
+        /// The plan_id referencing a plan in WithRelations.references.
+        plan_id: i64,
+        /// The subquery type.
+        subquery_type: SubqueryType,
+        /// Values for IN subquery (the left-side expressions).
+        in_subquery_values: Vec<Expr>,
+        negated: bool,
+    },
+    InList {
+        expr: Box<Expr>,
+        list: Vec<Expr>,
+        negated: bool,
+    },
+    IsFalse(Box<Expr>),
+    IsNotFalse(Box<Expr>),
+    IsTrue(Box<Expr>),
+    IsNotTrue(Box<Expr>),
+    IsNull(Box<Expr>),
+    IsNotNull(Box<Expr>),
+    IsUnknown(Box<Expr>),
+    IsNotUnknown(Box<Expr>),
+    Between {
+        expr: Box<Expr>,
+        negated: bool,
+        low: Box<Expr>,
+        high: Box<Expr>,
+    },
+    IsDistinctFrom {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    IsNotDistinctFrom {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    SimilarTo {
+        expr: Box<Expr>,
+        pattern: Box<Expr>,
+        negated: bool,
+        escape_char: Option<char>,
+        case_insensitive: bool,
+    },
+    Table {
+        expr: Box<Expr>,
+    },
+    UnresolvedDate {
+        value: String,
+    },
+    UnresolvedTime {
+        value: String,
+    },
+    UnresolvedTimestamp {
+        value: String,
+        timestamp_type: TimestampType,
+    },
+    IdentifierClause {
+        expr: Box<Expr>,
+    },
+}
+
+/// An identifier with only one part.
+/// It is the raw value without quotes or escape characters.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Identifier(String);
+
+impl From<String> for Identifier {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for Identifier {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl From<Identifier> for String {
+    fn from(id: Identifier) -> Self {
+        id.0
+    }
+}
+
+impl AsRef<str> for Identifier {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// An object name with potentially multiple parts.
+/// Each part is a raw value without quotes or escape characters.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ObjectName(Vec<Identifier>);
+
+impl ObjectName {
+    pub fn bare(name: impl Into<Identifier>) -> Self {
+        Self(vec![name.into()])
+    }
+
+    pub fn child(self, name: impl Into<Identifier>) -> Self {
+        let mut names = self.0;
+        names.push(name.into());
+        Self(names)
+    }
+
+    pub fn parts(&self) -> &[Identifier] {
+        &self.0
+    }
+}
+
+impl<T, S> From<T> for ObjectName
+where
+    T: IntoIterator<Item = S>,
+    S: Into<Identifier>,
+{
+    fn from(value: T) -> Self {
+        Self(value.into_iter().map(|x| x.into()).collect())
+    }
+}
+
+impl From<ObjectName> for Vec<String> {
+    fn from(name: ObjectName) -> Self {
+        name.0.into_iter().map(String::from).collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SortOrder {
+    pub child: Box<Expr>,
+    pub direction: SortDirection,
+    pub null_ordering: NullOrdering,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SortDirection {
+    Unspecified,
+    Ascending,
+    Descending,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum NullOrdering {
+    Unspecified,
+    NullsFirst,
+    NullsLast,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnresolvedFunction {
+    pub function_name: ObjectName,
+    /// A list of positional arguments.
+    pub arguments: Vec<Expr>,
+    /// A list of named arguments, which must come after positional arguments.
+    pub named_arguments: Vec<(Identifier, Expr)>,
+    pub is_distinct: bool,
+    pub is_user_defined_function: bool,
+    pub is_internal: Option<bool>,
+    pub ignore_nulls: Option<bool>,
+    pub filter: Option<Box<Expr>>,
+    pub order_by: Option<Vec<SortOrder>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Window {
+    Named(Identifier),
+    Unnamed {
+        cluster_by: Vec<Expr>,
+        partition_by: Vec<Expr>,
+        order_by: Vec<SortOrder>,
+        frame: Option<WindowFrame>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WindowFrame {
+    pub frame_type: WindowFrameType,
+    pub lower: WindowFrameBoundary,
+    pub upper: WindowFrameBoundary,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum WindowFrameType {
+    Row,
+    Range,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum WindowFrameBoundary {
+    CurrentRow,
+    UnboundedPreceding,
+    UnboundedFollowing,
+    Preceding(Box<Expr>),
+    Following(Box<Expr>),
+    /// An alternative way to specify a window frame boundary, where
+    /// a negative value is a preceding boundary and a positive value is a following boundary.
+    Value(Box<Expr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnresolvedNamedLambdaVariable {
+    pub name: ObjectName,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct WildcardOptions {
+    pub ilike_pattern: Option<String>,
+    pub exclude_columns: Option<Vec<Identifier>>,
+    pub except_columns: Option<Vec<Identifier>>,
+    pub replace_columns: Option<Vec<WildcardReplaceColumn>>,
+    pub rename_columns: Option<Vec<IdentifierWithAlias>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WildcardReplaceColumn {
+    pub expression: Box<Expr>,
+    pub column_name: Identifier,
+    pub as_keyword: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IdentifierWithAlias {
+    pub identifier: Identifier,
+    pub alias: Identifier,
+}
+
+/// The type of subquery expression.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SubqueryType {
+    In,
+    Scalar,
+    Exists,
+}

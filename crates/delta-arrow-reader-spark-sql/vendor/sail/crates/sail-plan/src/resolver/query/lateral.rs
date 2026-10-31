@@ -1,0 +1,97 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::Arc;
+
+use datafusion_expr::{Expr, LogicalPlan, Projection};
+use sail_common::spec;
+use sail_common_datafusion::utils::items::ItemTaker;
+
+use crate::error::{PlanError, PlanResult};
+use crate::function::get_outer_built_in_generator_functions;
+use crate::resolver::PlanResolver;
+use crate::resolver::state::PlanResolverState;
+use crate::resolver::tree::explode::ExplodeRewriter;
+use crate::resolver::tree::monotonic_id::MonotonicIdRewriter;
+use crate::resolver::tree::spark_partition_id::SparkPartitionIdRewriter;
+
+impl PlanResolver<'_> {
+    #[expect(clippy::too_many_arguments)]
+    pub(super) async fn resolve_query_lateral_view(
+        &self,
+        input: Option<spec::QueryPlan>,
+        function: spec::ObjectName,
+        arguments: Vec<spec::Expr>,
+        named_arguments: Vec<(spec::Identifier, spec::Expr)>,
+        table_alias: Option<spec::ObjectName>,
+        column_aliases: Option<Vec<spec::Identifier>>,
+        outer: bool,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        let Ok(function_name) = <Vec<String>>::from(function).one() else {
+            return Err(PlanError::unsupported(
+                "qualified lateral view function name",
+            ));
+        };
+        let input = match input {
+            Some(x) => self.resolve_query_plan(x, state).await?,
+            None => self.resolve_query_empty(true)?,
+        };
+        let schema = input.schema().clone();
+
+        let function_name = if outer {
+            get_outer_built_in_generator_functions(&function_name).to_string()
+        } else {
+            function_name
+        };
+        let expression = spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
+            function_name: spec::ObjectName::bare(function_name),
+            arguments,
+            named_arguments,
+            is_distinct: false,
+            is_user_defined_function: false,
+            is_internal: None,
+            ignore_nulls: None,
+            filter: None,
+            order_by: None,
+        });
+        let expression = if let Some(aliases) = column_aliases {
+            spec::Expr::Alias {
+                expr: Box::new(expression),
+                name: aliases,
+                metadata: None,
+            }
+        } else {
+            expression
+        };
+        let expr = self
+            .resolve_named_expression(expression, &schema, state)
+            .await?;
+        let (input, expr) = self.rewrite_wildcard(input, vec![expr], state)?;
+        let (input, expr) = self.rewrite_projection::<MonotonicIdRewriter>(input, expr, state)?;
+        let (input, expr) =
+            self.rewrite_projection::<SparkPartitionIdRewriter>(input, expr, state)?;
+        let (input, expr) = self.rewrite_projection::<ExplodeRewriter>(input, expr, state)?;
+        let expr = self.rewrite_multi_expr(expr)?;
+        let expr = self.rewrite_named_expressions(expr, state)?;
+        let expr = if let Some(table_alias) = table_alias {
+            let table_reference = self.resolve_table_reference(&table_alias)?;
+            expr.into_iter()
+                .map(|x| {
+                    let name = x.schema_name().to_string();
+                    x.alias_qualified(Some(table_reference.clone()), name)
+                })
+                .collect()
+        } else {
+            expr
+        };
+        let projections = schema
+            .columns()
+            .into_iter()
+            .map(Expr::Column)
+            .chain(expr)
+            .collect::<Vec<_>>();
+        Ok(LogicalPlan::Projection(Projection::try_new(
+            projections,
+            Arc::new(input),
+        )?))
+    }
+}

@@ -33,6 +33,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       cli: ${{ steps.filter.outputs.cli }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
+      spark_sql: ${{ steps.filter.outputs.spark_sql }}
       package_version: ${{ steps.package-version.outputs.version }}
       pr_head_sha: ${{ github.event.pull_request.head.sha }}
       release_pr: >-
@@ -57,6 +58,43 @@ jobs:
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  spark-sql:
+    name: Spark SQL / ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.spark_sql == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-2022]
+    defaults:
+      run:
+        working-directory: crates/delta-arrow-reader-spark-sql
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/delta-arrow-reader-spark-sql -> target
+          cache-bin: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked -p delta-arrow-reader-spark-sql --all-targets --no-deps -- -D warnings
+      - run: cargo test --locked --workspace
 
   feature-tests:
     name: Feature Tests / ${{ matrix.name }}
@@ -544,7 +582,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, rust-docs, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
+    needs: [changes, spark-sql, feature-tests, platform-tests, checks, rust-docs, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -553,6 +591,12 @@ jobs:
         run: |
           if [ "${{ needs.changes.result }}" != "success" ]; then
             echo "Detect Changes did not pass: ${{ needs.changes.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.changes.outputs.spark_sql }}" = "true" ] && \
+             [ "${{ needs.spark-sql.result }}" != "success" ]; then
+            echo "Spark SQL did not pass: ${{ needs.spark-sql.result }}"
             exit 1
           fi
 

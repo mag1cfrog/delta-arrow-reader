@@ -412,6 +412,7 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
                 ("changes.outputs.cli", "false"),
                 ("changes.outputs.tooling", "false"),
                 ("changes.outputs.selective_read", "false"),
+                ("changes.outputs.spark_sql", "false"),
                 ("changes.outputs.release_pr", release),
                 ("changes.outputs.pr_head_sha", "pr-head"),
                 ("release-cli.outputs.validated", "true"),

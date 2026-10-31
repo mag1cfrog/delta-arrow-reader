@@ -1,0 +1,26 @@
+# Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+[package]
+name = "sail-sql-parser"
+version = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+sail-sql-macro = { path = "../sail-sql-macro" }
+
+chumsky = { workspace = true }
+phf = { workspace = true }
+either = { workspace = true }
+paste = { workspace = true }
+serde = { workspace = true }
+itertools = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[build-dependencies]
+prettyplease = { workspace = true }
+syn = { workspace = true }
+quote = { workspace = true }

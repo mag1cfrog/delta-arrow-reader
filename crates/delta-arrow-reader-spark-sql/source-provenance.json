@@ -1,0 +1,1018 @@
+{
+  "frozen_commit": "c426ef86e4da43eb57f270f1a4945c9dcc6559fe",
+  "accepted_runtime_merge": "2a82385d1d420cbd88461d43ad6015801e3647ea",
+  "sail_upstream_commit": "9544c9253e981a82c5f9e493c43ce98a4d9d41b7",
+  "dependency_origins": [
+    {
+      "package": "datafusion-physical-plan",
+      "version": "54.1.0",
+      "registry_archive_sha256": "9bc84da934c903407ba297971ebcc020c4c1a38aafd765d6c144c76eff3fa6a1",
+      "source": "vendor/dependencies/datafusion-physical-plan"
+    },
+    {
+      "package": "datafusion-functions",
+      "version": "54.1.0",
+      "registry_archive_sha256": "5f64c983bbbdcb729d921a2b2ac3375598719b5cc0c30345ad664936f3176fc7",
+      "source": "vendor/dependencies/datafusion-functions"
+    },
+    {
+      "package": "datafusion-optimizer",
+      "version": "54.1.0",
+      "registry_archive_sha256": "a0635620b050b81bb92764e99250868f654e2cd5ad1bece413283b3f73c83179",
+      "source": "vendor/dependencies/datafusion-optimizer"
+    },
+    {
+      "package": "datafusion-physical-optimizer",
+      "version": "54.1.0",
+      "registry_archive_sha256": "86046eed10950c5f9aaed9acfd148e9bd2e1dfdfe4f9aef607d1447b271e4183",
+      "source": "vendor/dependencies/datafusion-physical-optimizer"
+    },
+    {
+      "package": "arrow-cast",
+      "version": "58.4.0",
+      "registry_archive_sha256": "3a8a327c9649f30d8406995f27642b68df354713cca3baaaf100f076f18d5f34",
+      "source": "vendor/dependencies/arrow-cast"
+    },
+    {
+      "package": "datafusion-physical-expr",
+      "version": "54.1.0",
+      "registry_archive_sha256": "8cabf7a86eb70b816729e33c81bf7767c936ee1226f607a114f5dac2decac8d0",
+      "source": "vendor/dependencies/datafusion-physical-expr"
+    },
+    {
+      "package": "datafusion-expr-common",
+      "version": "54.1.0",
+      "registry_archive_sha256": "b7b19a8c95522bee8cbb313d74263b85e355d2b52f42e67ef5694bf5de9e9356",
+      "source": "registry"
+    },
+    {
+      "package": "datafusion-expr",
+      "version": "54.1.0",
+      "registry_archive_sha256": "eeb14d374767ee0fc62dc79a5ba8bcf8a63c14e993c7d992d0e63adfa23d77d3",
+      "source": "vendor/dependencies/datafusion-expr"
+    },
+    {
+      "package": "arrow-array",
+      "version": "58.4.0",
+      "registry_archive_sha256": "ae33dad492b7df00a217563a7b0ef2874df68a0deea1b1a3acf628152f7f7a69",
+      "source": "vendor/dependencies/arrow-array"
+    },
+    {
+      "package": "arrow-arith",
+      "version": "58.4.0",
+      "registry_archive_sha256": "0a41203398f0eaa6f7ec8e62c0da742a21abf282c148fc157f6c35c90e29981a",
+      "source": "vendor/dependencies/arrow-arith"
+    },
+    {
+      "package": "datafusion-physical-expr-common",
+      "version": "54.1.0",
+      "registry_archive_sha256": "72d0d0057fc5a502d45c870cb6d47c66eb7bdd5edb1bd71ad6f3f724975ac2a8",
+      "source": "vendor/dependencies/datafusion-physical-expr-common"
+    },
+    {
+      "package": "arrow-select",
+      "version": "58.4.0",
+      "registry_archive_sha256": "c58da39eb3d8350ad4a549e5c2bc49284dac554016c69829310350f1731b0aad",
+      "source": "registry"
+    },
+    {
+      "package": "lexical-parse-float",
+      "version": "1.0.6",
+      "registry_archive_sha256": "52a9f232fbd6f550bc0137dcb5f99ab674071ac2d690ac69704593cb4abbea56",
+      "source": "vendor/dependencies/lexical-parse-float"
+    }
+  ],
+  "accepted_files": [
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/math.rs",
+      "accepted_sha256": "580a2838b15e6e280e209076936df3a37870014f9275a99cd1eb97ea4e4089d4",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/math.rs",
+      "consolidated_sha256": "65a49f8168bc40ec615aba7f6aabb57bfaa8c98b7f2275084315e1e2ba711bb2"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/query/lateral_join.rs",
+      "accepted_sha256": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/lateral.rs",
+      "consolidated_sha256": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs",
+      "accepted_sha256": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/cast.rs",
+      "consolidated_sha256": "a831a42186327eb75efffc4b04c3f32b3b861974a2f95035cfa355d141352f21"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/common.rs",
+      "accepted_sha256": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/common.rs",
+      "consolidated_sha256": "26889b36a52148000a87854016c97f344bd6155f8c7a812929ff7a3d37c1c3cf"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/Cargo.toml",
+      "accepted_sha256": "17aabfe61876632a6b26a4dffb3b0dcd603a5344e023b66e58bcb85b61b7871b",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/function-Cargo.toml",
+      "consolidated_sha256": "dd63b504b0e6db088c9df642c59aa84fb97c3f9d60707f6a9a02695fbe5cf67a"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/mod.rs",
+      "accepted_sha256": "cfaa4c666296ef5553deb7dfbe8b98cc562267b4ff9d346c2c6f34a10c800776",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/scalar-mod.rs",
+      "consolidated_sha256": "359dfcbf96cc4bb69fe7fd3a5b7d0b4d5f9117c40f389ae412b00b6dfed41cb0"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs",
+      "accepted_sha256": "8747f822bffa967aac7c4eb5231c94afc471a7b8a65a37ce931453d53aeac78c",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/string-cast.rs",
+      "consolidated_sha256": "2c74090207b11a80570c5bebbd36c5e81375f617d5e227575558386f7a825f39"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_float_to_decimal.rs",
+      "accepted_sha256": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/float-cast.rs",
+      "consolidated_sha256": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/lib.rs",
+      "accepted_sha256": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/lib.rs",
+      "consolidated_sha256": "237032783a63c044a02e2c72ddc2d562937873759f8d6b5eaf86ea1921379c12"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/expression_errors.rs",
+      "accepted_sha256": "818af1a613d206840874e8a96c1c4288fec8c8c9fc21b5aec74fc2ef58b7722d",
+      "archive": "local-decimal-cast-runs.json.gz",
+      "member": "candidate-decimal-null.rs",
+      "consolidated_sha256": "44c73f9dc88a798a56cbf66dba3ab3f433258a7aa52ee0ebc3c912e30048e4f1",
+      "accepted_path": "vendor/sail/crates/sail-plan/src/decimal_null.rs"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/mod.rs",
+      "accepted_sha256": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/function-mod.rs",
+      "consolidated_sha256": "be69e640ba2b7e83b292c020e1f93d1d52d9856c4cea84449e68608417384d8f"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/mod.rs",
+      "accepted_sha256": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/function-scalar-mod.rs",
+      "consolidated_sha256": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs",
+      "accepted_sha256": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-subquery.rs",
+      "consolidated_sha256": "68c8c724bdb4ef1fdb42acb24e24911aa3bfdc6e4b7df0fac22abed19c4414fa"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-analyzer/src/expression.rs",
+      "accepted_sha256": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/analyzer-expression.rs",
+      "consolidated_sha256": "e20dc6ba5fdc4af726db09ef25f199aa95fbfc87dd2623737eb95c51d729a7c5"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-analyzer/src/parser.rs",
+      "accepted_sha256": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/analyzer-parser.rs",
+      "consolidated_sha256": "cacd6337d41ed318625cb774d15f8a3514650997e4ef81d6bb4d332758d399af"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/mod.rs",
+      "accepted_sha256": "a6aa195940c3d52f9f8b706f8309194cb917462e27efd8f2c43d667dedd7d043",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/math-mod.rs",
+      "consolidated_sha256": "a4969d4b8bd4b08728f4c83bdca12dd55b2bea53a5861e3456458994d4ae1333"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs",
+      "accepted_sha256": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/decimal-utils.rs",
+      "consolidated_sha256": "a95f1d1d0ad4ffe27a9cd3bdef456e379a078c026a8800621fbcf2e74918a327"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/spark_decimal_round.rs",
+      "accepted_sha256": "2ced18332150ae4059513f27f5e78a5b16bb7a8a2f9970053b5ff5f4a14183f8",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/decimal-round.rs",
+      "consolidated_sha256": "2ced18332150ae4059513f27f5e78a5b16bb7a8a2f9970053b5ff5f4a14183f8"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs",
+      "accepted_sha256": "b32379a2f19e82602633640ffb51fb322cb3d710b413afe3ca67f97f49acbda4",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/conditional.rs",
+      "consolidated_sha256": "7e11d3098eefd8f90661000b79680e561a82721c223428cefb1e33522b3a851d"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs",
+      "accepted_sha256": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/small-int-divide.rs",
+      "consolidated_sha256": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs",
+      "accepted_sha256": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-predicate.rs",
+      "consolidated_sha256": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs",
+      "accepted_sha256": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/function-predicate.rs",
+      "consolidated_sha256": "de6390b5bb64958624f4ed63cfe3f2466291d8cf55fd8f5de3acb66ee3d75e91"
+    },
+    {
+      "path": "vendor/dependencies/arrow-cast/src/cast/mod.rs",
+      "accepted_sha256": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/arrow-mod",
+      "consolidated_sha256": "1a54c0b658176e482c8ce3f1568b6d49eec107c9af4a1f4fa562c2a4a2f04886"
+    },
+    {
+      "path": "vendor/dependencies/arrow-cast/src/cast/decimal.rs",
+      "accepted_sha256": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/arrow-decimal",
+      "consolidated_sha256": "ed6f8fda2748f8764288540469e01657c1869f9f01d98902d8c9641a7be57b95"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-optimizer/src/join_selection.rs",
+      "accepted_sha256": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/join-selection",
+      "consolidated_sha256": "f2c2ebe88e3773ade93d58b81e0dd8376e128f7578594aea6a9c75d5d8d604b6"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-optimizer/src/simplify_expressions/unwrap_cast.rs",
+      "accepted_sha256": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/unwrap-cast",
+      "consolidated_sha256": "368fc69884f97cc879fb9e5274303da69c6474e849589c11d96c33478f65136d"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-optimizer/src/simplify_expressions/expr_simplifier.rs",
+      "accepted_sha256": "f334d9e21c70da2b919e02385225b33c96b2dbecc8607a59795b671f7b651c42",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/expr-simplifier",
+      "consolidated_sha256": "469ff8a153d1042298910ca30a2cce3c8bc251f1ca1c87668a27459d623fcbdb"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-optimizer/src/decorrelate_predicate_subquery.rs",
+      "accepted_sha256": "5bb207eeda0253b825d26aff07a69b7fcce6b73b0bde65cfad4fc0c8122b9146",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/decorrelate",
+      "consolidated_sha256": "3c3b63b95fea25d402125f1c6b3cf9b751f52030be33a5c90c01ccfe6bd92e2f"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-plan/src/joins/nested_loop_join.rs",
+      "accepted_sha256": "433a1602170b0c8f3b49242e5550814f44e2012fef00f717b588592eae739454",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/nested-loop",
+      "consolidated_sha256": "aaf9d41d5e73d4eb799847a469636b796fa61cbb33e6403e67f6627e3d4fae07"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-parser/data/keywords.txt",
+      "accepted_sha256": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/parser-keywords",
+      "consolidated_sha256": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list.rs",
+      "accepted_sha256": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-in-list",
+      "consolidated_sha256": "8d33516ec94f8b9717215bd6d9a3f54970038c75f493f1a101efce4699d63cd8"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs",
+      "accepted_sha256": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-primitive-filter",
+      "consolidated_sha256": "6fd2a89ae00177379ac6bc16092cc83880583c25c6f2988c6e55462e6345c941"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/strategy.rs",
+      "accepted_sha256": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-strategy",
+      "consolidated_sha256": "6031cac8e4957c447e5da4370941da3a04d34792ddc4ac08b79d9bf94cf572ca"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/array_static_filter.rs",
+      "accepted_sha256": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-array-filter",
+      "consolidated_sha256": "1136c6a606b8eae54f03be11a72254420c5544e84d67a23477c651b2c33cd993"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/case.rs",
+      "accepted_sha256": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-case",
+      "consolidated_sha256": "6c4d5cf8b544f6e629ad11778124cb530ecc2709d9918c5454b4c1601c4fb162"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/state.rs",
+      "accepted_sha256": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-state.rs",
+      "consolidated_sha256": "f23c894418635302bf7340d2d696c1863fa05776705d3c5e23a1cfc88ee1964a"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-macro/src/attribute.rs",
+      "accepted_sha256": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-0",
+      "consolidated_sha256": "5eed1b5b9cc5cd1fe6c8f5621a95263c0122ba711550789dfba880433735129e"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-macro/src/lib.rs",
+      "accepted_sha256": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-1",
+      "consolidated_sha256": "f27fd8b7f81e6bf6cd95b7a6ea6c6194096c2d7f0db875a0b63ab7b272994763"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-macro/src/tree/mod.rs",
+      "accepted_sha256": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-2",
+      "consolidated_sha256": "9cfb25f78dcd52bc6b97c1428f315c7bb5c76f6ec6475477bcc4a87e912b8328"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-macro/src/tree/parser.rs",
+      "accepted_sha256": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-3",
+      "consolidated_sha256": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-macro/src/tree/syntax.rs",
+      "accepted_sha256": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-4",
+      "consolidated_sha256": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-macro/src/utils.rs",
+      "accepted_sha256": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-5",
+      "consolidated_sha256": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1"
+    },
+    {
+      "path": "vendor/sail/crates/sail-sql-parser/build.rs",
+      "accepted_sha256": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-6",
+      "consolidated_sha256": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/static_filter.rs",
+      "accepted_sha256": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-static-filter",
+      "consolidated_sha256": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/geoarrow/extension.rs",
+      "accepted_sha256": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-7",
+      "consolidated_sha256": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/geoarrow/mod.rs",
+      "accepted_sha256": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-8",
+      "consolidated_sha256": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/geoarrow/projjson.rs",
+      "accepted_sha256": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-9",
+      "consolidated_sha256": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/lib.rs",
+      "accepted_sha256": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-10",
+      "consolidated_sha256": "6d3b3e758731d36973fe8fbc2cf3e0ce61faf22f0089e583b87e364cf2ba8061"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/spec/data_type.rs",
+      "accepted_sha256": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-11",
+      "consolidated_sha256": "28cae7582eac7f05ec25d88625da45a15d66de6a19196e907c02530b3a5701e0"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/spec/expression.rs",
+      "accepted_sha256": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-12",
+      "consolidated_sha256": "38d8b085efa301c2463f74a9a83c9f6f4aa617eb7c1513385229cd04adba5a57"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/spec/literal.rs",
+      "accepted_sha256": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-13",
+      "consolidated_sha256": "715a0f434374cf35bbb79355b14420780dca7ca9d68e6a3bc75fa874c4b01ec3"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/spec/mod.rs",
+      "accepted_sha256": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-14",
+      "consolidated_sha256": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/spec/plan.rs",
+      "accepted_sha256": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-15",
+      "consolidated_sha256": "85063806369f54d7839d5da062ef088de3b718ea27069e8b05883950344d3e05"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/utils/datetime.rs",
+      "accepted_sha256": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-16",
+      "consolidated_sha256": "15318b37848c878a5af8e423dc1caf83ddbf809f4b6ec4f276d3d1280cc68a53"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/utils/mod.rs",
+      "accepted_sha256": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-17",
+      "consolidated_sha256": "7e70aff390d1d41d9ba0f1bce776b7e0cded307c95a7c4729b45630a0e29f243"
+    },
+    {
+      "path": "vendor/sail/crates/sail-common/src/utils/string.rs",
+      "accepted_sha256": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/restored-build-source-18",
+      "consolidated_sha256": "1f613fb55fa2aa6d7afde581a0ba7bb4d22c3a5937d75cad5423e4e71823b9a2"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/query/join.rs",
+      "accepted_sha256": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-join.rs",
+      "consolidated_sha256": "0d4f4443bfd689ee35f5908c0849877a9d0db4eb874949c576b19c3e5b2a167a"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/attribute.rs",
+      "accepted_sha256": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-attribute.rs",
+      "consolidated_sha256": "9948ced85eeb9bdb24e76c46208aa418e9ceee1053c62a8344b4bdd90d724105"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/query/project.rs",
+      "accepted_sha256": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-project.rs",
+      "consolidated_sha256": "6799e6009b0643981bb29e4388983ff77171f5c94e24809d84751f6d4ff9256e"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/function.rs",
+      "accepted_sha256": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-function.rs",
+      "consolidated_sha256": "691986e18e57b8f5653b336bfbabc2dd3db0f7d1afd14593c42f0ecbcb93933f"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/wildcard.rs",
+      "accepted_sha256": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-wildcard.rs",
+      "consolidated_sha256": "16ac38fdd1e4482f419eb832e0ac4f77bdf75b7ad546cd54d75d04cca55cd472"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/schema.rs",
+      "accepted_sha256": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-schema.rs",
+      "consolidated_sha256": "ecf8f9a08d970eef9a4c1527a4297368a49870f9962785f7f08b1162f20b2f06"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/struct.rs",
+      "accepted_sha256": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/scalar-struct.rs",
+      "consolidated_sha256": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs",
+      "accepted_sha256": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-aggregate.rs",
+      "consolidated_sha256": "3800c533bf2dd776585ebf818e535dc2b88f6d074e4b5dda1e4d4a444dabab44"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-plan/src/aggregates/mod.rs",
+      "accepted_sha256": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-aggregates.rs",
+      "consolidated_sha256": "138181a7a24a51cce6d4e1bd13c3fef1cf1664fa30ed9dabce31601328863850"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/query/sort.rs",
+      "accepted_sha256": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/resolver-sort.rs",
+      "consolidated_sha256": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/binary.rs",
+      "accepted_sha256": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-binary",
+      "consolidated_sha256": "a8c705a39a290041e93f7595da9f3ce89f7409a69ae4915459df539b043b3b7f"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/spark_checked_arithmetic.rs",
+      "accepted_sha256": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/checked.rs",
+      "consolidated_sha256": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs",
+      "accepted_sha256": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-scalar-function.rs",
+      "consolidated_sha256": "51265a8b2957b6ed6234b99399486afdf0ccebd2e2a53a98c1bd087699fa2ca7"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-expr/src/udf.rs",
+      "accepted_sha256": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/udf.rs",
+      "consolidated_sha256": "12364ed2f4735d89a03dad79eb75899392d6ec93738ab02946c92885051b5711"
+    },
+    {
+      "path": "vendor/sail/crates/sail-plan/src/resolver/expression/mod.rs",
+      "accepted_sha256": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/expression-mod.rs",
+      "consolidated_sha256": "cdb911a792299ad8f5ac36b7ba518c33f99b323d74d70a91a64deaa0969b418c"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/expressions/column.rs",
+      "accepted_sha256": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/native-column.rs",
+      "consolidated_sha256": "d60c4775e28ab1303a6fc5530bad574085c9f081c478da8610c08b5b3237d194"
+    },
+    {
+      "path": "vendor/dependencies/arrow-array/src/arithmetic.rs",
+      "accepted_sha256": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/arrow-arithmetic.rs",
+      "consolidated_sha256": "7fb64ec8998ca0c049c1c9bd5ab213253fd6f34b85df210618a2531bc890440f"
+    },
+    {
+      "path": "vendor/dependencies/arrow-arith/src/arity.rs",
+      "accepted_sha256": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/arrow-arity.rs",
+      "consolidated_sha256": "0bdc3d5685aaaabe621440ac47dad8c8b5ef1ada1d2a7f82a13b026d2412b78a"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr-common/src/utils.rs",
+      "accepted_sha256": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/scatter-utils.rs",
+      "consolidated_sha256": "3fc762894aa8b44b9088bc1c4f8fed0d4cb02d4661266fca1e3d171de834811a"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs",
+      "accepted_sha256": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/bround.rs",
+      "consolidated_sha256": "9cc476d222747896e15c8c2b5c2375378c3e97e67091ed98710ac6d0b21cbb23"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/spark_integer_round.rs",
+      "accepted_sha256": "e6dc484a88cd2d0b38756ecda79a76c69ea8e6e85984cea1107166a8c7b424b7",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/integer-round.rs",
+      "consolidated_sha256": "e6dc484a88cd2d0b38756ecda79a76c69ea8e6e85984cea1107166a8c7b424b7"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/math/spark_float_round.rs",
+      "accepted_sha256": "c62f0456753a6aa55f32c18a48576a01318b7336d61cc7c412adc91ad17b9cce",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/float-round.rs",
+      "consolidated_sha256": "c62f0456753a6aa55f32c18a48576a01318b7336d61cc7c412adc91ad17b9cce"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_int32.rs",
+      "accepted_sha256": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/integer-cast.rs",
+      "consolidated_sha256": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6"
+    },
+    {
+      "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_float.rs",
+      "accepted_sha256": "c0970aa7b4b52e86dae57e6d1b8b41ee0e86d71adcaba3f36ea86a7db032164d",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/floating-cast.rs",
+      "consolidated_sha256": "c0970aa7b4b52e86dae57e6d1b8b41ee0e86d71adcaba3f36ea86a7db032164d"
+    },
+    {
+      "path": "vendor/dependencies/lexical-parse-float/src/number.rs",
+      "accepted_sha256": "7d6b9673a13cf3ff9420b1efef8d8e4216727091ff07f701c0dbbbf9a044e4c8",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/lexical-number.rs",
+      "consolidated_sha256": "6a5b8be80dcf3ea4f807e527aef76548bf036f1449f07b4529d34bfd81cbd241"
+    },
+    {
+      "path": "vendor/dependencies/lexical-parse-float/src/binary.rs",
+      "accepted_sha256": "73cae5e3d170e2f6e088b15d013f75b90c8d1de2ee38f8d2567114cd85fa26f9",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/lexical-binary.rs",
+      "consolidated_sha256": "d60b2a955bde877f980bce364bbfe4cfb0798b524c6296c5ff002fdc8d3d3a52"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-expr/src/expr_schema.rs",
+      "accepted_sha256": "c0e20755a3dc54f939f9e5ae460a26f435c07437626893507bc3eaa227a18557",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/expr-schema.rs",
+      "consolidated_sha256": "deb0133ab60a93302420428cde036256720c522514501603203e6d0cca9680b7"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/planner.rs",
+      "accepted_sha256": "79ccdee0dc51999227c7fbb3f9d110a8d7a724b5bf6616302c957fe895bc5e2c",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/physical-planner.rs",
+      "consolidated_sha256": "8b1d17761c13a267970ea846700cedf874e9389552bc6e697007c607575ac64d"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-expr/src/scalar_subquery.rs",
+      "accepted_sha256": "7a904c657b01cdff372da9f6458672433df046fdb329b6bf4ec4c53f5289d180",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/physical-scalar.rs",
+      "consolidated_sha256": "7a904c657b01cdff372da9f6458672433df046fdb329b6bf4ec4c53f5289d180"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-plan/src/scalar_subquery.rs",
+      "accepted_sha256": "2a5aa2a04747a5159fbca4a4087d11330ba49f5482c949f369f7ab37f653617a",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/physical-subquery.rs",
+      "consolidated_sha256": "2a5aa2a04747a5159fbca4a4087d11330ba49f5482c949f369f7ab37f653617a"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-plan/src/projection.rs",
+      "accepted_sha256": "0c2892359085f4b0d98f2ce88180f962948cd1b516ce1d9249c837ea557e97da",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/physical-projection",
+      "consolidated_sha256": "fab14b4a598de955b4a2618c74b25f5d5aeb8af7531ef9e55ad8f0d1c4e7e590"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-plan/src/joins/hash_join/exec.rs",
+      "accepted_sha256": "af0098badfa9b9c8ce1cff4f1bcfdb8f38d423681715b06aff778c76345529b1",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/physical-hash-join",
+      "consolidated_sha256": "01d1c072c8152b27d820fb7cbb4761e644e83f3ab37ee1351f891e12d2f549de"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-functions/src/math/round.rs",
+      "accepted_sha256": "15577be9027f66f9814fd37ac84743c0308773e728a6201522e36f6af24ef5c9",
+      "record": "decimal-round-integrated-performance.json",
+      "patches": [
+        "datafusion-round-decimal256.patch",
+        "datafusion-round-remainder.patch"
+      ],
+      "consolidated_sha256": "bfe046f75ce8ef34ff0a6fe4ed7eed04cee3be393254c902fafca971b3843639"
+    },
+    {
+      "path": "vendor/dependencies/arrow-cast/src/cast/integer_decimal_buffer.rs",
+      "accepted_sha256": "f1a9bf1e4baf97a0bfb14da8550b7435de26d15cbe3c0eec78379f97f93fb45f",
+      "record": "integer-decimal-thread-cache-results.json",
+      "patches": [
+        "arrow-integer-decimal-reuse.patch",
+        "arrow-integer-decimal-thread-cache.patch"
+      ],
+      "consolidated_sha256": "f352383c37820f142cdbc5933e3dc722de65fd24ca3d2ed8129fec78a786bc78"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-optimizer/src/utils.rs",
+      "accepted_sha256": "c92c5599224be22721b3c3fdc5cf79d3172d69d09ca8fb18bf8adc7b9309cca4",
+      "record": "DECIMAL_DIVISION.md:531-617",
+      "patches": [
+        "datafusion-subquery-null.patch"
+      ],
+      "consolidated_sha256": "4edb6c8cb7d1fc304fd379dc9915171db23f34386132e418de8b18f1c53ed6a7"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-optimizer/src/output_requirements.rs",
+      "accepted_sha256": "bb98232643aa37881a18db127bcf9301f7a5408872757f6a20163fe10d081654",
+      "record": "DECIMAL_DIVISION.md:531-617",
+      "patches": [
+        "datafusion-subquery-order.patch"
+      ],
+      "consolidated_sha256": "1fba0ec1cdffc9804472c89fe541794905295752b7a1db83c14519a506f6c668"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-optimizer/src/decorrelate.rs",
+      "accepted_sha256": "5395b44c45eea1750a388dea98e28c2d4a867ccf97ba56f4d75d1fe735751d6d",
+      "record": "DECIMAL_DIVISION.md:531-617",
+      "patches": [
+        "datafusion-lateral-nested.patch"
+      ],
+      "consolidated_sha256": "3ff2acb57611510121f4b431b04e2c9da8e98965bd0958bda847671949fefad9"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-optimizer/src/decorrelate_lateral_join.rs",
+      "accepted_sha256": "1337704060bb751275eee177c9efae48511027a11604463f6d66e666bb57d2e6",
+      "record": "DECIMAL_DIVISION.md:531-617",
+      "patches": [
+        "datafusion-lateral-nested.patch"
+      ],
+      "consolidated_sha256": "4aa6fd3b531f782e4cad900dfa5b482910690af0a4c3507f16c1fcdf19c937ab"
+    },
+    {
+      "path": "vendor/dependencies/datafusion-physical-plan/src/filter.rs",
+      "accepted_sha256": "59bd7c9928586c28653a8b0d2f409525724784a139f326b08d2bc25f89aeb570",
+      "record": "DECIMAL_DIVISION.md:314-320,617",
+      "patches": [
+        "datafusion-filter-projection.patch"
+      ],
+      "consolidated_sha256": "d3df07d87c85adf5d0be2efe9dbdeba00252bce8e89eaf78fc2d04678eafc335"
+    }
+  ],
+  "consolidation_changes": {
+    "modified_file_notices": [
+      "vendor/dependencies/datafusion-physical-plan/src/projection.rs",
+      "vendor/dependencies/datafusion-physical-plan/src/filter.rs",
+      "vendor/dependencies/datafusion-physical-plan/src/aggregates/mod.rs",
+      "vendor/dependencies/datafusion-physical-plan/src/joins/nested_loop_join.rs",
+      "vendor/dependencies/datafusion-physical-plan/src/joins/hash_join/exec.rs",
+      "vendor/dependencies/datafusion-functions/src/math/round.rs",
+      "vendor/dependencies/datafusion-optimizer/src/decorrelate_predicate_subquery.rs",
+      "vendor/dependencies/datafusion-optimizer/src/utils.rs",
+      "vendor/dependencies/datafusion-optimizer/src/decorrelate.rs",
+      "vendor/dependencies/datafusion-optimizer/src/decorrelate_lateral_join.rs",
+      "vendor/dependencies/datafusion-optimizer/src/simplify_expressions/expr_simplifier.rs",
+      "vendor/dependencies/datafusion-optimizer/src/simplify_expressions/unwrap_cast.rs",
+      "vendor/dependencies/datafusion-physical-optimizer/src/join_selection.rs",
+      "vendor/dependencies/datafusion-physical-optimizer/src/output_requirements.rs",
+      "vendor/dependencies/arrow-cast/src/cast/decimal.rs",
+      "vendor/dependencies/arrow-cast/src/cast/mod.rs",
+      "vendor/dependencies/arrow-cast/src/cast/integer_decimal_buffer.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/planner.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/binary.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/case.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/column.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/array_static_filter.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/in_list/strategy.rs",
+      "vendor/dependencies/datafusion-expr/src/expr_schema.rs",
+      "vendor/dependencies/datafusion-expr/src/udf.rs",
+      "vendor/dependencies/arrow-array/src/arithmetic.rs",
+      "vendor/dependencies/arrow-arith/src/arity.rs",
+      "vendor/dependencies/datafusion-physical-expr-common/src/utils.rs",
+      "vendor/dependencies/lexical-parse-float/src/binary.rs",
+      "vendor/dependencies/lexical-parse-float/src/number.rs",
+      "vendor/sail/crates/sail-common-datafusion/Cargo.toml",
+      "vendor/sail/crates/sail-common/Cargo.toml",
+      "vendor/sail/crates/sail-function/Cargo.toml",
+      "vendor/sail/crates/sail-logical-plan/Cargo.toml",
+      "vendor/sail/crates/sail-plan/Cargo.toml",
+      "vendor/sail/crates/sail-sql-parser/Cargo.toml",
+      "vendor/sail/crates/sail-sql-parser/src/parser.rs",
+      "vendor/sail/crates/sail-sql-parser/src/span.rs",
+      "vendor/sail/crates/sail-sql-parser/tests/syntax.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/data_type.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/expression.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/identifier.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/keywords.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/literal.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/operator.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/query.rs",
+      "vendor/sail/crates/sail-sql-parser/src/ast/statement.rs",
+      "vendor/sail/crates/sail-sql-parser/src/container/box.rs",
+      "vendor/sail/crates/sail-sql-parser/src/container/either.rs",
+      "vendor/sail/crates/sail-sql-parser/src/container/option.rs",
+      "vendor/sail/crates/sail-sql-parser/src/container/sequence.rs",
+      "vendor/sail/crates/sail-sql-parser/src/container/tuple.rs",
+      "vendor/sail/crates/sail-sql-parser/src/container/vec.rs",
+      "vendor/sail/crates/sail-sql-parser/src/tree/mod.rs",
+      "vendor/sail/crates/sail-sql-macro/src/attribute.rs",
+      "vendor/sail/crates/sail-sql-macro/src/lib.rs",
+      "vendor/sail/crates/sail-sql-macro/src/tree/mod.rs",
+      "vendor/sail/crates/sail-sql-analyzer/src/error.rs",
+      "vendor/sail/crates/sail-sql-analyzer/src/expression.rs",
+      "vendor/sail/crates/sail-sql-analyzer/src/parser.rs",
+      "vendor/sail/crates/sail-sql-analyzer/src/statement.rs",
+      "vendor/sail/crates/sail-sql-analyzer/src/value.rs",
+      "vendor/sail/crates/sail-plan/src/config.rs",
+      "vendor/sail/crates/sail-plan/src/error.rs",
+      "vendor/sail/crates/sail-plan/src/formatter.rs",
+      "vendor/sail/crates/sail-plan/src/lib.rs",
+      "vendor/sail/crates/sail-plan/src/expression_errors.rs",
+      "vendor/sail/crates/sail-plan/src/function/aggregate.rs",
+      "vendor/sail/crates/sail-plan/src/function/common.rs",
+      "vendor/sail/crates/sail-plan/src/function/mod.rs",
+      "vendor/sail/crates/sail-plan/src/function/window.rs",
+      "vendor/sail/crates/sail-plan/src/physical_plan/mod.rs",
+      "vendor/sail/crates/sail-plan/src/physical_plan/monotonic_id.rs",
+      "vendor/sail/crates/sail-plan/src/physical_plan/spark_partition_id.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/data_type.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/mod.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/plan.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/schema.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/state.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/attribute.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/function.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/lambda.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/literal.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/misc.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/mod.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/wildcard.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/expression/window.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/alias.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/join.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/lateral.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/limit.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/misc.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/mod.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/pivoting.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/project.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/query/read.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/tree/mod.rs",
+      "vendor/sail/crates/sail-plan/src/resolver/tree/window.rs",
+      "vendor/sail/crates/sail-plan/src/function/scalar/array.rs",
+      "vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs",
+      "vendor/sail/crates/sail-plan/src/function/scalar/datetime.rs",
+      "vendor/sail/crates/sail-plan/src/function/scalar/math.rs",
+      "vendor/sail/crates/sail-plan/src/function/scalar/misc.rs",
+      "vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs",
+      "vendor/sail/crates/sail-plan/src/function/table/mod.rs",
+      "vendor/sail/crates/sail-plan/src/function/table/range.rs",
+      "vendor/sail/crates/sail-plan/src/function/table/range_exec.rs",
+      "vendor/sail/crates/sail-logical-plan/src/lib.rs",
+      "vendor/sail/crates/sail-function/src/functions_utils.rs",
+      "vendor/sail/crates/sail-function/src/aggregate/percentile_disc.rs",
+      "vendor/sail/crates/sail-function/src/aggregate/skewness.rs",
+      "vendor/sail/crates/sail-function/src/aggregate/utils.rs",
+      "vendor/sail/crates/sail-function/src/scalar/explode.rs",
+      "vendor/sail/crates/sail-function/src/scalar/mod.rs",
+      "vendor/sail/crates/sail-function/src/scalar/spark_struct_rename.rs",
+      "vendor/sail/crates/sail-function/src/scalar/spark_to_string.rs",
+      "vendor/sail/crates/sail-function/src/scalar/struct_function.rs",
+      "vendor/sail/crates/sail-function/src/window/mod.rs",
+      "vendor/sail/crates/sail-function/src/window/spark_ntile.rs",
+      "vendor/sail/crates/sail-function/src/scalar/array/arrays_zip.rs",
+      "vendor/sail/crates/sail-function/src/scalar/array/spark_array_aggregate.rs",
+      "vendor/sail/crates/sail-function/src/scalar/array/spark_array_filter.rs",
+      "vendor/sail/crates/sail-function/src/scalar/array/spark_array_sort.rs",
+      "vendor/sail/crates/sail-function/src/scalar/array/spark_array_transform.rs",
+      "vendor/sail/crates/sail-function/src/scalar/array/spark_sequence.rs",
+      "vendor/sail/crates/sail-function/src/scalar/csv/spark_from_csv.rs",
+      "vendor/sail/crates/sail-function/src/scalar/csv/spark_to_csv.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/convert_tz.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/mod.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_date.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_date_format.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_next_day.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_time.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_timestamp.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_unix_timestamp.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs",
+      "vendor/sail/crates/sail-function/src/scalar/geo/wkb_reader.rs",
+      "vendor/sail/crates/sail-function/src/scalar/json/common_union.rs",
+      "vendor/sail/crates/sail-function/src/scalar/json/from_json.rs",
+      "vendor/sail/crates/sail-function/src/scalar/json/mod.rs",
+      "vendor/sail/crates/sail-function/src/scalar/json/to_json.rs",
+      "vendor/sail/crates/sail-function/src/scalar/map/map_from.rs",
+      "vendor/sail/crates/sail-function/src/scalar/map/str_to_map.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/mod.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_abs.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_bin.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_ceil_floor.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_negative.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_pmod.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/spark_unhex.rs",
+      "vendor/sail/crates/sail-function/src/scalar/string/spark_to_char.rs",
+      "vendor/sail/crates/sail-function/src/scalar/string/spark_to_number.rs",
+      "vendor/sail/crates/sail-function/src/scalar/variant/spark_parse_json.rs",
+      "vendor/sail/crates/sail-function/src/scalar/variant/spark_variant_get.rs",
+      "vendor/sail/crates/sail-function/src/scalar/xml/from_xml.rs",
+      "vendor/sail/crates/sail-function/src/scalar/xml/to_xml.rs",
+      "vendor/sail/crates/sail-function/src/scalar/xml/xpath_typed.rs",
+      "vendor/sail/crates/sail-function/src/scalar/variant/utils/helper.rs",
+      "vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/format/formatting.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/format/locale.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/format/mod.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/format/parser.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/format/parsing.rs",
+      "vendor/sail/crates/sail-function/src/scalar/datetime/format/pattern.rs",
+      "vendor/sail/crates/sail-common/src/lib.rs",
+      "vendor/sail/crates/sail-common/src/spec/data_type.rs",
+      "vendor/sail/crates/sail-common/src/spec/expression.rs",
+      "vendor/sail/crates/sail-common/src/spec/literal.rs",
+      "vendor/sail/crates/sail-common/src/spec/plan.rs",
+      "vendor/sail/crates/sail-common/src/utils/datetime.rs",
+      "vendor/sail/crates/sail-common/src/utils/mod.rs",
+      "vendor/sail/crates/sail-common/src/utils/string.rs",
+      "vendor/sail/crates/sail-common-datafusion/src/display.rs",
+      "vendor/sail/crates/sail-common-datafusion/src/lib.rs",
+      "vendor/sail/crates/sail-common-datafusion/src/variant.rs",
+      "vendor/sail/crates/sail-common-datafusion/src/rename/mod.rs",
+      "vendor/dependencies/datafusion-optimizer/src/simplify_expressions/simplify_exprs.rs"
+    ],
+    "note": "Accepted hashes identify the original selected sources. Consolidated hashes include notice/link updates, formatting and the explicit review fixes below.",
+    "analyzer_rename": {
+      "module": "decimal_null -> expression_errors",
+      "type": "SparkDecimalNullPropagation -> PreserveSparkExpressionErrors",
+      "rule": "spark_decimal_null_propagation -> preserve_spark_expression_errors",
+      "reason": "The rule preserves early expression errors across arithmetic, casts, NULL branches and subqueries, not only Decimal NULL propagation."
+    },
+    "workspace": {
+      "members": "Eight retained Sail crates now share the independent DAR Spark SQL workspace and its dependency overrides; vendor/sail/Cargo.toml settings moved to the root crate manifest.",
+      "test_profile": "Development opt-level=1 retains the repository dependency profile when the vendored crates become testable workspace members. Debug assertions and overflow checks remain enabled."
+    },
+    "review_fixes": [
+      {
+        "path": "vendor/sail/crates/sail-plan/src/expression_errors.rs",
+        "change": "Reject volatile functions during local planning-time evaluation even when column inputs are available.",
+        "consolidated_sha256": "44c73f9dc88a798a56cbf66dba3ab3f433258a7aa52ee0ebc3c912e30048e4f1"
+      },
+      {
+        "path": "vendor/sail/crates/sail-plan/src/function/scalar/math.rs",
+        "change": "Remove unselectable false precision-policy branches and the unused Array import; all existing call sites retain their selected policy.",
+        "consolidated_sha256": "65a49f8168bc40ec615aba7f6aabb57bfaa8c98b7f2275084315e1e2ba711bb2"
+      },
+      {
+        "path": "vendor/sail/crates/sail-common/src/utils/string.rs",
+        "change": "Remove obsolete CAST-whitespace TODO contradicted by the accepted strict and legacy string casts.",
+        "consolidated_sha256": "1f613fb55fa2aa6d7afde581a0ba7bb4d22c3a5937d75cad5423e4e71823b9a2"
+      },
+      {
+        "path": "vendor/dependencies/datafusion-optimizer/src/simplify_expressions/simplify_exprs.rs",
+        "change": "Refresh outer-reference metadata after child expression simplification, preserving debug invariants and rejection of unsafe correlated scalar grouping.",
+        "registry_source_sha256": "70ad43178feb504794b0d5614e1158c7fe670295f1913d252d12168f9a1606b7",
+        "consolidated_sha256": "1faef2d2a9a267b17f3e8546be5268c873b2abe6e2af6259a4364aa5f5ab5111"
+      }
+    ],
+    "diagnostic_wording": "Replace extraction-probe wording in retained unsupported-operation errors with read-only-query or operation-specific errors; no new operations are admitted.",
+    "formatting": "Apply the repository Rust formatter to consolidated Rust source.",
+    "registry_equivalents": "Use the pinned registry packages for datafusion-expr-common and arrow-select: every Rust source and Cargo.toml was byte-identical to the accepted copies, so no local fork is needed."
+  },
+  "registry_equivalents": [
+    {
+      "accepted_sha256": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/expr-common",
+      "selected_path": "vendor/dependencies/datafusion-expr-common/src/type_coercion/binary.rs",
+      "registry_package": "datafusion-expr-common",
+      "registry_version": "54.1.0",
+      "registry_member": "src/type_coercion/binary.rs",
+      "registry_source_sha256": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461"
+    },
+    {
+      "accepted_sha256": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+      "archive": "empty-input-scalar-runs.json.gz",
+      "member": "baseline/filter.rs",
+      "selected_path": "vendor/dependencies/arrow-select/src/filter.rs",
+      "registry_package": "arrow-select",
+      "registry_version": "58.4.0",
+      "registry_member": "src/filter.rs",
+      "registry_source_sha256": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d"
+    }
+  ]
+}

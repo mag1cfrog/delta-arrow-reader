@@ -1,0 +1,41 @@
+# Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+[package]
+name = "sail-plan"
+version = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+sail-common = { path = "../sail-common" }
+sail-common-datafusion = { path = "../sail-common-datafusion" }
+sail-sql-analyzer = { path = "../sail-sql-analyzer" }
+sail-function = { path = "../sail-function" }
+sail-logical-plan = { path = "../sail-logical-plan" }
+
+datafusion = { workspace = true }
+datafusion-common = { workspace = true }
+datafusion-expr = { workspace = true }
+datafusion-expr-common = { workspace = true }
+datafusion-functions = { workspace = true }
+datafusion-functions-nested = { workspace = true }
+datafusion-spark = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+chumsky = { workspace = true }
+async-trait = { workspace = true }
+async-recursion = { workspace = true }
+lazy_static = { workspace = true }
+ryu = { workspace = true }
+either = { workspace = true }
+# Keep this test dependency here so Cargo can test the path dependency from the probe workspace.
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+rand = { workspace = true }
+half = { workspace = true }
+arrow = { workspace = true }
+arrow-schema = { workspace = true }
+serde_json = { workspace = true }
+regex-syntax = { workspace = true }
+parquet-variant-compute = { workspace = true }

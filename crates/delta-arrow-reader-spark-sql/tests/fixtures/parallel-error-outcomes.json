@@ -1,0 +1,142 @@
+{
+  "replay/cast-empty-group-scalar-cases/1382/only_div_union_exists_true": {
+    "error": "Arrow error: Divide by zero error",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1383/only_div_union_count_true": {
+    "error": "Arrow error: Divide by zero error",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1449/only_int_union_exists_true": {
+    "error": "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1450/only_int_union_count_true": {
+    "error": "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1525/only_double_union_exists_true": {
+    "error": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1526/only_double_union_count_true": {
+    "error": "Execution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1602/only_decimal_union_exists_true": {
+    "error": "Execution error: Cannot cast Some(\"bad\") to DECIMAL(10,2)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/cast-empty-group-scalar-cases/1603/only_decimal_union_count_true": {
+    "error": "Execution error: Cannot cast Some(\"bad\") to DECIMAL(10,2)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/127/TINYINT_column_-1_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(127, -1)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/265/SMALLINT_column_-3_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(32767, -3)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/266/SMALLINT_column_-2_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(32767, -2)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/267/SMALLINT_column_-1_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(32767, -1)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/404/INT_column_-5_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(2147483647, -5)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/405/INT_column_-3_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(2147483647, -3)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/407/INT_column_-1_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(2147483647, -1)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/541/BIGINT_column_-19_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(9223372036854775807, -19)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/543/BIGINT_column_-10_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(9223372036854775807, -10)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/544/BIGINT_column_-5_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(9223372036854775807, -5)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/545/BIGINT_column_-3_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(9223372036854775807, -3)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  },
+  "replay/integer-check-cases/547/BIGINT_column_-1_true": {
+    "error": "Execution error: [ARITHMETIC_OVERFLOW] integer overflow on round(9223372036854775807, -1)",
+    "output_names": [
+      "r"
+    ],
+    "status": "execution_error"
+  }
+}

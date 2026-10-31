@@ -1,0 +1,271 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use async_recursion::async_recursion;
+use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder};
+use sail_common::spec;
+
+use crate::error::{PlanError, PlanResult};
+use crate::resolver::PlanResolver;
+use crate::resolver::state::PlanResolverState;
+
+mod aggregate;
+mod alias;
+mod cte;
+mod dedup;
+mod filter;
+mod join;
+mod lateral;
+mod lateral_join;
+mod limit;
+mod misc;
+mod pivoting;
+mod project;
+mod read;
+mod recursion;
+mod set_op;
+mod sort;
+mod values;
+mod window;
+
+impl PlanResolver<'_> {
+    /// Resolve query plan.
+    /// No hidden fields are kept in the resolved plan.
+    #[async_recursion]
+    pub(super) async fn resolve_query_plan(
+        &self,
+        plan: spec::QueryPlan,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        let plan = self
+            .resolve_query_plan_with_hidden_fields(plan, state)
+            .await?;
+        self.remove_hidden_fields(plan, state)
+    }
+
+    /// Resolve query plan.
+    /// The resolved plan may contain hidden fields.
+    /// If the hidden fields cannot be handled,
+    /// [`Self::resolve_query_plan`] should be used instead,
+    #[async_recursion]
+    async fn resolve_query_plan_with_hidden_fields(
+        &self,
+        plan: spec::QueryPlan,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        use spec::QueryNode;
+
+        if plan.plan_id.is_some() {
+            return Err(PlanError::unsupported("DataFrame plan IDs"));
+        }
+        let plan = match plan.node {
+            QueryNode::Read {
+                is_streaming: true, ..
+            } => {
+                return Err(PlanError::unsupported("streaming reads"));
+            }
+            QueryNode::Read {
+                read_type,
+                is_streaming: false,
+            } => match read_type {
+                spec::ReadType::NamedTable(table) => {
+                    self.resolve_query_read_named_table(*table, state).await?
+                }
+                spec::ReadType::Udtf(udtf) => self.resolve_query_read_udtf(*udtf, state).await?,
+                spec::ReadType::DataSource(_) => {
+                    return Err(PlanError::unsupported("external data sources"));
+                }
+                spec::ReadType::DynamicTable(table) => {
+                    self.resolve_query_read_dynamic_table(*table, state).await?
+                }
+            },
+            QueryNode::Project { input, expressions } => {
+                self.resolve_query_project(input.map(|x| *x), expressions, state)
+                    .await?
+            }
+            QueryNode::Filter { input, condition } => {
+                self.resolve_query_filter(*input, condition, state).await?
+            }
+            QueryNode::Join(join) => self.resolve_query_join(join, state).await?,
+            QueryNode::SetOperation(op) => self.resolve_query_set_operation(op, state).await?,
+            QueryNode::Sort {
+                input,
+                order,
+                is_global,
+            } => {
+                self.resolve_query_sort(*input, order, is_global, state)
+                    .await?
+            }
+            QueryNode::Limit { input, skip, limit } => {
+                self.resolve_query_limit(*input, skip, limit, state).await?
+            }
+            QueryNode::Aggregate(aggregate) => {
+                self.resolve_query_aggregate(aggregate, state).await?
+            }
+            QueryNode::WithParameters { .. } => {
+                return Err(PlanError::unsupported("parameter binding"));
+            }
+            QueryNode::WithRelations { .. } | QueryNode::SubqueryAlias { .. } => {
+                return Err(PlanError::unsupported("Spark Connect relations"));
+            }
+            QueryNode::LocalRelation { .. } => {
+                return Err(PlanError::unsupported("inline Arrow input"));
+            }
+            QueryNode::TableSample { input, sample } => {
+                let plan = self.resolve_query_plan(*input, state).await?;
+                self.apply_table_sample(plan, sample, state).await?
+            }
+            QueryNode::Deduplicate(deduplicate) => {
+                self.resolve_query_deduplicate(deduplicate, state).await?
+            }
+            QueryNode::Sample(_)
+            | QueryNode::Range(_)
+            | QueryNode::Repartition { .. }
+            | QueryNode::RepartitionByExpression { .. }
+            | QueryNode::ToDf { .. }
+            | QueryNode::ToSchema { .. }
+            | QueryNode::WithColumnsRenamed { .. }
+            | QueryNode::Drop { .. }
+            | QueryNode::Tail { .. }
+            | QueryNode::WithColumns { .. }
+            | QueryNode::Hint { .. }
+            | QueryNode::CollectMetrics { .. }
+            | QueryNode::Parse(_) => {
+                return Err(PlanError::unsupported("DataFrame transforms"));
+            }
+            QueryNode::Pivot(pivot) => self.resolve_query_pivot(pivot, state).await?,
+            QueryNode::Unpivot(unpivot) => self.resolve_query_unpivot(unpivot, state).await?,
+            QueryNode::MapPartitions { .. }
+            | QueryNode::GroupMap { .. }
+            | QueryNode::CoGroupMap { .. }
+            | QueryNode::ApplyInPandasWithState { .. }
+            | QueryNode::CommonInlineUserDefinedTableFunction { .. } => {
+                return Err(PlanError::unsupported("Python user-defined functions"));
+            }
+            QueryNode::WithWatermark { .. } => {
+                return Err(PlanError::unsupported("streaming watermarks"));
+            }
+            QueryNode::CachedLocalRelation { .. } => {
+                return Err(PlanError::todo("cached local relation"));
+            }
+            QueryNode::CachedRemoteRelation { .. } => {
+                return Err(PlanError::unsupported("remote checkpoints"));
+            }
+            QueryNode::FillNa { .. }
+            | QueryNode::DropNa { .. }
+            | QueryNode::Replace { .. }
+            | QueryNode::StatSummary { .. }
+            | QueryNode::StatDescribe { .. }
+            | QueryNode::StatCrosstab { .. }
+            | QueryNode::StatCov { .. }
+            | QueryNode::StatCorr { .. }
+            | QueryNode::StatApproxQuantile { .. }
+            | QueryNode::StatFreqItems { .. }
+            | QueryNode::StatSampleBy { .. } => {
+                return Err(PlanError::unsupported("DataFrame NA/statistics"));
+            }
+            QueryNode::Empty { produce_one_row } => self.resolve_query_empty(produce_one_row)?,
+            QueryNode::Values(values) => self.resolve_query_values(values, state).await?,
+            QueryNode::TableAlias {
+                input,
+                name,
+                columns,
+            } => {
+                self.resolve_query_table_alias(*input, name, columns, state)
+                    .await?
+            }
+            QueryNode::WithCtes {
+                input,
+                recursive,
+                ctes,
+            } => {
+                self.resolve_query_with_ctes(*input, recursive, ctes, state)
+                    .await?
+            }
+            QueryNode::LateralView {
+                input,
+                function,
+                arguments,
+                named_arguments,
+                table_alias,
+                column_aliases,
+                outer,
+            } => {
+                self.resolve_query_lateral_view(
+                    input.map(|x| *x),
+                    function,
+                    arguments,
+                    named_arguments,
+                    table_alias,
+                    column_aliases,
+                    outer,
+                    state,
+                )
+                .await?
+            }
+            QueryNode::LateralJoin {
+                left,
+                right,
+                join_condition,
+                join_type,
+            } => {
+                self.resolve_query_lateral_join(*left, *right, join_condition, join_type, state)
+                    .await?
+            }
+            QueryNode::NamedWindows { input, windows } => {
+                self.resolve_named_windows(*input, windows, state).await?
+            }
+        };
+        self.verify_query_plan(&plan, state)?;
+        Ok(plan)
+    }
+
+    fn remove_hidden_fields(
+        &self,
+        plan: LogicalPlan,
+        state: &PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        let mut columns = vec![];
+        let mut has_hidden_columns = false;
+        for column in plan.schema().columns() {
+            let info = state.get_field_info(column.name())?;
+            if info.is_hidden() {
+                has_hidden_columns = true;
+            } else {
+                columns.push(column);
+            }
+        }
+        if has_hidden_columns {
+            let plan = LogicalPlanBuilder::new(plan)
+                .project(columns.into_iter().map(Expr::Column))?
+                .build()?;
+            Ok(plan)
+        } else {
+            Ok(plan)
+        }
+    }
+
+    /// All resolved plans must have "resolved columns".
+    /// If you define new fields in the plan, register the field in the state and use the "resolved field name" to alias the newly created field.
+    /// If you fetch an existing field in the plan, you likely have the "unresolved" field name from the spec.
+    /// Convert the unresolved field name to the "resolved field name" using the state.
+    fn verify_query_plan(&self, plan: &LogicalPlan, state: &PlanResolverState) -> PlanResult<()> {
+        let invalid = plan
+            .schema()
+            .fields()
+            .iter()
+            .filter_map(|f| {
+                if state.get_field_info(f.name()).is_ok() {
+                    None
+                } else {
+                    Some(f.name().to_string())
+                }
+            })
+            .collect::<Vec<_>>();
+        if invalid.is_empty() {
+            Ok(())
+        } else {
+            Err(PlanError::internal(format!(
+                "a plan resolver bug has produced invalid fields: {invalid:?}",
+            )))
+        }
+    }
+}

@@ -301,6 +301,7 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                             ("changes.outputs.cli", "false"),
                             ("changes.outputs.tooling", "false"),
                             ("changes.outputs.selective_read", "false"),
+                            ("changes.outputs.spark_sql", "false"),
                             ("changes.outputs.release_pr", release_pr),
                             ("release-approval.result", approval),
                             ("release-cli.result", build),
