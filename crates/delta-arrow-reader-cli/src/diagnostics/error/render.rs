@@ -454,6 +454,8 @@ mod tests {
             let reported = record["planning_errors"].as_array().unwrap();
             assert!(!reported.is_empty());
             assert_eq!(reported[0]["reason"], "unknown_function");
+            assert_eq!(reported[0]["line"], 65535);
+            assert_eq!(reported[0]["column"], 65535);
             if reported.len() < 8 {
                 assert_eq!(record["planning_errors_truncated"], true);
             }
