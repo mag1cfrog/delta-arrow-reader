@@ -125,11 +125,28 @@ impl Error {
             Self::StorageAuthorization { .. } => source_error,
             _ => &"CLI command failed",
         };
+        let planning_fields = match source_error {
+            Self::Query { source } => source
+                .planning_diagnostics()
+                .map(|details| details.to_json_fields()),
+            _ => None,
+        }
+        .unwrap_or_default();
+        let sql_function = planning_fields.get("function").and_then(Value::as_str);
+        let sql_line = planning_fields.get("line").and_then(Value::as_u64);
+        let sql_column = planning_fields.get("column").and_then(Value::as_u64);
+        let planning_errors = planning_fields
+            .get("planning_errors")
+            .map(tracing::field::display);
+        let planning_errors_truncated = planning_fields
+            .get("planning_errors_truncated")
+            .and_then(Value::as_bool);
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
             error_source_kind = source_kind, argument_kind, argument, expected, supplied, hint, field_path,
             json_kind, json_line, json_column, env_file_line, io_kind, os_error,
+            sql_function, sql_line, sql_column, planning_errors, planning_errors_truncated,
             "{message}"
         );
     }
@@ -162,8 +179,7 @@ impl Error {
             Some("unsupported") => ("change_request", Some(false)),
             _ if phase == "configuration"
                 || matches!(code, "invalid_projection" | "unsupported_predicate")
-                || (code == "sql_planning"
-                    && matches!(reason, "column_not_found" | "ambiguous_column")) =>
+                || (code == "sql_planning" && self.input_correction().is_some()) =>
             {
                 ("fix_input", Some(false))
             }
@@ -187,6 +203,11 @@ impl Error {
                 record = source.to_json_diagnostic()
             }
             Self::Query { source } => {
+                if let Some(details) = source.planning_diagnostics()
+                    && let Some(fields) = record.as_object_mut()
+                {
+                    fields.extend(details.to_json_fields());
+                }
                 if let Some(cause) = source.reader_cause() {
                     record["cause"] = json!({
                         "phase": cause.phase().as_str(),
@@ -335,6 +356,19 @@ fn limit_diagnostic_record(record: &mut Value) {
             cleanup.remove(field);
         }
     }
+    while record.to_string().len() >= max_record_bytes {
+        let Some(causes) = record
+            .get_mut("planning_errors")
+            .and_then(Value::as_array_mut)
+        else {
+            break;
+        };
+        if causes.len() <= 1 {
+            break;
+        }
+        causes.pop();
+        record["planning_errors_truncated"] = true.into();
+    }
     let Some(message) = record.get("upstream_message").and_then(Value::as_str) else {
         return;
     };
@@ -362,6 +396,72 @@ fn limit_diagnostic_record(record: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn planning_errors_fit_with_maximum_snapshot_bindings_and_cleanup() {
+        use datafusion::common::{DataFusionError, Diagnostic, Location, Span};
+
+        for (latest_only_count, limit) in [(0, 8192), (1, 10240), (64, 10240)] {
+            let bindings: Vec<_> = (0..crate::input::MAX_TABLES)
+                .map(|index| {
+                    let mut binding = json!({
+                        "alias": format!("table_{index:057}"),
+                        "table_version": u64::MAX.to_string(),
+                    });
+                    if index < latest_only_count {
+                        binding["time_travel"] = false.into();
+                    }
+                    binding
+                })
+                .collect();
+            let causes = (0..8)
+                .map(|index| {
+                    let message = format!("Invalid function 'function_{index:055}'");
+                    let position = Location {
+                        line: 65535,
+                        column: 65535,
+                    };
+                    DataFusionError::Plan(format!("{message}.\nDid you mean 'secret_suggestion'?"))
+                        .with_diagnostic(Diagnostic::new_error(
+                            message,
+                            Some(Span {
+                                start: position,
+                                end: position,
+                            }),
+                        ))
+                })
+                .collect();
+            let error = Error::WithCleanupFailure {
+                source: Box::new(Error::WithResolvedBindings {
+                    source: Box::new(Error::Query {
+                        source: crate::query::QueryError::Planning {
+                            source: DataFusionError::Collection(causes),
+                        },
+                    }),
+                    bindings: bindings.clone(),
+                }),
+                cleanup: Box::new(Error::Query {
+                    source: crate::query::QueryError::SpillCleanup {
+                        source: std::io::ErrorKind::StorageFull.into(),
+                    },
+                }),
+            };
+            let record = error.to_json_diagnostic();
+            assert!(record.to_string().len() < limit, "{record}");
+            assert_eq!(record["bindings"], json!(bindings));
+            assert_eq!(record["reason"], "multiple_planning_errors");
+            assert_eq!(record["cleanup_error"]["code"], "spill_cleanup");
+            let reported = record["planning_errors"].as_array().unwrap();
+            assert!(!reported.is_empty());
+            assert_eq!(reported[0]["reason"], "unknown_function");
+            assert_eq!(reported[0]["line"], 65535);
+            assert_eq!(reported[0]["column"], 65535);
+            if reported.len() < 8 {
+                assert_eq!(record["planning_errors_truncated"], true);
+            }
+            assert!(!record.to_string().contains("secret"));
+        }
+    }
 
     #[test]
     fn cleanup_diagnostics_fit_with_maximum_snapshot_bindings() {

@@ -6,6 +6,10 @@ use super::{snapshot_bindings_schema, unsigned_integer_string_schema};
 use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 
 pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
+    let function_name = json!({
+        "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+        "description": "Unavailable SQL function. Names outside this syntax are omitted.",
+    });
     json!({
         "title": "Terminal failure diagnostic",
         "description": "One JSON line on stderr with --diagnostics=json. At most 8192 bytes, or 10240 with any time_travel:false binding. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; correction text is guidance, not an identifier.",
@@ -19,6 +23,22 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             "code": {"type": "string"},
             "reason": {"type": "string"},
             "source_kind": {"type": ["string", "null"]},
+            "function": function_name,
+            "planning_errors": {
+                "type": "array", "minItems": 1, "maxItems": 8,
+                "description": "Independent SQL planning failures in reporting order. SQL and dependency messages are omitted; positions are one-based when available.",
+                "items": {
+                    "type": "object", "required": ["reason", "source_kind"],
+                    "properties": {
+                        "reason": {"type": "string"},
+                        "source_kind": {"type": "string"},
+                        "function": function_name,
+                        "line": {"type": "integer", "minimum": 1},
+                        "column": {"type": "integer", "minimum": 1},
+                    },
+                },
+            },
+            "planning_errors_truncated": {"const": true, "description": "More planning errors were available than fit in this diagnostic. Correct the reported errors and retry."},
             "cause": {
                 "type": "object",
                 "description": "Reader failure inside SQL; present only when a typed reader cause is available. Categories are extensible strings.",
@@ -61,8 +81,8 @@ pub(in crate::capabilities::schemas) fn diagnostic_schema() -> Value {
             "resource_details_command": {"type": "array", "items": {"type": "string"}, "description": "Optional focused lookup for SQL memory and spill policy."},
             "field_path": {"type": "string", "description": "JSON Pointer; an empty string identifies the input root."},
             "json_kind": {"type": "string"},
-            "line": {"type": "integer", "minimum": 0},
-            "column": {"type": "integer", "minimum": 0},
+            "line": {"type": "integer", "minimum": 0, "description": "JSON input or SQL error line; SQL positions are one-based."},
+            "column": {"type": "integer", "minimum": 0, "description": "JSON input or SQL error column; SQL positions are one-based."},
             "io_kind": {"type": "string"},
             "os_error": {"type": ["integer", "null"]},
             "bindings": snapshot_bindings_schema(1, "Present for SQL or result errors after all snapshots load. For retries, use the reported version in table_version or --table-version unless time_travel is false."),

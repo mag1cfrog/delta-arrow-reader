@@ -59,6 +59,9 @@ types, the precision/scale or timezone must also match the column. See
 [predicate examples](cli-workflows.md#filter-a-preview-without-sql).
 
 For SQL errors, correct the reported name, alias, or type in the SQL file.
+For `unknown_function`, replace the unavailable function at the reported SQL
+line and column. For `multiple_planning_errors`, correct the listed expressions
+together before retrying.
 Look up only information you lack. A positional table is named `t`; a tables
 manifest supplies its own aliases. Only one read-only statement is accepted. Use
 `dar capabilities --command query` if the installed command's input rules are
