@@ -75,6 +75,20 @@ fn coalesce(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     Ok(expr_fn::coalesce(arguments))
 }
 
+fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let (left, right) = input.arguments.two()?;
+    let schema = input.function_context.schema;
+    if is_temporal_type(&left.get_type(schema)?) || is_temporal_type(&right.get_type(schema)?) {
+        coalesce(ScalarFunctionInput {
+            arguments: vec![left, right],
+            function_context: input.function_context,
+        })
+    } else {
+        // COALESCE's numeric/string coercion would change existing non-ANSI results.
+        Ok(expr_fn::nvl(left, right))
+    }
+}
+
 fn coerce_string_temporal_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
@@ -186,7 +200,7 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
     vec![
         ("coalesce", F::custom(coalesce)),
         ("if", F::custom(if_expr)),
-        ("ifnull", F::binary(expr_fn::nvl)),
+        ("ifnull", F::custom(ifnull)),
         ("nanvl", F::binary(expr_fn::nanvl)),
         (
             "nullif",
@@ -195,7 +209,7 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
             }),
         ),
         ("nullifzero", F::custom(nullifzero)),
-        ("nvl", F::binary(expr_fn::nvl)),
+        ("nvl", F::custom(ifnull)),
         ("nvl2", F::ternary(expr_fn::nvl2)),
         ("zeroifnull", F::custom(zeroifnull)),
         ("when", F::custom(case)),

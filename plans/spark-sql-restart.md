@@ -11,11 +11,11 @@ S01 is complete and merged into `feat/spark-sql-staging` by PR #599, commit
 `3f4245fc258b59c835fc683d4c34a03bbe322231`. Its final CI run passed 408 tests on
 each of Linux, macOS and Windows. Issue #165 is closed.
 
-S02's first slice, #116 ARRAY_CONTAINS NULL semantics, is committed as `8fb846ad`
-in PR #600, targeting staging. Local validation passed 412 workspace tests and
-the independent review found no actionable issue. Remote CI remains pending.
-The following #150 conditional review has resumed; its first bounded runtime
-fix is #601, floating NULLIF equality, on `fix/spark-nullif-float`.
+S02's first slice, #116 ARRAY_CONTAINS NULL semantics, merged into staging through
+PR #600 as `c4e75faf`, after all three platform jobs passed. The following #150
+conditional review has resumed. Its floating NULLIF equality fix, #601, has
+completed local validation and independent review in PR #602; remote CI is
+pending. The next bounded repair is #603, IFNULL/NVL temporal coercion.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Subsequent implementation branches start there and their
@@ -68,7 +68,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150 | ARRAY_CONTAINS truth table; remaining NULLIF signed-zero and conditional cases |
-| S03 | Decimal input coercion | #141, #150 | VALUES Decimal/integer values and types; mixed CASE Decimal execution |
+| S03 | Decimal and conditional input coercion | #141, #150 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -267,6 +267,29 @@ because the old issue exists.
   S11 must investigate this case in the release comparison before any general
   performance acceptance. The current slice reports this cost, not a performance
   pass or a justified cause.
+- PR #600 passed CI on Linux, macOS and Windows and merged into staging as
+  `c4e75faf`; #116 is complete. Opened PR #602 for #601 against staging with the
+  independent review and measured costs in a separate evidence comment.
+- Created #603 for IFNULL/NVL temporal coercion. Both currently bypass the
+  existing COALESCE temporal rule. Fresh Spark references cover DATE, TIMESTAMP
+  and TIMESTAMP_NTZ in UTC and America/Phoenix, both ANSI modes, selected/unused
+  invalid fallbacks, column inputs, empty results and the aliases' exact arity.
+  Reference collection converts local TIMESTAMP values to UTC before encoding
+  epoch microseconds; TIMESTAMP_NTZ keeps wall time.
+- The first #603 candidate delegated all inputs to COALESCE. Its 380-reference
+  suite and 416 workspace tests passed, but independent review identified an
+  uncovered numeric/string regression. Fresh Spark/baseline/candidate probes
+  confirmed that non-ANSI aliases changed STRING '9' to INT 9 and errored on
+  STRING 'bad'. The repair uses COALESCE only when an operand is temporal;
+  non-temporal operands retain native NVL. All 60 mixed-input observations now
+  match the baseline, including types, values, errors and plans. The final
+  reference suite adds these non-ANSI mixed-string cases. Existing alias Decimal
+  and ANSI mixed-string differences remain S03 work, not compatibility passes.
+  Post-review validation passed 416 workspace tests, the 380-reference suite at
+  two batch sizes, formatting and CI-equivalent Clippy. The clean-context
+  follow-up found no outstanding actionable finding in this slice. Remote CI
+  and the staging merge remain pending. Existing timestamp parser diagnostics
+  lack Spark's CAST_INVALID_INPUT classification; keep that gap in S07.
 
 ### Retained gaps found during S01 review
 
@@ -292,3 +315,14 @@ each with a focused reference comparison before reopening or creating its issue.
   their admission with #156; batch NULL handling is covered by #116.
 - Legacy non-ANSI SIZE(NULL) differs from Spark's sizeOfNull=true setting. #116
   preserves the existing companion result; #150 owns the remaining mode contract.
+- IFNULL/NVL's native path promotes equal DECIMAL inputs to DOUBLE, retains
+  STRING for ANSI integer/string pairs, and admits Boolean/string pairs that
+  Spark rejects in non-ANSI mode. COALESCE's numeric/string union instead selects
+  the numeric type regardless of mode. Fresh captures and the unchanged paths
+  are retained for S03; #603 changes only temporal aliases.
+- Mixed DATE/TIMESTAMP coercion needs a shared conditional repair in S03. Fresh
+  Spark references cover 144 combinations of DATE/LTZ/NTZ, argument order, ANSI
+  mode and UTC/Phoenix. The baseline aliases returned STRING; the narrowed #603
+  candidate uses COALESCE's existing nanosecond/no-timezone DATE promotion, which
+  still differs from Spark. All 96 COALESCE observations at two batch sizes are
+  unchanged. These are diagnosed gaps, not passing compatibility observations.

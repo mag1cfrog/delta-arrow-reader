@@ -104,3 +104,8 @@ NULLIF floating comparisons reuse the existing Spark float normalization and
 native comparison/validity kernels. Unmatched values retain their original bits.
 The [NULLIF references](tests/fixtures/README.md#floating-nullif) separate this
 equality correction from the remaining result-type and evaluation differences.
+
+IFNULL and NVL use the existing COALESCE planning path when either argument is
+temporal, retaining their two-argument arity. Other inputs keep the native NVL
+path. The [reference cases](tests/fixtures/README.md#ifnull-and-nvl-temporal-results)
+cover temporal coercion, lazy fallbacks, modes and timezones.
