@@ -121,8 +121,6 @@ try:
             observation['retained_difference'] = 'nullable_projection_evaluation'
         elif name in {'registered_null_type_array', 'registered_null_type_empty_batch'}:
             observation['retained_difference'] = 'null_type_admission'
-        elif not ansi and name == 'size_null_control':
-            observation['retained_difference'] = 'legacy_size_of_null'
     target = Path(__file__).with_name('array-contains-spark.jsonl')
     target.write_text('\n'.join(json.dumps(record) for record in [inputs, *observations])+'\n')
     print(json.dumps({"observations": len(observations), "known_differences": sum('retained_difference' in r for r in observations)}))

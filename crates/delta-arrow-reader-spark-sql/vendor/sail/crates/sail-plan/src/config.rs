@@ -33,6 +33,9 @@ pub struct PlanConfig {
     /// Whether `COUNT()` is accepted with no arguments. Spark's legacy behavior returns zero;
     /// it does not interpret the call as `COUNT(*)`.
     pub legacy_allow_parameterless_count: bool,
+    /// `spark.sql.legacy.sizeOfNull`: SIZE and CARDINALITY return -1 for NULL
+    /// collections when this is true and ANSI mode is disabled.
+    pub legacy_size_of_null: bool,
 }
 
 impl Default for PlanConfig {
@@ -46,6 +49,7 @@ impl Default for PlanConfig {
             map_key_dedup_policy: MapKeyDedupPolicy::Exception,
             cross_join_enabled: true,
             legacy_allow_parameterless_count: false,
+            legacy_size_of_null: true,
         }
     }
 }

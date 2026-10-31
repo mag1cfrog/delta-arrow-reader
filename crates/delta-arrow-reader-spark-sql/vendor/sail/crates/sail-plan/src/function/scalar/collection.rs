@@ -1,6 +1,12 @@
+use std::sync::{Arc, LazyLock};
+
+use arrow::array::Int32Array;
+use arrow::compute::{is_null, kernels::zip::zip};
 use datafusion::arrow::datatypes::DataType;
-use datafusion_common::ScalarValue;
-use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
+use datafusion_common::{ScalarValue, utils::take_function_args};
+use datafusion_expr::{
+    ColumnarValue, ExprSchemable, ScalarUDF, Volatility, cast, create_udf, expr, lit, when,
+};
 use datafusion_functions::math::expr_fn::abs;
 use datafusion_functions_nested::expr_fn;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -11,19 +17,50 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 
+// COALESCE lowers to CASE and evaluates a non-null volatile input twice.
+static NULL_SIZE_AS_MINUS_ONE: LazyLock<ScalarUDF> = LazyLock::new(|| {
+    create_udf(
+        "null_size_as_minus_one",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(|arguments| {
+            let [size] = take_function_args("null_size_as_minus_one", arguments)?;
+            match size {
+                ColumnarValue::Scalar(ScalarValue::Int32(None)) => {
+                    Ok(ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))))
+                }
+                ColumnarValue::Array(array) if array.null_count() > 0 => Ok(ColumnarValue::Array(
+                    zip(&is_null(array)?, &Int32Array::new_scalar(-1), array)?,
+                )),
+                size => Ok(size.clone()),
+            }
+        }),
+    )
+});
+
 fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
 
-    match value.get_type(input.function_context.schema)? {
+    let length = match value.get_type(input.function_context.schema)? {
         DataType::List(_)
         | DataType::ListView(_)
         | DataType::FixedSizeList(..)
         | DataType::LargeList(_)
-        | DataType::LargeListView(_) => Ok(cast(expr_fn::array_length(value), DataType::Int32)),
-        DataType::Map(..) => Ok(cast(expr_fn::cardinality(value), DataType::Int32)),
-        wrong_type => Err(PlanError::InvalidArgument(format!(
-            "size expects List or Map as argument, got {wrong_type:?}"
-        ))),
+        | DataType::LargeListView(_) => cast(expr_fn::array_length(value), DataType::Int32),
+        DataType::Map(..) => cast(expr_fn::cardinality(value), DataType::Int32),
+        DataType::Null => cast(value, DataType::Int32),
+        wrong_type => {
+            return Err(PlanError::InvalidArgument(format!(
+                "size expects List or Map as argument, got {wrong_type:?}"
+            )));
+        }
+    };
+    let options = input.function_context.plan_config;
+    if !options.ansi_mode && options.legacy_size_of_null {
+        Ok(NULL_SIZE_AS_MINUS_ONE.call(vec![length]))
+    } else {
+        Ok(length)
     }
 }
 
@@ -66,9 +103,6 @@ pub(super) fn list_built_in_collection_functions() -> Vec<(&'static str, ScalarF
     use crate::function::common::ScalarFunctionBuilder as F;
 
     vec![
-        // TODO: coalesce(result, -1)
-        // if spark.sql.ansi.enabled is false and spark.sql.legacy.sizeOfNull is true
-        // https://spark.apache.org/docs/latest/api/sql/index.html#cardinality
         ("cardinality", F::custom(size)),
         ("deep_size", F::unary(expr_fn::cardinality)),
         ("element_at", F::custom(|input| element_at(input, false))),

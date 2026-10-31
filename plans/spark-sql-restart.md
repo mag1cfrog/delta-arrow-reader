@@ -13,16 +13,19 @@ each of Linux, macOS and Windows. Issue #165 is closed.
 
 S02's first slice, #116 ARRAY_CONTAINS NULL semantics, merged into staging through
 PR #600 as `c4e75faf`, after all three platform jobs passed. The following #150
-conditional review has resumed. Its floating NULLIF equality fix, #601, has
-completed local validation and independent review in PR #602; remote CI is
-pending. IFNULL/NVL temporal coercion, #603, is reviewed and pushed as `f4887db8`.
-Its PR will follow #602's staging merge to keep the diff independent. The current
-slice is #604, searched CASE condition types. Newly diagnosed mixed-temporal
-promotion has a separate implementation issue, #605, in the S03 queue.
+conditional review has resumed. Its floating NULLIF equality fix, #601, merged
+through PR #602 as `5b4b92f5` after all three platforms passed. IFNULL/NVL temporal
+coercion, #603, is reviewed and pushed as `f4887db8` in PR #607, with CI pending.
+Searched CASE condition types, #604, is reviewed and pushed as `da304f5e`; its PR
+will follow #607's staging merge to keep the diff independent. The current slice
+is #606, collection-size NULL rules, now locally verified and reviewed.
+Mixed-temporal promotion has a separate implementation issue, #605, in S03.
+Shared COALESCE/IFNULL/NVL input re-evaluation
+is tracked in #608 and follows the size fix.
 
 The active Spark frontend is developed and integrated on
-`feat/spark-sql-staging`. Subsequent implementation branches start there and their
-PRs target it. The original `feat/spark-sql-extraction` branch remains frozen.
+`feat/spark-sql-staging`. Each implementation PR targets it and contains one
+issue's changes. The original `feat/spark-sql-extraction` branch remains frozen.
 Adoption into `main` is a separate decision after the staged work is evaluated.
 
 ### Consolidated S01 baseline
@@ -70,7 +73,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | Order | Work | Existing issues | Completion evidence |
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
-| S02 | NULL and array semantics | #116, #150 | ARRAY_CONTAINS truth table; remaining NULLIF signed-zero and conditional cases |
+| S02 | NULL and array semantics | #116, #150, #606, #608 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
@@ -307,6 +310,29 @@ because the old issue exists.
   including the complete replay and 880 conditional reference comparisons.
   Formatting and CI-equivalent Clippy passed. The clean-context Sol/high review
   found no actionable finding; remote CI and staging integration remain pending.
+- #602 passed Linux, macOS and Windows CI and merged into staging as `5b4b92f5`.
+  Opened the separate #607 PR for #603. The reviewed CASE slice is committed as
+  `da304f5e`; its PR follows the preceding staging merge.
+- #606 adds the existing Spark legacy size setting to the public options and
+  keeps the native length calculations and checked INT cast. Independent Spark
+  references contain 288 observations across all four mode combinations. Untyped
+  NULLs now reach the INT NULL result for SIZE, CARDINALITY and ARRAY_SIZE; the
+  latter never applies the legacy -1 rule. The former retained SIZE difference
+  in the array suite is now a strict reference comparison.
+- A one-line COALESCE fallback passed the value references but evaluated a
+  three-row volatile input five times. The size fix instead replaces NULL in
+  the already computed length. Focused tests pass across seven Arrow input
+  representations, slices, empty batches and the INT overflow boundary. The
+  public COALESCE/IFNULL/NVL probe independently confirms the shared evaluation
+  gap in both ANSI modes; #608 owns that repair. All 419 workspace tests pass,
+  including the complete 25,180-observation historical replay and 576 new Spark
+  comparisons. The same two upstream documentation fragments remain ignored.
+  Formatting, diff checks, capture-script syntax checks and CI-equivalent Clippy
+  pass. The clean-context Sol/high Bulletproof Review independently checked the
+  input matrix, public API paths, native kernels, assertions and naming/docs,
+  with no actionable finding. It did not rerun Cargo or Spark. Remote platform
+  CI and staging integration remain pending; release cost and exact Spark schema
+  nullability are separate S11/S07 work.
 
 ### Retained gaps found during S01 review
 
@@ -330,8 +356,8 @@ each with a focused reference comparison before reopening or creating its issue.
   ANSI cases. Keep these evaluation boundaries with #150.
 - Untyped NullType operands remain admitted although Spark rejects them. Track
   their admission with #156; batch NULL handling is covered by #116.
-- Legacy non-ANSI SIZE(NULL) differs from Spark's sizeOfNull=true setting. #116
-  preserves the existing companion result; #150 owns the remaining mode contract.
+- Legacy collection-size behavior is being resolved in #606. The Spark result in
+  the original #116 companion capture is unchanged; its assertion is now strict.
 - IFNULL/NVL's native path promotes equal DECIMAL inputs to DOUBLE, retains
   STRING for ANSI integer/string pairs, and admits Boolean/string pairs that
   Spark rejects in non-ANSI mode. COALESCE's numeric/string union instead selects
