@@ -9,6 +9,7 @@ use datafusion::datasource::memory::MemorySourceConfig;
 use datafusion::functions::expr_fn;
 use datafusion::logical_expr::execution_props::ExecutionProps;
 use datafusion::optimizer::optimize_projections::OptimizeProjections;
+use datafusion::optimizer::push_down_filter::PushDownFilter;
 use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
 use datafusion::physical_expr::create_physical_expr;
@@ -791,6 +792,19 @@ impl Prepare {
         exists: bool,
     ) -> Result<LogicalPlan> {
         let plan = if self.has_array_contains {
+            // Native join rules decide which side can discard a failing input.
+            let plan = plan.transform_down(|node| {
+                if let LogicalPlan::Join(join) = &node
+                    && let Some(predicate) = &join.filter
+                    && predicate.exists(|expr| {
+                        Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<ArrayContains>()))
+                    })?
+                {
+                    PushDownFilter::new().rewrite(node, config)
+                } else {
+                    Ok(Transformed::no(node))
+                }
+            })?.data;
             self.simplify_projected_null_array_membership(plan)?
         } else {
             plan

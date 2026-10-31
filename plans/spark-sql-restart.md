@@ -18,12 +18,13 @@ through PR #602 as `5b4b92f5` after all three platforms passed. IFNULL/NVL tempo
 coercion, #603, merged through PR #607 as `4238a6c4` after all three platforms
 passed. Searched CASE condition types, #604, merged through PR #609 as
 `0f2b595d` after all three platforms passed. Collection-size NULL rules, #606,
-are reviewed and pushed as `6d0cbfe6` in PR #611, with CI running.
+merged through PR #611 as `929810ff` after all three platforms passed.
 Mixed-temporal promotion has a separate implementation issue, #605, in S03.
-Shared COALESCE/IFNULL/NVL evaluation, #608, is reviewed and pushed as `0425d50b`;
-its PR follows the collection-size slice. NULLIF evaluation, #610, is reviewed
-and pushed as `f43bcf5b`; its PR follows #608. The current slice is #612, known
-NULL array membership across projections.
+Shared COALESCE/IFNULL/NVL evaluation, #608, is reviewed and pushed as `0425d50b`
+in PR #614, with CI running. NULLIF evaluation, #610, is reviewed
+and pushed as `f43bcf5b`; its PR follows #608. Known NULL array projections,
+#612, are reviewed and pushed as `80d79acf`; their PR follows #610. The current
+slice is #613, array predicates at join boundaries.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -388,6 +389,24 @@ because the old issue exists.
   formatting and Clippy pass. The clean-context Sol/high reviewer verified the
   repaired paths and final logs with no remaining actionable finding in this
   slice. Remote platform CI and staging integration remain pending.
+
+- #612 is committed and pushed as `80d79acf`. #613 reuses native join predicate
+  movement before the existing single-input NULL proof. The 104 new Spark
+  observations cover six join types, both sides, compound/cross-input predicates,
+  aliases, empty inputs, local VALUES and subquery preparation. The baseline
+  differs in 30 of the initial 160 focused status/value comparisons across two
+  batch sizes. The candidate passes the expanded 360-observation array matrix,
+  including the two formerly retained inner-join failures. Required outer/anti,
+  cross-input and selected-output errors remain strict. Left/right outer-join
+  ID outputs retain exact rows and representable NULLs. Shared-live-value and
+  join-cardinality counters pass in both ANSI modes. The final complete workspace
+  run passes 421 tests with the same two inherited ignored doctests; the full
+  historical replay needs no new corrections. Formatting and Clippy pass. The
+  clean-context Sol/high reviewer checked the final references and logs with no
+  remaining actionable finding. Remote CI and staging integration remain pending.
+- #611 passed all three platform jobs and merged into staging as `929810ff`.
+  Issue #606 is closed. The separate conditional-evaluation PR #614 now targets
+  staging with one implementation commit; its detailed validation is a comment.
 
 ### Retained gaps found during S01 review
 
