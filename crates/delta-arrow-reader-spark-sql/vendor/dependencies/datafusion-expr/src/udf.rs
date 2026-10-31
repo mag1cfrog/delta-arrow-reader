@@ -862,6 +862,7 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
     /// Whether a NULL first argument returns NULL without evaluating subsequent
     /// arguments. Implementations opting in must also describe those arguments
     /// with `short_circuits` and `conditional_arguments` for logical optimizers.
+    /// Empty batches return an empty result without evaluating any argument.
     fn short_circuits_on_null_first_arg(&self) -> bool {
         false
     }

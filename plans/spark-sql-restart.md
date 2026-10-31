@@ -16,11 +16,13 @@ PR #600 as `c4e75faf`, after all three platform jobs passed. The following #150
 conditional review has resumed. Its floating NULLIF equality fix, #601, merged
 through PR #602 as `5b4b92f5` after all three platforms passed. IFNULL/NVL temporal
 coercion, #603, merged through PR #607 as `4238a6c4` after all three platforms
-passed. Searched CASE condition types, #604, is reviewed and pushed as `da304f5e`
-in PR #609, with CI running. Collection-size NULL rules, #606, are locally
-verified, reviewed and pushed as `6d0cbfe6`; their PR follows #609's merge.
+passed. Searched CASE condition types, #604, merged through PR #609 as
+`0f2b595d` after all three platforms passed. Collection-size NULL rules, #606,
+are reviewed and pushed as `6d0cbfe6` in PR #611, with CI running.
 Mixed-temporal promotion has a separate implementation issue, #605, in S03.
-The current slice is #608, shared COALESCE/IFNULL/NVL input re-evaluation.
+Shared COALESCE/IFNULL/NVL evaluation, #608, is reviewed and pushed as `0425d50b`;
+its PR follows the collection-size slice. The current slice is #610, NULLIF's
+unused right operand.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -72,7 +74,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | Order | Work | Existing issues | Completion evidence |
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
-| S02 | NULL and array semantics | #116, #150, #606, #608 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
+| S02 | NULL and array semantics | #116, #150, #606, #608, #610 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
@@ -348,6 +350,22 @@ because the old issue exists.
   found no remaining actionable issue after inspecting the analyzer repair and
   added nonnullable-column, native error and direct empty-batch controls. Formatting
   and CI-equivalent Clippy pass. Remote CI and staging integration remain pending.
+- #608 is committed and pushed as `0425d50b`. Created #610 for NULLIF's unused
+  right operand and captured 40 independent Spark observations. The baseline
+  evaluates four right rows where only two are needed, and has twelve value/error
+  differences across the two batch sizes. Reusing the existing conditional
+  metadata and NULL-first runtime path resolves those focused differences. A
+  direct empty-batch test also exposed operand evaluation before the empty check;
+  the shared conditional path now returns an empty result first. Independent
+  review identified a dictionary-value NULL gap in the shared mask. A counted
+  dictionary input reproduced three right-side rows instead of one; selection
+  now uses Arrow logical NULLs. Expanded references contain 50 observations,
+  including subquery preparation/admission. The full workspace passes 421 tests
+  with two inherited ignored doctests and no replay expectation changes.
+  Formatting and CI-equivalent Clippy pass. The clean-context Sol/high reviewer
+  rechecked the dictionary fix, subquery boundaries and shared empty-batch controls
+  and found no remaining actionable issue. Remote CI and staging integration
+  remain pending.
 
 ### Retained gaps found during S01 review
 

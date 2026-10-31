@@ -1,6 +1,6 @@
 //! NULLIF compares floating values with Spark equality and returns the original
 //! left value when unequal. For example, NULLIF(-0.0, 0.0) is NULL, but
-//! NULLIF(-0.0, 1.0) retains negative zero.
+//! NULLIF(-0.0, 1.0) retains negative zero. NULL left values skip comparison.
 
 use arrow::array::AsArray;
 use arrow::compute::kernels::nullif::nullif;
@@ -8,7 +8,10 @@ use arrow::datatypes::DataType;
 use datafusion::functions::core::nullif::NullIfFunc;
 use datafusion::physical_expr_common::datum::apply_cmp;
 use datafusion_common::{Result, ScalarValue, utils::take_function_args};
-use datafusion_expr::{ColumnarValue, Operator, ScalarFunctionArgs, ScalarUDFImpl, Signature};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
+use datafusion_expr::{
+    ColumnarValue, Expr, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, lit,
+};
 
 use crate::function::common::SparkComparisonFloat;
 
@@ -26,6 +29,33 @@ impl ScalarUDFImpl for SparkNullIf {
 
     fn return_type(&self, args: &[DataType]) -> Result<DataType> {
         self.0.return_type(args)
+    }
+
+    fn short_circuits(&self) -> bool {
+        true
+    }
+
+    fn short_circuits_on_null_first_arg(&self) -> bool {
+        true
+    }
+
+    fn conditional_arguments<'a>(
+        &self,
+        args: &'a [Expr],
+    ) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        args.split_first()
+            .map(|(first, rest)| (vec![first], rest.iter().collect()))
+    }
+
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if matches!(args.first(), Some(Expr::Literal(value, _)) if value.is_null()) {
+            // Keep comparison coercion even when the right input is discarded.
+            let original = ScalarUDF::from(Self::default()).call(args);
+            return Ok(ExprSimplifyResult::Simplified(lit(
+                ScalarValue::try_new_null(&info.get_data_type(&original)?)?,
+            )));
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, mut input: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -98,6 +128,44 @@ mod tests {
             DataType::Float64 => array.as_primitive::<Float64Type>().value(row).to_bits(),
             _ => unreachable!("test inputs are FLOAT or DOUBLE"),
         }
+    }
+
+    #[test]
+    fn empty_batches_skip_nullif_and_arithmetic_operands() -> Result<()> {
+        use arrow::datatypes::Schema;
+        use arrow::record_batch::RecordBatch;
+        use datafusion::prelude::SessionContext;
+        use datafusion_common::DFSchema;
+        use datafusion_expr::{Volatility, col, create_udf};
+        use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
+
+        let operand = create_udf(
+            "fail_if_evaluated",
+            vec![DataType::Int32],
+            DataType::Int32,
+            Volatility::Volatile,
+            Arc::new(|_| datafusion_common::exec_err!("unexpected operand evaluation")),
+        );
+        let batch = RecordBatch::new_empty(Arc::new(Schema::new(vec![Field::new(
+            "a",
+            DataType::Int32,
+            true,
+        )])));
+        let functions = std::iter::once(ScalarUDF::from(SparkNullIf::default())).chain(
+            [Operator::Plus, Operator::Minus, Operator::Multiply]
+                .map(|operator| ScalarUDF::from(SparkCheckedArithmetic::new(operator))),
+        );
+        for function in functions {
+            for right in [operand.call(vec![col("a")]), lit(7_i32)] {
+                let expression = function.call(vec![operand.call(vec![col("a")]), right]);
+                let physical = SessionContext::new()
+                    .create_physical_expr(expression, &DFSchema::try_from(batch.schema())?)?;
+                let result = physical.evaluate(&batch)?.into_array(0)?;
+                assert_eq!(result.len(), 0);
+                assert_eq!(result.data_type(), &DataType::Int32);
+            }
+        }
+        Ok(())
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Fallback arguments run once on the rows that need them, through either SQL frontend.
+//! Conditional arguments run once on the rows that need them.
 
 use std::error::Error;
 use std::sync::{
@@ -6,8 +6,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use arrow::array::{ArrayRef, AsArray, Int32Array};
-use arrow::datatypes::{DataType, Int32Type};
+use arrow::array::{ArrayRef, AsArray, DictionaryArray, Int8Array, Int32Array};
+use arrow::datatypes::{DataType, Int8Type, Int32Type};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::DFSchema;
 use datafusion::execution::{FunctionRegistry, SessionStateBuilder};
@@ -64,14 +64,21 @@ async fn execute_query(
     let batches = collect(plan, session.task_ctx()).await?;
     let mut result = Vec::new();
     for batch in batches {
-        assert_eq!(batch.schema().field(0).data_type(), &DataType::Int32);
-        result.extend(batch.column(0).as_primitive::<Int32Type>().iter());
+        let column = batch.column(0);
+        let value_type = match column.data_type() {
+            DataType::Dictionary(_, value_type) => value_type.as_ref(),
+            data_type => data_type,
+        };
+        assert_eq!(value_type, &DataType::Int32);
+        // Dictionary encoding preserves the logical INT values counted here.
+        let values = arrow::compute::cast(column, &DataType::Int32)?;
+        result.extend(values.as_primitive::<Int32Type>().iter());
     }
     Ok(result)
 }
 
 #[tokio::test]
-async fn fallback_arguments_are_evaluated_once_only_where_needed() -> TestResult {
+async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
     for frontend in [
         SqlFrontend::DataFusion,
         SqlFrontend::Spark { ansi_mode: true },
@@ -94,6 +101,20 @@ async fn fallback_arguments_are_evaluated_once_only_where_needed() -> TestResult
             (
                 "present",
                 Arc::new(Int32Array::from(vec![5, 6, 7, 8])) as ArrayRef,
+            ),
+            (
+                "dictionary",
+                Arc::new(DictionaryArray::<Int8Type>::try_new(
+                    Int8Array::from(vec![Some(0), Some(1), Some(0), None]),
+                    Arc::new(Int32Array::from(vec![None, Some(1)])),
+                )?) as ArrayRef,
+            ),
+            (
+                "dictionary_all_null",
+                Arc::new(DictionaryArray::<Int8Type>::try_new(
+                    Int8Array::from(vec![0; 4]),
+                    Arc::new(Int32Array::from(vec![None])),
+                )?) as ArrayRef,
             ),
         ])?;
         assert!(!input.schema().field_with_name("present")?.is_nullable());
@@ -172,6 +193,45 @@ async fn fallback_arguments_are_evaluated_once_only_where_needed() -> TestResult
                 [0, 0, 0],
                 vec![Some(5), Some(6), Some(7), Some(8)],
             ));
+        }
+        if matches!(frontend, SqlFrontend::Spark { .. }) {
+            cases.extend([
+                (
+                    "NULLIF(count_first(a),count_second(b))".to_string(),
+                    [4, 2, 0],
+                    vec![Some(1), None, Some(3), None],
+                ),
+                (
+                    "NULLIF(count_first(a),count_second(a))".to_string(),
+                    [4, 2, 0],
+                    vec![None; 4],
+                ),
+                (
+                    "NULLIF(count_first(present),count_second(b))".to_string(),
+                    [4, 4, 0],
+                    vec![Some(5), Some(6), Some(7), Some(8)],
+                ),
+                (
+                    "NULLIF(count_first(CAST(NULL AS INT)),count_second(b))".to_string(),
+                    [1, 0, 0],
+                    vec![None; 4],
+                ),
+                (
+                    "NULLIF(count_first(CAST(1 AS INT)),count_second(b))".to_string(),
+                    [1, 4, 0],
+                    vec![Some(1); 4],
+                ),
+                (
+                    "NULLIF(dictionary,count_second(b))".to_string(),
+                    [0, 1, 0],
+                    vec![None, Some(1), None, None],
+                ),
+                (
+                    "NULLIF(dictionary_all_null,count_second(b))".to_string(),
+                    [0, 0, 0],
+                    vec![None; 4],
+                ),
+            ]);
         }
         for (expression, expected_evaluated_rows, expected_rows) in cases {
             for counter in &evaluated_rows {
