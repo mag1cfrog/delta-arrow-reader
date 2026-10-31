@@ -440,10 +440,18 @@ fn round_subqueries(
                     **condition = folded;
                 }
             }
+        } else if let Expr::ScalarFunction(function) = &mut conditional
+            && function.func.inner().returns_first_non_null_argument()
+        {
+            // A nullable cast can become a known value after constant folding.
+            for argument in &mut function.args {
+                if let Ok(folded) = simplifier.simplify(argument.clone()) {
+                    *argument = folded;
+                }
+            }
         }
-        // Reuse native CASE/COALESCE pruning, without folding a selected scalar
-        // CAST that ROUND's NULL scale will never evaluate. Failed conditions
-        // stay opaque; only their surviving subqueries require execution.
+        // Failed constant folds stay opaque under ROUND's NULL scale; only
+        // subqueries surviving conditional pruning still require execution.
         if let Ok(simplified) = simplifier.simplify_algebraic_once(conditional)
             && simplified.data != *expr
         {
@@ -1092,10 +1100,15 @@ impl Prepare {
                 };
                 let expr = if let Expr::ScalarFunction(f) = &expr
                     && f.func.short_circuits()
-                    && let datafusion_expr::simplify::ExprSimplifyResult::Simplified(lowered) =
-                        f.func.simplify(f.args.clone(), &info)?
                 {
-                    lowered
+                    match f.func.simplify(f.args.clone(), &info)? {
+                        datafusion_expr::simplify::ExprSimplifyResult::Simplified(lowered) => {
+                            lowered
+                        }
+                        datafusion_expr::simplify::ExprSimplifyResult::Original(args) => {
+                            f.func.call(args)
+                        }
+                    }
                 } else {
                     expr
                 };
@@ -2066,7 +2079,8 @@ async fn null_scale_retains_subquery_execution_without_dead_scalar_work()
                         let actual = result.unwrap_err().to_string();
                         assert!(actual.contains(error), "{sql}, ANSI={ansi_mode}: {actual}");
                     } else {
-                        let (data_type, batches) = result?;
+                        let (data_type, batches) =
+                            result.map_err(|error| format!("{sql}, ANSI={ansi_mode}: {error}"))?;
                         assert_eq!(
                             batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
                             rows,

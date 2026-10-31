@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -18,10 +19,10 @@
 use arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, exec_err, internal_err, plan_err};
 use datafusion_expr::binary::try_type_union_resolution;
-use datafusion_expr::conditional_expressions::CaseBuilder;
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, Documentation, Expr, ReturnFieldArgs, ScalarFunctionArgs,
+    ColumnarValue, Documentation, Expr, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs,
+    ScalarUDF,
 };
 use datafusion_expr::{ScalarUDFImpl, Signature, Volatility};
 use datafusion_macros::user_doc;
@@ -44,7 +45,7 @@ use itertools::Itertools;
         description = "Expression to use if previous expressions are _null_. Can be a constant, column, or function, and any combination of arithmetic operators. Pass as many expression arguments as necessary."
     )
 )]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CoalesceFunc {
     pub(super) signature: Signature,
 }
@@ -89,11 +90,7 @@ impl ScalarUDFImpl for CoalesceFunc {
         Ok(Field::new(self.name(), return_type, nullable).into())
     }
 
-    fn simplify(
-        &self,
-        args: Vec<Expr>,
-        _info: &SimplifyContext,
-    ) -> Result<ExprSimplifyResult> {
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         if args.is_empty() {
             return plan_err!("coalesce must have at least one argument");
         }
@@ -103,22 +100,41 @@ impl ScalarUDFImpl for CoalesceFunc {
             ));
         }
 
-        let n = args.len();
-        let (init, last_elem) = args.split_at(n - 1);
-        let whens = init
+        let first = args
             .iter()
-            .map(|x| x.clone().is_not_null())
-            .collect::<Vec<_>>();
-        let cases = init.to_vec();
-        Ok(ExprSimplifyResult::Simplified(
-            CaseBuilder::new(None, whens, cases, Some(Box::new(last_elem[0].clone())))
-                .end()?,
-        ))
+            .position(|arg| !matches!(arg, Expr::Literal(value, _) if value.is_null()))
+            .unwrap_or(args.len() - 1);
+        let mut end = args.len();
+        for (index, arg) in args.iter().enumerate().skip(first) {
+            if !info.nullable(arg)? {
+                end = index + 1;
+                break;
+            }
+        }
+        if first == 0 && end == args.len() {
+            return Ok(ExprSimplifyResult::Original(args));
+        }
+        // Discarded arguments still determine the SQL result type.
+        let original = ScalarUDF::from(self.clone()).call(args.clone());
+        let result_type = info.get_data_type(&original)?;
+        let args = args
+            .into_iter()
+            .skip(first)
+            .take(end - first)
+            .map(|arg| arg.cast_to(&result_type, info.schema().as_ref()))
+            .collect::<Result<Vec<_>>>()?;
+        if args.len() == 1 {
+            Ok(ExprSimplifyResult::Simplified(
+                args.into_iter().next().unwrap(),
+            ))
+        } else {
+            Ok(ExprSimplifyResult::Original(args))
+        }
     }
 
     /// coalesce evaluates to the first value which is not NULL
     fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        internal_err!("coalesce should have been simplified to case")
+        internal_err!("coalesce requires conditional physical evaluation")
     }
 
     fn conditional_arguments<'a>(
@@ -131,6 +147,10 @@ impl ScalarUDFImpl for CoalesceFunc {
     }
 
     fn short_circuits(&self) -> bool {
+        true
+    }
+
+    fn returns_first_non_null_argument(&self) -> bool {
         true
     }
 

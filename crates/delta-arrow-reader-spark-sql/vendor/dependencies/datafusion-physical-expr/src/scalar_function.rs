@@ -58,6 +58,7 @@ pub struct ScalarFunctionExpr {
     config_options: Arc<ConfigOptions>,
     // Fixed by the UDF instance at planning time, avoiding a per-batch trait call.
     short_circuit_null: bool,
+    returns_first_non_null: bool,
 }
 
 impl Debug for ScalarFunctionExpr {
@@ -72,6 +73,40 @@ impl Debug for ScalarFunctionExpr {
 }
 
 impl ScalarFunctionExpr {
+    fn evaluate_first_non_null(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        use arrow::array::new_empty_array;
+        use arrow::compute::{is_null, kernels::zip::zip};
+
+        if batch.num_rows() == 0 {
+            return Ok(ColumnarValue::Array(new_empty_array(self.return_type())));
+        }
+        let Some((first, rest)) = self.args.split_first() else {
+            return internal_err!("{} requires at least one argument", self.name);
+        };
+        let mut result = first.evaluate(batch)?;
+        for expr in rest {
+            result = match result {
+                ColumnarValue::Scalar(value) if value.is_null() => expr.evaluate(batch)?,
+                ColumnarValue::Scalar(_) => break,
+                ColumnarValue::Array(array) => {
+                    let pending = is_null(&array)?;
+                    if pending.true_count() == 0 {
+                        return Ok(ColumnarValue::Array(array));
+                    }
+                    if pending.true_count() == batch.num_rows() {
+                        expr.evaluate(batch)?
+                    } else {
+                        let next = expr
+                            .evaluate_selection(batch, &pending)?
+                            .into_array(batch.num_rows())?;
+                        ColumnarValue::Array(zip(&pending, &next, &array)?)
+                    }
+                }
+            };
+        }
+        Ok(result)
+    }
+
     // Invoked after argument evaluation, including selection for functions with
     // a NULL-first-argument short circuit. Keep the normal result validation.
     fn invoke_evaluated(
@@ -128,6 +163,7 @@ impl ScalarFunctionExpr {
         config_options: Arc<ConfigOptions>,
     ) -> Self {
         Self {
+            returns_first_non_null: fun.inner().returns_first_non_null_argument(),
             short_circuit_null: fun.inner().short_circuits_on_null_first_arg()
                 && args.iter().skip(1).any(|arg| {
                     arg.downcast_ref::<Column>().is_none()
@@ -167,6 +203,7 @@ impl ScalarFunctionExpr {
         };
         let return_field = fun.return_field_from_args(ret_args)?;
         Ok(Self {
+            returns_first_non_null: fun.inner().returns_first_non_null_argument(),
             short_circuit_null: fun.inner().short_circuits_on_null_first_arg()
                 && args.iter().skip(1).any(|arg| {
                     arg.downcast_ref::<Column>().is_none()
@@ -251,7 +288,8 @@ impl PartialEq for ScalarFunctionExpr {
             args,
             return_field,
             config_options,
-            short_circuit_null: _, // derived from fun
+            short_circuit_null: _,     // derived from fun
+            returns_first_non_null: _, // derived from fun
         } = self;
         fun.eq(&o.fun)
             && name.eq(&o.name)
@@ -270,8 +308,9 @@ impl Hash for ScalarFunctionExpr {
             name,
             args,
             return_field,
-            config_options: _,     // expensive to hash, and often equal
-            short_circuit_null: _, // derived from fun
+            config_options: _,         // expensive to hash, and often equal
+            short_circuit_null: _,     // derived from fun
+            returns_first_non_null: _, // derived from fun
         } = self;
         fun.hash(state);
         name.hash(state);
@@ -296,6 +335,9 @@ impl PhysicalExpr for ScalarFunctionExpr {
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        if self.returns_first_non_null {
+            return self.evaluate_first_non_null(batch);
+        }
         let Some(first) = self.args.first() else {
             return self.invoke_evaluated(batch, Vec::new());
         };

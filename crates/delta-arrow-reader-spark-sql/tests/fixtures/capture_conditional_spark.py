@@ -77,6 +77,47 @@ def case_condition_queries():
     return queries
 
 
+def fallback_evaluation_queries():
+    forms = [
+        ('null_first', 'CAST(NULL AS INT),7', ''),
+        ('non_null_first', '3,7', ''),
+        ('both_null', 'CAST(NULL AS INT),CAST(NULL AS INT)', ''),
+        ('dead_cast', "1,CAST('bad' AS INT)", ''),
+        ('live_cast', "CAST(NULL AS INT),CAST('bad' AS INT)", ''),
+        ('column', 'v,7', ' FROM VALUES (0,1),(1,CAST(NULL AS INT)),(2,3) t(k,v) ORDER BY k'),
+        ('rowwise_cast', "v,IF(v IS NULL,7,CAST('bad' AS INT))", ' FROM VALUES (0,1),(1,CAST(NULL AS INT)),(2,3) t(k,v) ORDER BY k'),
+        ('empty', "v,CAST('bad' AS INT)", ' FROM VALUES (1) t(v) WHERE false'),
+        ('dead_subquery', '1,(SELECT v FROM VALUES (2),(3) t(v))', ''),
+        ('live_subquery', 'CAST(NULL AS INT),(SELECT v FROM VALUES (2),(3) t(v))', ''),
+    ]
+    for function in ["COALESCE", "IFNULL", "NVL"]:
+        for case, arguments, source in forms:
+            yield f"eval_{function.lower()}_{case}", f"SELECT {function}({arguments}) AS r{source}"
+    yield 'eval_coalesce_three_columns', 'SELECT COALESCE(a,b,c) AS r FROM VALUES (0,1,2,3),(1,NULL,2,3),(2,NULL,NULL,3),(3,NULL,NULL,NULL) t(k,a,b,c) ORDER BY k'
+    yield 'eval_coalesce_boolean', 'SELECT COALESCE(a,b) AS r FROM VALUES (0,true,false),(1,NULL,false),(2,NULL,true),(3,NULL,NULL) t(k,a,b) ORDER BY k'
+    yield 'eval_coalesce_untyped_nulls', 'SELECT COALESCE(NULL,NULL,NULL) AS r'
+    yield 'eval_coalesce_one_argument', 'SELECT COALESCE(v) AS r FROM VALUES (0,1),(1,NULL) t(k,v) ORDER BY k'
+    yield 'eval_coalesce_dead_divide', 'SELECT COALESCE(1,7 DIV 0) AS r'
+    yield 'eval_coalesce_live_divide', 'SELECT COALESCE(CAST(NULL AS BIGINT),7 DIV 0) AS r'
+
+
+def error_condition(error):
+    if hasattr(error, "getCondition"):
+        return error.getCondition()
+    cause = error.java_exception
+    for _ in range(8):
+        if cause is None:
+            break
+        try:
+            condition = cause.getCondition()
+            if condition:
+                return condition
+        except Exception:
+            pass
+        cause = cause.getCause()
+    raise RuntimeError("No structured Spark condition in exception chain") from error
+
+
 def encode_reference_value(value, data_type):
     if isinstance(value, datetime.datetime):
         # PySpark collects TIMESTAMP in the process timezone; NTZ is wall time.
@@ -84,6 +125,8 @@ def encode_reference_value(value, data_type):
             value = value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
         elapsed = value - datetime.datetime(1970, 1, 1)
         return str((elapsed.days * 86400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds)
+    if isinstance(value, bool):
+        return str(value).lower()
     return None if value is None else str(value)
 
 
@@ -124,6 +167,7 @@ try:
                 )
             if timezone == "UTC":
                 queries.extend(case_condition_queries())
+                queries.extend(fallback_evaluation_queries())
             for name, sql in queries:
                 try:
                     frame = spark.sql(sql)
@@ -131,8 +175,8 @@ try:
                     rows = [[encode_reference_value(row[0], schema["fields"][0]["type"])] for row in frame.collect()]
                     expected = dict(status="ok", schema=schema, rows=rows)
                 except Exception as error:
-                    condition = getattr(error, "getCondition", lambda: None)()
-                    if condition not in {"CAST_INVALID_INPUT", "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"}:
+                    condition = error_condition(error)
+                    if condition not in {"CAST_INVALID_INPUT", "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE", "DIVIDE_BY_ZERO", "SCALAR_SUBQUERY_TOO_MANY_ROWS"}:
                         raise
                     expected = dict(status="error", condition=condition)
                 records.append(dict(id=name, sql=sql, ansi=ansi, timezone=timezone, expected=expected))
