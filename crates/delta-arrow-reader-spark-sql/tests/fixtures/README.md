@@ -102,3 +102,34 @@ execution samples for nullable/nonnullable DOUBLE columns and constant operands,
 using 262,144 rows, two warm-ups and eleven samples per case. These inputs have
 equivalent outputs before and after the fix. Timing has no pass/fail threshold;
 local development-profile results do not establish release throughput.
+
+## IFNULL and NVL temporal results
+
+`ifnull-temporal-spark.jsonl` records 380 Spark 4.2.0 observations for IFNULL,
+NVL and COALESCE controls. Regenerate it with `capture_ifnull_temporal_spark.py`
+using the Python/Java setup above. TIMESTAMP values use UTC epoch microseconds;
+TIMESTAMP_NTZ values use microseconds of wall time since 1970-01-01. The capture
+converts PySpark's process-local TIMESTAMP values before encoding them.
+
+The tests compare values, types and names with one-row and 32-row batches. They
+cover DATE, TIMESTAMP and TIMESTAMP_NTZ with strings, both ANSI modes, UTC and
+America/Phoenix, selected and unused invalid fallbacks, column inputs and empty
+results. The aliases require two arguments; COALESCE's one- and three-argument
+controls remain valid. Numeric, string and same-type date controls check the
+alias boundary, and COALESCE retains a same-Decimal control. Non-ANSI mixed
+integer/string cases require STRING results, including an invalid numeric string.
+They catch unintended delegation of non-temporal inputs to COALESCE.
+
+Returned NULLs must fit the logical and physical schemas. Exact Spark nullability
+and diagnostic-code parity remain separate work: the existing timestamp parser
+reports a parsing error for invalid input, without Spark's CAST_INVALID_INPUT
+code. The tests require that specific parser failure instead of accepting any
+error for those cases. The original historical replay remains unchanged.
+
+Non-temporal alias inputs keep the native NVL path. Its existing Decimal and
+ANSI numeric/string or Boolean/string coercion differences remain S03 work;
+these temporal references do not claim those cases are Spark-compatible.
+Mixed DATE/TIMESTAMP promotion also remains separate: shared COALESCE coercion
+selects a nanosecond timestamp without a timezone. Native NVL previously returned
+a string for these pairs. Neither behavior matches Spark's LTZ result; this is
+retained in the S03 plan rather than included among the passing references.
