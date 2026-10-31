@@ -102,5 +102,69 @@
     "physical_nullable": [
       true
     ]
+  },
+  "replay/cast-scalar-cast-cases/8/tinyint_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/8/tinyint_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/17/smallint_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/17/smallint_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/26/int_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/26/int_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/35/bigint_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/35/bigint_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/44/overflow_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/44/overflow_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/53/modulo_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/53/modulo_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/62/double_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/62/double_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/71/decimal_untyped_true": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-scalar-cast-cases/71/decimal_untyped_false": {
+    "status": "planning_error",
+    "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
   }
 }

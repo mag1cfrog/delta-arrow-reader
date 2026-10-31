@@ -109,3 +109,8 @@ IFNULL and NVL use the existing COALESCE planning path when either argument is
 temporal, retaining their two-argument arity. Other inputs keep the native NVL
 path. The [reference cases](tests/fixtures/README.md#ifnull-and-nvl-temporal-results)
 cover temporal coercion, lazy fallbacks, modes and timezones.
+
+Searched CASE conditions must have BOOLEAN type before branch simplification.
+The [condition references](tests/fixtures/README.md#case-condition-types) retain
+typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
+CASE successes with independently confirmed planning failures.

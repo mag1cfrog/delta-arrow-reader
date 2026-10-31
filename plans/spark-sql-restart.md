@@ -15,7 +15,10 @@ S02's first slice, #116 ARRAY_CONTAINS NULL semantics, merged into staging throu
 PR #600 as `c4e75faf`, after all three platform jobs passed. The following #150
 conditional review has resumed. Its floating NULLIF equality fix, #601, has
 completed local validation and independent review in PR #602; remote CI is
-pending. The next bounded repair is #603, IFNULL/NVL temporal coercion.
+pending. IFNULL/NVL temporal coercion, #603, is reviewed and pushed as `f4887db8`.
+Its PR will follow #602's staging merge to keep the diff independent. The current
+slice is #604, searched CASE condition types. Newly diagnosed mixed-temporal
+promotion has a separate implementation issue, #605, in the S03 queue.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Subsequent implementation branches start there and their
@@ -68,7 +71,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150 | ARRAY_CONTAINS truth table; remaining NULLIF signed-zero and conditional cases |
-| S03 | Decimal and conditional input coercion | #141, #150 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion |
+| S03 | Decimal and conditional input coercion | #141, #150, #605 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -91,6 +94,11 @@ because the old issue exists.
   proceeding.
 - Merge accepted slices into `feat/spark-sql-staging`, not `main`. Keep the
   staging branch separate from ordinary releases until the user requests adoption.
+- Give each implementation issue its own PR targeting staging. If a newly
+  confirmed gap falls outside existing issue scope, create and assign a bounded
+  issue before implementing it. Link the issue family through native sub-issues;
+  keep review and validation detail in comments. Do not fold unrelated fixes
+  into a passing slice merely because they touch the same module.
 - Review completed work with a clean-context Sol/high sub-agent and the latest
   `/home/hanbo/.agents/skills/bulletproof-review/SKILL.md`. Review correctness,
   tests, names, responsibilities, documentation, integration and simplicity.
@@ -290,6 +298,15 @@ because the old issue exists.
   follow-up found no outstanding actionable finding in this slice. Remote CI
   and the staging merge remain pending. Existing timestamp parser diagnostics
   lack Spark's CAST_INVALID_INPUT classification; keep that gap in S07.
+- #604 validates searched CASE condition types before branch simplification.
+  The shared conditional reference suite now contains 440 observations, including
+  60 CASE/IF cases. Sixteen historical untyped-NULL CASE successes are independently
+  confirmed Spark analysis failures; their exact replay outcomes are corrected,
+  preserving the original source captures. BOOLEAN NULL, IF(NULL, ...), simple
+  CASE and dead/live result controls remain. All 416 workspace tests passed,
+  including the complete replay and 880 conditional reference comparisons.
+  Formatting and CI-equivalent Clippy passed. The clean-context Sol/high review
+  found no actionable finding; remote CI and staging integration remain pending.
 
 ### Retained gaps found during S01 review
 
@@ -326,3 +343,4 @@ each with a focused reference comparison before reopening or creating its issue.
   candidate uses COALESCE's existing nanosecond/no-timezone DATE promotion, which
   still differs from Spark. All 96 COALESCE observations at two batch sizes are
   unchanged. These are diagnosed gaps, not passing compatibility observations.
+  Its dedicated implementation owner is #605 under the native conditional parent.
