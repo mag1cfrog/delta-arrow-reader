@@ -1,0 +1,106 @@
+{
+  "replay/cast-classification-cases/62/nullif_zero_true": {
+    "status": "ok",
+    "types": [
+      "Float64"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ],
+      [
+        "2.0"
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/cast-classification-cases/62/nullif_zero_false": {
+    "status": "ok",
+    "types": [
+      "Float64"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ],
+      [
+        "2.0"
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/existing-nonansi-zero-cases/118/nullif_control_true": {
+    "status": "ok",
+    "types": [
+      "Float64"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ],
+      [
+        "2.0"
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/existing-nonansi-zero-cases/118/nullif_control_false": {
+    "status": "ok",
+    "types": [
+      "Float64"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ],
+      [
+        "2.0"
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  }
+}

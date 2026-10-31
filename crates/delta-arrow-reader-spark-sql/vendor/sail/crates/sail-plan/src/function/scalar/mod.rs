@@ -5,7 +5,7 @@ use crate::function::common::ScalarFunction;
 mod array;
 mod bitwise;
 mod collection;
-mod conditional;
+pub(crate) mod conditional;
 mod conversion;
 mod csv;
 mod datetime;

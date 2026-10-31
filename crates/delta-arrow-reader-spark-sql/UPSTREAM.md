@@ -99,3 +99,8 @@ hashes. ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
 batch results. Its references and known remaining differences are described in
 the [fixture notes](tests/fixtures/README.md#array-membership).
+
+NULLIF floating comparisons reuse the existing Spark float normalization and
+native comparison/validity kernels. Unmatched values retain their original bits.
+The [NULLIF references](tests/fixtures/README.md#floating-nullif) separate this
+equality correction from the remaining result-type and evaluation differences.

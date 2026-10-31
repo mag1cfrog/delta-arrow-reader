@@ -11,11 +11,11 @@ S01 is complete and merged into `feat/spark-sql-staging` by PR #599, commit
 `3f4245fc258b59c835fc683d4c34a03bbe322231`. Its final CI run passed 408 tests on
 each of Linux, macOS and Windows. Issue #165 is closed.
 
-S02's first slice, #116 ARRAY_CONTAINS NULL semantics, is ready for its staging
-PR on `fix/spark-array-contains-null`. Local validation passed 412 workspace
-tests. A clean-context Sol/high Bulletproof Review found no actionable issue.
-Remote CI for this slice remains pending. The next S02 slice covers #150's
-remaining NULLIF and conditional semantics.
+S02's first slice, #116 ARRAY_CONTAINS NULL semantics, is committed as `8fb846ad`
+in PR #600, targeting staging. Local validation passed 412 workspace tests and
+the independent review found no actionable issue. Remote CI remains pending.
+The following #150 conditional review has resumed; its first bounded runtime
+fix is #601, floating NULLIF equality, on `fix/spark-nullif-float`.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Subsequent implementation branches start there and their
@@ -234,6 +234,39 @@ because the old issue exists.
   412 tests, with only the two existing ignored documentation fragments; format
   and the CI-equivalent Clippy check passed. Remote CI is the remaining delivery
   check before this slice can merge into staging.
+- Committed #116 as `8fb846ad` and opened PR #600 against staging. Its evidence
+  comment distinguishes the passing comparisons from inherited differences and
+  records the independent review and local cost measurements.
+- Reopened #150 and reproduced 34 conditional queries in both ANSI modes against
+  fresh Spark 4.2.0 references. NULLIF floating equality and first-argument types,
+  dead operand evaluation, untyped CASE conditions and IFNULL temporal coercion
+  need separate repairs. Completed typed-NULL CASE/scalar-subquery behavior still
+  passes its value/type controls. Mixed Decimal and nested-admission work retain
+  their existing owners.
+- Created #601 under the existing NULL/conditional parent for floating NULLIF
+  equality. The candidate reuses SparkComparisonFloat and native equality/validity
+  kernels, preserving unmatched input bits and one evaluation per operand. Its
+  98 Spark observations run at three batch sizes; direct calls cover sliced and
+  empty arrays plus NaN payloads. Four exact replay outcomes now require the
+  independently confirmed NULL result, while the source archive remains intact.
+  The full local workspace passed 415 tests with the two existing ignored
+  documentation fragments. Independent review found a concrete analyzer
+  integration regression: a NULLIF-guarded multirow subquery executed instead of
+  being discarded. Added recognition of the new function type and independent
+  guarded/live INT/DOUBLE subquery controls. The full workspace and all 294
+  focused reference comparisons pass after the repair. The clean-context review
+  follow-up confirmed the fix and found no additional actionable issue; formatting
+  and the CI-equivalent Clippy check passed. Remote CI remains pending.
+- Local NULLIF cost probes use equivalent-output DOUBLE inputs and alternating
+  baseline/candidate executables. Normalization adds measurable work to column
+  comparisons. A nonzero, non-NaN scalar bypasses normalization; this restores
+  column/nonzero timings near baseline. Nonnullable scalar/column execution still
+  costs about 2.1-2.4 times the baseline in these development-profile runs, while
+  the nullable case is near baseline. Instrumentation confirms the same scalar
+  and array argument shapes reach the native fast path; the cause remains open.
+  S11 must investigate this case in the release comparison before any general
+  performance acceptance. The current slice reports this cost, not a performance
+  pass or a justified cause.
 
 ### Retained gaps found during S01 review
 
