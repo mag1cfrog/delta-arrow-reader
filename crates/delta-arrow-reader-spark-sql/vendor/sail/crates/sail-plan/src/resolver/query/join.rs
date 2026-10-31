@@ -152,7 +152,7 @@ impl PlanResolver<'_> {
                     Operator::Eq,
                     Expr::Column(right.clone()),
                     &comparison_schema,
-                    self.config.ansi_mode,
+                    &self.config,
                 )?
                 else {
                     unreachable!("spark_binary_expr returns a binary expression")

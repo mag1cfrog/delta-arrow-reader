@@ -12,7 +12,6 @@ use datafusion_expr::{
     WindowFunctionDefinition, WindowUDF, cast, expr, lit, try_cast,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::datetime::convert_tz::ConvertTz;
 use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
@@ -20,23 +19,10 @@ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIE
 
 use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
-use crate::function::comparison::{string_comparison_cast, string_comparison_type};
-use crate::function::is_spark_compatible_arrow_fixed_offset;
-
-pub(crate) fn cast_local_timestamp_to_ltz(argument: expr::Expr, timezone: &Arc<str>) -> expr::Expr {
-    let timestamp_ntz = cast(argument, DataType::Timestamp(TimeUnit::Microsecond, None));
-    let timestamp_ltz = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone)));
-    if is_spark_compatible_arrow_fixed_offset(timezone.as_ref()) {
-        return cast(timestamp_ntz, timestamp_ltz);
-    }
-    // Spark's named-zone conversion resolves DST gaps and overlaps differently from Arrow.
-    let instant = ScalarUDF::from(ConvertTz::new(false)).call(vec![
-        lit(timezone.to_string()),
-        lit("UTC"),
-        timestamp_ntz,
-    ]);
-    cast(cast(instant, DataType::Int64), timestamp_ltz)
-}
+use crate::function::comparison::{
+    string_comparison_cast, string_comparison_type, temporal_comparison_type,
+};
+use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 pub struct FunctionContextInput<'a> {
     /// The names of function arguments.
@@ -164,7 +150,7 @@ impl ScalarFunctionBuilder {
                     op,
                     right,
                     function_context.schema,
-                    function_context.plan_config.ansi_mode,
+                    function_context.plan_config,
                 )
             },
         )
@@ -369,8 +355,9 @@ pub(crate) fn spark_binary_expr(
     op: Operator,
     mut right: expr::Expr,
     schema: &DFSchemaRef,
-    ansi_mode: bool,
+    config: &PlanConfig,
 ) -> PlanResult<expr::Expr> {
+    let ansi_mode = config.ansi_mode;
     if matches!(
         op,
         Operator::Eq
@@ -384,6 +371,27 @@ pub(crate) fn spark_binary_expr(
     ) {
         let mut left_type = left.get_type(schema)?;
         let mut right_type = right.get_type(schema)?;
+        if let Some(target) =
+            temporal_comparison_type(&left_type, &right_type, &config.session_timezone)
+        {
+            let convert = |value, source: &DataType| {
+                if matches!(
+                    source,
+                    DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
+                ) && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) = &target
+                {
+                    cast_local_timestamp_expr_to_ltz(value, timezone)
+                } else if source != &target {
+                    cast(value, target.clone())
+                } else {
+                    value
+                }
+            };
+            left = convert(left, &left_type);
+            right = convert(right, &right_type);
+            left_type = target.clone();
+            right_type = target;
+        }
         if let Some(target) = string_comparison_type(&left_type, &right_type, ansi_mode) {
             let convert = |value, source: &DataType| -> PlanResult<_> {
                 Ok(if source.is_string() {
@@ -1594,7 +1602,10 @@ fn ansi_float_integer_predicates_preserve_the_single_precision_boundary() -> Pla
                     Operator::Eq,
                     right.clone(),
                     &schema,
-                    ansi_mode,
+                    &PlanConfig {
+                        ansi_mode,
+                        ..Default::default()
+                    },
                 )?,
                 spark_in_list(left, vec![right], false, &schema, ansi_mode)?,
             ] {
@@ -1735,7 +1746,16 @@ fn exact_integer_predicates_match_explicit_double_coercion() -> PlanResult<()> {
                 Operator::IsDistinctFrom,
                 Operator::IsNotDistinctFrom,
             ] {
-                let candidate = spark_binary_expr(left.clone(), op, right.clone(), &schema, true)?;
+                let candidate = spark_binary_expr(
+                    left.clone(),
+                    op,
+                    right.clone(),
+                    &schema,
+                    &PlanConfig {
+                        ansi_mode: true,
+                        ..Default::default()
+                    },
+                )?;
                 let reference = expr::Expr::BinaryExpr(BinaryExpr::new(
                     Box::new(wide_left.clone()),
                     op,

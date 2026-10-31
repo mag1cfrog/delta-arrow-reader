@@ -18,6 +18,7 @@ mod comparison;
 mod generator;
 pub(crate) mod scalar;
 mod table;
+pub(crate) mod temporal_coercion;
 mod window;
 
 pub(crate) use aggregate::get_built_in_aggregate_function;

@@ -12,9 +12,9 @@ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{
-    FunctionContextInput, ScalarFunction, ScalarFunctionInput, cast_local_timestamp_to_ltz,
-};
+use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+
+use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 mod nullif;
 pub(crate) use nullif::SparkNullIf;
@@ -169,33 +169,11 @@ fn coerce_to_temporal(
         DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
     ) && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) = target_type
     {
-        Ok(cast_local_timestamp_to_ltz(arg, timezone))
+        Ok(cast_local_timestamp_expr_to_ltz(arg, timezone))
     } else if is_temporal_type(data_type) {
         Ok(cast(arg, target_type.clone()))
     } else {
         Ok(arg)
-    }
-}
-
-fn common_temporal_type(data_types: &[DataType], session_timezone: &Arc<str>) -> Option<DataType> {
-    if data_types
-        .iter()
-        .any(|data_type| matches!(data_type, DataType::Timestamp(_, Some(_))))
-    {
-        Some(DataType::Timestamp(
-            TimeUnit::Microsecond,
-            Some(Arc::clone(session_timezone)),
-        ))
-    } else if data_types
-        .iter()
-        .any(|data_type| matches!(data_type, DataType::Timestamp(_, None)))
-    {
-        Some(DataType::Timestamp(TimeUnit::Microsecond, None))
-    } else {
-        data_types
-            .iter()
-            .any(is_date_type)
-            .then_some(DataType::Date32)
     }
 }
 
@@ -228,6 +206,7 @@ pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, Scalar
                 let (left, right) = input.arguments.two()?;
                 Ok(ScalarUDF::from(SparkNullIf::new(
                     input.function_context.plan_config.ansi_mode,
+                    input.function_context.plan_config.session_timezone.clone(),
                 ))
                 .call(vec![left, right]))
             }),

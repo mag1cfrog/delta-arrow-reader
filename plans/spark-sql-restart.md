@@ -23,9 +23,10 @@ Mixed-temporal promotion has a separate implementation issue, #605, in S03.
 Shared COALESCE/IFNULL/NVL evaluation, #608, merged through PR #614 as
 `16df0951` after all three platform jobs passed. NULLIF evaluation, #610, merged
 through PR #617 as `1e75c8bd` after the macOS infrastructure rerun and both other
-platforms passed. Issue #610 is closed. Known NULL array projections, #612, are
-reviewed and pushed as `80d79acf` in PR #625, with CI running. Array
-predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
+platforms passed. Issue #610 is closed. Known NULL array projections, #612,
+merged through PR #625 as `9e16391c` after all three platform jobs passed.
+Issue #612 is closed. Array predicates at join boundaries, #613, are reviewed
+and pushed as `7dcfda7a` in PR #628, with CI running.
 S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
 `04b191a6`. VALUES row-width validation, #616, is reviewed and pushed as
 `28d93682`. Mixed-temporal conditional types, #605, are reviewed and pushed as
@@ -34,8 +35,9 @@ S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
 comparison audit assigned independent string, temporal and known-NULL-right
 findings to #621, #622 and #623. The relational coverage tracker #170 and
 reference review #141 have resumed. Spark string-to-BOOLEAN CAST, #624, is reviewed
-and pushed as `a9a87c58`. The current slice is #621, sharing STRING comparison
-types and conversions between binary predicates and NULLIF.
+and pushed as `a9a87c58`. STRING comparison coercion, #621, is reviewed and
+pushed as `f3591dc7`. The current slice is #622, session timezones for DATE,
+TIMESTAMP_NTZ and TIMESTAMP comparisons.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -88,7 +90,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion and nanosecond precision |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -577,6 +579,31 @@ because the old issue exists.
   with no actionable findings remaining. Root warning-denying Clippy, formatting
   and diff checks pass. The slice is ready to commit; its separate PR and staging
   CI follow the existing queue.
+
+- #622 captures 1,350 independent temporal comparison observations initially;
+  the baseline has 500 status/value differences across two batch sizes. The
+  expanded 1,414-case capture adds registered-table rows whose LTZ data is UTC
+  while the session uses UTC, Phoenix, New York or +05:45. Ordinary comparisons,
+  NULLIF, BETWEEN and ON/USING joins reuse the existing session-zone conversion.
+  The common temporal type and expression/runtime adapters are grouped together;
+  the existing conditional, CAST and SEQUENCE expression trees remain unchanged.
+  The focused public-API tests pass. Clean review found that the new microsecond
+  promotion would lose precision for external nanosecond columns, making 1ns=2ns
+  true. A public-API regression reproduces it. The comparison selector now leaves
+  any nanosecond input on its original DataFusion path; unit/zone combinations
+  check equality, original NULLIF types and values. Dedicated #627, assigned as a
+  native child of #173, owns mixed nanosecond precision and session-zone coercion.
+  Re-review caught a NULLIF runtime conversion that still bypassed this fallback.
+  A second public regression reproduces the lost DST-gap error. The runtime now
+  requires the Spark temporal policy to match; separate binary/NULLIF executions
+  preserve nanosecond gap/overlap errors in both orders and ANSI modes.
+  Full i64-microsecond timestamp range remains S05 work because the reused
+  named-zone kernel depends on Chrono. The final workspace run passes 431 tests,
+  with no failures and the same two inherited ignored macro doctests. Root
+  warning-denying Clippy, formatting and diff checks pass. Clean-context Sol/high
+  Bulletproof Review rechecked both repairs and the full scope with no remaining
+  actionable findings. The slice is ready to commit; its dedicated staging PR
+  follows the existing queue.
 
 ### Retained gaps found during S01 review
 

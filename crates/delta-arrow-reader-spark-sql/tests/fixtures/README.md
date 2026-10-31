@@ -187,9 +187,8 @@ Incomparable scalar and typed-NULL inputs must fail during planning.
 
 Mixed-type volatile counters in `conditional_evaluation.rs` check that the
 original left expression is evaluated once and right inputs run only for
-non-NULL left rows. String comparisons are covered below. Mixed temporal
-comparisons and known-NULL-right simplification remain separate gaps in the
-restart plan.
+non-NULL left rows. String and mixed temporal comparisons are covered below.
+Known-NULL-right simplification remains a separate gap in the restart plan.
 
 ## String comparison coercion
 
@@ -209,8 +208,37 @@ that required operands run once and unused NULLIF inputs do not run.
 
 One ANSI observation is explicitly retained for #623: `NULLIF('bad', CAST(NULL
 AS INT))` still tries to parse the left string. Its expected Spark result remains
-`'bad'`; it is not counted as compatible. Temporal comparison and exact Spark
-error-stage/nullability parity remain separate work.
+`'bad'`; it is not counted as compatible. Mixed temporal comparisons are covered
+below. Exact Spark error-stage/nullability parity remains separate work.
+
+## Temporal comparison coercion
+
+`temporal-comparison-spark.jsonl` records 1,414 independent Spark 4.2.0
+observations from `capture_temporal_comparison_spark.py`. DATE, TIMESTAMP_NTZ
+and TIMESTAMP comparisons run in both orders and ANSI modes. The references
+include pre-epoch fractions, positive/negative fixed offsets, New York's spring
+gap and fall overlap, and Apia's skipped date. Ordinary comparisons, NULL-safe
+equality, NULLIF, BETWEEN and ON/USING joins share the reference checks.
+
+The capture's registered-table inputs are also registered as Arrow arrays by
+`comparison_coercion.rs`. Their LTZ column carries UTC while the session can use
+Phoenix or another zone. Comparisons must interpret DATE/NTZ in the session zone;
+NULLIF must retain its first input's original value, type and timezone annotation.
+The native DataFusion control retains its UTC interpretation. Runtime unit tests
+cover Date32/Date64/NTZ scalars, array slices, NULLs and empty inputs; volatile
+counters check that conversion does not repeat the original expression.
+
+Named-zone conversion reuses the existing ConvertTz kernel and its Chrono
+timestamp range. These fixtures do not establish Spark's full i64-microsecond
+range; that boundary remains part of the restart plan's timestamp slice.
+
+Nanosecond columns retain the previous DataFusion comparison path. A separate
+registered-Arrow regression checks that 1ns and 2ns stay distinct and NULLIF
+keeps the same equality relation and original type. Mixed-unit precision and
+nanosecond session-zone conversion remain tracked in #627; the retained mixed
+unit assertions protect existing behavior, not Spark compatibility. Separate
+binary and NULLIF executions also preserve the existing Arrow errors for
+nanosecond local timestamps in New York's DST gap and overlap.
 
 ## String-to-BOOLEAN casts
 

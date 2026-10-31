@@ -4,7 +4,7 @@
 
 use arrow::array::AsArray;
 use arrow::compute::kernels::nullif::nullif;
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, TimeUnit};
 use datafusion::functions::core::nullif::NullIfFunc;
 use datafusion::physical_expr_common::datum::apply_cmp;
 use datafusion_common::{Result, ScalarValue, utils::take_function_args};
@@ -14,25 +14,34 @@ use datafusion_expr::{
     ColumnarValue, Expr, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     Volatility, lit,
 };
+use std::sync::Arc;
 
 use crate::function::common::{SparkComparisonFloat, spark_comparison_widens_to_double};
-use crate::function::comparison::{string_comparison_cast, string_comparison_type};
+use crate::function::comparison::{
+    string_comparison_cast, string_comparison_type, temporal_comparison_type,
+};
+use crate::function::temporal_coercion::cast_local_timestamp_value_to_ltz;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct SparkNullIf {
     native: NullIfFunc,
     ansi_mode: bool,
+    session_timezone: Arc<str>,
 }
 
 impl SparkNullIf {
-    pub(crate) fn new(ansi_mode: bool) -> Self {
+    pub(crate) fn new(ansi_mode: bool, session_timezone: Arc<str>) -> Self {
         Self {
             native: NullIfFunc::new(),
             ansi_mode,
+            session_timezone,
         }
     }
 
     fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
+        if let Some(data_type) = temporal_comparison_type(left, right, &self.session_timezone) {
+            return Ok(data_type);
+        }
         if let Some(data_type) = string_comparison_type(left, right, self.ansi_mode) {
             return Ok(data_type);
         }
@@ -83,7 +92,9 @@ impl ScalarUDFImpl for SparkNullIf {
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         if matches!(args.first(), Some(Expr::Literal(value, _)) if value.is_null()) {
             // Keep comparability validation even when the right input is discarded.
-            let original = ScalarUDF::from(Self::new(self.ansi_mode)).call(args);
+            let original =
+                ScalarUDF::from(Self::new(self.ansi_mode, self.session_timezone.clone()))
+                    .call(args);
             return Ok(ExprSimplifyResult::Simplified(lit(
                 ScalarValue::try_new_null(&info.get_data_type(&original)?)?,
             )));
@@ -95,6 +106,12 @@ impl ScalarUDFImpl for SparkNullIf {
         let [left, right] = take_function_args(self.name(), input.args.as_slice())?;
         let left = left.clone();
         let same_type = left.data_type() == right.data_type();
+        let uses_spark_temporal_coercion = temporal_comparison_type(
+            &left.data_type(),
+            &right.data_type(),
+            &self.session_timezone,
+        )
+        .is_some();
         let comparison_type = self.comparison_type(&left.data_type(), &right.data_type())?;
         if !same_type {
             for (value, field) in input.args.iter_mut().zip(&mut input.arg_fields) {
@@ -105,7 +122,25 @@ impl ScalarUDFImpl for SparkNullIf {
                         .with_data_type(comparison_type.clone())
                         .with_nullable(field.is_nullable() || !self.ansi_mode),
                 );
-                *value = if value.data_type().is_string()
+                *value = if uses_spark_temporal_coercion
+                    && matches!(
+                        value.data_type(),
+                        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
+                    )
+                    && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) =
+                        &comparison_type
+                {
+                    cast_local_timestamp_value_to_ltz(
+                        ScalarFunctionArgs {
+                            args: vec![value.clone()],
+                            arg_fields: vec![field.clone()],
+                            number_rows: input.number_rows,
+                            return_field: comparison_field.clone(),
+                            config_options: input.config_options.clone(),
+                        },
+                        timezone,
+                    )?
+                } else if value.data_type().is_string()
                     && string_comparison_type(&value.data_type(), &comparison_type, self.ansi_mode)
                         .is_some()
                 {
@@ -176,7 +211,7 @@ mod tests {
     fn invoke(left: ColumnarValue, right: ColumnarValue, rows: usize) -> Result<ColumnarValue> {
         let field = Arc::new(Field::new("value", left.data_type(), true));
         let right_field = Arc::new(Field::new("right", right.data_type(), true));
-        SparkNullIf::new(true).invoke_with_args(ScalarFunctionArgs {
+        SparkNullIf::new(true, "UTC".into()).invoke_with_args(ScalarFunctionArgs {
             args: vec![left, right],
             arg_fields: vec![field.clone(), right_field],
             number_rows: rows,
@@ -216,10 +251,11 @@ mod tests {
             DataType::Int32,
             true,
         )])));
-        let functions = std::iter::once(ScalarUDF::from(SparkNullIf::new(true))).chain(
-            [Operator::Plus, Operator::Minus, Operator::Multiply]
-                .map(|operator| ScalarUDF::from(SparkCheckedArithmetic::new(operator))),
-        );
+        let functions = std::iter::once(ScalarUDF::from(SparkNullIf::new(true, "UTC".into())))
+            .chain(
+                [Operator::Plus, Operator::Minus, Operator::Multiply]
+                    .map(|operator| ScalarUDF::from(SparkCheckedArithmetic::new(operator))),
+            );
         for function in functions {
             for right in [operand.call(vec![col("a")]), lit(7_i32)] {
                 let expression = function.call(vec![operand.call(vec![col("a")]), right]);
