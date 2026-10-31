@@ -632,6 +632,7 @@
     },
     {
       "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_int32.rs",
+      "renamed_to": "vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_integer.rs",
       "accepted_sha256": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6",
       "archive": "empty-input-scalar-runs.json.gz",
       "member": "baseline/integer-cast.rs",

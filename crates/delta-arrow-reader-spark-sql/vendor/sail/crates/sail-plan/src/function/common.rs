@@ -20,6 +20,7 @@ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIE
 
 use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
+use crate::function::comparison::{string_comparison_cast, string_comparison_type};
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 
 pub(crate) fn cast_local_timestamp_to_ltz(argument: expr::Expr, timezone: &Arc<str>) -> expr::Expr {
@@ -381,8 +382,23 @@ pub(crate) fn spark_binary_expr(
             | Operator::IsDistinctFrom
             | Operator::IsNotDistinctFrom
     ) {
-        let left_type = left.get_type(schema)?;
-        let right_type = right.get_type(schema)?;
+        let mut left_type = left.get_type(schema)?;
+        let mut right_type = right.get_type(schema)?;
+        if let Some(target) = string_comparison_type(&left_type, &right_type, ansi_mode) {
+            let convert = |value, source: &DataType| -> PlanResult<_> {
+                Ok(if source.is_string() {
+                    string_comparison_cast(&target, ansi_mode)?.call(vec![value])
+                } else if source != &target {
+                    cast(value, target.clone())
+                } else {
+                    value
+                })
+            };
+            left = convert(left, &left_type)?;
+            right = convert(right, &right_type)?;
+            left_type = target.clone();
+            right_type = target;
+        }
         if (left_type.is_numeric() || left_type == DataType::Null)
             && (right_type.is_numeric() || right_type == DataType::Null)
         {

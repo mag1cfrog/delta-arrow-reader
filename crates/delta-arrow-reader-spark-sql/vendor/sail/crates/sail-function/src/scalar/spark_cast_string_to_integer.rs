@@ -1,32 +1,47 @@
+//! String-to-integer CAST shares strict Arrow parsing and Spark legacy truncation.
+
 use std::sync::Arc;
 
 use datafusion::arrow::array::{ArrayRef, PrimitiveArray};
+use datafusion::arrow::compute::CastOptions;
 use datafusion::arrow::datatypes::{
     ArrowPrimitiveType, DataType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
 };
+use datafusion::functions::expr_fn::btrim;
+use datafusion::functions::string::btrim::BTrimFunc;
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
-use datafusion_common::{Result, plan_err};
+use datafusion_common::{Result, ScalarValue, plan_err, utils::take_function_args};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+    Volatility, cast, lit, try_cast,
 };
 use num::{PrimInt, Signed};
 
 use crate::error::{invalid_arg_count_exec_err, unsupported_data_type_exec_err};
 use crate::functions_utils::make_scalar_function;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StringIntegerCastMode {
+    Ansi,
+    Legacy,
+    Try,
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkCastStringToInteger {
     signature: Signature,
     data_type: DataType,
+    mode: StringIntegerCastMode,
 }
 
 impl SparkCastStringToInteger {
-    pub fn try_new(data_type: DataType) -> Result<Self> {
+    pub fn try_new(data_type: DataType, mode: StringIntegerCastMode) -> Result<Self> {
         if !matches!(
             data_type,
             DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64
         ) {
-            return plan_err!("legacy string cast requires a signed integer, got {data_type}");
+            return plan_err!("string cast requires a signed integer, got {data_type}");
         }
         Ok(Self {
             signature: Signature::uniform(
@@ -35,8 +50,29 @@ impl SparkCastStringToInteger {
                 Volatility::Immutable,
             ),
             data_type,
+            mode,
         })
     }
+
+    pub fn into_expr(self, input: Expr) -> Expr {
+        // Native CAST nodes retain the analyzer's guarded-arithmetic and error rules.
+        match self.mode {
+            StringIntegerCastMode::Legacy => ScalarUDF::from(self).call(vec![input]),
+            StringIntegerCastMode::Ansi => cast(
+                btrim(vec![input, lit(integer_trim_characters())]),
+                self.data_type,
+            ),
+            StringIntegerCastMode::Try => try_cast(
+                btrim(vec![input, lit(integer_trim_characters())]),
+                self.data_type,
+            ),
+        }
+    }
+}
+
+fn integer_trim_characters() -> String {
+    // Spark's exact integer parser trims ASCII controls, including DEL.
+    (0_u8..=32).chain([127]).map(char::from).collect()
 }
 
 impl ScalarUDFImpl for SparkCastStringToInteger {
@@ -57,7 +93,8 @@ impl ScalarUDFImpl for SparkCastStringToInteger {
         Ok(self.data_type.clone())
     }
 
-    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> Result<FieldRef> {
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let [_] = take_function_args(self.name(), args.arg_fields)?;
         Ok(Arc::new(Field::new(
             self.name(),
             self.data_type.clone(),
@@ -65,7 +102,47 @@ impl ScalarUDFImpl for SparkCastStringToInteger {
         )))
     }
 
-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if let [Expr::Literal(value, _)] = args.as_slice()
+            && value.data_type().is_string()
+        {
+            // Keep literal CAST failures before empty-result pruning.
+            let value = self.invoke_with_args(ScalarFunctionArgs {
+                args: vec![ColumnarValue::Scalar(value.clone())],
+                arg_fields: vec![Arc::new(Field::new(
+                    "input",
+                    value.data_type(),
+                    value.is_null(),
+                ))],
+                number_rows: 1,
+                return_field: Arc::new(Field::new(self.name(), self.data_type.clone(), true)),
+                config_options: info.config_options().clone(),
+            })?;
+            if let ColumnarValue::Scalar(value) = value {
+                return Ok(ExprSimplifyResult::Simplified(Expr::Literal(value, None)));
+            }
+        }
+        Ok(ExprSimplifyResult::Original(args))
+    }
+
+    fn invoke_with_args(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let [_] = take_function_args(self.name(), args.args.as_slice())?;
+        if self.mode != StringIntegerCastMode::Legacy {
+            let [input_field] = take_function_args(self.name(), args.arg_fields.as_slice())?;
+            args.return_field = input_field.clone();
+            args.args.push(ColumnarValue::Scalar(ScalarValue::Utf8(Some(
+                integer_trim_characters(),
+            ))));
+            args.arg_fields
+                .push(Arc::new(Field::new("trim", DataType::Utf8, false)));
+            return BTrimFunc::new().invoke_with_args(args)?.cast_to(
+                &self.data_type,
+                Some(&CastOptions {
+                    safe: self.mode == StringIntegerCastMode::Try,
+                    ..Default::default()
+                }),
+            );
+        }
         let data_type = self.data_type.clone();
         make_scalar_function(
             move |arrays| cast_string_array_to_integer(arrays, &data_type),
@@ -193,6 +270,88 @@ mod tests {
     use super::*;
 
     #[test]
+    fn integer_cast_modes_preserve_string_layouts_and_slices() -> Result<()> {
+        use datafusion_common::config::ConfigOptions;
+        let values = [
+            Some("outside"),
+            Some("\u{7f} +7\0"),
+            None,
+            Some("1.9"),
+            Some("bad"),
+            Some("outside"),
+        ];
+        let arrays: [ArrayRef; 3] = [
+            Arc::new(StringArray::from(values.to_vec())),
+            Arc::new(LargeStringArray::from(values.to_vec())),
+            Arc::new(StringViewArray::from(values.to_vec())),
+        ];
+        for data_type in [
+            DataType::Int8,
+            DataType::Int16,
+            DataType::Int32,
+            DataType::Int64,
+        ] {
+            for mode in [
+                StringIntegerCastMode::Ansi,
+                StringIntegerCastMode::Legacy,
+                StringIntegerCastMode::Try,
+            ] {
+                let udf = SparkCastStringToInteger::try_new(data_type.clone(), mode)?;
+                let invoke = |value: ColumnarValue, rows| -> Result<ColumnarValue> {
+                    let input = Arc::new(Field::new("input", value.data_type(), true));
+                    udf.invoke_with_args(ScalarFunctionArgs {
+                        args: vec![value],
+                        arg_fields: vec![input],
+                        number_rows: rows,
+                        return_field: Arc::new(Field::new("result", data_type.clone(), true)),
+                        config_options: Arc::new(ConfigOptions::default()),
+                    })
+                };
+                for array in &arrays {
+                    let output =
+                        invoke(ColumnarValue::Array(array.slice(1, 2)), 2)?.into_array(2)?;
+                    assert_eq!(output.data_type(), &data_type);
+                    assert_eq!(
+                        ScalarValue::try_from_array(&output, 0)?.cast_to(&DataType::Int64)?,
+                        ScalarValue::Int64(Some(7))
+                    );
+                    assert!(output.is_null(1));
+                    let invalid = invoke(ColumnarValue::Array(array.slice(3, 2)), 2);
+                    if mode == StringIntegerCastMode::Ansi {
+                        assert!(invalid.is_err());
+                    } else {
+                        let output = invalid?.into_array(2)?;
+                        let expected = if mode == StringIntegerCastMode::Legacy {
+                            Some(1)
+                        } else {
+                            None
+                        };
+                        assert_eq!(
+                            ScalarValue::try_from_array(&output, 0)?.cast_to(&DataType::Int64)?,
+                            ScalarValue::Int64(expected)
+                        );
+                        assert!(output.is_null(1));
+                    }
+                    let empty =
+                        invoke(ColumnarValue::Array(array.slice(4, 0)), 0)?.into_array(0)?;
+                    assert_eq!(empty.len(), 0);
+                    assert_eq!(empty.data_type(), &data_type);
+                    let scalar = ScalarValue::try_from_array(array, 1)?;
+                    let result = invoke(ColumnarValue::Scalar(scalar), 1)?;
+                    let ColumnarValue::Scalar(value) = result else {
+                        return exec_err!("scalar cast returned an array");
+                    };
+                    assert_eq!(
+                        value.cast_to(&DataType::Int64)?,
+                        ScalarValue::Int64(Some(7))
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn test_parse_spark_legacy_string_to_i32() {
         let cases = [
             ("100", Some(100)),
@@ -306,7 +465,10 @@ mod tests {
                 Arc::new(LargeStringArray::from(values.clone())) as ArrayRef,
                 Arc::new(StringViewArray::from(values)) as ArrayRef,
             ];
-            let udf = SparkCastStringToInteger::try_new(data_type.clone())?;
+            let udf = SparkCastStringToInteger::try_new(
+                data_type.clone(),
+                StringIntegerCastMode::Legacy,
+            )?;
             assert_eq!(udf.return_type(&[DataType::Utf8])?, data_type);
             for input in arrays {
                 let output = cast_string_array_to_integer(&[input], &data_type)?;
@@ -320,13 +482,17 @@ mod tests {
                 }
             }
         }
-        assert!(SparkCastStringToInteger::try_new(DataType::Float64).is_err());
+        assert!(
+            SparkCastStringToInteger::try_new(DataType::Float64, StringIntegerCastMode::Legacy)
+                .is_err()
+        );
         Ok(())
     }
 
     #[test]
     fn test_return_field_is_nullable_for_non_nullable_input() -> Result<()> {
-        let udf = SparkCastStringToInteger::try_new(DataType::Int32)?;
+        let udf =
+            SparkCastStringToInteger::try_new(DataType::Int32, StringIntegerCastMode::Legacy)?;
         let input = Arc::new(Field::new("value", DataType::Utf8, false));
         let arg_fields = [input];
         let scalar_arguments = [None];

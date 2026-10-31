@@ -3,7 +3,6 @@ use std::ops::{Div, Mul};
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
-use datafusion::functions::expr_fn;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
 use sail_common::spec;
@@ -19,7 +18,9 @@ use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
-use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInteger;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
 use sail_function::scalar::spark_struct_rename::SparkStructRename;
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
@@ -167,23 +168,16 @@ impl PlanResolver<'_> {
             (
                 DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
                 to @ (DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64),
-                false,
-            ) if !self.config.ansi_mode => {
-                ScalarUDF::new_from_impl(SparkCastStringToInteger::try_new(to)?).call(vec![expr])
-            }
-            (
-                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
-                to @ (DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64),
                 is_try,
             ) => {
-                // UTF8String's exact integer parser trims ASCII controls, including DEL.
-                let trim: String = (0_u8..=32).chain([127]).map(char::from).collect();
-                let value = expr_fn::btrim(vec![expr, lit(trim)]);
-                if is_try {
-                    try_cast(value, to)
+                let mode = if is_try {
+                    StringIntegerCastMode::Try
+                } else if self.config.ansi_mode {
+                    StringIntegerCastMode::Ansi
                 } else {
-                    cast(value, to)
-                }
+                    StringIntegerCastMode::Legacy
+                };
+                SparkCastStringToInteger::try_new(to, mode)?.into_expr(expr)
             }
             (
                 DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,

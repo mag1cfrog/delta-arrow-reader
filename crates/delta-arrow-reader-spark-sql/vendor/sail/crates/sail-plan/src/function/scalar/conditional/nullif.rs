@@ -16,6 +16,7 @@ use datafusion_expr::{
 };
 
 use crate::function::common::{SparkComparisonFloat, spark_comparison_widens_to_double};
+use crate::function::comparison::{string_comparison_cast, string_comparison_type};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct SparkNullIf {
@@ -32,6 +33,9 @@ impl SparkNullIf {
     }
 
     fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
+        if let Some(data_type) = string_comparison_type(left, right, self.ansi_mode) {
+            return Ok(data_type);
+        }
         if spark_comparison_widens_to_double(left, right, self.ansi_mode) {
             return Ok(DataType::Float64);
         }
@@ -94,13 +98,30 @@ impl ScalarUDFImpl for SparkNullIf {
         let comparison_type = self.comparison_type(&left.data_type(), &right.data_type())?;
         if !same_type {
             for (value, field) in input.args.iter_mut().zip(&mut input.arg_fields) {
-                *value = value.cast_to(&comparison_type, None)?;
-                *field = std::sync::Arc::new(
+                let comparison_field = std::sync::Arc::new(
                     field
                         .as_ref()
                         .clone()
-                        .with_data_type(comparison_type.clone()),
+                        .with_data_type(comparison_type.clone())
+                        .with_nullable(field.is_nullable() || !self.ansi_mode),
                 );
+                *value = if value.data_type().is_string()
+                    && string_comparison_type(&value.data_type(), &comparison_type, self.ansi_mode)
+                        .is_some()
+                {
+                    string_comparison_cast(&comparison_type, self.ansi_mode)?.invoke_with_args(
+                        ScalarFunctionArgs {
+                            args: vec![value.clone()],
+                            arg_fields: vec![field.clone()],
+                            number_rows: input.number_rows,
+                            return_field: comparison_field.clone(),
+                            config_options: input.config_options.clone(),
+                        },
+                    )?
+                } else {
+                    value.cast_to(&comparison_type, None)?
+                };
+                *field = comparison_field;
             }
         }
         // Only equality with zero or NaN can change under float normalization.

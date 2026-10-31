@@ -33,6 +33,7 @@ use sail_function::scalar::math::{
 };
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 
 /// Preserve early expression errors before NULL and empty-result rewrites.
 #[derive(Debug)]
@@ -682,7 +683,8 @@ fn has_cast(expr: &Expr) -> Result<bool> {
     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
-            || f.func.inner().is::<SparkCastStringToBoolean>())))
+            || f.func.inner().is::<SparkCastStringToBoolean>()
+                || f.func.inner().is::<SparkCastStringToInteger>())))
 }
 
 // Preserve string and Decimal-to-Decimal failures before local pruning.
@@ -703,7 +705,8 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
                 .inner()
                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
             ) || f.func.inner().is::<SparkCastStringToDecimal>()
-                || f.func.inner().is::<SparkCastStringToBoolean>() =>
+                || f.func.inner().is::<SparkCastStringToBoolean>()
+                || f.func.inner().is::<SparkCastStringToInteger>() =>
         {
             Ok(matches!(f.args.as_slice(), [expr] if !null_literal(expr) && row_expression(expr, true)?))
         }

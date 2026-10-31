@@ -14,6 +14,7 @@ use crate::function::common::ScalarFunction;
 
 mod aggregate;
 pub(crate) mod common;
+mod comparison;
 mod generator;
 pub(crate) mod scalar;
 mod table;
