@@ -40,11 +40,11 @@ disabling parallelism is a fix.
 ## Array membership
 
 `array-contains-spark.jsonl` starts with input rows and Spark settings, followed by
-166 independent query observations. Regenerate it with
+256 independent query observations. Regenerate it with
 `capture_array_contains_spark.py` in a Python 3.12 environment containing
 `pyspark==4.2.0`, with Java 21 available. Rust tests use the committed captures.
 
-The tests compare values, output names and types for 152 supported-input cases in
+The tests compare values, output names and types for 242 supported-input cases in
 both one-row and larger batches. Returned NULLs must be representable in both
 output schemas. Logical nullability can remain conservative, and constant folding
 can narrow physical nullability; exact Spark nullability parity is separate S07
@@ -55,9 +55,18 @@ Fourteen observations have explicit `retained_difference` labels. Their assertio
 preserve the relevant boundary without counting them as Spark-compatible:
 
 - Mixed Decimal precisions still fail coercion. Equal Decimal types are covered.
-- Two projected NULL/cast cases still evaluate the bad cast in ANSI mode.
+- INNER JOIN still evaluates the unused cast in two ANSI cases, tracked in
+  [issue #613](https://github.com/mag1cfrog/delta-arrow-reader/issues/613). LEFT JOIN
+  keeps its required cast error.
 - Untyped NULL columns remain admitted, unlike Spark. Their membership results
   now follow the NULL rule across the complete batch; the admission gap remains.
+
+The projection cases distinguish a known NULL from a merely nullable input.
+They cover aliases, CTEs, filters, grouping keys/sets, windows, empty input and
+expressions still needed by another output. Aggregate arguments and sort keys
+retain their earlier input preparation, including ANSI failures. Local VALUES
+and required scalar-subquery errors remain visible. Volatile counters in both ANSI modes check that unused
+inputs do not run and shared required inputs run once per row.
 
 For local lookup-cost comparisons, run
 `cargo bench --locked --bench array_contains --profile dev` on each revision with
