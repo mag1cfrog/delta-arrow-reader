@@ -29,6 +29,11 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
     if case["expected"]["condition"] == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
         return Err("invalid CASE condition reached physical planning".into());
     }
+    if case["expected"]["condition"]
+        == "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN"
+    {
+        return Err("invalid scalar subquery reached physical planning".into());
+    }
     let logical_nullable = query.logical_plan.schema().field(0).is_nullable();
     let plan = query.create_physical_plan(session).await?;
     let schema = plan.schema();
@@ -79,7 +84,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(records.len(), 513);
+    assert_eq!(records.len(), 563);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -105,7 +110,10 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                 }
                 Err(error) if expected["status"] == "error" => {
                     match expected["condition"].as_str() {
-                        Some("CAST_INVALID_INPUT") => {
+                        Some(
+                            "CAST_INVALID_INPUT"
+                            | "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                        ) => {
                             let error = error.to_string();
                             error.contains("[CAST_INVALID_INPUT]")
                             || ((case["id"] == "case_live_cast" || case["id"].as_str().is_some_and(|id| id.starts_with("eval_")))
@@ -126,6 +134,11 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                         Some("SCALAR_SUBQUERY_TOO_MANY_ROWS") => error
                             .to_string()
                             .contains("Scalar subquery returned more than one row"),
+                        Some(
+                            "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+                        ) => error
+                            .to_string()
+                            .contains("Scalar subquery must return exactly one column"),
                         Some("DIVIDE_BY_ZERO") => {
                             error.to_string().contains("[DIVIDE_BY_ZERO]")
                                 || error

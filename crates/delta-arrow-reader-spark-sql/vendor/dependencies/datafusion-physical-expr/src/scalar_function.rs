@@ -74,12 +74,8 @@ impl Debug for ScalarFunctionExpr {
 
 impl ScalarFunctionExpr {
     fn evaluate_first_non_null(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
-        use arrow::array::new_empty_array;
         use arrow::compute::{is_null, kernels::zip::zip};
 
-        if batch.num_rows() == 0 {
-            return Ok(ColumnarValue::Array(new_empty_array(self.return_type())));
-        }
         let Some((first, rest)) = self.args.split_first() else {
             return internal_err!("{} requires at least one argument", self.name);
         };
@@ -335,6 +331,14 @@ impl PhysicalExpr for ScalarFunctionExpr {
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        // Empty batches skip the left input even when right-side selection is unnecessary.
+        if batch.num_rows() == 0
+            && (self.returns_first_non_null || self.fun.inner().short_circuits_on_null_first_arg())
+        {
+            return Ok(ColumnarValue::Array(arrow::array::new_empty_array(
+                self.return_type(),
+            )));
+        }
         if self.returns_first_non_null {
             return self.evaluate_first_non_null(batch);
         }
@@ -352,32 +356,36 @@ impl PhysicalExpr for ScalarFunctionExpr {
                         self.return_type(),
                     )?));
                 }
-                ColumnarValue::Array(array) if array.is_empty() || array.null_count() > 0 => {
-                    if array.null_count() == array.len() {
-                        return Ok(ColumnarValue::Array(new_null_array(
-                            self.return_type(),
-                            array.len(),
-                        )));
-                    }
-                    let mask = BooleanArray::new(array.nulls().unwrap().inner().clone(), None);
-                    let selected = filter_record_batch(batch, &mask)?;
-                    // A column has already been filtered with the input batch.
-                    // Reuse it; computed left operands still need their own selection.
-                    let selected_first = if let Some(column) = self.args[0].downcast_ref::<Column>()
+                ColumnarValue::Array(array) => {
+                    if let Some(nulls) = array.logical_nulls()
+                        && nulls.null_count() > 0
                     {
-                        Arc::clone(selected.column(column.index()))
-                    } else {
-                        filter(array.as_ref(), &mask)?
-                    };
-                    let mut args = Vec::with_capacity(self.args.len());
-                    args.push(ColumnarValue::Array(selected_first));
-                    for expr in &self.args[1..] {
-                        args.push(expr.evaluate(&selected)?);
+                        if nulls.null_count() == array.len() {
+                            return Ok(ColumnarValue::Array(new_null_array(
+                                self.return_type(),
+                                array.len(),
+                            )));
+                        }
+                        let mask = BooleanArray::new(nulls.inner().clone(), None);
+                        let selected = filter_record_batch(batch, &mask)?;
+                        // A column has already been filtered with the input batch.
+                        // Reuse it; computed left operands still need their own selection.
+                        let selected_first =
+                            if let Some(column) = self.args[0].downcast_ref::<Column>() {
+                                Arc::clone(selected.column(column.index()))
+                            } else {
+                                filter(array.as_ref(), &mask)?
+                            };
+                        let mut args = Vec::with_capacity(self.args.len());
+                        args.push(ColumnarValue::Array(selected_first));
+                        for expr in &self.args[1..] {
+                            args.push(expr.evaluate(&selected)?);
+                        }
+                        let result = self
+                            .invoke_evaluated(&selected, args)?
+                            .into_array(selected.num_rows())?;
+                        return Ok(ColumnarValue::Array(scatter(&mask, result.as_ref())?));
                     }
-                    let result = self
-                        .invoke_evaluated(&selected, args)?
-                        .into_array(selected.num_rows())?;
-                    return Ok(ColumnarValue::Array(scatter(&mask, result.as_ref())?));
                 }
                 _ => {}
             }

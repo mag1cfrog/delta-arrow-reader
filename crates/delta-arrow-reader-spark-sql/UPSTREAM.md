@@ -126,3 +126,9 @@ expansion while retaining argument pruning and result-type coercion. The shared
 path also replaces the private collection-size NULL fallback. The
 [evaluation references](tests/fixtures/README.md#conditional-fallback-evaluation)
 cover both SQL frontends and the six corrected physical-nullability expectations.
+
+NULLIF uses the existing NULL-first-argument short circuit and simplifies a
+known NULL left operand before unused right-side work. Conditional physical
+evaluation returns empty batches before evaluating operands. The
+[NULLIF evaluation cases](tests/fixtures/README.md#nullif-evaluation) cover its
+selected-row and error boundaries; mixed-input result typing remains separate.

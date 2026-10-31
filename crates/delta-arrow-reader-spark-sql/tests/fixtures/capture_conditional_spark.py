@@ -101,6 +101,38 @@ def fallback_evaluation_queries():
     yield 'eval_coalesce_live_divide', 'SELECT COALESCE(CAST(NULL AS BIGINT),7 DIV 0) AS r'
 
 
+def nullif_evaluation_queries():
+    forms = [
+        ("null_left_bad_cast", "CAST(NULL AS INT),CAST('bad' AS INT)", ""),
+        ("live_bad_cast", "1,CAST('bad' AS INT)", ""),
+        ("bad_left_null_right", "CAST('bad' AS INT),CAST(NULL AS INT)", ""),
+        ("null_left_divide", "CAST(NULL AS BIGINT),7 DIV 0", ""),
+        ("live_divide", "1L,7 DIV 0", ""),
+        ("bad_left_divide", "7 DIV 0,CAST(NULL AS BIGINT)", ""),
+        ("both_null", "CAST(NULL AS INT),CAST(NULL AS INT)", ""),
+        ("right_null", "7,CAST(NULL AS INT)", ""),
+        ("equal", "7,7", ""),
+        ("unequal", "7,8", ""),
+        ("rowwise_cast", "v,CAST(s AS INT)", " FROM VALUES (0,NULL,'bad'),(1,7,'7'),(2,8,'7'),(3,NULL,'bad') t(k,v,s) ORDER BY k"),
+        ("rowwise_live_cast", "v,CAST(s AS INT)", " FROM VALUES (0,NULL,'7'),(1,7,'bad') t(k,v,s) ORDER BY k"),
+        ("all_null", "v,CAST('bad' AS INT)", " FROM VALUES (CAST(NULL AS INT)),(NULL) t(v)"),
+        ("non_null", "v,7", " FROM VALUES (0,7),(1,8) t(k,v) ORDER BY k"),
+        ("empty", "v,CAST('bad' AS INT)", " FROM VALUES (1) t(v) WHERE false"),
+        ("dead_subquery", "CAST(NULL AS INT),(SELECT v FROM VALUES (2),(3) t(v))", ""),
+        ("live_subquery", "1,(SELECT v FROM VALUES (2),(3) t(v))", ""),
+        ("bad_left_subquery", "(SELECT v FROM VALUES (2),(3) t(v)),CAST(NULL AS INT)", ""),
+        ("null_left_subquery_cast", "CAST(NULL AS INT),(SELECT CAST(v AS INT) FROM VALUES ('bad') t(v))", ""),
+        ("null_left_subquery_divide", "CAST(NULL AS BIGINT),(SELECT 7 DIV 0)", ""),
+        ("null_left_subquery_values", "CAST(NULL AS INT),(SELECT v FROM VALUES (CAST('bad' AS INT)) t(v) WHERE false)", ""),
+        ("null_left_subquery_empty", "CAST(NULL AS INT),(SELECT CAST('bad' AS INT) FROM VALUES (0) t(v) WHERE false)", ""),
+        ("null_left_subquery_columns", "CAST(NULL AS INT),(SELECT 1,2)", ""),
+        ("one_argument", "1", ""),
+        ("three_arguments", "1,2,3", ""),
+    ]
+    for name, arguments, source in forms:
+        yield f"eval_nullif_{name}", f"SELECT NULLIF({arguments}) AS r{source}"
+
+
 def error_condition(error):
     if hasattr(error, "getCondition"):
         return error.getCondition()
@@ -168,6 +200,7 @@ try:
             if timezone == "UTC":
                 queries.extend(case_condition_queries())
                 queries.extend(fallback_evaluation_queries())
+                queries.extend(nullif_evaluation_queries())
             for name, sql in queries:
                 try:
                     frame = spark.sql(sql)
@@ -176,7 +209,15 @@ try:
                     expected = dict(status="ok", schema=schema, rows=rows)
                 except Exception as error:
                     condition = error_condition(error)
-                    if condition not in {"CAST_INVALID_INPUT", "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE", "DIVIDE_BY_ZERO", "SCALAR_SUBQUERY_TOO_MANY_ROWS"}:
+                    if condition not in {
+                        "CAST_INVALID_INPUT",
+                        "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+                        "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+                        "DIVIDE_BY_ZERO",
+                        "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+                        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+                        "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                    }:
                         raise
                     expected = dict(status="error", condition=condition)
                 records.append(dict(id=name, sql=sql, ansi=ansi, timezone=timezone, expected=expected))

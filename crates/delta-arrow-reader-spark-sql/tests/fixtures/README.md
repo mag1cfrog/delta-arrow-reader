@@ -111,9 +111,9 @@ the independently verified NULLIF results. It does not add alternatives:
 the old negative-zero output now fails. The original compressed captures stay
 unchanged, and unused correction IDs fail the complete replay.
 
-Mixed-input return types, unused-operand errors and nested-type admission remain
-separate conditional findings. These tests do not establish full NULLIF or Spark
-compatibility.
+Mixed-input return types and nested-type admission remain separate conditional
+findings. Unused-operand checks are described below. These tests do not establish
+full NULLIF or Spark compatibility.
 
 Run `cargo bench --locked --bench nullif --profile dev` on both revisions with the
 same profile and benchmark source/target declaration. It records planning and
@@ -124,9 +124,9 @@ local development-profile results do not establish release throughput.
 
 ## IFNULL and NVL temporal results
 
-`conditional-spark.jsonl` records 512 Spark 4.2.0 observations: 380 temporal and
-coercion cases, 60 CASE/IF controls and 72 fallback-evaluation cases described
-below. Regenerate it with `capture_conditional_spark.py`
+`conditional-spark.jsonl` records 562 Spark 4.2.0 observations: 380 temporal and
+coercion cases, 60 CASE/IF controls, 72 fallback cases and 50 NULLIF evaluation
+cases described below. Regenerate it with `capture_conditional_spark.py`
 using the Python/Java setup above. TIMESTAMP values use UTC epoch microseconds;
 TIMESTAMP_NTZ values use microseconds of wall time since 1970-01-01. The capture
 converts PySpark's process-local TIMESTAMP values before encoding them.
@@ -187,3 +187,19 @@ Six replay expectations narrow the physical result's nullability after COALESCE
 stops lowering to CASE. Fresh Spark references confirm the nonnullable results.
 Their exact IDs and old/new outcomes are in `reviewed-corrections.json`; values,
 types, names, error text and failure stages keep their existing assertions.
+
+## NULLIF evaluation
+
+The 50 NULLIF references distinguish a NULL left value from a selected right
+operand. They cover both ANSI modes, scalar and column NULLs, mixed rows, casts,
+division, scalar-subquery preparation and admission, empty results and arity
+errors. A NULL left value skips ordinary right-operand evaluation. Errors from
+the left operand, a selected right operand or subquery preparation/admission
+must remain visible.
+
+The counted-input tests check one left evaluation per row and right evaluation
+only for non-NULL left rows, including dictionary input with NULL values.
+A direct physical-expression test uses operands that fail if called, so it
+detects operand evaluation on an empty batch for NULLIF and checked arithmetic.
+Mixed-input result types keep their existing coercion contract pending the
+separate S03 repair.
