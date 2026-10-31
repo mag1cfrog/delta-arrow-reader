@@ -87,8 +87,8 @@ with existing expression-error handling. Direct calls check sliced arrays,
 scalar/array combinations, empty results and unmatched value bits. A volatile
 input test checks one evaluation of each operand per row.
 
-`reviewed-corrections.json` replaces four exact historical outcomes in the replay
-with the independently verified NULLIF results. It does not add alternatives:
+`reviewed-corrections.json` includes four exact historical outcomes replaced by
+the independently verified NULLIF results. It does not add alternatives:
 the old negative-zero output now fails. The original compressed captures stay
 unchanged, and unused correction IDs fail the complete replay.
 
@@ -105,8 +105,8 @@ local development-profile results do not establish release throughput.
 
 ## IFNULL and NVL temporal results
 
-`ifnull-temporal-spark.jsonl` records 380 Spark 4.2.0 observations for IFNULL,
-NVL and COALESCE controls. Regenerate it with `capture_ifnull_temporal_spark.py`
+`conditional-spark.jsonl` records 440 Spark 4.2.0 observations: 380 for IFNULL,
+NVL and COALESCE, and 60 CASE/IF controls described below. Regenerate it with `capture_conditional_spark.py`
 using the Python/Java setup above. TIMESTAMP values use UTC epoch microseconds;
 TIMESTAMP_NTZ values use microseconds of wall time since 1970-01-01. The capture
 converts PySpark's process-local TIMESTAMP values before encoding them.
@@ -133,3 +133,18 @@ Mixed DATE/TIMESTAMP promotion also remains separate: shared COALESCE coercion
 selects a nanosecond timestamp without a timezone. Native NVL previously returned
 a string for these pairs. Neither behavior matches Spark's LTZ result; this is
 retained in the S03 plan rather than included among the passing references.
+
+## CASE condition types
+
+The conditional fixture also checks searched CASE conditions in both ANSI modes.
+Untyped NULL, numeric, string, date and array conditions must fail in
+`plan_query`, even in a later branch that would be skipped. Typed BOOLEAN NULLs,
+Boolean expressions, columns and scalar subqueries remain valid. Simple CASE,
+IF(NULL, ...) and unused result expressions keep their separate behavior.
+
+Eight unique untyped-NULL queries come from the frozen replay, giving sixteen
+ANSI observations. Fresh Spark captures reject all of them during analysis.
+Their exact replay IDs now require planning errors in `reviewed-corrections.json`;
+the original compressed captures remain unchanged. A live invalid INT cast
+still fails with the existing Arrow cast message instead of Spark's error code.
+The test requires that specific cast cause; diagnostic-code parity remains S07.

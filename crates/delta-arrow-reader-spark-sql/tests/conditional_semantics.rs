@@ -1,4 +1,5 @@
-//! Spark references for the temporal result types and lazy fallbacks of IFNULL/NVL.
+//! Conditional expressions must reject invalid conditions before choosing a branch.
+//! Shared Spark captures also cover temporal fallback values and result types.
 
 use std::error::Error;
 
@@ -25,6 +26,9 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
         &options,
     )
     .await?;
+    if case["expected"]["condition"] == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
+        return Err("invalid CASE condition reached physical planning".into());
+    }
     let logical_nullable = query.logical_plan.schema().field(0).is_nullable();
     let plan = query.create_physical_plan(session).await?;
     let schema = plan.schema();
@@ -37,6 +41,7 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
         }
         DataType::Utf8 | DataType::Utf8View | DataType::LargeUtf8 => "string",
         DataType::Int32 => "integer",
+        DataType::Int64 => "long",
         DataType::Float64 => "double",
         DataType::Decimal128(10, 2) => "decimal(10,2)",
         other => return Err(format!("unexpected result type: {other:?}").into()),
@@ -65,13 +70,13 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn match_spark_temporal_aliases_and_fallbacks() -> TestResult {
-    let records = include_str!("fixtures/ifnull-temporal-spark.jsonl")
+async fn match_spark_conditional_results_and_admission() -> TestResult {
+    let records = include_str!("fixtures/conditional-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(records.len(), 381);
+    assert_eq!(records.len(), 441);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -95,23 +100,29 @@ async fn match_spark_temporal_aliases_and_fallbacks() -> TestResult {
                         && actual["rows"] == expected["rows"]
                         && actual["names"] == json!(["r"])
                 }
-                Err(error) if expected["status"] == "error" => match expected["condition"].as_str()
-                {
-                    Some("CAST_INVALID_INPUT") => {
-                        let error = error.to_string();
-                        error.contains("[CAST_INVALID_INPUT]")
+                Err(error) if expected["status"] == "error" => {
+                    match expected["condition"].as_str() {
+                        Some("CAST_INVALID_INPUT") => {
+                            let error = error.to_string();
+                            error.contains("[CAST_INVALID_INPUT]")
+                            || (case["id"] == "case_live_cast"
+                                && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
                             || (case["id"]
                                 .as_str()
                                 .is_some_and(|id| id.contains("_timestamp"))
                                 && error.starts_with(
                                     "Execution error: error in SQL parser: found b at 0:1",
                                 ))
+                        }
+                        Some("WRONG_NUM_ARGS.WITHOUT_SUGGESTION") => {
+                            error.to_string().contains("two values expected")
+                        }
+                        Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE") => error
+                            .to_string()
+                            .contains("CASE WHEN condition must be BOOLEAN"),
+                        _ => false,
                     }
-                    Some("WRONG_NUM_ARGS.WITHOUT_SUGGESTION") => {
-                        error.to_string().contains("two values expected")
-                    }
-                    _ => false,
-                },
+                }
                 _ => false,
             };
             if !matches {

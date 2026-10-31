@@ -11,7 +11,7 @@ use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 
-use crate::error::PlanResult;
+use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
 
 mod nullif;
@@ -28,6 +28,12 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     while let Some(condition) = iter.next() {
         match iter.next() {
             Some(result) => {
+                let condition_type = condition.get_type(function_context.schema)?;
+                if condition_type != DataType::Boolean {
+                    return Err(PlanError::InvalidArgument(format!(
+                        "CASE WHEN condition must be BOOLEAN, got {condition_type:?}"
+                    )));
+                }
                 conditions.push(condition);
                 branch_values.push(result);
             }
