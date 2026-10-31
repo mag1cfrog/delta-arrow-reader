@@ -37,6 +37,35 @@ S07, not a new supported Spark behavior. Fixing that gap must replace these
 alternatives with strict Spark expectations. Neither scheduler retries nor
 disabling parallelism is a fix.
 
+## VALUES Decimal inputs
+
+`values-decimal-spark.jsonl` records scalar VALUES column types and rows from
+Spark 4.2.0. Regenerate it with `capture_values_decimal_spark.py` in the same
+Python 3.12/Java 21 environment as the other focused captures. The reference
+uses Spark's default preference for integral digits when Decimal precision
+exceeds 38; Decimal/floating mixtures produce DOUBLE.
+
+The 142 observations cover both ANSI modes, integer widths, mixed/equal Decimal
+types, row order, multiple columns, NULLs and positive/negative halfway rounding.
+Invalid input types, ragged rows and required cast/remainder errors are separate
+failure assertions. Explicitly typed remainder controls distinguish this input
+coercion repair from arithmetic result rules. Rust runs each case at batch sizes
+1 and 32 and compares logical/physical types, output names and exact Decimal
+values. Returned NULLs must fit both schemas. Floating values are compared as
+numbers so formatting alone cannot create a mismatch.
+
+Five exact historical outcomes have reviewed replacements in
+`reviewed-corrections.json`: the three `live_zero_batch*_false` remainder cases
+now return Decimal(38,28), and the two `control_divide` cases now return DOUBLE.
+The capture includes their exact SQL, input-type reductions and explicit-type
+controls. The historical division query has no ORDER BY and is the only focused
+case marked `ordered: false`; its comparison preserves duplicate rows without
+requiring an incidental order. Other values, names and NULL guarantees remain
+unchanged.
+
+This corpus covers scalar numeric columns. Nested-value common typing and exact
+Spark error-stage/nullability parity have separate review scopes.
+
 ## Array membership
 
 `array-contains-spark.jsonl` starts with input rows and Spark settings, followed by

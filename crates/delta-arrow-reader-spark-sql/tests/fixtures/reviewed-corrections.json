@@ -514,5 +514,120 @@
       true,
       false
     ]
+  },
+  "replay/arithmetic-check-cases/269/live_zero_batch1_false": {
+    "status": "ok",
+    "types": [
+      "Decimal128(38, 28)"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/arithmetic-check-cases/272/live_zero_batch2_false": {
+    "status": "ok",
+    "types": [
+      "Decimal128(38, 28)"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/arithmetic-check-cases/275/live_zero_batch64_false": {
+    "status": "ok",
+    "types": [
+      "Decimal128(38, 28)"
+    ],
+    "rows": [
+      [
+        null
+      ],
+      [
+        null
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/modulo-check-cases/218/control_divide_true": {
+    "status": "ok",
+    "types": [
+      "Float64"
+    ],
+    "rows": [
+      [
+        "2.5"
+      ],
+      [
+        null
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
+  },
+  "replay/modulo-check-cases/218/control_divide_false": {
+    "status": "ok",
+    "types": [
+      "Float64"
+    ],
+    "rows": [
+      [
+        "2.5"
+      ],
+      [
+        null
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
   }
 }
