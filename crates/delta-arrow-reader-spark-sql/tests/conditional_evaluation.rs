@@ -202,6 +202,22 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                     vec![Some(1), None, Some(3), None],
                 ),
                 (
+                    "NULLIF(count_first(a),CAST(count_second(b) AS DOUBLE))".to_string(),
+                    [4, 2, 0],
+                    vec![Some(1), None, Some(3), None],
+                ),
+                (
+                    "NULLIF(count_first(a),CAST(count_second(b) AS DECIMAL(10,2)))".to_string(),
+                    [4, 2, 0],
+                    vec![Some(1), None, Some(3), None],
+                ),
+                (
+                    "NULLIF(count_first(CAST(NULL AS INT)),CAST(count_second(b) AS DOUBLE))"
+                        .to_string(),
+                    [1, 0, 0],
+                    vec![None; 4],
+                ),
+                (
                     "NULLIF(count_first(a),count_second(a))".to_string(),
                     [4, 2, 0],
                     vec![None; 4],

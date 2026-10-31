@@ -20,15 +20,16 @@ passed. Searched CASE condition types, #604, merged through PR #609 as
 `0f2b595d` after all three platforms passed. Collection-size NULL rules, #606,
 merged through PR #611 as `929810ff` after all three platforms passed.
 Mixed-temporal promotion has a separate implementation issue, #605, in S03.
-Shared COALESCE/IFNULL/NVL evaluation, #608, is reviewed and pushed as `0425d50b`
-in PR #614, with CI running. NULLIF evaluation, #610, is reviewed
-and pushed as `f43bcf5b`; its PR follows #608. Known NULL array projections,
+Shared COALESCE/IFNULL/NVL evaluation, #608, merged through PR #614 as
+`16df0951` after all three platform jobs passed. NULLIF evaluation, #610, is
+reviewed and pushed as `f43bcf5b` in PR #617, with CI running. Known NULL array projections,
 #612, are reviewed and pushed as `80d79acf`; their PR follows #610. Array
 predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
 S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
 `04b191a6`. VALUES row-width validation, #616, is reviewed and pushed as
-`28d93682`. The current slice, #605 mixed-temporal conditional types, has passed
-local checks and independent review and is ready to commit. The
+`28d93682`. Mixed-temporal conditional types, #605, are reviewed and pushed as
+`22151773`. The current slice is #618, NULLIF first-argument result preservation.
+Its separately confirmed comparison-policy gap is assigned to #619. The
 relational coverage tracker #170 and reference review #141 have resumed.
 
 The active Spark frontend is developed and integrated on
@@ -82,7 +83,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -90,7 +91,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |
-| S11 | Release comparison and support statement | #157, #164, #166 | Equivalent-output size/planning/execution comparisons under the same release settings; user-facing support documentation |
+| S11 | Release comparison and support statement | #157, #164, #166, #620 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF selection cost; user-facing support documentation |
 
 The other eleven historical performance leaves remain deferred unless these
 comparisons identify a relevant regression or bottleneck. Preserve their evidence
@@ -466,6 +467,44 @@ because the old issue exists.
   The current corpus verifies ordinary dates and DST/fixed-offset boundaries,
   not the full range. S05 must reproduce and route that limitation before making
   a broader support claim; it is not silently accepted as complete parity.
+
+- #605 is committed and pushed as `22151773`. #614 passed the three platform
+  jobs and merged into staging as `16df0951`; issue #608 is closed. The separate
+  NULLIF evaluation PR #617 now targets staging with one issue's changes.
+- #618 owns NULLIF first-argument result types and values. A 228-observation
+  Spark capture exposes 308 baseline result-preservation differences across two
+  batch sizes, including
+  loss of BIGINT precision and string leading zeros. Two observations independently
+  confirm an existing Decimal/DOUBLE comparison-policy gap, now owned by #619.
+  The result-preservation candidate keeps original values and performs native
+  comparison casts on temporary values. New mixed-type volatile counters retain
+  once-per-required-row evaluation. The initial full workspace passes 424 tests.
+  Review found that direct columns/literals could bypass NULL row selection before
+  the new internal casts. Eight new Spark observations reproduce that boundary;
+  four more check comparability rejection. The expanded capture has 240 records.
+  Initial baseline totals also included four #619 comparison mismatches and two
+  error-wording assertion differences; neither is counted as a result-type repair.
+  Both physical constructors now honor the declared NULL-first contract without
+  inferring safety from a Column/Literal node. The complete final workspace passes
+  424 tests with zero failures and the two inherited ignored doctests; the full
+  replay needs no new corrections. Mixed-width NaN/zero-bit checks and an explicit
+  native DataFusion type/validity control pass. The clean-context Sol/high review
+  resolved its implicit-cast, naming, stale-documentation and test-validity findings.
+  Final formatting, the explicit dependency-file format check and warning-denying
+  Clippy pass. Remote CI and staging integration remain pending.
+- The required NULL selection in #618 has a measured development-profile cost:
+  five alternating pairs on 262,144-row DOUBLE inputs show nullable-left column
+  cases at 3.20-3.82x (roughly 0.89-1.37 ms); nonnullable/scalar-left controls are
+  near unchanged. Dedicated S11 issue #620 under the resumed performance tracker
+  #168 owns release cost, checked-arithmetic controls and a safe optimization
+  before adoption; analyzer-only #157 keeps its original scope. Restoring the
+  unsafe node-kind gate is not an acceptable optimization. This is a staged
+  correctness repair, not a performance pass.
+- PR #617 CI run `41245115427` failed on macOS when the sccache client lost its
+  server response while compiling `unicode-ident`; there was no Clippy source
+  diagnostic. Linux/Windows were still running, so GitHub rejected an immediate
+  job rerun. Retry the failed job after the run completes; do not merge on this
+  attempt or change the source/workflow to disguise the infrastructure failure.
 
 ### Retained gaps found during S01 review
 

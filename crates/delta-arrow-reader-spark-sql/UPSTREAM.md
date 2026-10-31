@@ -112,8 +112,14 @@ conversion; native arithmetic and non-Decimal VALUES typing are unchanged.
 
 NULLIF floating comparisons reuse the existing Spark float normalization and
 native comparison/validity kernels. Unmatched values retain their original bits.
-The [NULLIF references](tests/fixtures/README.md#floating-nullif) separate this
-equality correction from the remaining result-type and evaluation differences.
+Comparison casts now operate on temporary values, preserving the first input's
+result type, Decimal scale and exact integer/string value. Comparability still
+uses the native rule; the [result references](tests/fixtures/README.md#nullif-result-types)
+retain its separate Decimal/floating comparison difference. The
+[floating references](tests/fixtures/README.md#floating-nullif) and evaluation
+controls cover unchanged equality and short-circuit behavior.
+Opted-in functions skip NULL-left rows even when right arguments are direct
+columns or literals, because comparison conversion can occur inside the kernel.
 
 IFNULL and NVL use the existing COALESCE planning path when either argument is
 temporal, retaining their two-argument arity. Other inputs keep the native NVL
