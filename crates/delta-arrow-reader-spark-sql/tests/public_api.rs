@@ -28,6 +28,58 @@ fn session() -> SessionContext {
 }
 
 #[tokio::test]
+async fn reject_ragged_values_before_column_coercion() -> TestResult {
+    let session = session();
+    for ansi_mode in [true, false] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..SparkSqlOptions::default()
+        };
+        for (sql, actual, expected) in [
+            ("VALUES (0, MAP('k',1)), (1)", 1, 2),
+            ("VALUES (0), (1, MAP('k',1))", 2, 1),
+            ("VALUES (MAP('k',1)), (MAP('k',2), 0)", 2, 1),
+            ("VALUES (MAP('k',1), 0), (MAP('k',2))", 1, 2),
+            ("VALUES (0, CAST('NaN' AS FLOAT)), (1)", 1, 2),
+            ("VALUES (0), (1, CAST('NaN' AS FLOAT))", 2, 1),
+            ("VALUES (0, CAST(1 AS DECIMAL(10,2))), (1)", 1, 2),
+            ("VALUES (0), (1, CAST(1 AS DECIMAL(10,2)))", 2, 1),
+            ("VALUES (0, 1), (2)", 1, 2),
+            ("VALUES (0), (1, 2)", 2, 1),
+        ] {
+            let error = plan_query(&session, sql, &options).await.expect_err(sql);
+            assert!(error.to_string().contains(&format!(
+                "Inconsistent data length across values list: got {actual} values in row 1 but expected {expected}"
+            )), "{sql}: {error}");
+        }
+        let query = plan_query(&session,
+            "SELECT id AS row_id, m['k'] AS value FROM VALUES (0, MAP('k',1)), (1, MAP('k',NULL)) t(id,m) ORDER BY id",
+            &options,
+        ).await?;
+        assert_eq!(query.column_names, ["row_id", "value"]);
+        let physical = query.create_physical_plan(&session).await?;
+        assert_eq!(physical.schema().field(1).data_type(), &DataType::Int32);
+        assert!(query.logical_plan.schema().field(1).is_nullable());
+        assert!(physical.schema().field(1).is_nullable());
+        let mut rows = Vec::new();
+        for batch in collect(physical, session.task_ctx()).await? {
+            for row in 0..batch.num_rows() {
+                rows.push((
+                    array_value_to_string(batch.column(0).as_ref(), row)?,
+                    if batch.column(1).is_null(row) {
+                        None
+                    } else {
+                        Some(array_value_to_string(batch.column(1).as_ref(), row)?)
+                    },
+                ));
+            }
+        }
+        assert_eq!(rows, [("0".into(), Some("1".into())), ("1".into(), None)]);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn preserve_host_resources_output_names_and_order() -> TestResult {
     let runtime = Arc::new(RuntimeEnv::default());
     let state = configure_spark_sql(

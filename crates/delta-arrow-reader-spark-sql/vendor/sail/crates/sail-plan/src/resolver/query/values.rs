@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
-use datafusion_common::{DFSchema, DFSchemaRef};
+use datafusion_common::{DFSchema, DFSchemaRef, plan_datafusion_err};
 use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, Projection, cast};
 use sail_common::spec;
 
@@ -22,6 +22,16 @@ impl PlanResolver<'_> {
             for value in values {
                 let value = self.resolve_expressions(value, &schema, state).await?;
                 results.push(value);
+            }
+            // Column coercion indexes rows before the native builder validates their widths.
+            let columns = results.first().map_or(0, Vec::len);
+            for (index, row) in results.iter().enumerate() {
+                if row.len() != columns {
+                    return Err(plan_datafusion_err!(
+                        "Inconsistent data length across values list: got {} values in row {} but expected {}",
+                        row.len(), index, columns
+                    ).into());
+                }
             }
             Self::coerce_values_decimal_columns(&mut results, &schema)?;
             let _nan_column_indices = Self::resolve_values_nan_types(&mut results, &schema)?;
@@ -50,10 +60,6 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
     ) -> PlanResult<()> {
         let columns = values.first().map_or(0, Vec::len);
-        if values.iter().any(|row| row.len() != columns) {
-            // The native VALUES builder reports malformed row dimensions.
-            return Ok(());
-        }
         for column in 0..columns {
             let types = values
                 .iter()
