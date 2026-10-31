@@ -9,8 +9,13 @@ has been reviewed. Publish the final support contract separately.
 
 S01 implementation, local validation and independent review are complete on
 `feat/spark-sql-crate`, based on main commit
-`39884a559afc10b1d6c255197471d7eeb05760df`. It is ready for its implementation PR
-and remote CI.
+`39884a559afc10b1d6c255197471d7eeb05760df`. PR #599 targets
+`feat/spark-sql-staging`; remote CI is in progress.
+
+The active Spark frontend is developed and integrated on
+`feat/spark-sql-staging`. Subsequent implementation branches start there and their
+PRs target it. The original `feat/spark-sql-extraction` branch remains frozen.
+Adoption into `main` is a separate decision after the staged work is evaluated.
 
 Consolidate the accepted extracted Sail frontend and its accepted runtime patches
 into an independent crate in this repository. A clean checkout must build the
@@ -77,6 +82,8 @@ because the old issue exists.
   2026-10-31 instruction authorizes ordered progress without waiting for approval
   between slices. Keep separate issues and commits, and fix review findings before
   proceeding.
+- Merge accepted slices into `feat/spark-sql-staging`, not `main`. Keep the
+  staging branch separate from ordinary releases until the user requests adoption.
 - Review completed work with a clean-context Sol/high sub-agent and the latest
   `/home/hanbo/.agents/skills/bulletproof-review/SKILL.md`. Review correctness,
   tests, names, responsibilities, documentation, integration and simplicity.
@@ -152,6 +159,9 @@ because the old issue exists.
 - Local slice review is complete. The user authorized committing and continuing
   in order without per-slice approval. Remote macOS/Windows CI, release
   size/performance comparisons and complete Spark compatibility remain unverified.
+- Committed S01 as `2847b369` and opened PR #599. The user selected a separate
+  staging branch for the complete frontend; #599 and subsequent slices target
+  `feat/spark-sql-staging`.
 
 ### Retained gaps found during S01 review
 
