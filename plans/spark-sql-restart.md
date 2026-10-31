@@ -7,19 +7,24 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-S01 implementation and its initial local validation and independent review are complete on
-`feat/spark-sql-crate`, based on main commit
-`39884a559afc10b1d6c255197471d7eeb05760df`. PR #599 targets
-`feat/spark-sql-staging`. The first CI run passed on all three platforms. A later
-documentation/inventory commit exposed scheduling-sensitive historical captures
-on macOS; their replay comparisons are being repaired and reviewed before merge.
+S01 is complete and merged into `feat/spark-sql-staging` by PR #599, commit
+`3f4245fc258b59c835fc683d4c34a03bbe322231`. Its final CI run passed 408 tests on
+each of Linux, macOS and Windows. Issue #165 is closed.
+
+S02's first slice, #116 ARRAY_CONTAINS NULL semantics, is ready for its staging
+PR on `fix/spark-array-contains-null`. Local validation passed 412 workspace
+tests. A clean-context Sol/high Bulletproof Review found no actionable issue.
+Remote CI for this slice remains pending. The next S02 slice covers #150's
+remaining NULLIF and conditional semantics.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Subsequent implementation branches start there and their
 PRs target it. The original `feat/spark-sql-extraction` branch remains frozen.
 Adoption into `main` is a separate decision after the staged work is evaluated.
 
-Consolidate the accepted extracted Sail frontend and its accepted runtime patches
+### Consolidated S01 baseline
+
+S01 consolidates the accepted extracted Sail frontend and its accepted runtime patches
 into an independent crate in this repository. A clean checkout must build the
 same selected implementation without old private caches or manual patch stacks.
 The crate must accept the host's DataFusion context and registered providers;
@@ -195,6 +200,40 @@ because the old issue exists.
   issue. Clarified that complete-query repeats observed only some alternative
   pairs. The full local replay, matcher rejection tests, formatting and the
   CI-equivalent Clippy check passed; the revised remote CI remains to run.
+- Pushed the replay repair as `1263c894` to PR #599. While its final platform CI
+  runs, S02 proceeds on `fix/spark-array-contains-null`; it will merge only after
+  S01 has entered the staging branch.
+- S02 reuses the pinned DataFusion Spark ARRAY_CONTAINS implementation, retaining
+  native constant-array simplification and adapting NULL scalar/NullType results
+  to complete batches. Independent Spark captures contain 166 observations:
+  151 supported-input comparisons and 15 explicitly retained differences, each
+  exercised with input batches of one and 32 rows. Volatile lookups are checked
+  for one evaluation per row, and direct function calls cover zero/one/multiple
+  rows. Local focused tests and the complete workspace test run passed before
+  final review; S02 remains uncommitted and unaccepted.
+- The local lookup benchmark uses 16,384 Int32 rows, eleven measured repeats
+  after two warm-ups, and the same development profile on both revisions.
+  Column lookups without NULL elements took 0.74-0.91 times the baseline execution
+  time; nullable hits took 0.84-0.98 times, and nullable misses 1.06-1.11 times.
+  Constant-array cases took 0.50-1.13 times. These are local observations, not
+  release throughput guarantees. Nullable misses now return NULL, so their
+  additional cost must be reported separately from equivalent-output comparisons.
+- The CI-equivalent root-package Clippy command passed for S02. An additional
+  `--all-targets` run selecting `sail-function` and `sail-plan` as primary lint
+  targets reported inherited test annotations, unwraps and style findings. Every
+  reported statement exists in the baseline; no diagnostic names the new adapter,
+  integration test or benchmark. This broader lint run did not pass. Include
+  vendored lint cleanup in S11 before claiming those packages are lint-clean.
+- S01's final run, `41222603054` at `1263c894`, passed 408 tests on each platform.
+  PR #599 merged into staging as `3f4245fc`; #165 is complete. Main and the release
+  graph remain unchanged.
+- The independent S02 review inspected every changed file, connected planner and
+  execution paths, all 302 supported Spark comparisons, 30 inherited-difference
+  checks, and 24 cost scenarios. It found no actionable issue. Clarified how to
+  carry the benchmark harness onto the baseline. Final local validation passed
+  412 tests, with only the two existing ignored documentation fragments; format
+  and the CI-equivalent Clippy check passed. Remote CI is the remaining delivery
+  check before this slice can merge into staging.
 
 ### Retained gaps found during S01 review
 
@@ -209,3 +248,14 @@ each with a focused reference comparison before reopening or creating its issue.
   branch's division/cast failure, while both the frozen Spark reference and fresh
   Spark 4.2.0 runs fail. S07 must settle evaluation/error preservation and replace
   the replay's explicit scheduling alternatives with strict Spark expectations.
+
+### Retained gaps confirmed during S02
+
+- Mixed Decimal array/lookup precision coercion remains rejected. Carry the
+  focused reference cases into S03 rather than widening #116's operand types.
+- A NULL-producing column projection still fails on an unused bad cast in two
+  ANSI cases. Keep these evaluation boundaries with #150.
+- Untyped NullType operands remain admitted although Spark rejects them. Track
+  their admission with #156; batch NULL handling is covered by #116.
+- Legacy non-ANSI SIZE(NULL) differs from Spark's sizeOfNull=true setting. #116
+  preserves the existing companion result; #150 owns the remaining mode contract.

@@ -36,3 +36,36 @@ gap tracked in the [restart plan](../../../../plans/spark-sql-restart.md) under
 S07, not a new supported Spark behavior. Fixing that gap must replace these
 alternatives with strict Spark expectations. Neither scheduler retries nor
 disabling parallelism is a fix.
+
+## Array membership
+
+`array-contains-spark.jsonl` starts with input rows and Spark settings, followed by
+166 independent query observations. Regenerate it with
+`capture_array_contains_spark.py` in a Python 3.12 environment containing
+`pyspark==4.2.0`, with Java 21 available. Rust tests use the committed captures.
+
+The tests compare values, output names and types for 151 supported-input cases in
+both one-row and larger batches. Returned NULLs must be representable in both
+output schemas. Logical nullability can remain conservative, and constant folding
+can narrow physical nullability; exact Spark nullability parity is separate S07
+work. The volatile-lookup and direct-function tests check evaluation count and
+all-NULL batch cardinality separately.
+
+Fifteen observations have explicit `retained_difference` labels. Their assertions
+preserve the relevant boundary without counting them as Spark-compatible:
+
+- Mixed Decimal precisions still fail coercion. Equal Decimal types are covered.
+- Two projected NULL/cast cases still evaluate the bad cast in ANSI mode.
+- Untyped NULL columns remain admitted, unlike Spark. Their membership results
+  now follow the NULL rule across the complete batch; the admission gap remains.
+- `SIZE(NULL)` remains NULL in non-ANSI mode, while the captured Spark setting
+  `spark.sql.legacy.sizeOfNull=true` returns -1.
+
+For local lookup-cost comparisons, run
+`cargo bench --locked --bench array_contains --profile dev` on each revision with
+the same profile. A baseline predating the benchmark needs the same benchmark
+source and Cargo target declaration copied into its checkout first. The benchmark
+reports planning and execution samples for 24 Int32 scenarios, including nullable
+and nonnullable hits and misses and long constant arrays. Nullable misses
+intentionally change result validity; their timing measures the cost of corrected
+behavior, not equivalent-output speed.

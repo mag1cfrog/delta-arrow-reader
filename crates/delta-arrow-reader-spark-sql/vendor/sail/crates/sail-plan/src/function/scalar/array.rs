@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, TimeUnit};
-use datafusion::functions::expr_fn::{btrim, coalesce, nvl};
+use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{
@@ -14,6 +14,7 @@ use datafusion_functions_nested::string::ArrayToString;
 use datafusion_spark::function::array::expr_fn as array_fn;
 use sail_common::utils::string::SPARK_WHITESPACE_OR_ISO_CONTROL_CHARACTERS;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::array::array_intersect::ArrayIntersect;
 use sail_function::scalar::array::array_position::SparkArrayPosition;
 use sail_function::scalar::array::arrays_zip::ArraysZip;
@@ -156,11 +157,8 @@ fn array_element(array: expr::Expr, element: expr::Expr) -> expr::Expr {
     expr_fn::array_element(array, element + lit(1_i64))
 }
 
-fn array_contains(array: expr::Expr, element: expr::Expr) -> PlanResult<expr::Expr> {
-    Ok(coalesce(vec![
-        expr_fn::array_has(array.clone(), element),
-        when(array.is_not_null(), lit(false)).end()?,
-    ]))
+fn array_contains(array: expr::Expr, element: expr::Expr) -> expr::Expr {
+    ScalarUDF::from(ArrayContains::default()).call(vec![array, element])
 }
 
 fn array_contains_all(array: expr::Expr, element: expr::Expr) -> expr::Expr {

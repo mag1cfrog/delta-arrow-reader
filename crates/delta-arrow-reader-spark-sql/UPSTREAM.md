@@ -93,3 +93,9 @@ the local fixes and their regression tests. A new upstream version or a successf
 compilation does not establish equivalent Spark semantics. Changes to shared
 DataFusion or Arrow code require both Spark and native Reader checks before CLI
 adoption.
+
+Later semantic fixes are recorded in Git without rewriting the accepted source
+hashes. ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
+function, with local adaptations for constant-array simplification and all-NULL
+batch results. Its references and known remaining differences are described in
+the [fixture notes](tests/fixtures/README.md#array-membership).
