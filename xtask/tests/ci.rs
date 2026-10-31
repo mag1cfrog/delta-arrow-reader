@@ -669,6 +669,57 @@ fn check_ci_results(values: &[(&str, &str)]) -> Result<Output> {
 }
 
 #[test]
+fn spark_sql_sources_require_the_isolated_workspace_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for (path, expected) in [
+        ("crates/delta-arrow-reader-spark-sql/Cargo.lock", true),
+        ("crates/delta-arrow-reader-spark-sql/src/lib.rs", true),
+        (
+            "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/lib.rs",
+            true,
+        ),
+        (
+            "crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-cast/src/cast/mod.rs",
+            true,
+        ),
+        ("crates/delta-arrow-reader-core/src/reader/scan.rs", true),
+        (
+            "crates/delta-arrow-reader-core/tests/reader/support/real_parquet_delta_table.rs",
+            true,
+        ),
+        ("README.md", false),
+        ("crates/delta-arrow-reader-cli/src/main.rs", false),
+    ] {
+        assert_eq!(
+            filter_matches(&filters, "spark_sql", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    assert!(
+        ci["jobs"]["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("spark-sql"))
+    );
+    for requested in ["true", "false"] {
+        for result in ["success", "failure", "skipped", "cancelled", ""] {
+            let output = check_ci_results(&[
+                ("changes.outputs.spark_sql", requested),
+                ("spark-sql.result", result),
+            ])?;
+            assert_eq!(
+                output.status.success(),
+                requested != "true" || result == "success",
+                "{output:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn summary_requires_rust_docs_when_core_checks_are_skipped() -> Result<()> {
     for code in ["true", "false"] {
         for rust_docs in ["true", "false"] {

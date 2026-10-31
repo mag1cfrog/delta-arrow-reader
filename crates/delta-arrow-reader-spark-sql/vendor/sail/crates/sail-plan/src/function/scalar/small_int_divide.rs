@@ -1,0 +1,299 @@
+// Local integer DIV kernel for the Delta reader Spark SQL experiment.
+use std::sync::Arc;
+
+use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::error::ArrowError;
+use datafusion_common::ScalarValue;
+use datafusion_expr::{Expr, cast, lit};
+use sail_common_datafusion::utils::items::ItemTaker;
+
+// Widen small integers in Arrow's traversal; BIGINT is used only in legacy mode.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) struct SparkIntegerDivide {
+    pub(super) signature: datafusion_expr::Signature,
+    pub(super) ansi: bool,
+}
+
+impl datafusion_expr::ScalarUDFImpl for SparkIntegerDivide {
+    fn name(&self) -> &str {
+        "spark_integer_divide"
+    }
+
+    fn signature(&self) -> &datafusion_expr::Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+        Ok(DataType::Int64)
+    }
+
+    fn return_field_from_args(
+        &self,
+        args: datafusion_expr::ReturnFieldArgs,
+    ) -> datafusion_common::Result<datafusion::arrow::datatypes::FieldRef> {
+        // Match the native binary expression after guards and constants simplify.
+        Ok(Arc::new(datafusion::arrow::datatypes::Field::new(
+            "spark_integer_divide",
+            DataType::Int64,
+            args.arg_fields.iter().any(|field| field.is_nullable()),
+        )))
+    }
+
+    fn simplify(
+        &self,
+        args: Vec<Expr>,
+        _info: &datafusion_expr::simplify::SimplifyContext,
+    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
+        use datafusion_expr::simplify::ExprSimplifyResult;
+        // Retain BinaryExpr's NULL propagation, including decorrelation sentinels.
+        if args
+            .iter()
+            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
+        {
+            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Int64(
+                None,
+            ))));
+        }
+        // At the original width, only MIN / -1 can overflow. Folded nonzero
+        // divisors other than -1 can keep the native division and final cast.
+        if let Expr::Literal(value, _) = &args[1] {
+            let safe = match value {
+                ScalarValue::Int8(Some(v)) => *v != 0 && *v != -1,
+                ScalarValue::Int16(Some(v)) => *v != 0 && *v != -1,
+                ScalarValue::Int32(Some(v)) => *v != 0 && *v != -1,
+                ScalarValue::Int64(Some(v)) => *v != 0 && *v != -1,
+                _ => false,
+            };
+            if safe {
+                let (left, right) = args.two()?;
+                return Ok(ExprSimplifyResult::Simplified(cast(
+                    left / right,
+                    DataType::Int64,
+                )));
+            }
+        }
+        Ok(ExprSimplifyResult::Original(args))
+    }
+
+    fn invoke_with_args(
+        &self,
+        input: datafusion_expr::ScalarFunctionArgs,
+    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
+        use datafusion::arrow::array::{Array, AsArray, Int64Array, PrimitiveArray};
+        use datafusion::arrow::compute::kernels::arity::try_binary;
+        use datafusion::arrow::datatypes::{
+            ArrowPrimitiveType, Int8Type, Int16Type, Int32Type, Int64Type,
+        };
+        use datafusion::physical_expr_common::datum::apply;
+
+        fn divide<T: ArrowPrimitiveType>(
+            a: &PrimitiveArray<T>,
+            a_scalar: bool,
+            b: &PrimitiveArray<T>,
+            b_scalar: bool,
+        ) -> Result<Int64Array, ArrowError>
+        where
+            i64: From<T::Native>,
+        {
+            // Small integers widen without overflow. Legacy BIGINT wraps MIN / -1.
+            // Zero still errors here; the legacy SQL builder supplies NULLIF.
+            let op = |a, b| {
+                let b = i64::from(b);
+                if b == 0 {
+                    Err(ArrowError::DivideByZero)
+                } else {
+                    Ok(i64::from(a).wrapping_div(b))
+                }
+            };
+            match (a_scalar, b_scalar) {
+                (true, false) if a.is_null(0) => Ok(Int64Array::new_null(b.len())),
+                (false, true) if b.is_null(0) => Ok(Int64Array::new_null(a.len())),
+                // Widen before negation; legacy BIGINT MIN retains its wrapped value.
+                (false, true) if i64::from(b.value(0)) == -1 => {
+                    Ok(a.unary(|a| i64::from(a).wrapping_neg()))
+                }
+                (true, false) => b.try_unary(|b| op(a.value(0), b)),
+                (false, true) => a.try_unary(|a| op(a, b.value(0))),
+                _ => try_binary(a, b, op),
+            }
+        }
+
+        let [left, right] = input.args.as_slice() else {
+            return datafusion_common::internal_err!("spark_integer_divide requires two arguments");
+        };
+        apply(left, right, |left, right| {
+            let (a, a_scalar) = left.get();
+            let (b, b_scalar) = right.get();
+            let result = match (a.data_type(), b.data_type()) {
+                (DataType::Int8, DataType::Int8) => divide(
+                    a.as_primitive::<Int8Type>(),
+                    a_scalar,
+                    b.as_primitive::<Int8Type>(),
+                    b_scalar,
+                ),
+                (DataType::Int16, DataType::Int16) => divide(
+                    a.as_primitive::<Int16Type>(),
+                    a_scalar,
+                    b.as_primitive::<Int16Type>(),
+                    b_scalar,
+                ),
+                (DataType::Int32, DataType::Int32) => divide(
+                    a.as_primitive::<Int32Type>(),
+                    a_scalar,
+                    b.as_primitive::<Int32Type>(),
+                    b_scalar,
+                ),
+                (DataType::Int64, DataType::Int64) => divide(
+                    a.as_primitive::<Int64Type>(),
+                    a_scalar,
+                    b.as_primitive::<Int64Type>(),
+                    b_scalar,
+                ),
+                _ => Err(ArrowError::ComputeError(
+                    "expected matching signed integer types".into(),
+                )),
+            }?;
+            Ok(Arc::new(result))
+        })
+    }
+}
+
+#[test]
+fn integer_divide_masks_and_scalars() -> datafusion_common::Result<()> {
+    use datafusion::arrow::array::{ArrayRef, AsArray, Int64Array};
+    use datafusion::arrow::datatypes::{Field, Int64Type};
+    use datafusion_common::config::ConfigOptions;
+    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl};
+
+    for (data_type, min, max) in [
+        (DataType::Int8, i8::MIN as i64, i8::MAX as i64),
+        (DataType::Int16, i16::MIN as i64, i16::MAX as i64),
+        (DataType::Int32, i32::MIN as i64, i32::MAX as i64),
+        (DataType::Int64, i64::MIN, i64::MAX),
+    ] {
+        let udf = SparkIntegerDivide {
+            ansi: false,
+            signature: datafusion_expr::Signature::exact(
+                vec![data_type.clone(); 2],
+                datafusion_expr::Volatility::Immutable,
+            ),
+        };
+        for left_nullable in [false, true] {
+            for right_nullable in [false, true] {
+                let fields = [
+                    Arc::new(Field::new("a", data_type.clone(), left_nullable)),
+                    Arc::new(Field::new("b", data_type.clone(), right_nullable)),
+                ];
+                let result = udf.return_field_from_args(datafusion_expr::ReturnFieldArgs {
+                    arg_fields: &fields,
+                    scalar_arguments: &[None, None],
+                })?;
+                assert_eq!(result.is_nullable(), left_nullable || right_nullable);
+                assert_eq!(result.data_type(), &DataType::Int64);
+            }
+        }
+        let array = |values: Vec<Option<i64>>| -> ArrayRef {
+            datafusion::arrow::compute::cast(&Int64Array::from(values), &data_type).unwrap()
+        };
+        let run = |left, right, rows| {
+            udf.invoke_with_args(ScalarFunctionArgs {
+                args: vec![left, right],
+                number_rows: rows,
+                arg_fields: vec![Arc::new(Field::new("arg", data_type.clone(), true)); 2],
+                return_field: Arc::new(Field::new("r", DataType::Int64, true)),
+                config_options: Arc::new(ConfigOptions::default()),
+            })
+        };
+        let a = array(vec![
+            Some(99),
+            Some(min),
+            None,
+            Some(-7),
+            Some(7),
+            Some(0),
+            Some(max),
+        ])
+        .slice(1, 6);
+        let b = array(vec![
+            Some(99),
+            Some(-1),
+            Some(0),
+            Some(2),
+            None,
+            Some(-1),
+            Some(1),
+        ])
+        .slice(1, 6);
+        let output =
+            run(ColumnarValue::Array(a.clone()), ColumnarValue::Array(b), 6)?.into_array(6)?;
+        assert_eq!(
+            output
+                .as_primitive::<Int64Type>()
+                .iter()
+                .collect::<Vec<_>>(),
+            vec![
+                Some(min.wrapping_neg()),
+                None,
+                Some(-3),
+                None,
+                Some(0),
+                Some(max)
+            ]
+        );
+        for divisor in [-3, -2, -1, 1, 2, 3] {
+            let scalar = ScalarValue::try_from_array(&array(vec![Some(divisor)]), 0)?;
+            let output = run(
+                ColumnarValue::Array(a.clone()),
+                ColumnarValue::Scalar(scalar),
+                6,
+            )?
+            .into_array(6)?;
+            let expected = [Some(min), None, Some(-7), Some(7), Some(0), Some(max)]
+                .map(|a| a.map(|a| a.wrapping_div(divisor)));
+            assert_eq!(
+                output
+                    .as_primitive::<Int64Type>()
+                    .iter()
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+        let scalar =
+            |v| ColumnarValue::Scalar(ScalarValue::try_from_array(&array(vec![v]), 0).unwrap());
+        let b = array(vec![Some(-1), None, Some(2)]);
+        let output = run(scalar(Some(min)), ColumnarValue::Array(b.clone()), 3)?.into_array(3)?;
+        assert_eq!(
+            output
+                .as_primitive::<Int64Type>()
+                .iter()
+                .collect::<Vec<_>>(),
+            vec![Some(min.wrapping_neg()), None, Some(min / 2)]
+        );
+        for (left, right, rows) in [
+            (scalar(None), ColumnarValue::Array(b), 3),
+            (ColumnarValue::Array(a.clone()), scalar(None), 6),
+        ] {
+            let output = run(left, right, rows)?.into_array(rows)?;
+            assert_eq!(output.null_count(), output.len());
+        }
+        assert!(
+            matches!(run(scalar(Some(min)),scalar(Some(-1)),1)?,ColumnarValue::Scalar(ScalarValue::Int64(Some(v))) if v == min.wrapping_neg())
+        );
+        assert!(matches!(
+            run(scalar(None), scalar(Some(0)), 1)?,
+            ColumnarValue::Scalar(ScalarValue::Int64(None))
+        ));
+        assert!(run(scalar(Some(1)), scalar(Some(0)), 1).is_err());
+        let empty = ColumnarValue::Array(a.slice(0, 0));
+        assert_eq!(run(empty, scalar(Some(0)), 0)?.into_array(0)?.len(), 0);
+        assert!(
+            run(
+                ColumnarValue::Array(a.clone()),
+                ColumnarValue::Array(a.slice(0, 1)),
+                6
+            )
+            .is_err()
+        );
+    }
+    Ok(())
+}

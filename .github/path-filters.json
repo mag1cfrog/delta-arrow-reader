@@ -147,6 +147,18 @@
     "crates/delta-arrow-reader-cli/**",
     "crates/delta-arrow-reader-core/tests/reader/fixtures/**"
   ],
+  "spark_sql": [
+    ".cargo/**",
+    ".github/path-filters.json",
+    ".github/workflows/ci.yml",
+    "Cargo.toml",
+    "clippy.toml",
+    "crates/delta-arrow-reader-spark-sql/**",
+    "crates/delta-arrow-reader-core/Cargo.toml",
+    "crates/delta-arrow-reader-core/src/**",
+    "crates/delta-arrow-reader-core/tests/reader/support.rs",
+    "crates/delta-arrow-reader-core/tests/reader/support/**"
+  ],
   "selective_read": [
     "xtask/src/selective_read.rs",
     "xtask/src/selective_read/**",

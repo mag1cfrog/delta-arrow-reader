@@ -1,0 +1,141 @@
+[package]
+name = "delta-arrow-reader-spark-sql"
+version = "0.1.0"
+edition = "2024"
+rust-version = { workspace = true }
+publish = false
+description = "Spark SQL planning over registered DataFusion table providers"
+license = "Apache-2.0"
+repository = "https://github.com/mag1cfrog/delta-arrow-reader"
+
+# Keep the selected dependency forks out of existing DAR release builds until
+# the CLI integration and its packaging changes are reviewed.
+[workspace]
+members = ["vendor/sail/crates/*"]
+exclude = ["vendor/dependencies/*"]
+resolver = "3"
+
+# Match the repository's development dependency profile for the vendored crates,
+# including their unit tests now that they are workspace members.
+[profile.dev]
+opt-level = 1
+
+[workspace.package]
+version = "0.7.1"
+authors = ["LakeSail <hello@lakesail.com>"]
+edition = "2024"
+homepage = "https://lakesail.com"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/lakehq/sail"
+rust-version = "1.96.0"
+
+[workspace.lints.clippy]
+allow_attributes = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+todo = "deny"
+
+[workspace.dependencies]
+thiserror = { version = "2.0.18" }
+tokio = { version = "1.52.3", features = ["macros", "rt"] }
+tokio-stream = { version = "0.1.18", default-features = false }
+educe = "0.6.0"
+async-trait = "0.1.89"
+async-recursion = "1.1.1"
+lazy_static = "1.5.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+xee-xpath = "0.1.5"
+xot = "0.31.2"
+regex = "1.12.3"
+regex-syntax = "0.8.11"
+chrono = "0.4.44"
+chrono-tz = "0.10.4"
+syn = "2.0.117"
+quote = "1.0.45"
+paste = "1.0.15"
+proc-macro2 = "1.0.106"
+prettyplease = "0.2.37"
+phf = { version = "0.13.1", features = ["macros"] }
+ryu = "1.0.23"
+either = "1.16.0"
+rand = "0.10.1"
+rand_distr = "0.6.0"
+url = "2.5.8"
+lexical-core = { version = "1.0.6", default-features = false, features = ["write-integers", "write-floats", "parse-integers", "parse-floats"] }
+aes = "0.8.4"
+aes-gcm = "0.10.3"
+cbc = { version = "0.1.2", features = ["std"] }
+base64 = "0.22.1"
+datasketches = { version = "0.3.0", features = ["hll", "theta"] }
+half = { version = "2.7.1", features = ["num-traits", "zerocopy"] }
+chumsky = { version = "0.12.0", default-features = false, features = ["pratt"] }
+num = "0.4.3"
+itertools = "0.14.0"
+ordered-float = "5.3.0"
+datafusion = { version = "54.1.0", default-features = false, features = [
+    "nested_expressions",
+    "crypto_expressions",
+    "datetime_expressions",
+    "encoding_expressions",
+    "regex_expressions",
+    "string_expressions",
+    "unicode_expressions",
+    "recursive_protection",
+] }
+datafusion-common = { version = "54.1.0", features = ["object_store"] }
+datafusion-expr = { version = "54.1.0", default-features = false }
+datafusion-expr-common = { version = "54.1.0" }
+datafusion-functions = { version = "54.1.0" }
+datafusion-functions-nested = { version = "54.1.0", default-features = false }
+datafusion-physical-expr = { version = "54.1.0" }
+datafusion-spark = { version = "54.1.0", features = ["core"] }
+jiter = { version = "0.15.0", default-features = false }
+arrow = { version = "58.3.0", features = ["chrono-tz"] }
+arrow-buffer = { version = "58.3.0" }
+arrow-schema = "58.3.0"
+parquet-variant = { version = "58.3.0" }
+parquet-variant-compute = { version = "58.3.0" }
+parquet-variant-json = { version = "58.3.0" }
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+expect_used = "deny"
+mod_module_files = "deny"
+panic = "deny"
+unwrap_used = "deny"
+
+[dependencies]
+datafusion = { version = "=54.1.0", default-features = false, features = ["sql"] }
+sail-common-datafusion = { path = "vendor/sail/crates/sail-common-datafusion" }
+sail-plan = { path = "vendor/sail/crates/sail-plan" }
+sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
+
+[dev-dependencies]
+arrow = "=58.4.0"
+delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
+delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
+flate2 = "1"
+futures-util = "0.3"
+parquet = "=58.4.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[patch.crates-io]
+arrow-arith = { path = "vendor/dependencies/arrow-arith" }
+arrow-array = { path = "vendor/dependencies/arrow-array" }
+arrow-cast = { path = "vendor/dependencies/arrow-cast" }
+datafusion-expr = { path = "vendor/dependencies/datafusion-expr" }
+datafusion-functions = { path = "vendor/dependencies/datafusion-functions" }
+datafusion-optimizer = { path = "vendor/dependencies/datafusion-optimizer" }
+datafusion-physical-expr = { path = "vendor/dependencies/datafusion-physical-expr" }
+datafusion-physical-expr-common = { path = "vendor/dependencies/datafusion-physical-expr-common" }
+datafusion-physical-optimizer = { path = "vendor/dependencies/datafusion-physical-optimizer" }
+datafusion-physical-plan = { path = "vendor/dependencies/datafusion-physical-plan" }
+lexical-parse-float = { path = "vendor/dependencies/lexical-parse-float" }
