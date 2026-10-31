@@ -166,5 +166,353 @@
   "replay/cast-scalar-cast-cases/71/decimal_untyped_false": {
     "status": "planning_error",
     "error": "invalid argument: CASE WHEN condition must be BOOLEAN, got Null"
+  },
+  "replay/cast-empty-scalar-cases/129/boolean_coalesce_true": {
+    "status": "ok",
+    "types": [
+      "Boolean"
+    ],
+    "rows": [
+      [
+        "true"
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      false
+    ],
+    "physical_nullable": [
+      false
+    ]
+  },
+  "replay/cast-empty-scalar-cases/129/boolean_coalesce_false": {
+    "status": "ok",
+    "types": [
+      "Boolean"
+    ],
+    "rows": [
+      [
+        "true"
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      false
+    ],
+    "physical_nullable": [
+      false
+    ]
+  },
+  "replay/existing-projected-cases/109/context_0_coalesce_true": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "1"
+      ],
+      [
+        "1",
+        "1"
+      ],
+      [
+        "10",
+        "1"
+      ],
+      [
+        "11",
+        "1"
+      ],
+      [
+        "12",
+        "1"
+      ],
+      [
+        "13",
+        "1"
+      ],
+      [
+        "2",
+        "1"
+      ],
+      [
+        "3",
+        "1"
+      ],
+      [
+        "4",
+        "1"
+      ],
+      [
+        "5",
+        "1"
+      ],
+      [
+        "6",
+        "1"
+      ],
+      [
+        "7",
+        "1"
+      ],
+      [
+        "8",
+        "1"
+      ],
+      [
+        "9",
+        "1"
+      ]
+    ],
+    "output_names": [
+      "id",
+      "q"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/existing-projected-cases/109/context_0_coalesce_false": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "1"
+      ],
+      [
+        "1",
+        "1"
+      ],
+      [
+        "10",
+        "1"
+      ],
+      [
+        "11",
+        "1"
+      ],
+      [
+        "12",
+        "1"
+      ],
+      [
+        "13",
+        "1"
+      ],
+      [
+        "2",
+        "1"
+      ],
+      [
+        "3",
+        "1"
+      ],
+      [
+        "4",
+        "1"
+      ],
+      [
+        "5",
+        "1"
+      ],
+      [
+        "6",
+        "1"
+      ],
+      [
+        "7",
+        "1"
+      ],
+      [
+        "8",
+        "1"
+      ],
+      [
+        "9",
+        "1"
+      ]
+    ],
+    "output_names": [
+      "id",
+      "q"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/existing-projected-cases/118/context_1_coalesce_true": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "1"
+      ],
+      [
+        "1",
+        "1"
+      ],
+      [
+        "10",
+        "1"
+      ],
+      [
+        "11",
+        "1"
+      ],
+      [
+        "12",
+        "1"
+      ],
+      [
+        "13",
+        "1"
+      ],
+      [
+        "2",
+        "1"
+      ],
+      [
+        "3",
+        "0"
+      ],
+      [
+        "4",
+        "0"
+      ],
+      [
+        "5",
+        "0"
+      ],
+      [
+        "6",
+        "1"
+      ],
+      [
+        "7",
+        "1"
+      ],
+      [
+        "8",
+        "1"
+      ],
+      [
+        "9",
+        "1"
+      ]
+    ],
+    "output_names": [
+      "id",
+      "q"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/existing-projected-cases/118/context_1_coalesce_false": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "1"
+      ],
+      [
+        "1",
+        "1"
+      ],
+      [
+        "10",
+        "1"
+      ],
+      [
+        "11",
+        "1"
+      ],
+      [
+        "12",
+        "1"
+      ],
+      [
+        "13",
+        "1"
+      ],
+      [
+        "2",
+        "1"
+      ],
+      [
+        "3",
+        "0"
+      ],
+      [
+        "4",
+        "0"
+      ],
+      [
+        "5",
+        "0"
+      ],
+      [
+        "6",
+        "1"
+      ],
+      [
+        "7",
+        "1"
+      ],
+      [
+        "8",
+        "1"
+      ],
+      [
+        "9",
+        "1"
+      ]
+    ],
+    "output_names": [
+      "id",
+      "q"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
   }
 }

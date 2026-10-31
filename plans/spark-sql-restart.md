@@ -15,13 +15,12 @@ S02's first slice, #116 ARRAY_CONTAINS NULL semantics, merged into staging throu
 PR #600 as `c4e75faf`, after all three platform jobs passed. The following #150
 conditional review has resumed. Its floating NULLIF equality fix, #601, merged
 through PR #602 as `5b4b92f5` after all three platforms passed. IFNULL/NVL temporal
-coercion, #603, is reviewed and pushed as `f4887db8` in PR #607, with CI pending.
-Searched CASE condition types, #604, is reviewed and pushed as `da304f5e`; its PR
-will follow #607's staging merge to keep the diff independent. The current slice
-is #606, collection-size NULL rules, now locally verified and reviewed.
+coercion, #603, merged through PR #607 as `4238a6c4` after all three platforms
+passed. Searched CASE condition types, #604, is reviewed and pushed as `da304f5e`
+in PR #609, with CI running. Collection-size NULL rules, #606, are locally
+verified, reviewed and pushed as `6d0cbfe6`; their PR follows #609's merge.
 Mixed-temporal promotion has a separate implementation issue, #605, in S03.
-Shared COALESCE/IFNULL/NVL input re-evaluation
-is tracked in #608 and follows the size fix.
+The current slice is #608, shared COALESCE/IFNULL/NVL input re-evaluation.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -333,6 +332,22 @@ because the old issue exists.
   with no actionable finding. It did not rerun Cargo or Spark. Remote platform
   CI and staging integration remain pending; release cost and exact Spark schema
   nullability are separate S11/S07 work.
+- #607 passed all three platforms in CI run `41233226325` and merged into staging
+  as `4238a6c4`; #603 is closed. The next independent PR, #609, contains #604.
+- #608 keeps COALESCE as a conditional physical expression. Each input is
+  evaluated once on rows still needing a value, and guaranteed unused arguments
+  remain pruned without changing the result type. The size fallback now uses
+  this shared implementation. New counter assertions cover both SQL frontends,
+  aliases, scalar/column inputs and empty results. Independent Spark captures
+  add 72 fallback observations; all previous 440 observations remain identical.
+  The 25,180-observation replay passes with six independently confirmed physical
+  nullability corrections. The first workspace run exposed a dead subquery under
+  ROUND with a NULL scale. The analyzer now retains successful constant proofs
+  and changed fallback arguments. The repaired workspace passes all 420 tests,
+  with the same two upstream doctests ignored. Clean-context Sol/high review
+  found no remaining actionable issue after inspecting the analyzer repair and
+  added nonnullable-column, native error and direct empty-batch controls. Formatting
+  and CI-equivalent Clippy pass. Remote CI and staging integration remain pending.
 
 ### Retained gaps found during S01 review
 

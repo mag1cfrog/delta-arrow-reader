@@ -866,6 +866,15 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
         false
     }
 
+    /// Whether this function returns the first non-NULL argument for each row.
+    /// Physical evaluation visits each argument once, only for rows still NULL,
+    /// instead of eagerly evaluating arguments and invoking the UDF kernel.
+    /// All arguments must be coerced to the return type. Implementations must
+    /// also describe lazy arguments with `short_circuits` and `conditional_arguments`.
+    fn returns_first_non_null_argument(&self) -> bool {
+        false
+    }
+
     /// Determines which of the arguments passed to this function are evaluated eagerly
     /// and which may be evaluated lazily.
     ///
@@ -1153,6 +1162,10 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
 
     fn short_circuits_on_null_first_arg(&self) -> bool {
         self.inner.short_circuits_on_null_first_arg()
+    }
+
+    fn returns_first_non_null_argument(&self) -> bool {
+        self.inner.returns_first_non_null_argument()
     }
 
     fn evaluate_bounds(&self, input: &[&Interval]) -> Result<Interval> {

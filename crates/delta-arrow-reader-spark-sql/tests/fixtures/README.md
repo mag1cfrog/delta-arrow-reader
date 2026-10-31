@@ -124,8 +124,9 @@ local development-profile results do not establish release throughput.
 
 ## IFNULL and NVL temporal results
 
-`conditional-spark.jsonl` records 440 Spark 4.2.0 observations: 380 for IFNULL,
-NVL and COALESCE, and 60 CASE/IF controls described below. Regenerate it with `capture_conditional_spark.py`
+`conditional-spark.jsonl` records 512 Spark 4.2.0 observations: 380 temporal and
+coercion cases, 60 CASE/IF controls and 72 fallback-evaluation cases described
+below. Regenerate it with `capture_conditional_spark.py`
 using the Python/Java setup above. TIMESTAMP values use UTC epoch microseconds;
 TIMESTAMP_NTZ values use microseconds of wall time since 1970-01-01. The capture
 converts PySpark's process-local TIMESTAMP values before encoding them.
@@ -143,7 +144,8 @@ Returned NULLs must fit the logical and physical schemas. Exact Spark nullabilit
 and diagnostic-code parity remain separate work: the existing timestamp parser
 reports a parsing error for invalid input, without Spark's CAST_INVALID_INPUT
 code. The tests require that specific parser failure instead of accepting any
-error for those cases. The original historical replay remains unchanged.
+error for those cases. The original compressed replay remains unchanged; the
+following sections identify its reviewed expectation corrections.
 
 Non-temporal alias inputs keep the native NVL path. Its existing Decimal and
 ANSI numeric/string or Boolean/string coercion differences remain S03 work;
@@ -167,3 +169,21 @@ Their exact replay IDs now require planning errors in `reviewed-corrections.json
 the original compressed captures remain unchanged. A live invalid INT cast
 still fails with the existing Arrow cast message instead of Spark's error code.
 The test requires that specific cast cause; diagnostic-code parity remains S07.
+
+## Conditional fallback evaluation
+
+The 72 fallback references cover COALESCE, IFNULL and NVL in both ANSI modes:
+scalar and column NULLs, unused and selected invalid casts, empty results,
+scalar subqueries, and COALESCE's Boolean, variadic and division cases. A
+selected failing expression must keep its specific cause; an unused one must
+not fail the query. Exact Spark error codes and failure stages remain S07 work.
+
+`conditional_evaluation.rs` registers volatile counted inputs through the Spark
+and native DataFusion entry points. Each fallback sees only rows still NULL,
+and no input runs while planning or on empty results. It also checks UDF aliases
+and an explicit CASE control whose repeated input occurrences must stay separate.
+
+Six replay expectations narrow the physical result's nullability after COALESCE
+stops lowering to CASE. Fresh Spark references confirm the nonnullable results.
+Their exact IDs and old/new outcomes are in `reviewed-corrections.json`; values,
+types, names, error text and failure stages keep their existing assertions.

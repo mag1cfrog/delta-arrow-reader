@@ -1,12 +1,6 @@
-use std::sync::{Arc, LazyLock};
-
-use arrow::array::Int32Array;
-use arrow::compute::{is_null, kernels::zip::zip};
 use datafusion::arrow::datatypes::DataType;
-use datafusion_common::{ScalarValue, utils::take_function_args};
-use datafusion_expr::{
-    ColumnarValue, ExprSchemable, ScalarUDF, Volatility, cast, create_udf, expr, lit, when,
-};
+use datafusion_common::ScalarValue;
+use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
 use datafusion_functions::math::expr_fn::abs;
 use datafusion_functions_nested::expr_fn;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -16,28 +10,6 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
-
-// COALESCE lowers to CASE and evaluates a non-null volatile input twice.
-static NULL_SIZE_AS_MINUS_ONE: LazyLock<ScalarUDF> = LazyLock::new(|| {
-    create_udf(
-        "null_size_as_minus_one",
-        vec![DataType::Int32],
-        DataType::Int32,
-        Volatility::Immutable,
-        Arc::new(|arguments| {
-            let [size] = take_function_args("null_size_as_minus_one", arguments)?;
-            match size {
-                ColumnarValue::Scalar(ScalarValue::Int32(None)) => {
-                    Ok(ColumnarValue::Scalar(ScalarValue::Int32(Some(-1))))
-                }
-                ColumnarValue::Array(array) if array.null_count() > 0 => Ok(ColumnarValue::Array(
-                    zip(&is_null(array)?, &Int32Array::new_scalar(-1), array)?,
-                )),
-                size => Ok(size.clone()),
-            }
-        }),
-    )
-});
 
 fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
@@ -58,7 +30,10 @@ fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     };
     let options = input.function_context.plan_config;
     if !options.ansi_mode && options.legacy_size_of_null {
-        Ok(NULL_SIZE_AS_MINUS_ONE.call(vec![length]))
+        Ok(datafusion_functions::core::expr_fn::coalesce(vec![
+            length,
+            lit(-1i32),
+        ]))
     } else {
         Ok(length)
     }

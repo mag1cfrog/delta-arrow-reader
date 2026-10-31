@@ -119,3 +119,10 @@ Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
 ARRAY_SIZE always preserves NULL. The [size references](tests/fixtures/README.md#collection-sizes)
 cover modes, admission, Arrow representations, overflow and input evaluation.
+
+COALESCE and its NVL/IFNULL aliases use conditional physical evaluation so each
+argument runs once for rows that still need a value. This replaces their CASE
+expansion while retaining argument pruning and result-type coercion. The shared
+path also replaces the private collection-size NULL fallback. The
+[evaluation references](tests/fixtures/README.md#conditional-fallback-evaluation)
+cover both SQL frontends and the six corrected physical-nullability expectations.

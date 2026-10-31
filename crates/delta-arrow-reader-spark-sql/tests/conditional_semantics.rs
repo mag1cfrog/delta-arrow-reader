@@ -42,6 +42,8 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
         DataType::Utf8 | DataType::Utf8View | DataType::LargeUtf8 => "string",
         DataType::Int32 => "integer",
         DataType::Int64 => "long",
+        DataType::Boolean => "boolean",
+        DataType::Null => "void",
         DataType::Float64 => "double",
         DataType::Decimal128(10, 2) => "decimal(10,2)",
         other => return Err(format!("unexpected result type: {other:?}").into()),
@@ -50,8 +52,9 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
     let mut rows = Vec::new();
     for batch in batches {
         let column = batch.column(0);
+        let nulls = column.logical_nulls();
         for row in 0..batch.num_rows() {
-            let value = if column.is_null(row) {
+            let value = if nulls.as_ref().is_some_and(|nulls| nulls.is_null(row)) {
                 assert!(logical_nullable && schema.field(0).is_nullable());
                 Value::Null
             } else if matches!(column.data_type(), DataType::Timestamp(_, _)) {
@@ -76,7 +79,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(records.len(), 441);
+    assert_eq!(records.len(), 513);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -105,7 +108,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                         Some("CAST_INVALID_INPUT") => {
                             let error = error.to_string();
                             error.contains("[CAST_INVALID_INPUT]")
-                            || (case["id"] == "case_live_cast"
+                            || ((case["id"] == "case_live_cast" || case["id"].as_str().is_some_and(|id| id.starts_with("eval_")))
                                 && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
                             || (case["id"]
                                 .as_str()
@@ -120,6 +123,15 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                         Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE") => error
                             .to_string()
                             .contains("CASE WHEN condition must be BOOLEAN"),
+                        Some("SCALAR_SUBQUERY_TOO_MANY_ROWS") => error
+                            .to_string()
+                            .contains("Scalar subquery returned more than one row"),
+                        Some("DIVIDE_BY_ZERO") => {
+                            error.to_string().contains("[DIVIDE_BY_ZERO]")
+                                || error
+                                    .to_string()
+                                    .contains("Arrow error: Divide by zero error")
+                        }
                         _ => false,
                     }
                 }

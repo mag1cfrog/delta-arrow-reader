@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -138,6 +139,10 @@ impl ScalarUDFImpl for NVLFunc {
 
     fn short_circuits(&self) -> bool {
         self.coalesce.short_circuits()
+    }
+
+    fn returns_first_non_null_argument(&self) -> bool {
+        self.coalesce.returns_first_non_null_argument()
     }
 
     fn aliases(&self) -> &[String] {
