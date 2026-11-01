@@ -54,28 +54,31 @@ impl ScalarUDFImpl for SparkAbs {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        if arg_types[0].is_numeric()
-            || arg_types[0].is_null()
-            || matches!(arg_types[0], DataType::Interval(_) | DataType::Duration(_))
+        let [arg_type] = arg_types else {
+            return Err(invalid_arg_count_exec_err("abs", (1, 1), arg_types.len()));
+        };
+        if arg_type.is_numeric()
+            || arg_type.is_null()
+            || matches!(arg_type, DataType::Interval(_) | DataType::Duration(_))
         {
-            Ok(arg_types[0].clone())
+            Ok(arg_type.clone())
         } else {
             Err(unsupported_data_type_exec_err(
                 "abs",
                 "Numeric, Interval, or Duration type",
-                &arg_types[0],
+                arg_type,
             ))
         }
     }
 
     fn coerce_types(&self, arg_types: &[DataType]) -> Result<Vec<DataType>> {
-        if arg_types.len() != 1 {
+        let [arg_type] = arg_types else {
             return Err(invalid_arg_count_exec_err("abs", (1, 1), arg_types.len()));
-        }
-        match &arg_types[0] {
+        };
+        match arg_type {
             t if t.is_numeric() => Ok(vec![t.clone()]),
             DataType::Null => Ok(vec![DataType::Null]),
-            DataType::Interval(_) | DataType::Duration(_) => Ok(vec![arg_types[0].clone()]),
+            DataType::Interval(_) | DataType::Duration(_) => Ok(vec![arg_type.clone()]),
             DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
                 Ok(vec![DataType::Float64])
             }
@@ -88,11 +91,14 @@ impl ScalarUDFImpl for SparkAbs {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let [arg] = args.args.as_slice() else {
+            return Err(invalid_arg_count_exec_err("abs", (1, 1), args.args.len()));
+        };
         // Float/Decimal/UInt/Null have no ANSI overflow concerns; delegate to
         // DataFusion's built-in abs so the kernel stays correct even on
         // bypass paths where `simplify` has not rewritten the call.
         if matches!(
-            args.args[0].data_type(),
+            arg.data_type(),
             DataType::Float32
                 | DataType::Float64
                 | DataType::Decimal128(_, _)
@@ -106,10 +112,6 @@ impl ScalarUDFImpl for SparkAbs {
             return datafusion::functions::math::abs::AbsFunc::new().invoke_with_args(args);
         }
         let return_dtype = args.return_field.data_type().clone();
-        let ScalarFunctionArgs { args, .. } = args;
-        let [arg] = args.as_slice() else {
-            return Err(invalid_arg_count_exec_err("abs", (1, 1), args.len()));
-        };
         // Skip the kernel pass when every input row is NULL.
         if let ColumnarValue::Array(array) = arg
             && array.null_count() == array.len()
@@ -437,16 +439,18 @@ impl ScalarUDFImpl for SparkAbs {
     }
 
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        let [arg] = args.as_slice() else {
+            return Err(invalid_arg_count_exec_err("abs", (1, 1), args.len()));
+        };
         // Idempotence: abs(abs(x)) = abs(x).
-        if args.len() == 1
-            && let Expr::ScalarFunction(inner) = &args[0]
+        if let Expr::ScalarFunction(inner) = arg
             && let Some(inner_abs) = inner.func.inner().downcast_ref::<Self>()
             && inner_abs.ansi_mode == self.ansi_mode
         {
-            return Ok(ExprSimplifyResult::Simplified(args[0].clone()));
+            return Ok(ExprSimplifyResult::Simplified(arg.clone()));
         }
 
-        let dt = info.get_data_type(&args[0])?;
+        let dt = info.get_data_type(arg)?;
         match dt {
             // Keep in invoke_with_args: interval/duration, and signed integers
             // (where invoke branches on self.ansi_mode between wrapping_abs and
@@ -463,7 +467,9 @@ impl ScalarUDFImpl for SparkAbs {
     }
 
     fn output_ordering(&self, input: &[ExprProperties]) -> Result<SortProperties> {
-        let arg = &input[0];
+        let [arg] = input else {
+            return Err(invalid_arg_count_exec_err("abs", (1, 1), input.len()));
+        };
         let range = &arg.range;
         if range.lower().data_type() != range.upper().data_type() {
             return internal_err!("Endpoints of an Interval should have the same type");
@@ -479,5 +485,146 @@ impl ScalarUDFImpl for SparkAbs {
         } else {
             Ok(SortProperties::Unordered)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::datatypes::Field;
+    use datafusion_common::{DFSchema, exec_err};
+    use datafusion_expr::lit;
+
+    fn abs_arguments(args: Vec<ColumnarValue>, data_type: DataType) -> ScalarFunctionArgs {
+        ScalarFunctionArgs {
+            arg_fields: args
+                .iter()
+                .map(|arg| Arc::new(Field::new("input", arg.data_type(), true)))
+                .collect(),
+            number_rows: match args.first() {
+                Some(ColumnarValue::Array(array)) => array.len(),
+                _ => 1,
+            },
+            args,
+            return_field: Arc::new(Field::new("result", data_type, true)),
+            config_options: Arc::default(),
+        }
+    }
+
+    fn assert_abs_argument_error<T>(result: Result<T>, count: usize) -> Result<()> {
+        let Err(error) = result else {
+            return exec_err!("ABS accepted {count} arguments");
+        };
+        assert_eq!(
+            error.to_string(),
+            format!("Execution error: Spark `abs` function requires 1 argument, got {count}")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn abs_checks_arity_at_each_trait_boundary() -> Result<()> {
+        let info = SimplifyContext::builder()
+            .with_schema(Arc::new(DFSchema::empty()))
+            .build();
+        for ansi in [false, true] {
+            let udf = SparkAbs::new(ansi);
+            for count in [0, 2] {
+                assert_abs_argument_error(udf.return_type(&vec![DataType::Int32; count]), count)?;
+                assert_abs_argument_error(udf.coerce_types(&vec![DataType::Int32; count]), count)?;
+                assert_abs_argument_error(udf.simplify(vec![lit(-1i32); count], &info), count)?;
+                assert_abs_argument_error(
+                    udf.invoke_with_args(abs_arguments(
+                        vec![ColumnarValue::Scalar(ScalarValue::Float64(Some(-1.5))); count],
+                        DataType::Float64,
+                    )),
+                    count,
+                )?;
+                let properties = (0..count)
+                    .map(|_| ExprProperties::new_unknown())
+                    .collect::<Vec<_>>();
+                assert_abs_argument_error(udf.output_ordering(&properties), count)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn abs_valid_arguments_keep_types_values_and_ansi_overflow() -> Result<()> {
+        for ansi in [false, true] {
+            let udf = SparkAbs::new(ansi);
+            for (input, expected) in [
+                (ScalarValue::Int32(Some(-7)), ScalarValue::Int32(Some(7))),
+                (ScalarValue::Int32(None), ScalarValue::Int32(None)),
+                (
+                    ScalarValue::Float64(Some(-1.5)),
+                    ScalarValue::Float64(Some(1.5)),
+                ),
+                (
+                    ScalarValue::Decimal128(Some(-125), 10, 2),
+                    ScalarValue::Decimal128(Some(125), 10, 2),
+                ),
+                (
+                    ScalarValue::IntervalYearMonth(Some(-7)),
+                    ScalarValue::IntervalYearMonth(Some(7)),
+                ),
+                (
+                    ScalarValue::DurationMicrosecond(Some(-20)),
+                    ScalarValue::DurationMicrosecond(Some(20)),
+                ),
+            ] {
+                let data_type = input.data_type();
+                assert_eq!(
+                    udf.return_type(std::slice::from_ref(&data_type))?,
+                    data_type
+                );
+                let result = udf.invoke_with_args(abs_arguments(
+                    vec![ColumnarValue::Scalar(input)],
+                    data_type,
+                ))?;
+                let actual = match result {
+                    ColumnarValue::Scalar(value) => value,
+                    ColumnarValue::Array(array) => {
+                        assert_eq!(array.len(), 1);
+                        ScalarValue::try_from_array(&array, 0)?
+                    }
+                };
+                assert_eq!(actual, expected);
+            }
+            let values = Arc::new(Int32Array::from(vec![Some(-1), None, Some(2)]));
+            let result = udf.invoke_with_args(abs_arguments(
+                vec![ColumnarValue::Array(values)],
+                DataType::Int32,
+            ))?;
+            let ColumnarValue::Array(actual) = result else {
+                return exec_err!("ABS returned a scalar for an array input");
+            };
+            assert_eq!(
+                actual.as_primitive::<Int32Type>(),
+                &Int32Array::from(vec![Some(1), None, Some(2)])
+            );
+            let overflow = udf.invoke_with_args(abs_arguments(
+                vec![ColumnarValue::Scalar(ScalarValue::Int32(Some(i32::MIN)))],
+                DataType::Int32,
+            ));
+            if ansi {
+                let Err(error) = overflow else {
+                    return exec_err!("ANSI ABS accepted the minimum integer");
+                };
+                assert!(error.to_string().contains("[ARITHMETIC_OVERFLOW]"));
+            } else {
+                let ColumnarValue::Scalar(actual) = overflow? else {
+                    return exec_err!("ABS changed scalar representation");
+                };
+                assert_eq!(actual, ScalarValue::Int32(Some(i32::MIN)));
+            }
+            let properties = ExprProperties::new_unknown()
+                .with_range(Interval::make_unbounded(&DataType::Int32)?);
+            assert_eq!(
+                udf.output_ordering(&[properties])?,
+                SortProperties::Unordered
+            );
+        }
+        Ok(())
     }
 }
