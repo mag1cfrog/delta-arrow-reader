@@ -7,31 +7,51 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#669, Boolean row evaluation, is ready for its staging PR on `fix/boolean-row-evaluation`,
-based on staging `716dd884`. #150 review found that mixed AND/OR batches can
-evaluate CASTs on rows already decided by the left input. Independent Spark
-references succeed; the same native query succeeds at batch size 1 but fails at
-32 in ANSI mode. Required-error and legacy controls remain intact. The repair
-uses the shared physical evaluation boundary and preserves three-valued
-results, required errors and operand evaluation counts. The 48 independent
-Spark references pass in batches of 1 and 32, including four required ANSI
-errors. Native tests record operand visits across scalar/column inputs, sliced
-null bitmaps and empty batches. The 80 retained BinaryExpr unit checks pass.
-Final Linux checks pass 455 workspace tests, zero failures and two inherited
-ignored doctests, plus root-crate Clippy, workspace formatting and diff checks.
-Clean-context Sol/high Bulletproof Review found no unresolved actionable issue.
-Mixed Boolean expressions now filter all required right-input rows regardless
-of density. S11 must compare dense/wide/nested predicates against the baseline;
-this correctness repair does not establish their performance.
+#672 is the bounded prerequisite for #671. Native physical-plan construction
+runs volatile IN-list expressions while trying to build a static filter. When
+all items return scalars, the planning result is cached and execution never
+calls that volatile expression. A later column prevents caching but does not
+undo the earlier call. The fix reuses DataFusion's recursive volatility check
+before any constant-list evaluation. Literal and deterministic constant filters
+retain their existing path. Local Linux checks pass 457 workspace tests with
+zero failures and two inherited ignored doctests, plus 55 retained native
+InList unit tests. Root Clippy, formatting and the final focused tests pass.
+Independent review findings in the test code have been addressed without adding
+a dependency. This slice does not complete #671's per-row selection work.
 
-#150 remains open for direct Boolean/NULL reference coverage, explicit schema
-stage controls and its final independent review. Its audit also found stale
-array fixture documentation after #659: 356 of 360 original observations now
-have strict supported-input expectations, four untyped-NULL observations remain,
-and the separate 324-case Decimal corpus is strict. Correct that description in
-the coverage slice. The temporary diagnostic sources and results are retained
-outside the repository. CASE analyzed-schema nullability differs from Spark in
-the folded control; that classification remains under #149/S07.
+#671, native IN-list row evaluation, is the next bounded repair on staging
+`686f8126`. #150 review confirmed that lists longer than three items and computed
+lookups retain `InListExpr`, whose later operands still run on rows already
+matched. The expanded 70-case Spark capture has six required errors; native
+replay fails four skipped ANSI cases at batch size 32. Short column-lookup lists
+are lowered to the Boolean path repaired in #669 and still pass. The new issue
+is assigned, is a child of the NULL/conditional track and blocks #150.
+
+#150's reference/coverage changes are pending on `test/null-conditional-coverage`.
+Its earlier 54-case replay and 456-test workspace gates passed, but those gates
+predate the expanded failing references and do not establish final readiness.
+The fixture documentation correction covers 356 strict original array cases,
+four remaining untyped-NULL admission cases and the 324-case Decimal corpus.
+Replaying the original 34 queries in both modes and two batch sizes leaves only
+the known MAP NULLIF admission difference in result status/values after typed
+display normalization. Its ARRAY NULLIF case returns the expected NULL array.
+The old temporary collector needed logical-null handling for NullArray; that
+collector issue is not a runtime defect. Schema stages and specific error
+contracts are inspected separately. MAP admission remains queued under frozen
+#156/S10 and is not a completed repair. Final review and all gates must be
+repeated after #671 merges; no coverage PR is ready yet.
+
+#669 merged through PR #670 at `686f8126`, whose full tree matches reviewed
+source `1818f397`. The shared Boolean evaluation path uses existing row
+selection/scatter and Kleene kernels instead of the old density-only AND helper.
+All 48 independent Spark cases pass at both batch sizes; native checks cover
+operand visits, NULLs, scalar/array inputs, slices and empty batches. The final
+Linux workspace passes 455 tests with zero failures and two inherited ignored
+doctests; all 80 retained BinaryExpr unit tests, root Clippy and formatting checks
+pass. Clean-context Sol/high Bulletproof Review found no unresolved actionable
+issue. The issue is closed and its temporary branch is removed. Mixed Boolean
+filtering cost remains a required dense/wide/nested comparison in S11. This is
+correctness evidence, not a performance or cross-platform acceptance.
 
 #659 merged through PR #668 at `716dd884`, whose full tree matches reviewed
 source `73f426a4`. All 324 independent Spark observations and the original eight
