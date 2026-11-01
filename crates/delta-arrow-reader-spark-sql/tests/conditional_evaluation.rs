@@ -271,6 +271,16 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                     vec![Some(1), None, Some(3), None],
                 ),
                 (
+                    r#"CAST(NULLIF(arrow_cast(count_first(a), 'Timestamp(Nanosecond, None)'),arrow_cast(count_second(b), 'Timestamp(Microsecond, Some("UTC"))')) IS NULL AS INT)"#.to_string(),
+                    [4, 2, 0],
+                    vec![Some(0), Some(1), Some(0), Some(1)],
+                ),
+                (
+                    r#"CAST(arrow_cast(count_first(a), 'Timestamp(Nanosecond, None)')=arrow_cast(count_second(b), 'Timestamp(Microsecond, Some("UTC"))') AS INT)"#.to_string(),
+                    [4, 4, 0],
+                    vec![Some(0), None, Some(0), None],
+                ),
+                (
                     "NULLIF(count_first(CAST(NULL AS INT)),CAST(count_second(b) AS DOUBLE))"
                         .to_string(),
                     [1, 0, 0],

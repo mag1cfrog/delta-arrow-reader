@@ -126,8 +126,11 @@ native comparison/validity kernels. Unmatched values retain their original bits.
 Comparison casts now operate on temporary values, preserving the first input's
 result type, Decimal scale and exact integer/string value. The shared numeric
 promotion rule compares Decimal/floating pairs as DOUBLE, and integer/FLOAT
-pairs as DOUBLE in ANSI mode. Other comparability checks use the native rule;
-string and temporal comparison gaps remain in the restart plan. The
+pairs as DOUBLE in ANSI mode. Mixed nanosecond comparisons use exact Decimal128
+nanosecond counts, preserving precision without limiting other units to the
+i64-nanosecond range. Local values reuse the existing session-timezone converter;
+values beyond its range fail explicitly. Equal-unit instants retain native
+comparison. The
 [result references](tests/fixtures/README.md#nullif-result-types),
 [floating references](tests/fixtures/README.md#floating-nullif) and evaluation
 controls cover unchanged equality and short-circuit behavior.

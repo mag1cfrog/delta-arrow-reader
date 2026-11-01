@@ -18,7 +18,8 @@ use std::sync::Arc;
 
 use crate::function::common::{SparkComparisonFloat, spark_comparison_widens_to_double};
 use crate::function::comparison::{
-    string_comparison_cast, string_comparison_type, temporal_comparison_type,
+    nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
+    temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_value_to_ltz;
 
@@ -48,6 +49,9 @@ impl SparkNullIf {
     }
 
     fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
+        if let Some(conversion) = nanosecond_comparison_cast(left, right, &self.session_timezone) {
+            return conversion.inner().return_type(&[left.clone()]);
+        }
         if let Some(data_type) = temporal_comparison_type(left, right, &self.session_timezone) {
             return Ok(data_type);
         }
@@ -122,13 +126,22 @@ impl ScalarUDFImpl for SparkNullIf {
         let [left, right] = take_function_args(self.name(), input.args.as_slice())?;
         let left = left.clone();
         let same_type = left.data_type() == right.data_type();
+        let exact_timestamp_cast = nanosecond_comparison_cast(
+            &left.data_type(),
+            &right.data_type(),
+            &self.session_timezone,
+        );
         let uses_spark_temporal_coercion = temporal_comparison_type(
             &left.data_type(),
             &right.data_type(),
             &self.session_timezone,
         )
         .is_some();
-        let comparison_type = self.comparison_type(&left.data_type(), &right.data_type())?;
+        let comparison_type = if let Some(conversion) = &exact_timestamp_cast {
+            conversion.inner().return_type(&[left.data_type()])?
+        } else {
+            self.comparison_type(&left.data_type(), &right.data_type())?
+        };
         if !same_type {
             for (value, field) in input.args.iter_mut().zip(&mut input.arg_fields) {
                 let comparison_field = std::sync::Arc::new(
@@ -138,7 +151,15 @@ impl ScalarUDFImpl for SparkNullIf {
                         .with_data_type(comparison_type.clone())
                         .with_nullable(field.is_nullable() || !self.ansi_mode),
                 );
-                *value = if uses_spark_temporal_coercion
+                *value = if let Some(conversion) = &exact_timestamp_cast {
+                    conversion.invoke_with_args(ScalarFunctionArgs {
+                        args: vec![value.clone()],
+                        arg_fields: vec![field.clone()],
+                        number_rows: input.number_rows,
+                        return_field: comparison_field.clone(),
+                        config_options: input.config_options.clone(),
+                    })?
+                } else if uses_spark_temporal_coercion
                     && matches!(
                         value.data_type(),
                         DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)

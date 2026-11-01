@@ -20,7 +20,8 @@ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIE
 use crate::config::PlanConfig;
 use crate::error::{IntoPlanResult, PlanError, PlanResult};
 use crate::function::comparison::{
-    string_comparison_cast, string_comparison_type, temporal_comparison_type,
+    nanosecond_comparison_cast, string_comparison_cast, string_comparison_type,
+    temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
@@ -371,7 +372,15 @@ pub(crate) fn spark_binary_expr(
     ) {
         let mut left_type = left.get_type(schema)?;
         let mut right_type = right.get_type(schema)?;
-        if let Some(target) =
+        if let Some(conversion) =
+            nanosecond_comparison_cast(&left_type, &right_type, &config.session_timezone)
+        {
+            let target = conversion.inner().return_type(&[left_type.clone()])?;
+            left = conversion.call(vec![left]);
+            right = conversion.call(vec![right]);
+            left_type = target.clone();
+            right_type = target;
+        } else if let Some(target) =
             temporal_comparison_type(&left_type, &right_type, &config.session_timezone)
         {
             let convert = |value, source: &DataType| {

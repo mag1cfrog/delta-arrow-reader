@@ -243,13 +243,19 @@ Named-zone conversion reuses the existing ConvertTz kernel and its Chrono
 timestamp range. These fixtures do not establish Spark's full i64-microsecond
 range; that boundary remains part of the restart plan's timestamp slice.
 
-Nanosecond columns retain the previous DataFusion comparison path. A separate
-registered-Arrow regression checks that 1ns and 2ns stay distinct and NULLIF
-keeps the same equality relation and original type. Mixed-unit precision and
-nanosecond session-zone conversion remain tracked in #627; the retained mixed
-unit assertions protect existing behavior, not Spark compatibility. Separate
-binary and NULLIF executions also preserve the existing Arrow errors for
-nanosecond local timestamps in New York's DST gap and overlap.
+`timestamp-precision.jsonl` covers 58 registered-Arrow cases beyond Spark's
+microsecond precision. Regenerate it with `capture_timestamp_precision.py` in
+the same reference environment. Python integers supply exact comparisons;
+`zoneinfo` supplies local-time offsets, checked against 18 Spark conversions.
+The cases include fractions on both sides of the epoch, a negative fractional
+timestamp at a DST boundary, dates, different timezone annotations and values
+outside the i64-nanosecond range.
+
+`timestamp_precision.rs` checks both operand orders and ANSI modes, two batch
+sizes, sliced arrays, NULLs, empty results, all comparison operators, NULLIF,
+BETWEEN and ON/USING joins. NULLIF retains the original ticks, type and timezone.
+Local inputs outside the reused timezone converter's range fail explicitly;
+they must not silently become NULL. Equal-unit instants retain native comparison.
 
 ## String-to-BOOLEAN casts
 
