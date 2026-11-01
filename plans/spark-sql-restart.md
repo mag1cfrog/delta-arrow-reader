@@ -7,20 +7,40 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#683 is in progress on `fix/set-operation-floating-keys`, based on `5a1b5ff9`.
-The set resolver reuses `SparkComparisonFloat` for comparison keys after type
-coercion, including DISTINCT grouping and ALL occurrence numbering. Original
-result values and UNION ALL remain unchanged. Independent contract review found
-that Spark's adaptive aggregate removal changes physical zero representatives;
-set equality checks therefore equate zero signs while retaining raw reference
-bits and exact UNION ALL/plain/arithmetic controls. General post-set string
-formatting remains with #687. The focused replay passes 660 floating-key, 512
-coercion and 366 duplicate-count Spark references at batch sizes 1 and 32, plus
-UNION ALL bit-preservation, metadata and native-SQL controls. Final full Linux
-checks pass 480 tests with zero failures and two inherited ignored doctests;
-root Clippy, formatting and diff checks pass. Clean-context Sol/high Bulletproof
-Review reports no actionable findings. Final source receipts precede the
-dedicated staging PR.
+#691 is ready for its staging PR on `fix/null-extended-join-properties`, based
+on `40f03f4e`.
+Both Spark and native DataFusion SQL reproduce the grouping failure: a LEFT JOIN
+with alternating matched and missing rows returns five one-row groups instead
+of `(7,3)` and `(NULL,2)`. The shared join properties retained a non-NULL constant
+on the NULL-extended side, causing an invalid ordered aggregate. The candidate
+removes those claims while retaining column equalities, known NULL constants
+and the preserved side's metadata. Its 900 independent Spark references cover
+grouping and set multiplicities across join types, value types and empty inputs.
+Independent review found that CrossJoinExec selected the Full property rule;
+it now selects Inner, preserving both inputs' facts. The added physical check
+failed before this caller repair and passes afterward. Final Linux checks pass
+483 tests, zero failures and two inherited ignored doctests, including 4,600
+SQL comparisons. Root Clippy, formatting and diff checks pass. Clean-context
+Sol/high Bulletproof Review has no remaining actionable finding. The original
+128 outer-join captures also pass their 256 zero-sign-independent bag checks;
+64 exact sign comparisons remain different. No cross-platform or large-input
+performance result is claimed for this slice.
+
+#689's result-normalization candidate is retained in its owned stash and
+external backup. Independent review found a context-dependent zero-rendering
+regression now tracked by #690; that issue blocks #689. The separate #691
+duplicate-count failure also occurs on pristine staging and is being repaired
+first. The 128 outer-join captures and their failures remain recorded, rather
+than being reported as compatibility passes. #141's coverage slice remains
+parked until these set-operation issues are resolved.
+
+#683 merged through PR #688 at `40f03f4e`, whose complete tree matches reviewed
+source `fc8cb9d2`. The floating comparison keys pass 660 floating-key, 512
+coercion and 366 duplicate-count Spark references at batches 1 and 32. Final
+Linux checks passed 480 tests, zero failures and two inherited ignored doctests,
+plus root Clippy, formatting and clean-context Sol/high Bulletproof Review.
+The issue is closed and its implementation branches removed. General post-set
+zero rendering remains with #687; macOS/Windows await the next checkpoint.
 
 #682 merged through PR #686 at `5a1b5ff9`, whose complete tree and seven reviewed
 file hashes match source `c441fd54`. The duplicate-row numbering repair passes

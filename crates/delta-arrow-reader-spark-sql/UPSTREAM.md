@@ -196,3 +196,11 @@ known NULL left operand before unused right-side work. Conditional physical
 evaluation returns empty batches before evaluating operands. The
 [NULLIF evaluation cases](tests/fixtures/README.md#nullif-evaluation) cover its
 selected-row and error boundaries; mixed-input result typing remains separate.
+
+DataFusion join equivalence properties retain only column equalities and known
+NULL constants on a NULL-extended input. Non-NULL constants on that side can
+become NULL, so treating them as constant can select an invalid ordered
+aggregate. Preserved inputs keep their equivalences and constant metadata when
+column indexes shift. The [outer-join references](tests/fixtures/README.md#constants-after-outer-joins)
+check grouping and set multiplicities through Spark and native SQL. Cross joins
+use the inner-join property rule, since neither input is NULL-extended.

@@ -634,3 +634,30 @@ For example, Spark may stringify a deduplicated registered negative zero as
 `0.0` while DAR retains `-0.0`. Literal INTERSECT and identical literal UNION
 controls preserve Spark's `-0.0` result. Nested floating keys, exact analyzed
 nullability and large-input performance are not established by this corpus.
+
+## Constants after outer joins
+
+`outer-join-constants-spark.jsonl` records 900 independent Spark 4.2.0
+observations from `capture_outer_join_constants_spark.py`, using the same
+PySpark/Java environment. Its header contains the complete nullable STRING
+inputs. LEFT, RIGHT and FULL joins can replace a projected constant with NULL;
+INNER, semi/anti joins and an empty lookup provide controls. FLOAT, DOUBLE,
+BIGINT, STRING and known NULL constants feed grouping and all four
+INTERSECT/EXCEPT forms, in both operand orders and ANSI modes.
+
+The Rust replay compares exact bags, output names/types and returned-NULL
+schema safety at batch sizes 1 and 32 with one and two target partitions.
+Only zero signs and unordered row order are normalized; zero representation
+after set operations remains separate work. Native DataFusion SQL also runs
+the grouping and DISTINCT cases. Its existing ALL implementation uses semi/anti
+joins rather than Spark's duplicate-count rules, so those native ALL cases are
+not counted as Spark compatibility checks. All 900 captures run through the
+Spark frontend, for 3,600 executions; native controls add 1,000 executions.
+
+Physical-property assertions cover all ten join types. NULL extension must
+discard non-NULL, unknown and partition-local constant claims and expressions
+that need not become NULL, such as `IS NULL(column)`. Column equalities and
+known NULL constants remain valid. The preserved input keeps its constant
+metadata, including after right-column offsets. These checks do not establish
+large-input performance or exact Spark analyzed nullability. A direct physical
+cross-join test checks that both input constants survive and execute correctly.
