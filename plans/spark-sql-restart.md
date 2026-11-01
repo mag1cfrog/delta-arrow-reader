@@ -39,7 +39,11 @@ and pushed as `a9a87c58`. STRING comparison coercion, #621, is reviewed and
 pushed as `f3591dc7`. Session timezones for DATE, TIMESTAMP_NTZ and TIMESTAMP
 comparisons, #622, are reviewed and pushed as `bb2704f0`. NULLIF comparisons
 against a known NULL right operand, #623, are reviewed and pushed as `7cefd14a`.
-The current slice is #627, mixed nanosecond precision and session-zone comparisons.
+Mixed nanosecond comparisons, #627, are reviewed and pushed as `a23bebd6`.
+The current slice is #631, the DATE parser boundary repair needed before #629
+can reuse that parser for STRING comparisons. The #629 prototype and its 786
+independent Spark observations are saved separately while this prerequisite is
+reviewed. The new issue is assigned under the existing native temporal parent.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -650,6 +654,28 @@ because the old issue exists.
   no actionable finding remains. The slice is ready to commit and enter the
   dedicated staging PR queue. Performance and predicate pushdown were not
   measured; full-range named-zone conversion remains S05 work.
+
+- #629's independent STRING/DATE/LTZ/NTZ capture has 786 observations. Reusing
+  the existing converters repairs the ANSI-mode gap but exposed a prerequisite:
+  SparkDate rejects an uppercase-T date suffix that the old Arrow comparison
+  accepted. Its separate parser repair is #631. The #629 prototype is saved
+  while that dependency is completed; its remaining local-preparation and error
+  assertions are still unresolved, so the comparison slice is not accepted.
+
+- #631 reuses the date-component grammar while restricting ignored suffixes to
+  complete dates followed by space or uppercase T. The public parse entry trims
+  surrounding ASCII controls and spaces. Timestamp parsing supplies an empty
+  day suffix, preserving its previous grammar. Fresh Spark references contain
+  516 observations: 514 match strictly at both batch sizes, while two expose the
+  pre-existing lowercase timestamp separator gap now assigned to #632 for S05.
+  The full workspace passes 434 tests, zero failures and two inherited ignored
+  doctests, with the frozen historical corpus unchanged. Independent review
+  caught an overly broad error assertion: malformed CAST input must retain its
+  CAST_INVALID_INPUT class, while typed-literal errors use their own existing
+  mapping. The repaired assertions, root warning-denying Clippy and formatting
+  checks pass. Clean-context Sol/high Bulletproof Review completed the whole
+  scope and rechecked the assertion repair with no remaining findings. The slice
+  is ready to commit and enter the dedicated staging PR queue.
 
 ### Retained gaps found during S01 review
 

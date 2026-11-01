@@ -3,7 +3,7 @@ use std::str::FromStr;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use chumsky::Parser;
 use chumsky::extra::ParserExtra;
-use chumsky::prelude::{any, choice, end, just, one_of};
+use chumsky::prelude::{any, choice, empty, end, just, one_of};
 
 use crate::error::{SqlError, SqlResult};
 
@@ -147,13 +147,15 @@ where
         })
 }
 
-fn date<'a, E>() -> impl Parser<'a, &'a str, DateValue, E>
+fn date<'a, E>(
+    day_suffix: impl Parser<'a, &'a str, (), E>,
+) -> impl Parser<'a, &'a str, DateValue, E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
     let year = signed(4, 7);
     let month = unsigned(1, 2);
-    let day = unsigned(1, 2);
+    let day = unsigned(1, 2).then_ignore(day_suffix);
 
     year.then(just('-').ignore_then(month).or_not())
         .then(just('-').ignore_then(day).or_not())
@@ -205,7 +207,7 @@ fn timestamp<'a, E>() -> impl Parser<'a, &'a str, TimestampValue<'a>, E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
-    date()
+    date(empty())
         .then(choice((
             just('T')
                 .or(just('t'))
@@ -232,15 +234,8 @@ pub fn create_date_parser<'a, E>() -> impl Parser<'a, &'a str, DateValue, E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
-    // A date value is allowed to be followed by an arbitrary string which is ignored.
-    date()
-        .then_ignore(
-            any()
-                .filter(|c: &char| c.is_ascii_whitespace())
-                .then(any().repeated())
-                .or_not(),
-        )
-        .then_ignore(end())
+    // Only a complete date may ignore a suffix starting with space or uppercase T.
+    date(one_of([' ', 'T']).then(any().repeated()).or_not().ignored()).then_ignore(end())
 }
 
 pub fn create_timestamp_parser<'a, E>() -> impl Parser<'a, &'a str, TimestampValue<'a>, E>

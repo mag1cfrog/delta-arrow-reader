@@ -257,6 +257,21 @@ BETWEEN and ON/USING joins. NULLIF retains the original ticks, type and timezone
 Local inputs outside the reused timezone converter's range fail explicitly;
 they must not silently become NULL. Equal-unit instants retain native comparison.
 
+## DATE string boundaries
+
+`date-boundaries-spark.jsonl` contains 516 Spark 4.2.0 observations from
+`capture_date_boundaries_spark.py`, using the same reference environment.
+CAST, TRY_CAST, unformatted TO_DATE and typed DATE literals cover complete and
+partial dates, suffix separators, ASCII controls, signed years, invalid calendar
+dates, NULLs and empty results in both ANSI modes. Timestamp literals provide
+controls for the shared date-component grammar.
+
+`date_boundaries.rs` checks exact values, result types and expected errors at
+batch sizes 1 and 32. It strictly matches 514 observations. The other two retain
+an existing lowercase timestamp-separator difference tracked in #632; their
+Spark error expectations stay unchanged, and the test explicitly checks the
+current staged result. They are not counted as supported Spark behavior.
+
 ## String-to-BOOLEAN casts
 
 `boolean-cast-spark.jsonl` contains 344 independent Spark 4.2.0 observations from
