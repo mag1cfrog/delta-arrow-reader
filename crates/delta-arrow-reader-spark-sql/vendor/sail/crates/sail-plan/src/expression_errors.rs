@@ -9,6 +9,7 @@ use datafusion::datasource::memory::MemorySourceConfig;
 use datafusion::functions::expr_fn;
 use datafusion::logical_expr::execution_props::ExecutionProps;
 use datafusion::optimizer::optimize_projections::OptimizeProjections;
+use datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation;
 use datafusion::optimizer::push_down_filter::PushDownFilter;
 use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
@@ -19,6 +20,7 @@ use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
 use datafusion_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, lit};
 
+use crate::function::SparkStringTemporalComparisonCast;
 use crate::function::scalar::conditional::SparkNullIf;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
@@ -690,6 +692,7 @@ fn has_cast(expr: &Expr) -> Result<bool> {
             || f.func.inner().is::<SparkCastStringToDecimal>()
             || f.func.inner().is::<SparkCastStringToBoolean>()
                 || f.func.inner().is::<SparkCastStringToInteger>()
+                || f.func.inner().is::<SparkStringTemporalComparisonCast>()
                 || f.func.inner().is::<SparkNullIf>())))
 }
 
@@ -718,7 +721,8 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
             ) || f.func.inner().is::<SparkCastStringToDecimal>()
                 || f.func.inner().is::<SparkCastStringToBoolean>()
-                || f.func.inner().is::<SparkCastStringToInteger>() =>
+                || f.func.inner().is::<SparkCastStringToInteger>()
+                || f.func.inner().is::<SparkStringTemporalComparisonCast>() =>
         {
             Ok(matches!(f.args.as_slice(), [expr] if !null_literal(expr) && row_expression(expr, true)?))
         }
@@ -1171,7 +1175,7 @@ impl Prepare {
             self.prepare_distinct_limits(plan, 0)?.data
         };
         let plan = self.prune_projections(plan, &config, exists)?;
-        Ok(plan
+        let plan = plan
             .transform_down(|node| {
                 if let LogicalPlan::Limit(limit) = &node
                     && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(0)
@@ -1187,6 +1191,37 @@ impl Prepare {
                     )));
                 }
                 Ok(Transformed::no(node))
+            })?
+            .data;
+        if !self.has_null_sensitive_comparison {
+            return Ok(plan);
+        }
+        Ok(plan
+            .transform_up(|node| {
+                // Propagate nested LIMIT 0 before checking a parent's constants.
+                let prepared = PropagateEmptyRelation::new().rewrite(node, &config)?;
+                let node = prepared.data;
+                node.apply_expressions(|expr| {
+                    if expr.exists(|expr| {
+                        Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<SparkNullIf>()))
+                    })? {
+                        // Constant NULLIF comparisons precede empty filters, after LIMIT 0 pruning.
+                        let schema = match &node {
+                            LogicalPlan::TableScan(scan) => Arc::new(DFSchema::try_from_qualified_schema(
+                                scan.table_name.clone(), &scan.source.schema(),
+                            )?),
+                            _ => Arc::new(datafusion_expr::utils::merge_schema(&node.inputs())),
+                        };
+                        let info = datafusion_expr::simplify::SimplifyContext::builder()
+                            .with_schema(schema)
+                            .with_config_options(Arc::new(options.clone()))
+                            .build();
+                        let prepared = ExprSimplifier::new(info).simplify(expr.clone())?;
+                        self.check_expr(&prepared, true)?;
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })?;
+                Ok(Transformed::new_transformed(node, prepared.transformed))
             })?
             .data)
     }

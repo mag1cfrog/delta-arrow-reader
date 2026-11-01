@@ -55,7 +55,9 @@ impl SparkNullIf {
         if let Some(data_type) = temporal_comparison_type(left, right, &self.session_timezone) {
             return Ok(data_type);
         }
-        if let Some(data_type) = string_comparison_type(left, right, self.ansi_mode) {
+        if let Some(data_type) =
+            string_comparison_type(left, right, self.ansi_mode, &self.session_timezone)
+        {
             return Ok(data_type);
         }
         if spark_comparison_widens_to_double(left, right, self.ansi_mode) {
@@ -178,8 +180,13 @@ impl ScalarUDFImpl for SparkNullIf {
                         timezone,
                     )?
                 } else if value.data_type().is_string()
-                    && string_comparison_type(&value.data_type(), &comparison_type, self.ansi_mode)
-                        .is_some()
+                    && string_comparison_type(
+                        &value.data_type(),
+                        &comparison_type,
+                        self.ansi_mode,
+                        &self.session_timezone,
+                    )
+                    .is_some()
                 {
                     string_comparison_cast(&comparison_type, self.ansi_mode)?.invoke_with_args(
                         ScalarFunctionArgs {

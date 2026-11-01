@@ -197,10 +197,9 @@ that conversion, and Spark's local VALUES preparation can fail before the same
 constant comparison is removed. Explicit failing left casts, invalid argument
 types, empty inputs and volatile expressions retain separate controls.
 
-Three non-ANSI STRING/DATE/LTZ/NTZ column cases retain the frontend's strict cast
-error, although Spark returns the original strings. Their expected reference
-values remain unchanged, and #629 owns the conversion repair. These cases are
-not counted as compatible.
+STRING/DATE/LTZ/NTZ comparisons use the same ANSI mode as explicit casts. The
+three previously retained non-ANSI cases now strictly check the original Spark
+strings, including invalid date strings that must survive NULLIF unchanged.
 
 ## String comparison coercion
 
@@ -256,6 +255,39 @@ sizes, sliced arrays, NULLs, empty results, all comparison operators, NULLIF,
 BETWEEN and ON/USING joins. NULLIF retains the original ticks, type and timezone.
 Local inputs outside the reused timezone converter's range fail explicitly;
 they must not silently become NULL. Equal-unit instants retain native comparison.
+
+## STRING and temporal comparisons
+
+`string-temporal-spark.jsonl` contains 956 Spark 4.2.0 observations from
+`capture_string_temporal_spark.py`, using the reference environment above.
+STRING comparisons with DATE, TIMESTAMP_NTZ and TIMESTAMP cover both operand
+orders and ANSI modes. Inputs include invalid dates, partial dates, offsets,
+fractional seconds, NULLs, local VALUES and registered tables. UTC, Phoenix,
+New York and a fixed offset distinguish session interpretation from a registered
+timestamp column's UTC annotation.
+
+`comparison_coercion.rs` checks exact results, types and names at batch sizes 1
+and 32. NULLIF retains its left input; comparisons also run in filters, joins,
+BETWEEN, unused CASE branches and empty results. Volatile counters separately
+check that conversion does not evaluate an input twice or evaluate unused rows.
+Native DataFusion SQL keeps its existing cast errors, including in a host
+configured for the Spark entry point.
+
+Literal NULLIF controls include numeric and BOOLEAN peers, typed DATE literals
+and conditional registered inputs. Both top-level and nested LIMIT 0 discard
+unused comparisons; an empty filter can still require a constant cast error.
+
+The references strictly match 953 observations. Three ANSI local-VALUES
+comparisons with a literal NULL retain a known difference tracked by #633:
+Spark raises CAST_INVALID_INPUT during preparation, while DAR returns NULL rows.
+Their Spark expectations remain unchanged; tests assert the retained result
+separately. These cases are not counted as compatible.
+
+Timestamp parsing still exposes the existing parser error rather than Spark's
+error-class wrapper. Marked references accept only the observed execution-error
+variants for the captured bad strings. Exact error-stage and nullability parity
+remain separate work. These references cover Spark's Date32 and microsecond
+timestamp types, not STRING comparison casts for other Arrow timestamp units.
 
 ## DATE string boundaries
 

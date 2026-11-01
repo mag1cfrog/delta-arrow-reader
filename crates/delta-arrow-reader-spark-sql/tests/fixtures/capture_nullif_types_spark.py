@@ -178,9 +178,8 @@ def main():
                         raise
                     expected = {"status": "error", "condition": condition}
                 observation = {"id": name, "sql": sql, "ansi": ansi, "expected": expected}
-                if not ansi and name in {"known_right_null_DATE_column", "known_right_null_TIMESTAMP_column",
-                                         "known_right_null_TIMESTAMP_NTZ_column"}:
-                    observation["retained_difference"] = "string_temporal_ansi_629"
+                if ansi and name in {"known_right_null_TIMESTAMP_column", "known_right_null_TIMESTAMP_NTZ_column"}:
+                    observation["error_representation"] = "timestamp_parser"
                 observations.append(observation)
         metadata = {"spark_version": spark.version, "timezone": "UTC",
                     "java_version": spark.sparkContext._jvm.java.lang.System.getProperty("java.version")}
