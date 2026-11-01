@@ -787,3 +787,18 @@ cardinality behavior remain owned by #140 for S09. The eight historical ANSI
 UNION/LIMIT early-error differences remain owned by #149 for S07; their complete
 accepted-runtime alternatives remain explicit. Exact Spark error-stage and
 analyzed-nullability parity are not established by the row/schema checks here.
+
+## COUNT_IF aggregate filters
+
+`count-if-spark.jsonl` contains 164 independent Spark 4.2.0 observations from
+`capture_count_if_spark.py`, using the Python/Java setup above. Rust compares
+complete ordered rows and output names, types, nullability and metadata at batch
+sizes 1 and 32. Both ANSI modes cover ordinary/DISTINCT counts, groups, HAVING,
+empty/all-NULL inputs, predicate/FILTER truth tables, STRING admission and required
+cast errors. Constant false and NULL boundaries have separate observations.
+Nested aggregate/window rejection is checked before zero-count pruning, with
+valid scalar aggregate subqueries and windows over aggregates as controls.
+
+An unfiltered window is a control. FILTER on aggregate windows is a confirmed
+separate gap tracked in #697; it is outside this aggregate repair. The initial
+window references and native rejection remain recorded in that issue's evidence.

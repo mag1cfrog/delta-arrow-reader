@@ -226,3 +226,10 @@ operators conservatively normalize their outputs. Executable branches are not
 removed, so required evaluations and errors remain. UNION ALL retains every
 original value and duplicate. Floating UNION schemas allow nullable physical
 results when native simplification removes an inner constant marker.
+
+COUNT_IF retains its SQL FILTER separately from the count argument. The native
+NULLIF expression shape permits common subexpression elimination before FILTER,
+matching Spark's complex-predicate evaluation. Native simplification handles
+constant zero-count cases, and the existing STRING-to-BOOLEAN function supplies
+ANSI input conversion. The [COUNT_IF references](tests/fixtures/README.md#count_if-aggregate-filters)
+cover results, schema and error boundaries.

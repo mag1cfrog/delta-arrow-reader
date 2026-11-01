@@ -10,9 +10,12 @@ use datafusion::functions_aggregate::{
     variance,
 };
 use datafusion::functions_nested::string::array_to_string;
+use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
 use datafusion_common::{DFSchema, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams};
+use datafusion_expr::simplify::SimplifyContext;
+use datafusion_expr::utils::{find_aggregate_exprs, find_window_exprs};
 use datafusion_expr::{
     AggregateUDF, BinaryExpr, ExprSchemable, Operator, ScalarUDF, cast, expr, lit, try_cast, when,
 };
@@ -40,6 +43,7 @@ use sail_function::aggregate::theta_sketch::{
     ThetaIntersectionAggFunction, ThetaSketchAggFunction, ThetaUnionAggFunction,
 };
 use sail_function::aggregate::try_avg::TryAvgFunction;
+use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
@@ -626,26 +630,95 @@ fn duplicate_agnostic_extreme(
 }
 
 fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    match input.arguments.len() {
-        1 => {
-            let filter = input
-                .arguments
-                .first()
-                .ok_or_else(|| PlanError::invalid("`count_if` requires 1 argument"))?
-                .clone();
-            Ok(expr::Expr::AggregateFunction(AggregateFunction {
-                func: count::count_udaf(),
-                params: AggregateFunctionParams {
-                    args: vec![lit(0)],
-                    distinct: input.distinct,
-                    order_by: input.order_by,
-                    filter: Some(Box::new(filter)),
-                    null_treatment: get_null_treatment(input.ignore_nulls),
-                },
-            }))
+    let predicate = input
+        .arguments
+        .one()
+        .map_err(|_| PlanError::invalid("`count_if` requires 1 argument"))?;
+    let schema = input.function_context.schema;
+    let predicate = match predicate.get_type(schema)? {
+        DataType::Boolean | DataType::Null => predicate,
+        data_type if data_type.is_string() && input.function_context.plan_config.ansi_mode => {
+            ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![predicate])
         }
-        _ => Err(PlanError::invalid("`count_if` requires 1 argument")),
+        other => {
+            return Err(PlanError::invalid(format!(
+                "COUNT_IF requires a BOOLEAN argument, got {other}"
+            )));
+        }
+    };
+    require_deterministic_scalar_expression(&predicate, "COUNT_IF argument")?;
+    if let Some(filter) = &input.filter {
+        if filter.get_type(schema)? != DataType::Boolean {
+            return Err(PlanError::invalid("COUNT_IF FILTER requires BOOLEAN"));
+        }
+        require_deterministic_scalar_expression(filter, "COUNT_IF FILTER")?;
     }
+    let counts_no_rows = if let Some(filter) = &input.filter {
+        let state = input.function_context.session_context.state();
+        let simplifier = ExprSimplifier::new(
+            SimplifyContext::builder()
+                .with_schema(schema.clone())
+                .with_query_execution_start_time(state.execution_props().query_execution_start_time)
+                .with_config_options(state.config_options().clone())
+                .build(),
+        );
+        // Constant errors precede removal of a false FILTER or false/NULL argument.
+        let predicate = simplifier.simplify(predicate.clone())?;
+        let filter = simplifier.simplify(filter.as_ref().clone())?;
+        matches!(
+            filter,
+            expr::Expr::Literal(ScalarValue::Boolean(Some(false)), _)
+        ) || matches!(
+            predicate,
+            expr::Expr::Literal(
+                ScalarValue::Boolean(Some(false) | None) | ScalarValue::Null,
+                _
+            )
+        )
+    } else {
+        false
+    };
+    let (argument, filter) = if counts_no_rows {
+        (lit(ScalarValue::Boolean(None)), None)
+    } else {
+        // Match Spark's NULLIF shape so native CSE evaluates complex predicates before FILTER.
+        (
+            when(!predicate.clone(), lit(ScalarValue::Boolean(None))).otherwise(predicate)?,
+            input.filter,
+        )
+    };
+    Ok(expr::Expr::AggregateFunction(AggregateFunction {
+        func: count::count_udaf(),
+        params: AggregateFunctionParams {
+            args: vec![argument],
+            distinct: input.distinct,
+            order_by: input.order_by,
+            filter,
+            null_treatment: get_null_treatment(input.ignore_nulls),
+        },
+    }))
+}
+
+fn require_deterministic_scalar_expression(
+    expression: &expr::Expr,
+    clause: &str,
+) -> PlanResult<()> {
+    if !find_aggregate_exprs([expression]).is_empty() {
+        return Err(PlanError::invalid(format!(
+            "{clause} cannot contain an aggregate function"
+        )));
+    }
+    if !find_window_exprs([expression]).is_empty() {
+        return Err(PlanError::invalid(format!(
+            "{clause} cannot contain a window function"
+        )));
+    }
+    if expression.is_volatile() {
+        return Err(PlanError::invalid(format!(
+            "{clause} requires a deterministic expression"
+        )));
+    }
+    Ok(())
 }
 
 fn collect_set(input: AggFunctionInput) -> PlanResult<expr::Expr> {
