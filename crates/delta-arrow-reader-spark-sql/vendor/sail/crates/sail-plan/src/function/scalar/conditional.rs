@@ -1,25 +1,19 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use arrow::datatypes::{DataType, TimeUnit};
+use arrow::datatypes::DataType;
 use datafusion::functions::expr_fn;
 use datafusion::functions::math::iszero::IsZeroFunc;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, cast, expr, lit};
+use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, expr, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::datetime::spark_date::SparkDate;
-use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
-use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
-use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
-use sail_function::scalar::spark_cast_string_to_integer::{
-    SparkCastStringToInteger, StringIntegerCastMode,
-};
-use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 use crate::function::numeric_coercion::common_numeric_type;
-use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
+use crate::function::result_coercion::{
+    coerce_result_values, common_result_type_with_strings, is_temporal_type,
+};
 
 mod nullif;
 pub(crate) use nullif::SparkNullIf;
@@ -51,7 +45,7 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             }
         }
     }
-    let branch_values = coerce_conditional_result_values(branch_values, &function_context)?;
+    let branch_values = coerce_result_values(branch_values, &function_context)?;
     let when_then_expr = conditions
         .into_iter()
         .zip(branch_values)
@@ -71,7 +65,7 @@ fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let (when_expr, then_expr, else_expr) = arguments.three()?;
     let (then_expr, else_expr) =
-        coerce_conditional_result_values(vec![then_expr, else_expr], &function_context)?.two()?;
+        coerce_result_values(vec![then_expr, else_expr], &function_context)?.two()?;
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![(Box::new(when_expr), Box::new(then_expr))],
@@ -84,7 +78,7 @@ fn coalesce(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         arguments,
         function_context,
     } = input;
-    let arguments = coerce_conditional_result_values(arguments, &function_context)?;
+    let arguments = coerce_result_values(arguments, &function_context)?;
     Ok(expr_fn::coalesce(arguments))
 }
 
@@ -94,7 +88,7 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let data_types = [left.get_type(schema)?, right.get_type(schema)?];
     if data_types.iter().any(is_temporal_type)
         || common_numeric_type(&data_types, input.function_context.plan_config.ansi_mode).is_some()
-        || conditional_result_type_with_strings(
+        || common_result_type_with_strings(
             &data_types,
             input.function_context.plan_config.ansi_mode,
         )?
@@ -107,223 +101,6 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } else {
         Ok(expr_fn::nvl(left, right))
     }
-}
-
-fn coerce_conditional_result_values(
-    arguments: Vec<expr::Expr>,
-    function_context: &FunctionContextInput<'_>,
-) -> PlanResult<Vec<expr::Expr>> {
-    let data_types = arguments
-        .iter()
-        .map(|arg| arg.get_type(function_context.schema))
-        .collect::<Result<Vec<_>, _>>()?;
-    if let Some(target) = common_numeric_type(&data_types, function_context.plan_config.ansi_mode) {
-        return Ok(arguments
-            .into_iter()
-            .zip(data_types)
-            .map(|(arg, source)| {
-                if source == target {
-                    arg
-                } else {
-                    cast(arg, target.clone())
-                }
-            })
-            .collect());
-    }
-    if let Some(target) =
-        conditional_result_type_with_strings(&data_types, function_context.plan_config.ansi_mode)?
-    {
-        return arguments
-            .into_iter()
-            .zip(data_types)
-            .map(|(arg, source)| {
-                if source == target {
-                    return Ok(arg);
-                }
-                let arg = if is_string_type(&source) {
-                    match target {
-                        DataType::Int64 => SparkCastStringToInteger::try_new(
-                            DataType::Int64,
-                            StringIntegerCastMode::Ansi,
-                        )?
-                        .into_expr(arg),
-                        DataType::Float64 => ScalarUDF::from(SparkCastStringToFloat::try_new(
-                            DataType::Float64,
-                            false,
-                        )?)
-                        .call(vec![arg]),
-                        DataType::Boolean => {
-                            ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![arg])
-                        }
-                        _ => cast(arg, target.clone()),
-                    }
-                } else if target == DataType::Utf8
-                    && (is_temporal_type(&source)
-                        || matches!(source, DataType::Float32 | DataType::Float64))
-                {
-                    ScalarUDF::from(SparkToUtf8::new()).call(vec![arg])
-                } else {
-                    cast(arg, target.clone())
-                };
-                Ok(arg)
-            })
-            .collect();
-    }
-    let has_string = data_types.iter().any(is_string_type);
-    let temporal_type =
-        common_temporal_type(&data_types, &function_context.plan_config.session_timezone);
-    let arguments = if has_string {
-        if let Some(temporal_type) = temporal_type {
-            if function_context.plan_config.ansi_mode {
-                arguments
-                    .into_iter()
-                    .zip(data_types.iter())
-                    .map(|(arg, data_type)| coerce_to_temporal(arg, data_type, &temporal_type))
-                    .collect::<PlanResult<Vec<_>>>()?
-            } else {
-                arguments
-                    .into_iter()
-                    .zip(data_types)
-                    .map(|(arg, data_type)| {
-                        if is_temporal_type(&data_type) {
-                            ScalarUDF::from(SparkToUtf8::new()).call(vec![arg])
-                        } else {
-                            arg
-                        }
-                    })
-                    .collect()
-            }
-        } else {
-            arguments
-        }
-    } else if let Some(temporal_type) = temporal_type {
-        arguments
-            .into_iter()
-            .zip(data_types.iter())
-            .map(|(arg, data_type)| coerce_to_temporal(arg, data_type, &temporal_type))
-            .collect::<PlanResult<Vec<_>>>()?
-    } else {
-        arguments
-    };
-    Ok(arguments)
-}
-
-// STRING with INT selects BIGINT in ANSI mode and STRING otherwise.
-fn conditional_result_type_with_strings(
-    data_types: &[DataType],
-    ansi_mode: bool,
-) -> PlanResult<Option<DataType>> {
-    if !data_types.iter().any(is_string_type) {
-        return Ok(None);
-    }
-    let alternatives = data_types
-        .iter()
-        .filter(|data_type| !is_string_type(data_type) && **data_type != DataType::Null)
-        .collect::<Vec<_>>();
-    let is_numeric = |data_type: &DataType| {
-        data_type.is_signed_integer()
-            || matches!(
-                data_type,
-                DataType::Float32 | DataType::Float64 | DataType::Decimal128(..)
-            )
-    };
-    if alternatives.iter().any(|data_type| {
-        !is_numeric(data_type)
-            && !is_temporal_type(data_type)
-            && !matches!(data_type, DataType::Boolean | DataType::Binary)
-    }) {
-        return Ok(None);
-    }
-    let target = if alternatives.is_empty() {
-        Some(DataType::Utf8)
-    } else if !ansi_mode {
-        alternatives
-            .iter()
-            .all(|data_type| !matches!(data_type, DataType::Boolean | DataType::Binary))
-            .then_some(DataType::Utf8)
-    } else if alternatives.iter().all(|data_type| is_numeric(data_type)) {
-        Some(
-            if alternatives
-                .iter()
-                .any(|data_type| !data_type.is_signed_integer())
-            {
-                DataType::Float64
-            } else {
-                DataType::Int64
-            },
-        )
-    } else if alternatives
-        .iter()
-        .all(|data_type| **data_type == DataType::Boolean)
-    {
-        Some(DataType::Boolean)
-    } else if alternatives
-        .iter()
-        .all(|data_type| **data_type == DataType::Binary)
-    {
-        Some(DataType::Binary)
-    } else if alternatives
-        .iter()
-        .all(|data_type| is_temporal_type(data_type))
-    {
-        // Temporal alternatives keep the existing session-timezone conversion.
-        return Ok(None);
-    } else {
-        None
-    };
-    target.map(Some).ok_or_else(|| {
-        PlanError::invalid(format!(
-            "Incompatible conditional STRING result types: {data_types:?}"
-        ))
-    })
-}
-
-fn coerce_to_temporal(
-    arg: expr::Expr,
-    data_type: &DataType,
-    target_type: &DataType,
-) -> PlanResult<expr::Expr> {
-    if data_type == target_type {
-        return Ok(arg);
-    }
-    if is_string_type(data_type) {
-        match target_type {
-            DataType::Date32 => Ok(ScalarUDF::from(SparkDate::new(false)).call(vec![arg])),
-            // This is only reached when ANSI mode requires a temporal common type.
-            DataType::Timestamp(_, timezone) => {
-                Ok(
-                    ScalarUDF::from(SparkTimestamp::try_new(timezone.clone(), true, false)?)
-                        .call(vec![arg]),
-                )
-            }
-            _ => Ok(cast(arg, target_type.clone())),
-        }
-    } else if matches!(
-        data_type,
-        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None)
-    ) && let DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)) = target_type
-    {
-        Ok(cast_local_timestamp_expr_to_ltz(arg, timezone))
-    } else if is_temporal_type(data_type) {
-        Ok(cast(arg, target_type.clone()))
-    } else {
-        Ok(arg)
-    }
-}
-
-fn is_string_type(data_type: &DataType) -> bool {
-    matches!(
-        data_type,
-        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
-    )
-}
-
-fn is_temporal_type(data_type: &DataType) -> bool {
-    is_date_type(data_type) || matches!(data_type, DataType::Timestamp(_, _))
-}
-
-fn is_date_type(data_type: &DataType) -> bool {
-    matches!(data_type, DataType::Date32 | DataType::Date64)
 }
 
 pub(super) fn list_built_in_conditional_functions() -> Vec<(&'static str, ScalarFunction)> {

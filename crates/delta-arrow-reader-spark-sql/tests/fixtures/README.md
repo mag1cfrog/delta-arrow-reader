@@ -551,3 +551,34 @@ for 262,144 rows). Nonnullable-left and scalar-left controls remained near their
 previous cost. These measurements isolate the selection change; they do not
 establish release throughput or checked-arithmetic cost. S11 issue #620 retains
 that performance assessment before frontend adoption.
+
+## Set-operation input types
+
+`set-operation-coercion-spark.jsonl` contains 512 independent Spark 4.2.0
+observations, including 74 required errors. Regenerate it with
+`capture_set_operation_coercion_spark.py` in the same Linux Python/Java reference
+environment. The script sets both Python's process timezone and Spark's session
+timezone to UTC before collecting timestamps; named-zone cases override the
+session timezone. Timestamp values use epoch microseconds, with physical units
+and timezone annotations checked separately.
+
+The corpus covers all six UNION, INTERSECT and EXCEPT variants with swapped
+operands, integer widths, Decimal scale/precision, float combinations, strings,
+Boolean/binary values, DATE, local/zoned timestamps and typed/untyped NULLs.
+Additional queries cover empty inputs, CTE reuse, multiple columns, duplicate
+values after conversion, column-count errors, invalid conversions, integer
+overflow, maximum Decimal precision, three-input UNION ordering and named-zone
+DST conversion. Successful rows and physical
+result types are compared at batch sizes 1 and 32; returned NULLs must have
+nullable fields. Exact Spark analyzed/optimized nullability remains separate
+schema-contract work.
+
+SQL `UNION ALL BY NAME` is a parser rejection control on both engines. The
+retained resolver's by-name input API is checked separately by an inline unit
+test against the header's independent DataFrame API observations, including
+reordered columns and missing-column NULLs. Integration controls
+check output names, field metadata and unchanged native DataFusion SQL.
+Unbalanced INTERSECT ALL counts and signed-zero set keys remain separate fixes;
+this corpus does not claim those already work. The timestamp parser retains its
+native error text; Spark error classification and error-stage parity remain
+separate schema/error-contract work.

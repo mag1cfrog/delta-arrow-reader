@@ -7,19 +7,35 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#678 is prepared on `fix/boolean-filter-subquery-preparation`, based on
-`6d2c93cc`. It reuses literal Boolean reduction in correlated EXISTS/NOT EXISTS
-filters before preparing their nested scalar queries. All 124 independent Spark
-observations, including 45 required errors, pass at batches 1 and 32 with names,
-types and NULL safety checked. The initial comparison repaired 32 failures;
-the final corpus adds removed-correlation and distinct local-input controls.
-Full local Linux checks pass 471 tests with zero failures and two inherited
-ignored doctests; root Clippy and formatting pass. Clean-context Sol/high review
-identified an affected native SQL path and an ambiguous error-source assertion.
-Both are corrected and covered by passing regressions. The new prepass uses the
-existing query-local Spark marker, and malformed VALUES inputs have a distinct
-test token. The staging PR and merge are pending; the restoration stash remains
-until the reviewed slice merges.
+#684 is in progress on `fix/set-operation-input-coercion`, based on `06dc3ad4`.
+Independent mixed-type probes confirm that set operations retain the left input
+schema and compare some strings numerically before selecting their common result
+type. The patch reuses conditional numeric, string and temporal conversion rules
+before set membership and duplicate grouping. All 512 independent Spark
+references, including 74 required errors, pass at batches 1 and 32. Separate
+checks preserve output names/metadata and native DataFusion SQL; the resolver's
+BY NAME test covers reordering and missing-column NULLs against two independent
+DataFrame observations. Three-input UNION ordering matches Spark's binary
+coercion, so no flattening change is needed. Final full Linux checks pass 475
+tests with zero failures and two inherited ignored doctests; root Clippy,
+formatting and diff checks pass. Clean-context Sol/high review reports no
+remaining source finding; final receipt verification precedes the separate PR.
+Exact Spark error-stage/nullability parity, #682/#683 and performance checks
+remain separate work.
+
+#682 follows this coercion prerequisite. Its minimal integer query returns all
+three matching left rows when the right side contains one; Spark returns one.
+Reuse of the existing EXCEPT ALL row-number plan will be evaluated after both
+inputs use the common type. #683 separately owns floating signed-zero equality
+across set-operation keys and follows #682. Neither has a runtime patch or PR.
+
+#678 merged through PR #681 at `06dc3ad4`, whose full tree matches reviewed
+source `d46117dc`. All 124 Spark references, including 45 required errors,
+pass at batches 1 and 32. Final Linux checks pass 471 tests with zero failures
+and two inherited ignored doctests; root Clippy and formatting pass.
+Clean-context Sol/high Bulletproof Review resolved the native SQL boundary and
+indistinguishable local/scalar error tokens. No review finding remains. The issue
+is closed, and its temporary branch and restoration stash are removed.
 
 #679 merged through PR #680 at `6d2c93cc`, whose entire tree matches reviewed
 source `311e7a08`. ABS validates its single argument before every affected trait
@@ -30,14 +46,19 @@ pass. The connected replay fixes four arity panics without changing its other
 representation assumption and a stale progress claim, with no remaining finding.
 The issue is closed and the temporary branch is removed.
 
-#141's retained relational-query coverage is pending on
-`test/relational-query-coverage`, based on `d32ae7d6`. The original 164 remaining
-observations have fresh Spark 4.2 and current native captures. Their correlated
-predicate/scalar and UNION error-order gaps remain visible; #678 separately owns
-the two literal-false filter observations. Ordinary joins, projections, CTEs
-and set operations also need explicit input/reference coverage. Completed VALUES
-Decimal repairs remain controls; S07 and S09 retain their separate error-order
-and nested-correlated scopes.
+#141's coverage work is retained on `test/relational-query-coverage`, based on
+`06dc3ad4`. Its three new test/reference files have an owned stash and a verified
+external backup while #684, #682 and #683 are repaired. The 128 explicit-input Spark
+references produce 256 native observations with 36 mismatches across nine query
+shapes. The other comparisons meet their respective references, including the
+previously approved three-valued IN policy; raw Spark differences remain visible.
+The two set-operation causes have separate issues. No coverage PR is ready yet.
+
+The original 164 historical observations have fresh Spark 4.2 and pre-#678 native
+captures. #678 repairs their two literal-false filter observations, with exact
+replacement expectations verified by the full replay. Remaining correlated and
+UNION error-order classification stays with S09/S07. Final coverage review and
+an explicit three-platform checkpoint remain required before this leaf closes.
 
 #150 merged through PR #677 at `d32ae7d6`, whose entire tree matches reviewed
 source `4ba2e4b3`. All 70 independent Spark observations, including six required

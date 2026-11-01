@@ -267,7 +267,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                             .contains("CASE WHEN condition must be BOOLEAN"),
                         Some("DATATYPE_MISMATCH.DATA_DIFF_TYPES") => error
                             .to_string()
-                            .contains("Incompatible conditional STRING result types"),
+                            .contains("Incompatible STRING result types"),
                         Some("SCALAR_SUBQUERY_TOO_MANY_ROWS") => error
                             .to_string()
                             .contains("Scalar subquery returned more than one row"),

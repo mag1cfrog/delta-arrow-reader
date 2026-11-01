@@ -17,6 +17,7 @@ pub(crate) mod common;
 mod comparison;
 mod generator;
 pub(crate) mod numeric_coercion;
+pub(crate) mod result_coercion;
 pub(crate) mod scalar;
 mod table;
 pub(crate) mod temporal_coercion;
