@@ -7,24 +7,28 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#679 is ready for a staging PR on `fix/spark-abs-arity`, based on `d32ae7d6`.
-ABS validates its single argument at every affected trait entry point before
-reading it. Four focused tests pass, and the full local Linux workspace passes
-469 tests with zero failures and two inherited ignored doctests. Root Clippy
-and formatting pass. The 184-observation connected replay changes only the
-four arity panics into argument-count errors; #678's 24 cast failures remain.
-Clean-context Sol/high review resolved one incorrect test assumption about
-Scalar versus one-element Array output. No unresolved source finding remains. The final source receipt is verified;
-the staging PR and merge are pending.
+#678 is prepared on `fix/boolean-filter-subquery-preparation`, based on
+`6d2c93cc`. It reuses literal Boolean reduction in correlated EXISTS/NOT EXISTS
+filters before preparing their nested scalar queries. All 124 independent Spark
+observations, including 45 required errors, pass at batches 1 and 32 with names,
+types and NULL safety checked. The initial comparison repaired 32 failures;
+the final corpus adds removed-correlation and distinct local-input controls.
+Full local Linux checks pass 471 tests with zero failures and two inherited
+ignored doctests; root Clippy and formatting pass. Clean-context Sol/high review
+identified an affected native SQL path and an ambiguous error-source assertion.
+Both are corrected and covered by passing regressions. The new prepass uses the
+existing query-local Spark marker, and malformed VALUES inputs have a distinct
+test token. The staging PR and merge are pending; the restoration stash remains
+until the reviewed slice merges.
 
-#678 has 92 independent Spark observations. Its initial 184-observation native
-capture had 24 skipped-cast failures in correlated EXISTS/NOT EXISTS filters and
-four ABS-arity panics. The #679 candidate fixes those four panics; the 24 filter
-failures remain for #678. Ordinary scalar projections
-and the tested noncorrelated range filters still require their bad-cast errors;
-a global Boolean-pruning pass would change the reference behavior. The capture
-and fixture are saved in an owned stash while the prerequisite is repaired.
-
+#679 merged through PR #680 at `6d2c93cc`, whose entire tree matches reviewed
+source `311e7a08`. ABS validates its single argument before every affected trait
+callback reads it. Four focused tests and all 469 Linux workspace tests pass,
+with zero failures and two inherited ignored doctests; root Clippy and formatting
+pass. The connected replay fixes four arity panics without changing its other
+180 observations. Clean-context Sol/high Bulletproof Review resolved a test
+representation assumption and a stale progress claim, with no remaining finding.
+The issue is closed and the temporary branch is removed.
 
 #141's retained relational-query coverage is pending on
 `test/relational-query-coverage`, based on `d32ae7d6`. The original 164 remaining

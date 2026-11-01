@@ -467,6 +467,28 @@ separate work. Direct native expression tests also record which rows each
 operand visits, including sliced buffers and scalar returns, so correct final
 values cannot hide unnecessary or duplicate evaluation.
 
+## Boolean filters with scalar subqueries
+
+`boolean-filter-subqueries-spark.jsonl` records 124 Spark 4.2.0 observations,
+including 45 required errors. Regenerate it with
+`capture_boolean_filter_subqueries_spark.py` using PySpark 4.2.0 and Java 21.
+Rust checks values, names and types at batch sizes 1 and 32. Returned NULLs must
+fit both native schemas; exact Spark nullability and error-stage parity remain
+S07 work.
+
+Correlated EXISTS and NOT EXISTS can discard a scalar query under literal
+`false AND ...` or `true OR ...` before preparing that query. The references
+distinguish this step from folding comparisons or NULL casts, and from preparing
+ordinary projections and noncorrelated filters. Live casts, division by zero,
+multirow scalar results, invalid names/arity and malformed VALUES inputs retain
+their specific failures. Distinct invalid strings identify local-input failures
+separately from nested scalar failures. A native SQL regression checks that the
+Spark preparation rule does not change the configured host's native SQL path.
+
+Two exact historical `ei_control_direct_where_false_*_true` errors are replaced
+in `reviewed-corrections.json` with the independently captured Boolean results.
+Other replay expectations stay unchanged.
+
 ## IN-list operand evaluation
 
 `in-list-evaluation-spark.jsonl` records 28 Spark 4.2.0 observations, including

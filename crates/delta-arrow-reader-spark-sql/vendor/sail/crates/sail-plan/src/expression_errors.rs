@@ -154,6 +154,68 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
     ))
 }
 
+// Spark reduces Boolean literals before pulling correlations, but folds
+// comparisons and CAST(NULL AS BOOLEAN) later.
+fn simplify_literal_boolean_predicate(predicate: Expr) -> Result<Transformed<Expr>> {
+    predicate.transform_up(|expr| {
+        use Expr::Literal;
+        use Operator::{And, Or};
+        use ScalarValue::Boolean;
+        let reduced = match &expr {
+            Expr::BinaryExpr(binary) => match (&*binary.left, binary.op, &*binary.right) {
+                (Literal(Boolean(Some(false)), _), And, _)
+                | (_, And, Literal(Boolean(Some(false)), _)) => Some(lit(false)),
+                (Literal(Boolean(Some(true)), _), Or, _)
+                | (_, Or, Literal(Boolean(Some(true)), _)) => Some(lit(true)),
+                (Literal(Boolean(Some(true)), _), And, right)
+                | (Literal(Boolean(Some(false)), _), Or, right) => Some(right.clone()),
+                (left, And, Literal(Boolean(Some(true)), _))
+                | (left, Or, Literal(Boolean(Some(false)), _)) => Some(left.clone()),
+                _ => None,
+            },
+            Expr::Not(inner) => match inner.as_ref() {
+                Literal(Boolean(Some(value)), _) => Some(lit(!value)),
+                _ => None,
+            },
+            _ => None,
+        };
+        Ok(match reduced {
+            Some(expr) => Transformed::yes(expr),
+            None => Transformed::no(expr),
+        })
+    })
+}
+
+fn simplify_correlated_exists_filters(expr: Expr) -> Result<Transformed<Expr>> {
+    let Expr::Exists(mut exists) = expr else {
+        return Ok(Transformed::no(expr));
+    };
+    if exists.subquery.outer_ref_columns.is_empty() {
+        return Ok(Transformed::no(Expr::Exists(exists)));
+    }
+    let simplified = Arc::unwrap_or_clone(exists.subquery.subquery).transform_up(|node| {
+        let LogicalPlan::Filter(mut filter) = node else {
+            return Ok(Transformed::no(node));
+        };
+        if !filter.predicate.contains_scalar_subquery() {
+            return Ok(Transformed::no(LogicalPlan::Filter(filter)));
+        }
+        let predicate = simplify_literal_boolean_predicate(filter.predicate)?;
+        filter.predicate = predicate.data;
+        Ok(Transformed::new(
+            LogicalPlan::Filter(filter),
+            predicate.transformed,
+            TreeNodeRecursion::Continue,
+        ))
+    })?;
+    exists.subquery.subquery = Arc::new(simplified.data);
+    Ok(Transformed::new(
+        Expr::Exists(exists),
+        simplified.transformed,
+        TreeNodeRecursion::Continue,
+    ))
+}
+
 impl AnalyzerRule for PreserveSparkExpressionErrors {
     fn name(&self) -> &str {
         "preserve_spark_expression_errors"
@@ -215,8 +277,19 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         } else {
             plan
         };
+        let is_spark_query = options.extensions.get::<SparkSqlErrorSemantics>().is_some();
         let plan = if check_cast || check_arithmetic {
             plan.transform_down_up_with_subqueries(|node| {
+                // Correlated EXISTS drops unused filter subqueries before their preparation.
+                let simplified = if is_spark_query {
+                    node.map_expressions(|expr| {
+                        expr.transform_down(simplify_correlated_exists_filters)
+                    })?
+                } else {
+                    Transformed::no(node)
+                };
+                let changed = simplified.transformed;
+                let node = simplified.data;
                 // Local empty conversion precedes preparing scalar children.
                 // Keep the existing postorder work for all remaining nodes.
                 let scalar_children = match &node {
@@ -257,7 +330,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                         )?,
                     )));
                 }
-                Ok(Transformed::no(node))
+                Ok(Transformed::new(node, changed, TreeNodeRecursion::Continue))
             }, |node| {
                 let schema = if !node.inputs().is_empty() {
                     Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()))
@@ -1066,52 +1139,12 @@ impl Prepare {
         plan.map_children(|child| self.prepare_distinct_limits(child, projections))
     }
 
-    // Spark pulls correlations out after BooleanSimplification, before
-    // ConstantFolding. Folding 1=2 or CAST(NULL AS BOOLEAN) here is too early.
     fn correlated_exists_uses_inner_columns(&self, plan: &LogicalPlan) -> Result<bool> {
         plan.exists(|node| {
             let LogicalPlan::Filter(filter) = node else {
                 return Ok(false);
             };
-            // ponytail: literal Boolean reductions only; extend this guard when
-            // another Spark BooleanSimplification boundary is reproduced.
-            let predicate = filter
-                .predicate
-                .clone()
-                .transform_up(|expr| {
-                    use Expr::Literal;
-                    use Operator::{And, Or};
-                    use ScalarValue::Boolean;
-                    let reduced = match &expr {
-                        Expr::BinaryExpr(binary) => {
-                            match (&*binary.left, binary.op, &*binary.right) {
-                                (Literal(Boolean(Some(false)), _), And, _)
-                                | (_, And, Literal(Boolean(Some(false)), _)) => Some(lit(false)),
-                                (Literal(Boolean(Some(true)), _), Or, _)
-                                | (_, Or, Literal(Boolean(Some(true)), _)) => Some(lit(true)),
-                                (Literal(Boolean(Some(true)), _), And, right)
-                                | (Literal(Boolean(Some(false)), _), Or, right) => {
-                                    Some(right.clone())
-                                }
-                                (left, And, Literal(Boolean(Some(true)), _))
-                                | (left, Or, Literal(Boolean(Some(false)), _)) => {
-                                    Some(left.clone())
-                                }
-                                _ => None,
-                            }
-                        }
-                        Expr::Not(inner) => match inner.as_ref() {
-                            Literal(Boolean(Some(value)), _) => Some(lit(!value)),
-                            _ => None,
-                        },
-                        _ => None,
-                    };
-                    Ok(match reduced {
-                        Some(expr) => Transformed::yes(expr),
-                        None => Transformed::no(expr),
-                    })
-                })?
-                .data;
+            let predicate = simplify_literal_boolean_predicate(filter.predicate.clone())?.data;
             Ok(split_conjunction_owned(predicate)
                 .iter()
                 .any(|expr| expr.contains_outer() && expr.any_column_refs()))
