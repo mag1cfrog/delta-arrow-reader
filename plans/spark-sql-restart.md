@@ -7,33 +7,41 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#663, floating ARRAY_CONTAINS zero equality, is in progress on
-`fix/spark-array-floating-zero`, based on staging `13cd8e0b`. Pure FLOAT/DOUBLE
-queries reproduce false or NULL where Spark matches both zero signs. The
-candidate normalizes floating array children through the existing Spark
-comparison helper and keeps the membership kernel unchanged. Independent Spark
-4.2 references cover 96 observations, with both ANSI modes, signed-zero and NaN
-inputs, required errors and unused errors. The replay passes five Arrow list
-layouts and two batch sizes. Constant arrays still become IN expressions;
-volatile counters verify that needed operands run once and unused ones do not
-run. Review found that sliced lists normalized their entire backing child,
-which multiplies work across small batches. The fix uses DataFusion's existing
-list-value slicing and offset adjustment helpers. A direct structural regression
-failed before this fix (4096 unused values for an empty slice) and now passes.
-The final Linux workspace passes 441 tests, zero failures and two inherited
-ignored doctests. Root-crate Clippy and formatting pass. Clean-context Sol/high
-Bulletproof Review completed with no unresolved actionable finding after checking
-all seven changed files and final validation receipts. The slice is ready for its
-dedicated staging PR; #659's strict reference rerun follows that merge. The first higher-order transformation prototype was
-rejected because it changed NULL and error behavior; its evidence remains
-outside the source tree.
+#665, sliced list cast bounds, is ready for its staging PR on `fix/sliced-list-casts`, based
+on staging `780f9700`. Follow-up review of #659 found that numeric list casts
+convert an entire backing child for every small batch. The structural regression
+reproduces 4096 converted values for an empty slice. A strict string-to-integer
+control also fails because an invalid value outside the selected row is cast.
+The candidate trims ordinary list ranges and compacts the union of referenced
+scalar view ranges before shared cast dispatch. Review found generic gathering
+can expand nested sharing and panic on valid dictionary keys; dedicated small
+regressions reproduced both, plus lost contiguous buffer reuse. The repair uses
+zero-copy slices for single ranges and retains the previous multi-range path for
+nested/encoded children. #666 tracks that inherited S10 limitation. Scalar
+partial-overlap, nullability and sharing checks are included. The connected
+List-to-View constructor now propagates non-nullable-target validation instead
+of panicking. Fixed-size conversions now apply the complete target child field
+and preserve row counts for zero-width arrays. Tests reproduced the ignored
+nullability and lost-row failures before those changes. Final local validation
+passes 451 workspace tests, zero failures and two inherited ignored doctests,
+plus Clippy and formatting. All 41 retained Arrow list/nested/display checks pass
+through an isolated manifest pointing to the actual source with the same Arrow
+58.4.0 versions. Clean-context Sol/high Bulletproof Review found no remaining
+actionable finding. macOS/Windows are reserved for the next checkpoint. After
+this separate PR merges, rerun #659's unchanged references before closing #665.
 
-#659 is saved in stash `e5ea29ea60aec41f48749e4bd7e30028ef1bd7f4` while #663 is
-completed. Its eight original Decimal cases and volatile counters pass after
-#660; five Arrow list layouts also pass. Its full 324-observation capture has
-40 failing executions across two ANSI modes and batch sizes, all involving
-signed zero. Keep its reference expectations unchanged and rerun them after
-this prerequisite. The earlier backup `d9854582` is retained until completion.
+#659 is saved in stash `a0a03c9695f6c50742b52dbb9aeac326a2e7f393`. Its unchanged
+324 Decimal references now all pass after #663; full Linux tests pass 443 cases,
+zero failures and two inherited ignored doctests. Independent review confirmed
+that the signed-zero finding is resolved but identified #665. The Decimal slice
+remains unaccepted until the shared cast repair and follow-up review finish.
+
+#663 merged through PR #664 at `780f9700`, whose full tree matches reviewed
+source `7d9fa725`. Final Linux checks passed 441 tests, Clippy and formatting,
+with zero failures and two inherited ignored doctests. Clean-context Sol/high
+Bulletproof Review completed after fixing the new helper name and full-backing
+float normalization. The required #659 strict rerun also passes. Its issue is
+closed and temporary implementation branch removed.
 
 #660 is complete through PR #662 at `13cd8e0b`, whose full merge tree matches
 reviewed source `b3f44d99`. Local Linux validation passed 438 workspace tests,
@@ -52,7 +60,7 @@ The three-platform checkpoint on `30a284f2a89fcb9222129098b0c1f8b9075ea098` is
 [run 41276527898](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41276527898).
 Linux, macOS and Windows each passed 437 tests, zero failures and two inherited
 ignored doctests, plus formatting and root-crate Clippy. That checkpoint covers
-its recorded baseline, not the later #660/#659/#663 changes. #656's separate signed-zero
+its recorded baseline, not the later #660/#659/#663/#665 changes. #656's separate signed-zero
 PIVOT matching gap stays in S04.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
@@ -124,14 +132,14 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660, #663 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660, #663, #665 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
 | S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661 | Classify remaining schema/error differences; separately fix multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
-| S10 | Remaining string and nested-value coverage | #151, #155, #156 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |
+| S10 | Remaining string and nested-value coverage | #151, #155, #156, #666 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |
 | S11 | Release comparison and support statement | #157, #164, #166, #620, #626 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF selection cost; user-facing support documentation |
 
 The other eleven historical performance leaves remain deferred unless these

@@ -17,6 +17,101 @@
 
 use crate::cast::*;
 
+pub(crate) fn trim_list_for_cast<O: OffsetSizeTrait>(
+    list: &GenericListArray<O>,
+) -> Result<Option<ArrayRef>, ArrowError> {
+    let start = list.offsets()[0];
+    let end = list.offsets()[list.len()].as_usize();
+    if start.as_usize() == 0 && end == list.values().len() {
+        return Ok(None);
+    }
+    let (field, offsets, values, nulls) = list.clone().into_parts();
+    let values = values.slice(start.as_usize(), end - start.as_usize());
+    let offsets = OffsetBuffer::new(offsets.iter().map(|offset| *offset - start).collect());
+    Ok(Some(Arc::new(GenericListArray::<O>::try_new(
+        field, offsets, values, nulls,
+    )?)))
+}
+
+pub(crate) fn compact_list_view_for_cast<O: OffsetSizeTrait>(
+    list: &GenericListViewArray<O>,
+) -> Result<Option<ArrayRef>, ArrowError> {
+    let mut ranges: Vec<_> = list
+        .offsets()
+        .iter()
+        .zip(list.sizes())
+        .filter(|(_, size)| size.as_usize() != 0)
+        .map(|(offset, size)| offset.as_usize()..offset.as_usize() + size.as_usize())
+        .collect();
+    ranges.sort_unstable_by_key(|range| range.start);
+    let mut merged: Vec<std::ops::Range<usize>> = Vec::new();
+    for range in ranges {
+        if let Some(last) = merged.last_mut()
+            && range.start <= last.end
+        {
+            last.end = last.end.max(range.end);
+        } else {
+            merged.push(range);
+        }
+    }
+    if merged.as_slice() == [0..list.values().len()]
+        || (merged.is_empty() && list.values().is_empty())
+    {
+        return Ok(None);
+    }
+    if merged.len() > 1
+        && (list.values().data_type().is_nested()
+            || matches!(
+                list.values().data_type(),
+                DataType::Dictionary(..) | DataType::RunEndEncoded(..)
+            ))
+    {
+        // shortcut: retain gapped nested/encoded backing until #666 can gather it without expanding storage.
+        return Ok(None);
+    }
+
+    let mut starts = Vec::with_capacity(merged.len());
+    let values = match merged.as_slice() {
+        [] => list.values().slice(0, 0),
+        [range] => {
+            starts.push(0);
+            list.values().slice(range.start, range.len())
+        }
+        _ => {
+            // Copy each scalar range once so overlapping views keep sharing values.
+            let data = list.values().to_data();
+            let capacity = merged.iter().map(|range| range.len()).sum();
+            let mut compacted = MutableArrayData::new(vec![&data], false, capacity);
+            for range in &merged {
+                starts.push(compacted.len());
+                compacted.extend(0, range.start, range.end);
+            }
+            make_array(compacted.freeze())
+        }
+    };
+    let offsets = list
+        .offsets()
+        .iter()
+        .zip(list.sizes())
+        .map(|(offset, size)| {
+            if size.as_usize() == 0 {
+                return O::usize_as(0);
+            }
+            let offset = offset.as_usize();
+            let range = merged.partition_point(|range| range.start <= offset) - 1;
+            O::usize_as(starts[range] + offset - merged[range].start)
+        })
+        .collect::<Vec<_>>();
+    let (field, _, sizes, _, nulls) = list.clone().into_parts();
+    Ok(Some(Arc::new(GenericListViewArray::<O>::try_new(
+        field,
+        offsets.into(),
+        sizes,
+        values,
+        nulls,
+    )?)))
+}
+
 /// Converts a non-list array to a list array where every element is a single element
 /// list. `NULL`s in the original array become `[NULL]` (i.e. output list array
 /// contains no nulls since it wraps all input nulls in a single element list).
@@ -102,8 +197,8 @@ fn cast_fixed_size_list_to_list_inner<OffsetSize: OffsetSizeTrait, const IS_LIST
     let DataType::FixedSizeList(inner_field, size) = array.data_type() else {
         unreachable!()
     };
-    let array = if to.data_type() != inner_field.data_type() {
-        // To transform inner type, can first cast to FSL with new inner type.
+    let array = if to != inner_field {
+        // Apply the whole target child field before the layout conversion preserves it.
         let fsl_to = DataType::FixedSizeList(to.clone(), *size);
         let array = cast_with_options(array, &fsl_to, cast_options)?;
         array.as_fixed_size_list().clone()
@@ -220,7 +315,13 @@ where
     // Cast the inner values if necessary
     let values = cast_with_options(values.as_ref(), field.data_type(), cast_options)?;
 
-    let array = FixedSizeListArray::try_new(field.clone(), size, values, null_builder.build())?;
+    let array = FixedSizeListArray::try_new_with_length(
+        field.clone(),
+        size,
+        values,
+        null_builder.build(),
+        array.len(),
+    )?;
     Ok(Arc::new(array))
 }
 
@@ -267,7 +368,13 @@ pub(crate) fn cast_list_view_to_fixed_size_list<O: OffsetSizeTrait>(
     let values = make_array(mutable.freeze());
     let values = cast_with_options(values.as_ref(), field.data_type(), cast_options)?;
 
-    let array = FixedSizeListArray::try_new(field.clone(), size, values, null_builder.build())?;
+    let array = FixedSizeListArray::try_new_with_length(
+        field.clone(),
+        size,
+        values,
+        null_builder.build(),
+        array.len(),
+    )?;
     Ok(Arc::new(array))
 }
 
@@ -476,12 +583,12 @@ pub(crate) fn cast_list_to_list_view<I: OffsetSizeTrait, O: OffsetSizeTrait>(
         sizes.push(O::usize_as(size));
     }
     let values = cast_with_options(&values, to_field.data_type(), cast_options)?;
-    let array = GenericListViewArray::<O>::new(
+    let array = GenericListViewArray::<O>::try_new(
         to_field.clone(),
         view_offsets.into(),
         sizes.into(),
         values,
         nulls,
-    );
+    )?;
     Ok(Arc::new(array))
 }
