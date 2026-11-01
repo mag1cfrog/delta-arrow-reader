@@ -100,7 +100,13 @@ DataFusion or Arrow code require both Spark and native Reader checks before CLI
 adoption.
 
 Later semantic fixes are recorded in Git without rewriting the accepted source
-hashes. ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
+hashes. SORT_ARRAY and ARRAY_JOIN reuse native array operations through Spark
+adapters that preserve argument nullability. ARRAY_JOIN also propagates an
+explicitly NULL replacement, unlike native array_to_string's omitted-value rule.
+Untyped NULL arrays are given the list types required by Spark before native use.
+The native SQL functions retain their original behavior.
+
+ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
 batch results. The Spark analyzer exposes known NULLs through projection/alias
 chains before native column pruning, preserving input preparation at aggregate
