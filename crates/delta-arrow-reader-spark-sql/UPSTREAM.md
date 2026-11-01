@@ -109,10 +109,13 @@ exposes eligible one-sided filters before that simplification; outer/anti
 preservation rules remain with DataFusion. Its references and remaining
 differences are described in the [fixture notes](tests/fixtures/README.md#array-membership).
 
-Scalar VALUES columns containing Decimal inputs use Spark common numeric types
-before native VALUES construction. Precision reduction preserves integral digits,
-and Decimal/floating mixtures become DOUBLE. Existing casts perform the value
-conversion; native arithmetic and non-Decimal VALUES typing are unchanged.
+CASE, IF, COALESCE, IFNULL and NVL share Spark numeric result types with Decimal
+VALUES columns. Precision reduction preserves integral digits, so DECIMAL(38,20)
+and BIGINT share DECIMAL(38,18). Decimal/floating mixtures become DOUBLE;
+integer/FLOAT conditional results do so in ANSI mode. Existing casts perform
+the value conversion. Native arithmetic and non-Decimal VALUES typing are
+unchanged. The [numeric references](tests/fixtures/README.md#conditional-numeric-results)
+cover exact types, values and lazy evaluation.
 
 STRING-to-BOOLEAN CAST uses Spark's whole-token and ASCII trimming rules.
 Invalid input raises a cast error in ANSI mode and returns NULL for TRY_CAST or
@@ -155,9 +158,9 @@ controls cover unchanged equality and short-circuit behavior.
 Opted-in functions skip NULL-left rows even when right arguments are direct
 columns or literals, because comparison conversion can occur inside the kernel.
 
-IFNULL and NVL use the existing COALESCE planning path when either argument is
-temporal, retaining their two-argument arity. Other inputs keep the native NVL
-path. CASE, IF and fallback functions share mixed DATE/LTZ/NTZ promotion with
+IFNULL and NVL use the existing COALESCE planning path for Spark numeric inputs
+or when either argument is temporal, retaining their two-argument arity. Other
+inputs keep the native NVL path. CASE, IF and fallback functions share mixed DATE/LTZ/NTZ promotion with
 microsecond precision and session-timezone interpretation. Local-time conversion
 reuses the same expression builder as explicit CAST and SEQUENCE, including
 Spark's DST gap/overlap rules. The [reference cases](tests/fixtures/README.md#conditional-temporal-results)

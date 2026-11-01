@@ -337,6 +337,39 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                     vec![None; 4],
                 ),
             ]);
+            for (left_type, right_type) in [
+                ("DECIMAL(38,20)", "BIGINT"),
+                ("DECIMAL(10,2)", "DECIMAL(8,3)"),
+                ("FLOAT", "INT"),
+                ("DECIMAL(10,2)", "DOUBLE"),
+            ] {
+                for (left_type, right_type) in [(left_type, right_type), (right_type, left_type)] {
+                    let left = format!("CAST(count_first(a) AS {left_type})");
+                    let right = format!("CAST(count_second(b) AS {right_type})");
+                    for function in ["COALESCE", "IFNULL", "NVL"] {
+                        cases.push((
+                            format!("CAST({function}({left},{right}) AS INT)"),
+                            [4, 2, 0],
+                            vec![Some(1), Some(2), Some(3), None],
+                        ));
+                    }
+                    for expression in [
+                        format!("IF(a IS NOT NULL,{left},{right})"),
+                        format!("CASE WHEN a IS NOT NULL THEN {left} ELSE {right} END"),
+                    ] {
+                        cases.push((
+                            format!("CAST({expression} AS INT)"),
+                            [2, 2, 0],
+                            vec![Some(1), Some(2), Some(3), None],
+                        ));
+                    }
+                }
+            }
+            cases.push((
+                "CAST(COALESCE(CAST(count_first(a) AS DECIMAL(38,20)),CAST(count_second(b) AS BIGINT),CAST(count_third(c) AS DECIMAL(38,10))) AS INT)".into(),
+                [4, 2, 1],
+                vec![Some(1), Some(2), Some(3), Some(4)],
+            ));
         }
         for (expression, expected_evaluated_rows, expected_rows) in cases {
             for counter in &evaluated_rows {

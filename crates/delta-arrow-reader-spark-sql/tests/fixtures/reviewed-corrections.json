@@ -629,5 +629,32 @@
     "physical_nullable": [
       true
     ]
+  },
+  "replay/cast-decimal-cases/212/constant_bad_nullable_/_true": {
+    "status": "execution_error",
+    "error": "spark_decimal_null_propagation\ncaused by\nExecution error: Cannot cast Some(\"bad\") to DECIMAL(10,2)",
+    "output_names": [
+      "r"
+    ]
+  },
+  "replay/cast-decimal-cases/212/constant_bad_nullable_/_false": {
+    "status": "ok",
+    "types": [
+      "Decimal128(25, 15)"
+    ],
+    "rows": [
+      [
+        null
+      ]
+    ],
+    "output_names": [
+      "r"
+    ],
+    "logical_nullable": [
+      true
+    ],
+    "physical_nullable": [
+      true
+    ]
   }
 }
