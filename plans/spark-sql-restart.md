@@ -7,33 +7,40 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#660, Decimal cast preservation in comparisons, is in progress on
-`fix/spark-decimal-comparison-casts`, based on staging `30a284f2`. The #659
-Decimal array-membership candidate exposed an existing optimizer rewrite that
-removes a precision-reducing cast before comparison. Its strict reference
-expects true after rounding, while the physical plan compares the original
-fraction and returns NULL. Repair the shared dependency rule before resuming
-array coercion; do not add a separate membership-only workaround.
+#663, floating ARRAY_CONTAINS zero equality, is in progress on
+`fix/spark-array-floating-zero`, based on staging `13cd8e0b`. Pure FLOAT/DOUBLE
+queries reproduce false or NULL where Spark matches both zero signs. The
+candidate normalizes floating array children through the existing Spark
+comparison helper and keeps the membership kernel unchanged. Independent Spark
+4.2 references cover 96 observations, with both ANSI modes, signed-zero and NaN
+inputs, required errors and unused errors. The replay passes five Arrow list
+layouts and two batch sizes. Constant arrays still become IN expressions;
+volatile counters verify that needed operands run once and unused ones do not
+run. Review found that sliced lists normalized their entire backing child,
+which multiplies work across small batches. The fix uses DataFusion's existing
+list-value slicing and offset adjustment helpers. A direct structural regression
+failed before this fix (4096 unused values for an empty slice) and now passes.
+The final Linux workspace passes 441 tests, zero failures and two inherited
+ignored doctests. Root-crate Clippy and formatting pass. Clean-context Sol/high
+Bulletproof Review completed with no unresolved actionable finding after checking
+all seven changed files and final validation receipts. The slice is ready for its
+dedicated staging PR; #659's strict reference rerun follows that merge. The first higher-order transformation prototype was
+rejected because it changed NULL and error behavior; its evidence remains
+outside the source tree.
 
-The candidate now preserves Decimal rounding and range checks in shared binary
-comparison and IN rewrites. Its independent Spark capture has 152 observations.
-Two legacy Decimal-to-small-integer CAST cases retain a separate kernel gap:
-Spark wraps overflow, while the existing converter raises a range error even
-in a direct projection. #661 owns that S07 repair; its original successful
-Spark expectations remain unchanged. Seventeen targeted optimizer unit tests
-pass, including adjacent integer-capacity boundaries, safe cast removal and the
-existing Decimal/DOUBLE inverse checks. Negative-scale Decimal sources retain
-their casts because the pinned reverse-literal conversion can panic; physical
-evaluation verifies the retained expressions. The final Linux workspace passes
-438 tests, zero failures and two inherited ignored doctests. Root-crate Clippy,
-formatting and the final comparison target pass. Independent review's stale
-optimizer assertions and boundary-coverage findings are repaired; no actionable
-source finding remains. The slice is ready for its dedicated staging PR.
+#659 is saved in stash `e5ea29ea60aec41f48749e4bd7e30028ef1bd7f4` while #663 is
+completed. Its eight original Decimal cases and volatile counters pass after
+#660; five Arrow list layouts also pass. Its full 324-observation capture has
+40 failing executions across two ANSI modes and batch sizes, all involving
+signed zero. Keep its reference expectations unchanged and rerun them after
+this prerequisite. The earlier backup `d9854582` is retained until completion.
 
-#659 and its 324 independent Spark observations are saved in stash
-`d98545829dbf5254b4773bdb62e792922f03700a`. Its original eight Decimal planning
-failures and volatile counters pass with common numeric coercion, but the new
-rounding mismatch remains a failing assertion. The candidate is unaccepted.
+#660 is complete through PR #662 at `13cd8e0b`, whose full merge tree matches
+reviewed source `b3f44d99`. Local Linux validation passed 438 workspace tests,
+zero failures and two inherited ignored doctests, plus 17 optimizer tests,
+Clippy and formatting. Clean-context Sol/high Bulletproof Review completed
+without unresolved findings. Its issue is closed and temporary branch removed.
+The separate legacy Decimal-to-small-integer overflow gap stays with #661 in S07.
 
 #650 and #651 are complete through PRs #658 and #657. Their complete merge trees
 match the reviewed sources, and their issues are closed. Final local checks pass
@@ -45,7 +52,7 @@ The three-platform checkpoint on `30a284f2a89fcb9222129098b0c1f8b9075ea098` is
 [run 41276527898](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41276527898).
 Linux, macOS and Windows each passed 437 tests, zero failures and two inherited
 ignored doctests, plus formatting and root-crate Clippy. That checkpoint covers
-its recorded baseline, not the new #660 candidate. #656's separate signed-zero
+its recorded baseline, not the later #660/#659/#663 changes. #656's separate signed-zero
 PIVOT matching gap stays in S04.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
@@ -117,7 +124,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660, #663 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |

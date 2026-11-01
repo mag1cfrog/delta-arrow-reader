@@ -358,7 +358,7 @@ async fn array_contains_requires_two_arguments() -> TestResult {
 }
 
 #[tokio::test]
-async fn array_membership_preserves_volatile_lookup_evaluation() -> TestResult {
+async fn array_membership_evaluates_needed_operands_once() -> TestResult {
     let session = create_session(32);
     session.register_batch(
         "lookups",
@@ -380,7 +380,65 @@ async fn array_membership_preserves_volatile_lookup_evaluation() -> TestResult {
             Ok(ColumnarValue::Array(Arc::clone(&arrays[0])))
         }),
     ));
+    let counter = evaluated_rows.clone();
+    session.register_udf(create_udf(
+        "count_float_lookup",
+        vec![DataType::Int32],
+        DataType::Float64,
+        Volatility::Volatile,
+        Arc::new(move |arguments| {
+            let arrays = ColumnarValue::values_to_arrays(arguments)?;
+            counter.fetch_add(arrays[0].len(), Ordering::SeqCst);
+            let values = arrays[0]
+                .as_primitive::<Int32Type>()
+                .iter()
+                .map(|value| value.map(|value| if value == 1 { -0.0 } else { 1.0 }));
+            Ok(ColumnarValue::Array(Arc::new(
+                arrow::array::Float64Array::from_iter(values),
+            )))
+        }),
+    ));
     let cases = [
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(CAST('0.0' AS DOUBLE),NULL), count_float_lookup(n)) AS r FROM lookups",
+            vec![vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(count_float_lookup(n),NULL),CAST('0.0' AS DOUBLE)) AS r FROM lookups",
+            vec![vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(CAST(ARRAY() AS ARRAY<DOUBLE>),count_float_lookup(n)) AS r FROM lookups",
+            vec![vec![Some(false), None, Some(false)]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<DOUBLE>) AS a, count_float_lookup(n) AS n FROM lookups) t",
+            vec![vec![None; 3]],
+            0,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT ARRAY(count_float_lookup(n),NULL) AS a, CAST(NULL AS DOUBLE) AS n FROM lookups) t",
+            vec![vec![None; 3]],
+            0,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r, ARRAY_CONTAINS(ARRAY(CAST('0.0' AS DOUBLE),NULL),n) AS needed FROM (SELECT CAST(NULL AS ARRAY<DOUBLE>) AS a, count_float_lookup(n) AS n FROM lookups) t",
+            vec![vec![None; 3], vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(a,n) AS r, ARRAY_CONTAINS(a,CAST('0.0' AS DOUBLE)) AS needed FROM (SELECT ARRAY(count_float_lookup(n),NULL) AS a, CAST(NULL AS DOUBLE) AS n FROM lookups) t",
+            vec![vec![None; 3], vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(CAST('0.0' AS DOUBLE),NULL),count_float_lookup(n)) AS r FROM lookups WHERE false",
+            vec![vec![]],
+            0,
+        ),
         (
             "SELECT ARRAY_CONTAINS(CAST(ARRAY() AS ARRAY<INT>), count_lookup(n)) AS r FROM lookups",
             vec![vec![Some(false), None, Some(false)]],
@@ -480,6 +538,168 @@ async fn array_membership_preserves_volatile_lookup_evaluation() -> TestResult {
                 *expected_evaluated_rows,
                 "{sql}"
             );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn floating_membership_matches_both_zero_signs() -> TestResult {
+    let session = create_session(32);
+    session.register_batch(
+        "zeros",
+        RecordBatch::try_from_iter(vec![(
+            "v",
+            Arc::new(arrow::array::Float64Array::from(vec![
+                Some(0.0),
+                Some(-0.0),
+                None,
+            ])) as ArrayRef,
+        )])?,
+    )?;
+    for sql in [
+        "SELECT ARRAY_CONTAINS(ARRAY(CAST('0.0' AS DOUBLE), CAST(NULL AS DOUBLE)), CAST('-0.0' AS DOUBLE)) AS r",
+        "SELECT ARRAY_CONTAINS(ARRAY(CAST('-0.0' AS DOUBLE)), CAST('0.0' AS DOUBLE)) AS r",
+        "SELECT ARRAY_CONTAINS(ARRAY(CAST('0.0' AS FLOAT)), CAST('-0.0' AS FLOAT)) AS r",
+        "SELECT ARRAY_CONTAINS(ARRAY(CAST('0.0' AS DOUBLE), CAST(NULL AS DOUBLE)), v) AS r FROM zeros",
+    ] {
+        if sql.ends_with("FROM zeros") {
+            let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+            use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+            use datafusion::logical_expr::Expr;
+            let optimized = session.state().optimize(&query.logical_plan)?;
+            let mut membership_rewrites = 0;
+            optimized.apply(|plan| {
+                plan.apply_expressions(|expression| {
+                    expression.apply(|expression| {
+                        membership_rewrites += usize::from(matches!(expression, Expr::InList(_)));
+                        Ok(TreeNodeRecursion::Continue)
+                    })
+                })?;
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            assert_eq!(membership_rewrites, 1);
+        }
+        let actual = capture_query_outcome(&session, &json!({"sql":sql,"ansi":true})).await?;
+        let expected = if sql.ends_with("FROM zeros") {
+            json!([["true"], ["true"], [null]])
+        } else {
+            json!([["true"]])
+        };
+        assert_eq!(actual["rows"], expected, "{sql}: {actual}");
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct FloatingMembershipInput {
+    sql_type: String,
+    fixed: bool,
+    rows: Vec<InputRow<String>>,
+}
+
+fn floating_batch_from_bits<T: arrow::datatypes::ArrowPrimitiveType>(
+    rows: &[InputRow<String>],
+    decode: impl Fn(&str) -> TestResult<T::Native>,
+) -> TestResult<RecordBatch> {
+    use arrow::array::PrimitiveBuilder;
+    let mut arrays = ListBuilder::new(PrimitiveBuilder::<T>::new());
+    let mut lookups = PrimitiveBuilder::<T>::new();
+    let mut ids = Vec::new();
+    for (id, values, lookup) in
+        std::iter::once(rows.first().ok_or("empty floating input")?).chain(rows)
+    {
+        ids.push(*id);
+        if let Some(values) = values {
+            for value in values {
+                arrays
+                    .values()
+                    .append_option(value.as_deref().map(&decode).transpose()?);
+            }
+        }
+        arrays.append(values.is_some());
+        lookups.append_option(lookup.as_deref().map(&decode).transpose()?);
+    }
+    Ok(RecordBatch::try_from_iter(vec![
+        ("id", Arc::new(Int32Array::from(ids)) as ArrayRef),
+        ("a", Arc::new(arrays.finish()) as ArrayRef),
+        ("n", Arc::new(lookups.finish()) as ArrayRef),
+    ])?)
+}
+
+#[tokio::test]
+async fn floating_array_membership_matches_spark() -> TestResult {
+    use arrow::datatypes::{Float32Type, Float64Type};
+    let records = include_str!("fixtures/array-floating-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 97);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    let inputs = records[0]["inputs"]
+        .as_object()
+        .ok_or("missing floating inputs")?;
+    for layout in [
+        "list",
+        "large_list",
+        "list_view",
+        "large_list_view",
+        "fixed_size_list",
+    ] {
+        for batch_size in [1, 32] {
+            let session = create_session(batch_size);
+            for (name, input) in inputs {
+                let input: FloatingMembershipInput = serde_json::from_value(input.clone())?;
+                if layout == "fixed_size_list" && !input.fixed {
+                    continue;
+                }
+                let batch = match input.sql_type.as_str() {
+                    "FLOAT" => floating_batch_from_bits::<Float32Type>(&input.rows, |bits| {
+                        Ok(f32::from_bits(u32::from_str_radix(bits, 16)?))
+                    })?,
+                    "DOUBLE" => floating_batch_from_bits::<Float64Type>(&input.rows, |bits| {
+                        Ok(f64::from_bits(u64::from_str_radix(bits, 16)?))
+                    })?,
+                    _ => return Err("unsupported floating input type".into()),
+                };
+                let DataType::List(field) = batch.column(1).data_type() else {
+                    return Err("expected floating list".into());
+                };
+                let data_type = match layout {
+                    "list" => DataType::List(field.clone()),
+                    "large_list" => DataType::LargeList(field.clone()),
+                    "list_view" => DataType::ListView(field.clone()),
+                    "large_list_view" => DataType::LargeListView(field.clone()),
+                    "fixed_size_list" => DataType::FixedSizeList(field.clone(), 2),
+                    _ => return Err("unsupported list layout".into()),
+                };
+                let batch = RecordBatch::try_from_iter(vec![
+                    ("id", batch.column(0).clone()),
+                    ("a", arrow::compute::cast(batch.column(1), &data_type)?),
+                    ("n", batch.column(2).clone()),
+                ])?
+                .slice(1, input.rows.len());
+                let batches = (0..batch.num_rows())
+                    .step_by(batch_size)
+                    .map(|start| batch.slice(start, batch_size.min(batch.num_rows() - start)))
+                    .collect();
+                session.register_table(
+                    name,
+                    Arc::new(MemTable::try_new(batch.schema(), vec![batches])?),
+                )?;
+            }
+            for query in &records[1..] {
+                if layout == "fixed_size_list"
+                    && let Some(name) = query["input"].as_str()
+                    && inputs[name]["fixed"] != true
+                {
+                    continue;
+                }
+                let actual = capture_query_outcome(&session, query).await?;
+                assert_spark_result(query, &actual)?;
+            }
+            let native = session.sql("SELECT array_has(make_array(CAST('0.0' AS DOUBLE)), CAST('-0.0' AS DOUBLE)) AS r").await?.collect().await?;
+            assert!(!native[0].column(0).as_boolean().value(0));
         }
     }
     Ok(())
