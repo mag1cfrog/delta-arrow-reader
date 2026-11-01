@@ -46,6 +46,10 @@ impl AggregateUDFImpl for HllSketchAggFunction {
         &self.signature
     }
 
+    fn is_nullable(&self) -> bool {
+        false
+    }
+
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         validate_hll_sketch_agg_types("hll_sketch_agg", arg_types)?;
         Ok(DataType::Binary)
@@ -97,6 +101,10 @@ impl AggregateUDFImpl for HllUnionAggFunction {
 
     fn signature(&self) -> &Signature {
         &self.signature
+    }
+
+    fn is_nullable(&self) -> bool {
+        false
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {

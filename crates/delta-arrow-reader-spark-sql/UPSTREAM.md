@@ -258,3 +258,11 @@ Rebuilding costs work proportional to the selected frames' total size, which can
 be quadratic for wide moving frames. Native retraction remains the optimization
 path for those aggregates. The [bounded window checks](tests/fixtures/README.md#bounded-aggregate-windows)
 cover results, errors, incremental work bounds and repeatable timing cases.
+
+Empty windows retain explicit aggregate defaults. A non-null aggregate with a
+generic NULL default instead evaluates its initialized empty accumulator, so
+query arguments such as HLL sketch precision survive. Both cumulative and sliding
+windows use this rule; nullable aggregates retain their NULL default. HLL sketch
+and union aggregates expose non-null binary results. Scalar estimation and union
+inherit their inputs' nullability. The [HLL references](tests/fixtures/README.md#empty-hll-sketches)
+check empty-state configuration, schemas, FILTER and downstream consumers.

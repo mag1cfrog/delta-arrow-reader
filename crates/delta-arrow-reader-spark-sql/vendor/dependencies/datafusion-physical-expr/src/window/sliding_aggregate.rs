@@ -209,8 +209,7 @@ impl AggregateWindowExpr for SlidingAggregateWindowExpr {
             if !last_range.is_empty() {
                 *accumulator = self.get_accumulator()?;
             }
-            self.aggregate
-                .default_value(self.aggregate.field().data_type())
+            self.aggregate.evaluate_empty_window(accumulator.as_mut())
         } else {
             let recompute_frame = cur_range.start != last_range.start
                 && !accumulator.supports_retract_batch();

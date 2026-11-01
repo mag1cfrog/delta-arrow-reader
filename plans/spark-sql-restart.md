@@ -7,6 +7,27 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### HLL empty-state prerequisite for S04
+
+#705 owns HLL result nullability and physically empty window sketches, found by
+expanding #697's FILTER references after #703. All 412 original comparisons pass;
+the four added HLL references produce eight mismatches at two batch sizes. The
+210-record FILTER candidate remains saved while this independent repair is reviewed.
+
+The shared executor uses the configured empty accumulator when a non-null
+aggregate otherwise inherits a NULL default. Explicit defaults and nullable
+aggregate behavior remain unchanged. Independent Spark references cover sketch
+precisions, empty groups and moving/cumulative frames, union/estimate consumers,
+schemas and required errors. Native FILTER cases check execution before #697's
+frontend admission change. All 276 comparisons from 138 Spark observations pass
+at two batch sizes. The added RANGE cases include nonempty, empty and nonempty
+frames; downstream union checks exposed a scalar nullability defect, now repaired.
+Spark's unused IS NOT NULL evaluations and required COALESCE errors are recorded
+separately. Full Linux checks pass 512 tests with zero failures and two inherited
+ignored doctests, plus root Clippy and formatting. Clean-context Sol/high review
+found no remaining actionable issue after the scalar union and API-doc repairs.
+Next merge this prerequisite, then restore #697 and its full 420 comparisons.
+
 ### Array scalar prerequisite for S04
 
 #703 owns SORT_ARRAY and ARRAY_JOIN NULL contracts, independently exposed by
@@ -23,13 +44,15 @@ NULL arrays now receive the required list types, and direct adapter tests cover
 zero-row batches and argument errors. All 224 reference comparisons pass. Linux
 workspace checks pass 510 tests with no failures and two inherited ignored
 doctests; root Clippy and formatting pass. Clean-context Sol/high review found
-no remaining actionable issue after the NULL-array repair. After #703, restore
-#697 and rerun its 206-record comparison and Linux checks.
+no remaining actionable issue after the NULL-array repair. PR #704 merged at
+`0b4c9eea`; #697's original 206-record comparison then passed in full. Its expanded
+HLL cases are owned by #705 before FILTER can complete acceptance.
 
 ### S04 bounded aggregate windows
 
-#699 merged through PR #701 at `49bc810f`. #700 now owns bounded execution for
-aggregates without retraction; #697's FILTER frontend candidate remains saved
+#699 merged through PR #701 at `49bc810f`. #700 merged through PR #702 at
+`f7c523af`, adding bounded execution for aggregates without retraction;
+#697's FILTER frontend candidate remains saved
 on its separate branch. The shared window executor rebuilds only a frame
 whose start advances when the accumulator cannot retract. Existing incremental
 aggregates and expanding frames retain their current paths.
@@ -56,9 +79,9 @@ failures and two inherited ignored doctests; root Clippy and formatting pass.
 
 #697's independent window FILTER comparison exposed stale native MIN/MAX values
 after retraction. #699 fixed this shared accumulator defect.
-#700 separately owns bounded frames for aggregate implementations without
-retraction support. Both are assigned native children under the active S04 parent.
-The FILTER candidate is preserved for reintegration after #700's separate PR.
+#700 completed bounded frames for aggregate implementations without retraction
+support. Both are assigned native children under the active S04 parent. The
+FILTER candidate is preserved for reintegration after its remaining prerequisites.
 
 The extrema regression has 96 independent Spark observations across four value
 types, both ANSI modes and six frame shapes. It checks native SQL and unfiltered

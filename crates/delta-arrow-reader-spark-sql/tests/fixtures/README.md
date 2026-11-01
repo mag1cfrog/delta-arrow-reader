@@ -884,3 +884,34 @@ Use the same Python 3.12, PySpark 4.2.0 and Java 21 setup as the other reference
 Compare benchmark runs with the same build profile and idle machine. Newly
 supported non-retracting aggregates can scan every moving frame; timings should
 be interpreted alongside row count and frame width, not as a constant-cost path.
+
+## Empty HLL sketches
+
+`hll-empty-spark.jsonl` records 138 Spark 4.2.0 observations in UTC and both ANSI
+modes. Sketch precisions 4, 12 and 18 cover ordinary, empty and all-NULL groups,
+aggregate FILTER, cumulative and moving windows, RANGE gaps, and union/estimate
+consumers. Required errors cover invalid precision, nonconstant configuration,
+invalid bytes and incompatible sketch precisions. IS NOT NULL checks also record
+Spark's pruning of unused HLL evaluations; direct results and COALESCE retain
+their errors. The capture script registers input schemas and rows explicitly.
+
+The Java DataSketches implementation bundled with Spark decodes each binary
+result into its precision and rounded estimate. Rust compares these properties
+using the installed DataSketches dependency, along with complete ordered rows,
+names, types, nullability and metadata. Original Spark bytes remain in each
+record. This checks usable sketches and their configuration without requiring
+two valid serializations to have identical bytes.
+
+`hll_empty.rs` runs all references at batch sizes 1 and 32. Sixteen FILTER window
+observations exercise the shared native executor with the retained HLL functions
+registered directly; Spark frontend FILTER admission is separately tracked in
+#697. Other observations use the public Spark planning entry point. Additional
+native UDAF controls distinguish an explicit non-null default, a nullable NULL
+default and a non-null aggregate whose empty value comes from its accumulator.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_hll_empty_spark.py
+cargo test --locked --workspace --test hll_empty
+```

@@ -3,9 +3,9 @@ use std::sync::Arc;
 use arrow::array::{
     Array, ArrayRef, BinaryArray, BinaryBuilder, BooleanArray, Int64Builder, new_null_array,
 };
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, exec_err};
-use datafusion_expr::{ScalarFunctionArgs, ScalarUDFImpl};
+use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, TypeSignature, Volatility};
 
@@ -71,6 +71,20 @@ impl ScalarUDFImpl for HllSketchEstimateFunction {
         }
         make_scalar_function(hll_sketch_estimate_inner, vec![])(&args)
     }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let types = args
+            .arg_fields
+            .iter()
+            .map(|field| field.data_type().clone())
+            .collect::<Vec<_>>();
+        let data_type = self.return_type(&types)?;
+        Ok(Arc::new(Field::new(
+            self.name(),
+            data_type,
+            args.arg_fields[0].is_nullable(),
+        )))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -107,6 +121,20 @@ impl ScalarUDFImpl for HllUnionFunction {
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         validate_hll_union_types("hll_union", arg_types)?;
         Ok(DataType::Binary)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let types = args
+            .arg_fields
+            .iter()
+            .map(|field| field.data_type().clone())
+            .collect::<Vec<_>>();
+        let data_type = self.return_type(&types)?;
+        Ok(Arc::new(Field::new(
+            self.name(),
+            data_type,
+            args.arg_fields.iter().any(|field| field.is_nullable()),
+        )))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
