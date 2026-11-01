@@ -7,13 +7,41 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#150's coverage slice is ready for a staging PR on `test/null-conditional-coverage` at
-`c726c9c9`. All 70 independent Spark observations, including six required ANSI
-cast errors, pass at batch sizes 1 and 32. Full local Linux checks pass 465 tests
-with zero failures and two inherited ignored doctests; root Clippy and formatting
-also pass. The clean-context Sol/high Bulletproof Review is complete with no
-unresolved findings. The PR must merge before the issue is closed.
-This slice adds references, replay assertions and fixture documentation only.
+#679 is ready for a staging PR on `fix/spark-abs-arity`, based on `d32ae7d6`.
+ABS validates its single argument at every affected trait entry point before
+reading it. Four focused tests pass, and the full local Linux workspace passes
+469 tests with zero failures and two inherited ignored doctests. Root Clippy
+and formatting pass. The 184-observation connected replay changes only the
+four arity panics into argument-count errors; #678's 24 cast failures remain.
+Clean-context Sol/high review resolved one incorrect test assumption about
+Scalar versus one-element Array output. No unresolved source finding remains. The final source receipt is verified;
+the staging PR and merge are pending.
+
+#678 has 92 independent Spark observations. Its initial 184-observation native
+capture had 24 skipped-cast failures in correlated EXISTS/NOT EXISTS filters and
+four ABS-arity panics. The #679 candidate fixes those four panics; the 24 filter
+failures remain for #678. Ordinary scalar projections
+and the tested noncorrelated range filters still require their bad-cast errors;
+a global Boolean-pruning pass would change the reference behavior. The capture
+and fixture are saved in an owned stash while the prerequisite is repaired.
+
+
+#141's retained relational-query coverage is pending on
+`test/relational-query-coverage`, based on `d32ae7d6`. The original 164 remaining
+observations have fresh Spark 4.2 and current native captures. Their correlated
+predicate/scalar and UNION error-order gaps remain visible; #678 separately owns
+the two literal-false filter observations. Ordinary joins, projections, CTEs
+and set operations also need explicit input/reference coverage. Completed VALUES
+Decimal repairs remain controls; S07 and S09 retain their separate error-order
+and nested-correlated scopes.
+
+#150 merged through PR #677 at `d32ae7d6`, whose entire tree matches reviewed
+source `4ba2e4b3`. All 70 independent Spark observations, including six required
+ANSI cast errors, pass at batch sizes 1 and 32. Full local Linux checks pass
+465 tests with zero failures and two inherited ignored doctests; root Clippy
+and formatting pass. Clean-context Sol/high Bulletproof Review completed with
+no unresolved findings. The issue is closed and its temporary branch and owned
+stash are removed. The slice adds coverage and fixture documentation only.
 
 The original 34 conditional queries were replayed in both modes and batch sizes.
 Only the known MAP NULLIF admission difference remains in status/values after
