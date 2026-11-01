@@ -7,26 +7,40 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-### Required checkpoint after #141
+### S04 aggregate FILTER behavior
 
-Finish the current #690 -> #689 -> #687 -> #141 chain before starting another
-compatibility slice. Then synchronize GitHub state and run the three-platform
-checkpoint, since staging is 15 merges beyond the previous checkpoint:
+#142 is reopened on the current staging baseline. #696 owns COUNT_IF aggregate
+FILTER results and evaluation/admission boundaries. #697 separately owns FILTER
+on aggregate window expressions. Both are native children of #171 and blockers
+of #142. #656 remains a separate floating PIVOT repair.
 
-- Update #141 with #685/#686/#688/#692 and #689/#690 results; check only
-  acceptance items established by the final evidence.
-- Mark S01 complete in #113 without marking Reader/CLI integration or production
-  adoption complete.
-- Refresh current progress and the next work in #167/#173/#174; remove stale
-  next-work descriptions.
-- Move #632 from the NULL/conditional family to Dates/timestamps using the native
-  issue hierarchy.
-- Reconcile the parents of #656/#661/#666 so open work does not remain under
-  parents closed as not planned.
-- Reopen #166 and #189-#192, or establish explicit replacement issues, when their
-  corresponding S08/S11 slices begin.
-- After GitHub synchronization and the three-platform checkpoint, report the
-  remaining S04-S11 issue mapping and a revised ETA before continuing.
+Independent Spark captures reproduce the ignored COUNT_IF FILTER and show why
+COUNT(CASE WHEN predicate THEN 0 END) is insufficient: Spark extracts repeated
+complex predicates before applying FILTER. Reuse native expressions and common
+subexpression elimination, while retaining constant-NULL counts and admission
+checks. All 164 independent Spark observations pass at batches 1 and 32, with
+328 exact result/schema/error comparisons. Full Linux workspace checks pass
+501 tests with zero failures and two inherited ignored doctests; root Clippy,
+formatting and diff checks pass. Independent Sol/high review identified a
+constant-pruning admission bug, reproduced and repaired before integration.
+Native expression searches now reject illegal nested aggregates/windows before
+pruning, while valid scalar aggregate subqueries and windows over aggregates
+remain covered.
+
+### Completed synchronization and platform checkpoint
+
+The #690 -> #689 -> #687 -> #141 chain is complete. PR #695 merged at
+`e420aa36556dac1bb0867b2ca16fdc46fb249927`; checkpoint `41344985125` passed on that
+exact commit. Each macOS, Linux and Windows job passed 500 tests with zero
+failures and two inherited ignored doctests, plus formatting and root Clippy.
+Their logs include the historical, relational, UNION and enclosing-context suites.
+
+GitHub scope and acceptance are synchronized across #141/#113/#167/#173/#174.
+#632 now belongs to Dates/timestamps. The parents of #656/#661/#666 are open,
+and #170 records the remaining relational work. S01 is complete; Reader/CLI
+integration and production adoption remain pending. Reopen #189-#192 at S08
+and #166 at S11. The remaining S04-S11 mapping and provisional 30-59 engineering
+hour estimate are recorded in #167 before implementation resumed.
 
 ### Relational coverage acceptance
 
@@ -36,7 +50,7 @@ The UNION repair passed all 664 new comparisons, the existing result/raw-bit/
 metadata/native-SQL controls, 499 Linux workspace tests, root Clippy and a fresh
 clean-context Sol/high Bulletproof Review. The final focused replay also passed.
 
-The current `test/relational-query-acceptance` branch restores #141's 128 original
+PR #695 restores #141's 128 original
 Spark records. All 256 batch-size comparisons pass on the repaired staging
 runtime. Four projected IN shapes retain their previously approved SQL NULL
 policy; their raw Spark results are unchanged. The matcher now verifies their
@@ -49,8 +63,8 @@ remain S07/#149 work. Full Linux validation passes 500 tests, zero failures and 
 doctests, including the complete 25,180-observation historical replay. Root
 all-target Clippy, formatting and diff checks pass. Clean-context Sol/high
 Bulletproof Review found no actionable issue after correcting an obsolete
-progress paragraph. The coverage PR and three-platform checkpoint remain
-pending; platform acceptance is not yet checked on #141.
+progress paragraph. The coverage PR and three-platform checkpoint passed, and
+#141 closed with every scoped acceptance item checked.
 
 INTERSECT/EXCEPT stay private temporary nodes until query resolution finishes.
 A memoized column-lineage callback shares native NULL-rejection rules without
@@ -80,8 +94,8 @@ The fresh clean-context Sol/high Bulletproof Review completed every applicable
 criterion and rechecked the final source manifest without actionable findings.
 Both issues were closed after staging integration.
 
-GitHub synchronization and the three-platform checkpoint remain required after
-#141, before starting another compatibility slice.
+GitHub synchronization and the three-platform checkpoint completed before S04
+resumed; the results are recorded above.
 
 #691 merged through PR #692 at `69ee9323`, whose entire tree and eight reviewed
 file hashes match source `7dc60068`. Shared physical join properties now drop
@@ -154,8 +168,8 @@ captures. #678 repairs their two literal-false filter observations, with exact
 replacement expectations verified by the full replay. The fresh 24-case correlated probe confirms #140 remains an S09 execution gap:
 Spark returns rows for four nested-qualified cases and cardinality errors for
 twenty live ROUND/BROUND cases; DAR rejects physical planning in all 24.
-UNION/LIMIT early-error differences remain S07/#149 work. Final coverage review and
-an explicit three-platform checkpoint remain required before this leaf closes.
+UNION/LIMIT early-error differences remain S07/#149 work. Final coverage review
+and the three-platform checkpoint passed before #141 closed.
 
 #150 merged through PR #677 at `d32ae7d6`, whose entire tree matches reviewed
 source `4ba2e4b3`. All 70 independent Spark observations, including six required
@@ -337,8 +351,8 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613, #669 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660, #663, #665 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
-| S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
-| S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
+| S04 | Conditional aggregation and window contracts | #142, #656, #696, #697 | COUNT_IF aggregate FILTER, aggregate window FILTER, floating PIVOT signed-zero equality, then aggregation/window coverage |
+| S05 | Dates, timestamps and timezones | #152, #153, #154, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
 | S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661 | Classify remaining schema/error differences; separately fix multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
