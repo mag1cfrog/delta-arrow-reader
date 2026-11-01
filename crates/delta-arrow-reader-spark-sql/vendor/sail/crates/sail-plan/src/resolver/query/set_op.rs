@@ -23,6 +23,7 @@ use crate::resolver::state::PlanResolverState;
 
 mod constant_columns;
 mod pending;
+mod union;
 use constant_columns::PreserveSetConstant;
 mod filter_context;
 use pending::PendingSetOperation;
@@ -132,22 +133,13 @@ impl PlanResolver<'_> {
                     (left, right)
                 };
                 let (left, right) = self.coerce_set_operation_inputs(left, right)?;
-                if is_all {
-                    Ok(LogicalPlanBuilder::new(left).union(right)?.build()?)
-                } else {
-                    Ok(distinct_set_operation_rows(
-                        LogicalPlanBuilder::new(left).union(right)?.build()?,
-                    )?)
-                }
+                Ok(LogicalPlan::Extension(datafusion_expr::Extension {
+                    node: Arc::new(PendingSetOperation::new(left, right, set_op_type, is_all)?),
+                }))
             }
             SetOpType::Intersect | SetOpType::Except => {
-                let join_type = if matches!(set_op_type, SetOpType::Intersect) {
-                    JoinType::LeftSemi
-                } else {
-                    JoinType::LeftAnti
-                };
                 Ok(LogicalPlan::Extension(datafusion_expr::Extension {
-                    node: Arc::new(PendingSetOperation::new(left, right, join_type, is_all)?),
+                    node: Arc::new(PendingSetOperation::new(left, right, set_op_type, is_all)?),
                 }))
             }
         }
@@ -227,30 +219,7 @@ fn lower_set_operation(
     under_limit_one: bool,
     state: &mut PlanResolverState,
 ) -> datafusion_common::Result<LogicalPlan> {
-    let result_exprs = left
-        .schema()
-        .iter()
-        .enumerate()
-        .map(|(index, (qualifier, field))| {
-            let column = Expr::from((qualifier, field));
-            if under_limit_one
-                || !matches!(field.data_type(), DataType::Float32 | DataType::Float64)
-            {
-                return Ok(column);
-            }
-            // ALL materializes set values even for literal inputs; DISTINCT can retain constants.
-            let result = if let Some(constant) = &constant_columns[index] {
-                ScalarUDF::from(constant.clone()).call(vec![column])
-            } else {
-                ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![column])
-            };
-            Ok(result.alias_qualified_with_metadata(
-                qualifier.cloned(),
-                field.name(),
-                Some(field.metadata().clone().into()),
-            ))
-        })
-        .collect::<datafusion_common::Result<Vec<_>>>()?;
+    let result_exprs = set_result_expressions(&left, constant_columns, under_limit_one)?;
     let mut join_keys = set_operation_comparison_keys(&left)
         .into_iter()
         .zip(set_operation_comparison_keys(&right))
@@ -283,6 +252,36 @@ fn lower_set_operation(
     Ok(LogicalPlanBuilder::from(LogicalPlan::Join(join))
         .project(result_exprs)?
         .build()?)
+}
+
+fn set_result_expressions(
+    input: &LogicalPlan,
+    constant_columns: &[Option<PreserveSetConstant>],
+    under_limit_one: bool,
+) -> datafusion_common::Result<Vec<Expr>> {
+    input
+        .schema()
+        .iter()
+        .enumerate()
+        .map(|(index, (qualifier, field))| {
+            let column = Expr::from((qualifier, field));
+            if under_limit_one
+                || !matches!(field.data_type(), DataType::Float32 | DataType::Float64)
+            {
+                return Ok(column);
+            }
+            let result = if let Some(constant) = &constant_columns[index] {
+                ScalarUDF::from(constant.clone()).call(vec![column])
+            } else {
+                ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![column])
+            };
+            Ok(result.alias_qualified_with_metadata(
+                qualifier.cloned(),
+                field.name(),
+                Some(field.metadata().clone().into()),
+            ))
+        })
+        .collect()
 }
 
 // Normalize comparisons after coercion, without rewriting the returned values.

@@ -697,7 +697,8 @@ also checks a nested constant result subsequently placed on an outer join's
 nullable side, Stable sibling expressions and partition-local SORT BY. Exact
 Spark analyzed nullability remains outside these assertions. STRING and negation
 results use the original Spark expectations, with the recorded zero-sign
-limitation below. UNION policy and the existing raw-bit controls are unchanged.
+limitation below. UNION has the separate capture described below; the existing
+raw-bit controls remain unchanged.
 
 `set-parent-context-spark.jsonl` records 220 further observations from
 `capture_set_parent_context_spark.py`. These distinguish filters outside a set,
@@ -729,3 +730,29 @@ rows, NULLs, nonzero values and equal signs in both columns. Identity projection
 filtered limits and retained volatile outputs remain exact controls. These
 checks preserve the compatibility boundary; they do not establish exact-sign
 parity for arbitrary Spark optimizer combinations.
+
+### Floating UNION results
+
+`capture_union_zero_results_spark.py` records 332 independent Spark 4.2.0
+observations in `union-zero-results-spark.jsonl`. It reuses the explicit bit-pattern
+inputs from the floating set-key capture. There are 130 SQL shapes across FLOAT
+and DOUBLE; both ANSI modes cover every shape, and six controls run with adaptive
+execution on/off and one/two input partitions. The capture includes full optimized
+Spark plans. Rust runs each record at batches 1 and 32, for 664 exact comparisons.
+
+Outer STRING casts and negation distinguish constant and materialized zeros.
+UNION and UNION ALL cover duplicate, empty, NULL, NaN and infinite inputs, multiple
+columns, renamed fields, VALUES, filters, grouping and nested sets. Identical
+constant branches retain negative zero; matching constants from different sources,
+different filters or differently written expressions normalize it. Registered
+columns normalize even when both branches read the same table. UNION ALL keeps
+its original signs and duplicates. The LIMIT control records Spark's removal of
+DISTINCT immediately below a one-row limit.
+
+The branch-identity proof covers projections, filters, aggregates, empty relations,
+table scans and deferred set operations, ignoring positional renames. Other
+operators conservatively normalize floating results; arbitrary optimizer-shape
+parity is not established. No original reference is rewritten or allowed an
+alternative result in this corpus. Shared counters also verify that both volatile
+UNION operands execute once, and invalid ANSI casts remain errors for all six
+set operators. Existing raw-bit, metadata and native-SQL controls remain required.

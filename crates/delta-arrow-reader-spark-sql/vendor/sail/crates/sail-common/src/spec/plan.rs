@@ -435,7 +435,7 @@ pub struct JoinDataType {
     pub is_right_struct: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub enum SetOpType {
     Intersect,
     Union,

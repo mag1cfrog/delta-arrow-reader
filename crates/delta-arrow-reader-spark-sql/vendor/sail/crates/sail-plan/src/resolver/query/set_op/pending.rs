@@ -1,4 +1,4 @@
-//! Keep INTERSECT/EXCEPT visible until their enclosing query has been resolved.
+//! Keep set operations visible until their enclosing query has been resolved.
 //! A filter above an inner set can change whether Spark retains a literal -0.0.
 
 use std::fmt::Formatter;
@@ -8,7 +8,8 @@ use arrow::datatypes::DataType;
 use datafusion::execution::SessionState;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DFSchemaRef, JoinType, Result, internal_err};
-use datafusion_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
+use datafusion_expr::{Expr, LogicalPlan, Union, UserDefinedLogicalNodeCore};
+use sail_common::spec::SetOpType;
 
 use super::constant_columns::{
     build_set_result_constant_markers, constant_output_columns, expression_uses_only_constants,
@@ -41,12 +42,12 @@ pub(super) fn lower_query_sets(
     Ok(lower_sets(plan, &mut EnclosingQueryContext::default(), &session, state)?.executable)
 }
 
-struct SetLoweringResult {
-    executable: LogicalPlan,
-    constant_analysis: LogicalPlan,
+pub(super) struct SetLoweringResult {
+    pub(super) executable: LogicalPlan,
+    pub(super) constant_analysis: LogicalPlan,
 }
 
-fn lower_sets<'a>(
+pub(super) fn lower_sets<'a>(
     plan: &'a LogicalPlan,
     context: &mut EnclosingQueryContext<'a>,
     session: &SessionState,
@@ -58,6 +59,14 @@ fn lower_sets<'a>(
             .as_any()
             .downcast_ref::<PendingSetOperation>()
     {
+        if set.set_op_type == SetOpType::Union {
+            return super::union::lower_union(plan, set, context, session, state);
+        }
+        let join_type = if set.set_op_type == SetOpType::Intersect {
+            JoinType::LeftSemi
+        } else {
+            JoinType::LeftAnti
+        };
         let right = lower_sets(
             &set.right,
             &mut EnclosingQueryContext::default(),
@@ -65,7 +74,7 @@ fn lower_sets<'a>(
             state,
         )?;
         let saved = context.enter_input(plan, 0);
-        if !set.is_all && set.join_type == JoinType::LeftSemi {
+        if !set.is_all && join_type == JoinType::LeftSemi {
             for (index, (constant, nonnull)) in constant_output_columns(&right.constant_analysis)?
                 .into_iter()
                 .zip(prove_non_nullable_outputs(
@@ -102,7 +111,7 @@ fn lower_sets<'a>(
             executable: lower_set_operation(
                 left.executable,
                 right.executable,
-                set.join_type,
+                join_type,
                 set.is_all,
                 &executable_markers,
                 under_limit_one,
@@ -111,7 +120,7 @@ fn lower_sets<'a>(
             constant_analysis: lower_set_operation(
                 left.constant_analysis,
                 right.constant_analysis,
-                set.join_type,
+                join_type,
                 set.is_all,
                 &analyzed_markers,
                 under_limit_one,
@@ -199,17 +208,17 @@ fn replace_inputs(plan: LogicalPlan, inputs: Vec<LogicalPlan>) -> Result<Logical
 pub(super) struct PendingSetOperation {
     pub(super) left: Arc<LogicalPlan>,
     pub(super) right: Arc<LogicalPlan>,
-    pub(super) join_type: JoinType,
+    pub(super) set_op_type: SetOpType,
     pub(super) is_all: bool,
     schema: DFSchemaRef,
 }
 
 impl PartialOrd for PendingSetOperation {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        (&self.left, &self.right, self.join_type, self.is_all).partial_cmp(&(
+        (&self.left, &self.right, self.set_op_type, self.is_all).partial_cmp(&(
             &other.left,
             &other.right,
-            other.join_type,
+            other.set_op_type,
             other.is_all,
         ))
     }
@@ -219,35 +228,45 @@ impl PendingSetOperation {
     pub(super) fn new(
         left: LogicalPlan,
         right: LogicalPlan,
-        join_type: JoinType,
+        set_op_type: SetOpType,
         is_all: bool,
     ) -> Result<Self> {
-        let fields = left
-            .schema()
-            .iter()
-            .map(|(qualifier, field)| {
-                let field = if !is_all
-                    && matches!(field.data_type(), DataType::Float32 | DataType::Float64)
-                {
-                    Arc::new(field.as_ref().clone().with_nullable(true))
-                } else {
-                    field.clone()
-                };
-                (qualifier.cloned(), field)
-            })
-            .collect();
-        let schema = Arc::new(DFSchema::new_with_metadata(
-            fields,
-            left.schema().metadata().clone(),
-        )?);
+        let source_schema = if set_op_type == SetOpType::Union {
+            Union::try_new(vec![Arc::new(left.clone()), Arc::new(right.clone())])?.schema
+        } else {
+            left.schema().clone()
+        };
+        let schema = if !is_all || set_op_type == SetOpType::Union {
+            allow_nullable_float_results(&source_schema)?
+        } else {
+            source_schema
+        };
         Ok(Self {
             left: Arc::new(left),
             right: Arc::new(right),
-            join_type,
+            set_op_type,
             is_all,
             schema,
         })
     }
+}
+
+pub(super) fn allow_nullable_float_results(schema: &DFSchemaRef) -> Result<DFSchemaRef> {
+    let fields = schema
+        .iter()
+        .map(|(qualifier, field)| {
+            let field = if matches!(field.data_type(), DataType::Float32 | DataType::Float64) {
+                Arc::new(field.as_ref().clone().with_nullable(true))
+            } else {
+                field.clone()
+            };
+            (qualifier.cloned(), field)
+        })
+        .collect();
+    Ok(Arc::new(DFSchema::new_with_metadata(
+        fields,
+        schema.metadata().clone(),
+    )?))
 }
 
 impl UserDefinedLogicalNodeCore for PendingSetOperation {
@@ -267,7 +286,7 @@ impl UserDefinedLogicalNodeCore for PendingSetOperation {
         write!(
             f,
             "PendingSetOperation: {:?}, all={}",
-            self.join_type, self.is_all
+            self.set_op_type, self.is_all
         )
     }
     fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
@@ -277,7 +296,7 @@ impl UserDefinedLogicalNodeCore for PendingSetOperation {
         if !exprs.is_empty() {
             return internal_err!("Set operation has no expressions");
         }
-        Self::new(left, right, self.join_type, self.is_all)
+        Self::new(left, right, self.set_op_type, self.is_all)
     }
 }
 
@@ -384,7 +403,7 @@ mod tests {
                 node: Arc::new(PendingSetOperation::new(
                     input,
                     right,
-                    JoinType::LeftSemi,
+                    SetOpType::Intersect,
                     false,
                 )?),
             });

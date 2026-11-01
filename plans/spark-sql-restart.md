@@ -28,22 +28,27 @@ checkpoint, since staging is 15 merges beyond the previous checkpoint:
 - After GitHub synchronization and the three-platform checkpoint, report the
   remaining S04-S11 issue mapping and a revised ETA before continuing.
 
-### Set-result candidate
+### UNION result slice
 
-#690 now has an approved compatibility boundary: zero-sign differences that
-follow Spark's projection/LIMIT optimization order remain explicit limitations.
-The issue keeps exact nullable-join and constant-propagation requirements,
-set equality, multiplicity, NULLs, errors, metadata and native SQL. Its acceptance
-is still unchecked until the final local validation, independent review and
-staging integration finish.
+#690 and #689 are accepted and closed. PR #693 merged their shared repair into
+staging at `a56f2509`, with its complete tree matching reviewed source
+`cb82972c`. The approved boundary retains explicitly recorded zero-sign
+differences caused by Spark's projection/LIMIT optimization order; equality,
+multiplicity, NULLs, errors, metadata and native SQL remain required.
 
-The uncommitted candidate on `fix/set-operation-zero-results` is based on
-`69ee9323`. It implements the shared #690/#689 result-planning repair. These
-changes must integrate together: output normalization needs enclosing-query
-constant analysis to avoid introducing nullable-join regressions. One staging
-PR will carry that coherent fix, with separate acceptance evidence and closure
-for each issue. UNION result policy stays in #687, and #141's coverage remains
-in its owned stash until those blockers finish.
+The current `fix/union-zero-results` branch addresses #687. Its independent
+capture contains 332 Spark observations for UNION and UNION ALL, including
+constant and registered inputs, aliases, nested sets, empty inputs, both ANSI
+modes and partition/adaptive controls. Baseline failures expose unnormalized
+materialized negative zeros. The candidate reuses the shared result projection,
+with bounded branch identity checks before folding. All 664 new comparisons and
+the existing result, raw-bit, metadata and native-SQL tests pass. The full Linux
+workspace passes 499 tests, zero failures and two inherited ignored doctests.
+Root all-target Clippy, formatting and diff checks pass. The final focused replay
+also passes after short-circuiting identity comparisons for UNION ALL and unequal
+branches. Independent Sol/high Bulletproof Review found no actionable source
+issues; its final evidence and source manifest accompany the staging PR.
+#141's coverage remains in its owned stash until #687 finishes.
 
 INTERSECT/EXCEPT stay private temporary nodes until query resolution finishes.
 A memoized column-lineage callback shares native NULL-rejection rules without
@@ -69,9 +74,9 @@ Earlier red results, full Spark plans and native-rule investigation are retained
 under `spark-set-bounded-analysis-2026-11-01` outside the repository. The final
 Linux workspace run passes 497 tests, with zero failures and two inherited
 ignored doctests. Root-crate all-targets Clippy passes with warnings denied.
-The fresh clean-context Sol/high Bulletproof Review has completed its source
-criteria without findings and is finalizing the evidence and source manifest.
-Staging integration remains pending.
+The fresh clean-context Sol/high Bulletproof Review completed every applicable
+criterion and rechecked the final source manifest without actionable findings.
+Both issues were closed after staging integration.
 
 GitHub synchronization and the three-platform checkpoint remain required after
 #141, before starting another compatibility slice.

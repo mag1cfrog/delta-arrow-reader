@@ -1,4 +1,4 @@
-//! Compare the observable STRING and negation results after INTERSECT/EXCEPT.
+//! Compare observable STRING and negation results after all six set operations.
 
 use std::error::Error;
 use std::sync::{
@@ -21,6 +21,16 @@ mod float_inputs;
 use float_inputs::register_float_inputs;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
+
+#[tokio::test]
+async fn union_float_results_match_spark() -> TestResult {
+    assert_set_result_fixture(
+        include_str!("fixtures/union-zero-results-spark.jsonl"),
+        332,
+        0,
+    )
+    .await
+}
 
 #[tokio::test]
 async fn intersect_except_float_results_match_spark() -> TestResult {
@@ -363,23 +373,57 @@ async fn set_output_normalization_does_not_repeat_volatile_inputs_or_hide_errors
             Ok(args[0].clone())
         }),
     ));
-    let query = plan_query(&session,
-        "SELECT CAST(k AS STRING) AS text FROM (SELECT observed_zero(CAST('-0.0' AS DOUBLE)) AS k INTERSECT SELECT CAST('0.0' AS DOUBLE) AS k) q",
-        &SparkSqlOptions::default()).await?;
-    let physical = query.create_physical_plan(&session).await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 0);
-    let batches = collect(physical, session.task_ctx()).await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-    assert_eq!(
-        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
-        1
-    );
-    let batch = batches
-        .iter()
-        .find(|batch| batch.num_rows() > 0)
-        .ok_or("missing result")?;
-    assert_eq!(array_value_to_string(batch.column(0).as_ref(), 0)?, "0.0");
-    for operation in ["INTERSECT", "INTERSECT ALL", "EXCEPT", "EXCEPT ALL"] {
+    for (operation, right_value, expected_calls, expected_rows, expected_text) in [
+        ("INTERSECT", "CAST('0.0' AS DOUBLE)", 1, 1, "0.0"),
+        (
+            "UNION",
+            "observed_zero(CAST('-0.0' AS DOUBLE))",
+            2,
+            1,
+            "0.0",
+        ),
+        (
+            "UNION ALL",
+            "observed_zero(CAST('-0.0' AS DOUBLE))",
+            2,
+            2,
+            "-0.0",
+        ),
+    ] {
+        calls.store(0, Ordering::SeqCst);
+        let sql = format!(
+            "SELECT CAST(k AS STRING) AS text FROM (SELECT observed_zero(CAST('-0.0' AS DOUBLE)) AS k {operation} SELECT {right_value} AS k) q"
+        );
+        let query = plan_query(&session, &sql, &SparkSqlOptions::default()).await?;
+        let physical = query.create_physical_plan(&session).await?;
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "{operation} planning");
+        let batches = collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            expected_calls,
+            "{operation} execution"
+        );
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            expected_rows
+        );
+        for batch in batches {
+            for row in 0..batch.num_rows() {
+                assert_eq!(
+                    array_value_to_string(batch.column(0).as_ref(), row)?,
+                    expected_text
+                );
+            }
+        }
+    }
+    for operation in [
+        "UNION",
+        "UNION ALL",
+        "INTERSECT",
+        "INTERSECT ALL",
+        "EXCEPT",
+        "EXCEPT ALL",
+    ] {
         let query = plan_query(
             &session,
             &format!("SELECT CAST('bad' AS DOUBLE) AS k {operation} SELECT CAST(0 AS DOUBLE) AS k"),

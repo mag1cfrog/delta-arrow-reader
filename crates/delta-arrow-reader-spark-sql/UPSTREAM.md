@@ -205,7 +205,7 @@ column indexes shift. The [outer-join references](tests/fixtures/README.md#const
 check grouping and set multiplicities through Spark and native SQL. Cross joins
 use the inner-join property rule, since neither input is NULL-extended.
 
-INTERSECT/EXCEPT remain private logical nodes until their enclosing query is
+Set operations remain private logical nodes until their enclosing query is
 resolved. This lets filters restore constant zero signs before result
 normalization, including separate uses of a CTE. The vendored outer-join rule
 exposes its NULL-rejection test through a column callback, so analysis can follow
@@ -214,5 +214,15 @@ native literal folding with query-time functions masked; executable inputs keep
 their required evaluations. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
 cover values, NULLs, nesting, grouping and LIMIT boundaries. Exact zero signs
 that depend on Spark's projection/LIMIT rewrite order remain a documented
-compatibility limitation, with original Spark captures retained. UNION result
-policy is unchanged.
+compatibility limitation, with original Spark captures retained.
+
+UNION DISTINCT flattens nested unions before choosing its result representation.
+Materialized floating outputs reuse the shared normalization; matching constant
+branches can retain their original zero sign. A bounded structural comparison
+uses native expression equality before folding, remaps column aliases by
+position and compares actual table providers. It does not equate different
+sources, filters or casts merely because they produce the same value. Unsupported
+operators conservatively normalize their outputs. Executable branches are not
+removed, so required evaluations and errors remain. UNION ALL retains every
+original value and duplicate. Floating UNION schemas allow nullable physical
+results when native simplification removes an inner constant marker.
