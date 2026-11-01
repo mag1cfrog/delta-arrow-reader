@@ -25,8 +25,10 @@ in PR #614, with CI running. NULLIF evaluation, #610, is reviewed
 and pushed as `f43bcf5b`; its PR follows #608. Known NULL array projections,
 #612, are reviewed and pushed as `80d79acf`; their PR follows #610. Array
 predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
-The current slice is S03's #615, scalar VALUES Decimal common types. The
-relational coverage tracker #170 and reference review #141 have resumed.
+S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
+`04b191a6`. The current slice is #616, rejecting inconsistent VALUES row widths
+before column coercion. The relational coverage tracker #170 and reference
+review #141 have resumed.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -427,6 +429,19 @@ because the old issue exists.
   Formatting and Clippy pass. The clean-context Sol/high reviewer audited the
   final eight files, connected paths and validation with no remaining actionable
   finding. Remote platform CI and staging integration remain pending.
+- #615 is committed and pushed as `04b191a6`. Its review exposed an older MAP
+  preparation boundary: `VALUES (0, MAP('k',1)), (1)` panics while indexing the
+  absent column, before the native builder can report malformed dimensions.
+  A fresh public-API regression reproduces the panic on `04b191a6`. NaN FLOAT
+  SQL controls already reject the row width correctly. Separate issue #616
+  moves dimension validation before all column coercion and removes the
+  Decimal-only deferred guard. Focused controls cover MAP/scalar row orders and
+  valid map/NULL values. The full workspace passes 423 tests with zero failures
+  and the same two inherited ignored doctests; all historical expectations are
+  unchanged. Formatting and Clippy pass. The clean-context Sol/high review
+  found no actionable issue after tracing SQL grammar, direct AST boundaries,
+  error precedence, caller paths and assertion faults. Remote platform CI and
+  staging integration remain pending.
 
 ### Retained gaps found during S01 review
 
