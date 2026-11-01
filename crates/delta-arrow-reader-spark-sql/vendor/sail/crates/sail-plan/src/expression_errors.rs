@@ -21,6 +21,7 @@ use datafusion_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, lit};
 
 use crate::function::SparkStringTemporalComparisonCast;
+use crate::function::common::{NormalizeFloatArrayForSparkComparison, SparkComparisonFloat};
 use crate::function::scalar::conditional::SparkNullIf;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
@@ -74,6 +75,15 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
         Expr::Alias(alias) => projected_null(&alias.expr, input),
         Expr::Cast(cast) => projected_null(&cast.expr, input),
         Expr::TryCast(cast) => projected_null(&cast.expr, input),
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<NormalizeFloatArrayForSparkComparison>()
+                || f.func.inner().is::<SparkComparisonFloat>() =>
+        {
+            match f.args.as_slice() {
+                [arg] => projected_null(arg, input),
+                _ => Ok(false),
+            }
+        }
         Expr::Column(column) => {
             let index = input.schema().index_of_column(column)?;
             match input {

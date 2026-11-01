@@ -28,7 +28,10 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
+    SparkComparisonFloat,
+};
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -166,8 +169,25 @@ fn array_element(array: expr::Expr, element: expr::Expr) -> expr::Expr {
     expr_fn::array_element(array, element + lit(1_i64))
 }
 
-fn array_contains(array: expr::Expr, element: expr::Expr) -> expr::Expr {
-    ScalarUDF::from(ArrayContains::default()).call(vec![array, element])
+fn array_contains(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let schema = input.function_context.schema;
+    let (mut array, mut element) = input.arguments.two()?;
+    if let DataType::List(field)
+    | DataType::LargeList(field)
+    | DataType::FixedSizeList(field, _)
+    | DataType::ListView(field)
+    | DataType::LargeListView(field) = array.get_type(schema)?
+        && matches!(field.data_type(), DataType::Float32 | DataType::Float64)
+    {
+        array = ScalarUDF::from(NormalizeFloatArrayForSparkComparison).call(vec![array]);
+    }
+    if matches!(
+        element.get_type(schema)?,
+        DataType::Float32 | DataType::Float64
+    ) {
+        element = ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![element]);
+    }
+    Ok(ScalarUDF::from(ArrayContains::default()).call(vec![array, element]))
 }
 
 fn array_contains_all(array: expr::Expr, element: expr::Expr) -> expr::Expr {
@@ -486,7 +506,7 @@ pub(super) fn list_built_in_array_functions() -> Vec<(&'static str, ScalarFuncti
         ("array", F::udf(SparkArray::new())),
         ("array_append", F::custom(array_append)),
         ("array_compact", F::unary(array_compact)),
-        ("array_contains", F::binary(array_contains)),
+        ("array_contains", F::custom(array_contains)),
         ("array_contains_all", F::binary(array_contains_all)),
         ("array_distinct", F::unary(expr_fn::array_distinct)),
         ("array_except", F::binary(expr_fn::array_except)),

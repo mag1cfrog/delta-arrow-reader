@@ -948,6 +948,147 @@ impl ScalarUDFImpl for SparkComparisonFloat {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) struct NormalizeFloatArrayForSparkComparison;
+
+impl ScalarUDFImpl for NormalizeFloatArrayForSparkComparison {
+    fn name(&self) -> &str {
+        "spark_normalize_float_array_for_comparison"
+    }
+
+    fn signature(&self) -> &datafusion_expr::Signature {
+        static SIGNATURE: std::sync::LazyLock<datafusion_expr::Signature> =
+            std::sync::LazyLock::new(|| {
+                datafusion_expr::Signature::array(datafusion_expr::Volatility::Immutable)
+            });
+        &SIGNATURE
+    }
+
+    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+        match args {
+            [
+                data_type @ (DataType::List(field)
+                | DataType::LargeList(field)
+                | DataType::FixedSizeList(field, _)
+                | DataType::ListView(field)
+                | DataType::LargeListView(field)),
+            ] if matches!(field.data_type(), DataType::Float32 | DataType::Float64) => {
+                Ok(data_type.clone())
+            }
+            _ => datafusion_common::plan_err!("expected an array of FLOAT or DOUBLE values"),
+        }
+    }
+
+    fn return_field_from_args(
+        &self,
+        args: datafusion_expr::ReturnFieldArgs,
+    ) -> datafusion_common::Result<arrow::datatypes::FieldRef> {
+        self.return_type(&[args.arg_fields[0].data_type().clone()])?;
+        Ok(Arc::new(
+            args.arg_fields[0].as_ref().clone().with_name(self.name()),
+        ))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: datafusion_expr::ScalarFunctionArgs,
+    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
+        use arrow::array::{Array, ArrayRef, AsArray, LargeListArray, ListArray};
+        use datafusion_common::utils::{adjust_offsets_for_slice, list_values};
+        use datafusion_expr::ColumnarValue;
+        let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        self.return_type(&[value.data_type()])?;
+        let scalar = matches!(value, ColumnarValue::Scalar(_));
+        let array = value.to_array(1)?;
+        let values = list_values(array.as_ref())?;
+        let rows = values.len();
+        let field = Arc::new(arrow::datatypes::Field::new(
+            "value",
+            values.data_type().clone(),
+            true,
+        ));
+        let normalized = SparkComparisonFloat { widen: false }
+            .invoke_with_args(datafusion_expr::ScalarFunctionArgs {
+                args: vec![ColumnarValue::Array(values)],
+                arg_fields: vec![field.clone()],
+                number_rows: rows,
+                return_field: field,
+                config_options: args.config_options,
+            })?
+            .into_array(rows)?;
+        // The array signature coerces view and fixed-size inputs before execution.
+        let normalized: ArrayRef = match array.data_type() {
+            DataType::List(field) => Arc::new(ListArray::try_new(
+                field.clone(),
+                adjust_offsets_for_slice(array.as_list::<i32>()),
+                normalized,
+                array.nulls().cloned(),
+            )?),
+            DataType::LargeList(field) => Arc::new(LargeListArray::try_new(
+                field.clone(),
+                adjust_offsets_for_slice(array.as_list::<i64>()),
+                normalized,
+                array.nulls().cloned(),
+            )?),
+            _ => return datafusion_common::exec_err!("expected a coerced floating list"),
+        };
+        Ok(if scalar {
+            ColumnarValue::Scalar(ScalarValue::try_from_array(&normalized, 0)?)
+        } else {
+            ColumnarValue::Array(normalized)
+        })
+    }
+}
+
+#[test]
+fn floating_array_comparison_only_normalizes_visible_values() -> datafusion_common::Result<()> {
+    use arrow::array::{Array, AsArray, ListArray};
+    use arrow::datatypes::Float64Type;
+    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs};
+
+    let backing = ListArray::from_iter_primitive::<Float64Type, _, _>(
+        (0..2048).map(|_| Some(vec![Some(-0.0), None])),
+    );
+    for value_type in [DataType::Float32, DataType::Float64] {
+        let field = Arc::new(arrow::datatypes::Field::new(
+            "item",
+            value_type.clone(),
+            true,
+        ));
+        for array_type in [DataType::List(field.clone()), DataType::LargeList(field)] {
+            let backing = arrow::compute::cast(&backing, &array_type)?;
+            for len in [0, 1, 2] {
+                let slice = backing.slice(1001, len);
+                let field = Arc::new(arrow::datatypes::Field::new("a", array_type.clone(), false));
+                let result = NormalizeFloatArrayForSparkComparison
+                    .invoke_with_args(ScalarFunctionArgs {
+                        args: vec![ColumnarValue::Array(slice)],
+                        arg_fields: vec![field.clone()],
+                        number_rows: len,
+                        return_field: field,
+                        config_options: Arc::default(),
+                    })?
+                    .into_array(len)?;
+                assert_eq!(result.data_type(), &array_type);
+                assert_eq!(result.len(), len);
+                assert_eq!(result.null_count(), 0);
+                let child = arrow::array::make_array(result.to_data().child_data()[0].clone());
+                assert_eq!(
+                    child.len(),
+                    len * 2,
+                    "unused values retained for {array_type}"
+                );
+                assert_eq!(child.null_count(), len);
+                let child = arrow::compute::cast(&child, &DataType::Float64)?;
+                for (index, value) in child.as_primitive::<Float64Type>().iter().enumerate() {
+                    assert_eq!(value.map(f64::to_bits), (index % 2 == 0).then_some(0));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn comparison_float_preserves_values_nulls_and_shapes() -> datafusion_common::Result<()> {
     use arrow::array::{Array, ArrayRef, AsArray, Float32Array, Float64Array};
