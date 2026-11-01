@@ -342,6 +342,9 @@ impl PhysicalExpr for InListExpr {
                 let compare_one = |expr: &Arc<dyn PhysicalExpr>| -> Result<BooleanArray> {
                     match expr.evaluate(batch)? {
                         ColumnarValue::Array(array) => {
+                            if array.data_type() == &DataType::Null {
+                                return Ok(BooleanArray::new_null(num_rows));
+                            }
                             if lhs_supports_arrow_eq
                                 && supports_arrow_eq(array.data_type())
                             {

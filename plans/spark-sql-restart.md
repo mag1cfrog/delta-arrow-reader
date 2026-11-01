@@ -7,25 +7,44 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#672 is the bounded prerequisite for #671. Native physical-plan construction
-runs volatile IN-list expressions while trying to build a static filter. When
-all items return scalars, the planning result is cached and execution never
-calls that volatile expression. A later column prevents caching but does not
-undo the earlier call. The fix reuses DataFusion's recursive volatility check
-before any constant-list evaluation. Literal and deterministic constant filters
-retain their existing path. Local Linux checks pass 457 workspace tests with
-zero failures and two inherited ignored doctests, plus 55 retained native
-InList unit tests. Root Clippy, formatting and the final focused tests pass.
-Independent review findings in the test code have been addressed without adding
-a dependency. This slice does not complete #671's per-row selection work.
+#674 has a candidate repair on `fix/untyped-null-in-list`, based on staging
+`ca5dd5b8`. The native constructor already admits DataType::Null list columns;
+the dynamic array path now returns an unknown comparison for those values,
+matching its scalar-NULL behavior instead of sending mismatched types to Arrow.
+The direct reproduction uses `a=[1,2]`, `n=NullArray(2)` and `b=[1,3]`:
+`a IN (n,b)` should be `[true,NULL]`; NOT IN should be `[false,NULL]`. Both
+previously reported `Invalid comparison operation: Int32 == Null`.
 
-#671, native IN-list row evaluation, is the next bounded repair on staging
-`686f8126`. #150 review confirmed that lists longer than three items and computed
-lookups retain `InListExpr`, whose later operands still run on rows already
-matched. The expanded 70-case Spark capture has six required errors; native
-replay fails four skipped ANSI cases at batch size 32. Short column-lookup lists
-are lowered to the Boolean path repaired in #669 and still pass. The new issue
-is assigned, is a child of the NULL/conditional track and blocks #150.
+Tests cover primitive and nested lookup values, NULL items first/last/alone,
+typed and untyped NULL controls, scalar and array lookups, sliced/empty inputs,
+result nullability, type rejection and required errors after NULL. The new issue
+is assigned, is a native child of #173 and blocks #671. Final Linux workspace
+checks pass 459 tests with zero failures and two inherited ignored doctests;
+all 55 retained InList unit tests, root Clippy and formatting pass. Independent
+clean-context Sol/high review has found no actionable source issue. Broader
+nested Spark admission remains #156/S10; this change only repairs an already
+admitted native NULL representation.
+
+#671's seven-file candidate is saved in the owned stash recorded outside the
+repository as `pending-row-selection-stash.json`, with source copies and hashes.
+Its 28 independent Spark observations/six required errors pass at both batch
+sizes, and native operand visits, logical NULLs, scalar results, slices and empty
+input pass. Linux workspace checks pass 462 tests with zero failures and two
+inherited ignored doctests; all 55 retained InList unit tests pass. It is not
+ready for a PR: finish #674 separately, restore the candidate, rerun connected
+checks and complete Clippy/format gates and independent review. No requirement
+is counted as passed by deferral. #671 still blocks #150.
+
+#672 merged through PR #673 at `ca5dd5b8`, whose entire tree matches reviewed
+source `be743b39`. A recursive volatility precheck prevents planning calls and
+cached volatile membership values. Literal and deterministic constant filters
+retain their existing path. Linux workspace checks pass 457 tests with zero
+failures and two inherited ignored doctests, plus 55 retained InList unit tests.
+Final focused tests, root Clippy and formatting pass. Clean-context Sol/high
+Bulletproof Review completed after two test-only fixes, with no unresolved
+findings. The issue is closed and temporary branches removed. No automatic
+cloud PR checks ran, consistent with the staging policy; this is not a new
+cross-platform checkpoint or performance claim.
 
 #150's reference/coverage changes are pending on `test/null-conditional-coverage`.
 Its earlier 54-case replay and 456-test workspace gates passed, but those gates
@@ -177,7 +196,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156, #666 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |
-| S11 | Release comparison and support statement | #157, #164, #166, #620, #626 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF and Boolean row-selection cost; user-facing support documentation |
+| S11 | Release comparison and support statement | #157, #164, #166, #620, #626 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF, Boolean and IN-list row-selection cost; user-facing support documentation |
 
 The other eleven historical performance leaves remain deferred unless these
 comparisons identify a relevant regression or bottleneck. Preserve their evidence

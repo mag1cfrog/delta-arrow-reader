@@ -1,15 +1,19 @@
-//! IN-list planning preserves volatile operands for each execution.
+//! Native membership preserves dynamic values and three-valued NULL results.
 
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 
-use arrow::array::{ArrayRef, AsArray, Int32Array};
-use arrow::datatypes::DataType;
+use arrow::array::{ArrayRef, AsArray, Int32Array, NullArray, StructArray, new_null_array};
+use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::{DFSchema, Result, ScalarValue, exec_err};
 use datafusion::logical_expr::{ColumnarValue, Volatility, col, create_udf, lit};
+use datafusion::physical_expr::PhysicalExpr;
+use datafusion::physical_expr::expressions::{
+    InListExpr, col as physical_col, lit as physical_lit,
+};
 use datafusion::prelude::SessionContext;
 
 #[test]
@@ -106,6 +110,143 @@ fn required_volatile_list_errors_remain_execution_errors() -> Result<()> {
         let error = plan.evaluate(&batch).unwrap_err();
         assert!(error.to_string().contains("required list item failed"));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn untyped_null_array_items_keep_unknown_until_a_later_match() -> Result<()> {
+    let lookup_values = Arc::new(Int32Array::from(vec![
+        Some(99),
+        Some(1),
+        Some(2),
+        None,
+        Some(1),
+    ])) as ArrayRef;
+    let list_values = Arc::new(Int32Array::from(vec![
+        Some(99),
+        Some(1),
+        Some(3),
+        Some(4),
+        None,
+    ])) as ArrayRef;
+    let field = Arc::new(Field::new("n", DataType::Int32, true));
+    let struct_lookup_values = Arc::new(StructArray::from(vec![(
+        field.clone(),
+        lookup_values.clone(),
+    )])) as ArrayRef;
+    let struct_list_values =
+        Arc::new(StructArray::from(vec![(field, list_values.clone())])) as ArrayRef;
+    for (lookup_values, list_values) in [
+        (lookup_values, list_values),
+        (struct_lookup_values, struct_list_values),
+    ] {
+        let data_type = lookup_values.data_type().clone();
+        let batch = RecordBatch::try_from_iter_with_nullable([
+            ("a", lookup_values.clone(), true),
+            ("b", list_values, true),
+            (
+                "untyped_null",
+                Arc::new(NullArray::new(5)) as ArrayRef,
+                true,
+            ),
+            ("typed_null", new_null_array(&data_type, 5), true),
+        ])?
+        .slice(1, 4);
+        for length in [0, 4] {
+            let input = batch.slice(0, length);
+            let schema = input.schema();
+            let lookups = [
+                physical_col("a", &schema)?,
+                physical_lit(ScalarValue::try_from_array(&lookup_values, 1)?),
+                physical_lit(ScalarValue::try_from(&data_type)?),
+            ];
+            let null_items = [
+                physical_col("untyped_null", &schema)?,
+                physical_col("typed_null", &schema)?,
+                physical_lit(ScalarValue::Null),
+                physical_lit(ScalarValue::try_from(&data_type)?),
+            ];
+            for (lookup_index, lookup) in lookups.iter().enumerate() {
+                for null_item in &null_items {
+                    for (with_match, null_first) in [(false, true), (true, true), (true, false)] {
+                        let mut list = vec![null_item.clone()];
+                        if with_match {
+                            list.insert(usize::from(null_first), physical_col("b", &schema)?);
+                        }
+                        for negated in [false, true] {
+                            let expression = InListExpr::try_new(
+                                lookup.clone(),
+                                list.clone(),
+                                negated,
+                                &schema,
+                            )?;
+                            assert!(expression.nullable(&schema)?);
+                            let result = expression.evaluate(&input)?.into_array(length)?;
+                            let expected: Vec<_> = (0..length)
+                                .map(|row| {
+                                    (with_match && lookup_index != 2 && row == 0)
+                                        .then_some(!negated)
+                                })
+                                .collect();
+                            assert_eq!(
+                                result.as_boolean().iter().collect::<Vec<_>>(),
+                                expected,
+                                "{data_type:?} {expression} length={length}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn untyped_null_items_preserve_type_rejection_and_required_errors() -> Result<()> {
+    let batch = RecordBatch::try_from_iter_with_nullable([
+        ("a", Arc::new(Int32Array::from(vec![1])) as ArrayRef, false),
+        ("n", Arc::new(NullArray::new(1)) as ArrayRef, true),
+    ])?;
+    let schema = batch.schema();
+    let incompatible = InListExpr::try_new(
+        physical_col("a", &schema)?,
+        vec![
+            physical_col("n", &schema)?,
+            physical_lit(ScalarValue::Utf8(Some("1".into()))),
+        ],
+        false,
+        &schema,
+    )
+    .unwrap_err();
+    assert!(
+        incompatible
+            .to_string()
+            .contains("data type inlist should be same")
+    );
+    let failure = create_udf(
+        "required_failure",
+        vec![],
+        DataType::Int32,
+        Volatility::Volatile,
+        Arc::new(|_| exec_err!("required item after NULL failed")),
+    );
+    let required = SessionContext::new()
+        .create_physical_expr(failure.call(vec![]), &DFSchema::try_from(schema.clone())?)?;
+    for negated in [false, true] {
+        let expression = InListExpr::try_new(
+            physical_col("a", &schema)?,
+            vec![physical_col("n", &schema)?, required.clone()],
+            negated,
+            &schema,
+        )?;
+        let error = expression.evaluate(&batch).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("required item after NULL failed")
+        );
     }
     Ok(())
 }
