@@ -7,21 +7,23 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#654, nested NULL text, is in progress on `fix/spark-nested-null-text`, based on
-staging `474183c8`. The baseline formatter emitted uppercase NULL in nested
-casts; Spark uses lowercase. The 48 independent references include pivot-name
-controls. Baseline comparison found 52 value differences at two batch sizes.
-The candidate passes all 436 workspace tests, root-crate Clippy and formatting,
-with zero failures and two inherited ignored doctests. Clean-context Sol/high
-Bulletproof Review found no actionable issues. The slice is ready for its
-dedicated staging PR. Floating-point rules remain separate in #651.
+#651, shared floating-point text conversion, is in progress on
+`fix/spark-floating-point-text`, based on staging `e129b129`. The candidate shares
+FLOAT/DOUBLE formatting across casts, array display, CSV and XML. Its formatter
+matches Java 21 for 30,024 exact bit patterns. The 446-row Spark reference now
+passes through public SQL. Final validation passes 437 workspace tests, zero
+failures and two inherited ignored doctests; root-crate Clippy also passes.
+Clean-context Sol/high Bulletproof Review is complete with no unresolved finding
+in this slice. It is ready for its dedicated staging PR.
 
-#652 merged through PR #653 as `474183c8`; its issue is closed. The merge tree
-matches its reviewed source. All 435 workspace tests, root-crate Clippy and
-formatting pass, with clean-context Sol/high Bulletproof Review complete.
+The two separately reviewed prerequisites are merged: #652 through PR #653
+(`474183c8`) and #654 through PR #655 (`e129b129`). Both issues are closed, and
+both merge trees match their reviewed source. #654's completed local Linux
+validation has 436 passing tests, zero failures and two inherited ignored
+doctests, plus Clippy, formatting and clean-context Sol/high Bulletproof Review.
 
-#651 and #650 candidates are saved locally. Resume #651 after #654, then #650,
-with separate validation, reviews and staging PRs. #635 is complete through
+#650's conditional STRING candidate remains saved locally. Resume it after #651
+with separate validation, review and a staging PR. #635 is complete through
 PR #649, merged as `86d94c3e` with its issue closed.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
@@ -94,7 +96,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
-| S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
+| S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
 | S07 | Arithmetic schema and diagnostic contracts | #149, #293 | Classify remaining schema/error differences; separately fix multi-output CAST error order and the retained BROUND gaps below |
@@ -765,10 +767,29 @@ is claimed.
   syntax is used by both engines. DAR currently rejects Spark's bare `FOR v`
   pivot syntax and PIVOT directly after inline VALUES; retain these parser cases
   for S09 relational-query coverage rather than changing the parser in this slice.
+  The later float-name check also found that aliases before PIVOT are rejected;
+  its verified reference omits the unnecessary subquery alias.
   Final candidate validation passes 436 tests, zero failures and the two inherited
   ignored doctests, including the unchanged historical replay. Root-crate Clippy
   and formatting pass. The 52 baseline result differences are resolved; the
   unchanged CSV and PIVOT controls pass.
+
+- #651's connected PIVOT check exposed #656: matching negative zero counts only
+  one sign while Spark combines both. The original independent reference and
+  failed public result are preserved. #656 is queued in S04; formatting does not
+  modify pivot predicates. Name controls use a separate four-value input with
+  one zero sign, keeping their expected counts independently captured.
+
+- #651 shares FLOAT/DOUBLE rendering through the installed ryu formatter, retaining
+  Java 21 notation, signed zero and the closest decimal for subnormal values.
+  The unchanged formatter source matches 30,024 independent Java bit patterns.
+  All 446 original Spark input rows pass across CAST/TRY_CAST, CSV, XML and nested
+  display in both ANSI modes and at batch sizes 1 and 32. Four focused pivot
+  references verify generated names, types and counts; original mixed-zero
+  counting remains assigned to #656. Volatile inputs execute once per required
+  row, native DataFusion casts retain their results, and the historical replay
+  needs no correction. The final Linux workspace passes 437 tests, zero failures
+  and two inherited ignored doctests, plus root-crate Clippy.
 
 ### Retained gaps found during S01 review
 

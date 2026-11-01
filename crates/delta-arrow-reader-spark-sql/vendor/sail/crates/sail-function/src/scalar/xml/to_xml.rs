@@ -12,6 +12,7 @@ use datafusion_expr::{
 };
 use datafusion_expr_common::signature::Volatility;
 use sail_common::spec::{SAIL_MAP_KEY_FIELD_NAME, SAIL_MAP_VALUE_FIELD_NAME};
+use sail_common_datafusion::formatter::{format_float32, format_float64};
 
 use crate::scalar::datetime::format::DateTimeFormat;
 
@@ -774,76 +775,6 @@ fn format_decimal128(raw: i128, scale: u32) -> String {
     )
 }
 
-/// Formats a `f64` the way Java's `Double.toString` (and therefore Spark) does:
-/// plain decimal for `1e-3 <= |x| < 1e7`, scientific `d.dddEexp` otherwise,
-/// always with at least one fractional digit.
-fn format_double(v: f64) -> String {
-    if v.is_nan() {
-        return "NaN".to_string();
-    }
-    if v.is_infinite() {
-        return if v > 0.0 { "Infinity" } else { "-Infinity" }.to_string();
-    }
-    if v == 0.0 {
-        return "0.0".to_string();
-    }
-    // Rust's `{:e}` yields the shortest round-tripping mantissa in normalized
-    // form `d[.ddd]e<exp>`, which carries exactly the significant digits and the
-    // base-10 exponent Java needs.
-    java_float_repr(v < 0.0, &format!("{:e}", v.abs()))
-}
-
-/// Same as [`format_double`] but for `f32` (Spark `FLOAT`). Formatting the `f32`
-/// directly (not via `f64`) keeps the shortest `f32` round-tripping digits.
-fn format_single(v: f32) -> String {
-    if v.is_nan() {
-        return "NaN".to_string();
-    }
-    if v.is_infinite() {
-        return if v > 0.0 { "Infinity" } else { "-Infinity" }.to_string();
-    }
-    if v == 0.0 {
-        return "0.0".to_string();
-    }
-    java_float_repr(v < 0.0, &format!("{:e}", v.abs()))
-}
-
-/// Reformats Rust's normalized `{:e}` output (e.g. `"1.2345678e7"`) into Java
-/// `Double.toString` style. `neg` carries the sign separately.
-fn java_float_repr(neg: bool, rust_sci: &str) -> String {
-    let Some((mantissa, exp_str)) = rust_sci.split_once('e') else {
-        return rust_sci.to_string();
-    };
-    let Ok(sci_exp) = exp_str.parse::<i32>() else {
-        return rust_sci.to_string();
-    };
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    let sign = if neg { "-" } else { "" };
-
-    if (-3..7).contains(&sci_exp) {
-        // Plain decimal notation.
-        let body = if sci_exp >= 0 {
-            let int_len = sci_exp as usize + 1;
-            if int_len >= digits.len() {
-                format!("{}{}.0", digits, "0".repeat(int_len - digits.len()))
-            } else {
-                format!("{}.{}", &digits[..int_len], &digits[int_len..])
-            }
-        } else {
-            format!("0.{}{}", "0".repeat((-sci_exp - 1) as usize), digits)
-        };
-        format!("{sign}{body}")
-    } else {
-        // Scientific notation: one digit before the point, at least one after.
-        let mantissa = if digits.len() == 1 {
-            format!("{}.0", digits)
-        } else {
-            format!("{}.{}", &digits[..1], &digits[1..])
-        };
-        format!("{sign}{mantissa}E{sci_exp}")
-    }
-}
-
 fn scalar_to_display_string(scalar: &ScalarValue) -> Result<String> {
     match scalar {
         ScalarValue::Boolean(Some(v)) => Ok(v.to_string()),
@@ -855,8 +786,8 @@ fn scalar_to_display_string(scalar: &ScalarValue) -> Result<String> {
         ScalarValue::UInt16(Some(v)) => Ok(v.to_string()),
         ScalarValue::UInt32(Some(v)) => Ok(v.to_string()),
         ScalarValue::UInt64(Some(v)) => Ok(v.to_string()),
-        ScalarValue::Float32(Some(v)) => Ok(format_single(*v)),
-        ScalarValue::Float64(Some(v)) => Ok(format_double(*v)),
+        ScalarValue::Float32(Some(v)) => Ok(format_float32(*v)),
+        ScalarValue::Float64(Some(v)) => Ok(format_float64(*v)),
         ScalarValue::Utf8(Some(v))
         | ScalarValue::LargeUtf8(Some(v))
         | ScalarValue::Utf8View(Some(v)) => Ok(v.clone()),
@@ -1106,39 +1037,5 @@ mod tests {
         assert_eq!(format_decimal128(999999, 2), "9999.99");
         assert_eq!(format_decimal128(42, 0), "42");
         Ok(())
-    }
-
-    #[test]
-    fn test_format_double() {
-        // Values pinned against Java `Double.toString` (Spark JVM ground truth).
-        assert_eq!(format_double(f64::NAN), "NaN");
-        assert_eq!(format_double(f64::INFINITY), "Infinity");
-        assert_eq!(format_double(f64::NEG_INFINITY), "-Infinity");
-        assert_eq!(format_double(0.0), "0.0");
-        assert_eq!(format_double(-0.0), "0.0");
-        assert_eq!(format_double(1.0), "1.0");
-        assert_eq!(format_double(100.0), "100.0");
-        assert_eq!(format_double(2.71), "2.71");
-        assert_eq!(format_double(-123.456), "-123.456");
-        assert_eq!(format_double(0.001), "0.001");
-        assert_eq!(format_double(0.0009), "9.0E-4");
-        assert_eq!(format_double(0.0001), "1.0E-4");
-        assert_eq!(format_double(9999999.0), "9999999.0");
-        assert_eq!(format_double(10000000.0), "1.0E7");
-        assert_eq!(format_double(12345678.0), "1.2345678E7");
-        assert_eq!(format_double(1e20), "1.0E20");
-        assert_eq!(format_double(1e-7), "1.0E-7");
-        assert_eq!(format_double(1e308), "1.0E308");
-        assert_eq!(format_double(123456789012345.0), "1.23456789012345E14");
-    }
-
-    #[test]
-    fn test_format_single() {
-        assert_eq!(format_single(f32::NAN), "NaN");
-        assert_eq!(format_single(f32::INFINITY), "Infinity");
-        assert_eq!(format_single(1.0), "1.0");
-        assert_eq!(format_single(0.1), "0.1");
-        assert_eq!(format_single(123.456), "123.456");
-        assert_eq!(format_single(10000000.0), "1.0E7");
     }
 }

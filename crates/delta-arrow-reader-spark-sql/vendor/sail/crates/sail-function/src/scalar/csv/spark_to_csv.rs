@@ -12,6 +12,7 @@ use datafusion_expr::{
 };
 use datafusion_expr_common::signature::Volatility;
 use lazy_static::lazy_static;
+use sail_common_datafusion::formatter::{format_float32, format_float64};
 
 use crate::functions_utils::make_scalar_function;
 use crate::scalar::csv::options::{
@@ -763,34 +764,6 @@ fn format_binary(value: &[u8]) -> String {
     output
 }
 
-fn format_float32(value: f32) -> String {
-    if value.is_nan() {
-        "NaN".to_string()
-    } else if value.is_infinite() {
-        if value.is_sign_positive() {
-            "Infinity".to_string()
-        } else {
-            "-Infinity".to_string()
-        }
-    } else {
-        value.to_string()
-    }
-}
-
-fn format_float64(value: f64) -> String {
-    if value.is_nan() {
-        "NaN".to_string()
-    } else if value.is_infinite() {
-        if value.is_sign_positive() {
-            "Infinity".to_string()
-        } else {
-            "-Infinity".to_string()
-        }
-    } else {
-        value.to_string()
-    }
-}
-
 /// Reads a single-character CSV option. `validate_options` already rejects a value longer than one
 /// character (with Spark's message), so an empty value maps to `'\0'` and anything else to its
 /// first character; this never has to error.
@@ -988,7 +961,7 @@ mod tests {
 
         let output = result.as_any().downcast_ref::<StringArray>().unwrap();
         assert_eq!(output.value(0), "1.5,1000000");
-        assert_eq!(output.value(1), "0,0");
+        assert_eq!(output.value(1), "0.0,0");
         assert_eq!(output.value(2), ",-7"); // null float → empty string
         Ok(())
     }
