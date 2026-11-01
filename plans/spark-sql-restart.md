@@ -7,22 +7,22 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#652, NULL results for empty CSV records, is in progress on
-`fix/spark-empty-csv-records`, based on staging `86d94c3e`. Tests using 100 independent Spark references cover final-record emptiness,
-quoting, separators, replacement values, NULL structs, sliced columns and option
-errors. All 435 workspace tests pass, with zero failures and two inherited
-ignored doctests. Root-crate Clippy, formatting and diff checks pass. Clean-context Sol/high
-Bulletproof Review found no unresolved actionable issues after repairing the
-progress-log placement. The slice is ready for its dedicated staging PR.
+#654, nested NULL text, is in progress on `fix/spark-nested-null-text`, based on
+staging `474183c8`. The baseline formatter emitted uppercase NULL in nested
+casts; Spark uses lowercase. The 48 independent references include pivot-name
+controls. Baseline comparison found 52 value differences at two batch sizes.
+The candidate passes all 436 workspace tests, root-crate Clippy and formatting,
+with zero failures and two inherited ignored doctests. Clean-context Sol/high
+Bulletproof Review found no actionable issues. The slice is ready for its
+dedicated staging PR. Floating-point rules remain separate in #651.
 
-The #651 floating-text candidate and #650 conditional STRING candidate are saved
-locally on their own branches. #652 blocks #651, which blocks #650. Resume each
-in that order, with its own checks, clean-context review and staging PR.
+#652 merged through PR #653 as `474183c8`; its issue is closed. The merge tree
+matches its reviewed source. All 435 workspace tests, root-crate Clippy and
+formatting pass, with clean-context Sol/high Bulletproof Review complete.
 
-#635 merged through PR #649 as `86d94c3e`; its issue is closed. The merged tree
-matches its reviewed source. All 434 workspace tests pass, with zero failures
-and two inherited ignored doctests, plus root-crate Clippy, formatting and
-clean-context Sol/high Bulletproof Review. No automatic PR CI ran.
+#651 and #650 candidates are saved locally. Resume #651 after #654, then #650,
+with separate validation, reviews and staging PRs. #635 is complete through
+PR #649, merged as `86d94c3e` with its issue closed.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
 #633 are merged through separate PRs #637 and #640-#648. Their issues are closed.
@@ -759,6 +759,16 @@ is claimed.
   its generated column path throws on a NULL CSV result; scalar and interpreted
   results agree. Full Linux validation passes 435 tests, zero failures and the
   same two inherited ignored doctests, plus root-crate Clippy and formatting.
+
+- #654 uses 48 fresh Spark references for nested NULL markers, SQL NULL validity,
+  literal NULL/null text, CSV controls and pivot names. The same supported PIVOT
+  syntax is used by both engines. DAR currently rejects Spark's bare `FOR v`
+  pivot syntax and PIVOT directly after inline VALUES; retain these parser cases
+  for S09 relational-query coverage rather than changing the parser in this slice.
+  Final candidate validation passes 436 tests, zero failures and the two inherited
+  ignored doctests, including the unchanged historical replay. Root-crate Clippy
+  and formatting pass. The 52 baseline result differences are resolved; the
+  unchanged CSV and PIVOT controls pass.
 
 ### Retained gaps found during S01 review
 

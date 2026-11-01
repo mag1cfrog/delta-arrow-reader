@@ -30,6 +30,8 @@ use crate::formatter::{
 };
 use crate::variant::is_marked_variant_storage_type;
 
+const NULL_TEXT: &str = "null";
+
 /// Writes one array value using Spark SQL formatting.
 pub struct ValueFormatter<'a> {
     idx: usize,
@@ -214,7 +216,7 @@ struct VariantFormat {
 impl DisplayIndex for VariantFormat {
     fn write(&self, idx: usize, f: &mut dyn Write) -> FormatResult {
         if self.array.is_null(idx) {
-            f.write_str("NULL")?;
+            f.write_str(NULL_TEXT)?;
             return Ok(());
         }
 
@@ -230,7 +232,7 @@ impl DisplayIndex for VariantFormat {
 impl<'a, F: DisplayIndexState<'a> + Array> DisplayIndex for ArrayFormat<'a, F> {
     fn write(&self, idx: usize, f: &mut dyn Write) -> FormatResult {
         if self.array.is_null(idx) {
-            f.write_str("NULL")?;
+            f.write_str(NULL_TEXT)?;
             return Ok(());
         }
         DisplayIndexState::write(&self.array, &self.state, idx, f)
@@ -246,7 +248,7 @@ impl DisplayIndex for &BooleanArray {
 
 impl DisplayIndex for &NullArray {
     fn write(&self, _idx: usize, f: &mut dyn Write) -> FormatResult {
-        f.write_str("NULL")?;
+        f.write_str(NULL_TEXT)?;
         Ok(())
     }
 }
@@ -664,7 +666,7 @@ mod tests {
                 Box::new(Decimal128Array::from(vec![123]).with_precision_and_scale(5, 2)?),
                 "1.23",
             ),
-            (Box::new(Int32Array::from(vec![None])), "NULL"),
+            (Box::new(Int32Array::from(vec![None])), "null"),
         ];
         for (array, expected) in cases {
             let formatter = ArrayFormatter::try_new(array.as_ref())?;
@@ -791,7 +793,7 @@ mod tests {
     fn test_null() {
         let array = NullArray::new(2);
         let formatted = format_array(&array);
-        assert_eq!(formatted, &["NULL".to_string(), "NULL".to_string()])
+        assert_eq!(formatted, &["null".to_string(), "null".to_string()])
     }
 
     #[expect(clippy::unwrap_used)]
@@ -856,6 +858,6 @@ mod tests {
         assert_eq!("[1,2,3]", array_value_to_string(&struct_array, 1).unwrap());
 
         // Test null
-        assert_eq!("NULL", array_value_to_string(&struct_array, 2).unwrap());
+        assert_eq!("null", array_value_to_string(&struct_array, 2).unwrap());
     }
 }
