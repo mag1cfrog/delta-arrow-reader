@@ -30,6 +30,9 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
     if case["expected"]["condition"] == "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" {
         return Err("invalid CASE condition reached physical planning".into());
     }
+    if case["expected"]["condition"] == "DATATYPE_MISMATCH.DATA_DIFF_TYPES" {
+        return Err("incompatible result inputs reached physical planning".into());
+    }
     if case["expected"]["condition"]
         == "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN"
     {
@@ -67,6 +70,7 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
         DataType::Int32 => "integer",
         DataType::Int64 => "long",
         DataType::Boolean => "boolean",
+        DataType::Binary => "binary",
         DataType::Null => "void",
         DataType::Float32 => "float",
         DataType::Float64 => "double",
@@ -86,6 +90,14 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
             let value = if nulls.as_ref().is_some_and(|nulls| nulls.is_null(row)) {
                 assert!(logical_nullable && schema.field(0).is_nullable());
                 Value::Null
+            } else if column.data_type() == &DataType::Binary {
+                column
+                    .as_binary::<i32>()
+                    .value(row)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+                    .into()
             } else if matches!(column.data_type(), DataType::Timestamp(_, _)) {
                 column
                     .as_primitive::<TimestampMicrosecondType>()
@@ -136,8 +148,24 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
     assert_eq!(numeric.len(), 1233);
     assert_eq!(numeric[0]["spark_version"], "4.2.0");
     assert_eq!(numeric[0]["retain_fraction_digits_first"], "false");
-    let registered_inputs = numeric[0]["registered_inputs"].clone();
+    let mut registered_inputs = numeric[0]["registered_inputs"]
+        .as_object()
+        .ok_or("missing numeric registered inputs")?
+        .clone();
     records.extend(numeric.into_iter().skip(1));
+    let strings = include_str!("fixtures/conditional-strings-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(strings.len(), 963);
+    assert_eq!(strings[0]["spark_version"], "4.2.0");
+    registered_inputs.extend(
+        strings[0]["registered_inputs"]
+            .as_object()
+            .ok_or("missing STRING registered inputs")?
+            .clone(),
+    );
+    records.extend(strings.into_iter().skip(1));
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -152,10 +180,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
             )
             .build(),
         );
-        for (name, input) in registered_inputs
-            .as_object()
-            .ok_or("missing registered inputs")?
-        {
+        for (name, input) in &registered_inputs {
             let rows: Vec<(i32, Option<String>, Option<String>)> =
                 serde_json::from_value(input["rows"].clone())?;
             let raw_table = format!("{name}_strings");
@@ -182,11 +207,24 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                     ),
                 ])?,
             )?;
+            let cast_registered_input = |column: &str, data_type: &str| {
+                if data_type == "BINARY" {
+                    format!("arrow_cast({column}, 'Binary')")
+                } else {
+                    format!("CAST({column} AS {data_type})")
+                }
+            };
             let frame = session
                 .sql(&format!(
-                    "SELECT k,CAST(l AS {}) AS a,CAST(r AS {}) AS b FROM {raw_table}",
-                    input["left_type"].as_str().ok_or("missing left type")?,
-                    input["right_type"].as_str().ok_or("missing right type")?,
+                    "SELECT k,{} AS a,{} AS b FROM {raw_table}",
+                    cast_registered_input(
+                        "l",
+                        input["left_type"].as_str().ok_or("missing left type")?
+                    ),
+                    cast_registered_input(
+                        "r",
+                        input["right_type"].as_str().ok_or("missing right type")?
+                    ),
                 ))
                 .await?;
             session.register_table(name, frame.into_view())?;
@@ -209,6 +247,8 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                             let error = error.to_string();
                             error.contains("[CAST_INVALID_INPUT]")
                             || (case["float_encoding"] == "ieee754_bits" && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
+                            || (case["id"].as_str().is_some_and(|id| id.contains("_INT_required_error") || id.contains("_integer_text_"))
+                                && error.contains("Cast error: Cannot cast string") && error.contains("to value of Int64 type"))
                             || (case["id"] == "replay_decimal_division_after_case" && error.contains("Cannot cast Some(\"bad\") to DECIMAL(10,2)"))
                             || ((case["id"] == "case_live_cast" || case["id"].as_str().is_some_and(|id| id.starts_with("eval_")))
                                 && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
@@ -225,6 +265,9 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                         Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE") => error
                             .to_string()
                             .contains("CASE WHEN condition must be BOOLEAN"),
+                        Some("DATATYPE_MISMATCH.DATA_DIFF_TYPES") => error
+                            .to_string()
+                            .contains("Incompatible conditional STRING result types"),
                         Some("SCALAR_SUBQUERY_TOO_MANY_ROWS") => error
                             .to_string()
                             .contains("Scalar subquery returned more than one row"),
@@ -249,7 +292,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
             }
         }
         let native = session
-            .sql("SELECT NVL(CAST(1.23 AS DECIMAL(10,2)),CAST(2.45 AS DECIMAL(10,2))) AS d, COALESCE(CAST(NULL AS FLOAT),CAST(16777217 AS INT)) AS f")
+            .sql("SELECT NVL(CAST(1.23 AS DECIMAL(10,2)),CAST(2.45 AS DECIMAL(10,2))) AS d, COALESCE(CAST(NULL AS FLOAT),CAST(16777217 AS INT)) AS f, NVL(CAST(NULL AS INT),'bad') AS s")
             .await?
             .collect()
             .await?;
@@ -266,6 +309,12 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
         assert_eq!(
             native[0].column(1).as_primitive::<Float32Type>().value(0),
             16_777_216.0
+        );
+        assert!(native[0].column(2).data_type().is_string());
+        assert!(!native[0].column(2).is_null(0));
+        assert_eq!(
+            array_value_to_string(native[0].column(2).as_ref(), 0)?,
+            "bad"
         );
     }
     assert!(

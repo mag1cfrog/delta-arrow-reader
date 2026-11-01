@@ -9,6 +9,11 @@ use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, cast, expr, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
@@ -90,13 +95,17 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     if data_types.iter().any(is_temporal_type)
         || common_numeric_result_type(&data_types, input.function_context.plan_config.ansi_mode)
             .is_some()
+        || conditional_result_type_with_strings(
+            &data_types,
+            input.function_context.plan_config.ansi_mode,
+        )?
+        .is_some()
     {
         coalesce(ScalarFunctionInput {
             arguments: vec![left, right],
             function_context: input.function_context,
         })
     } else {
-        // COALESCE's numeric/string coercion would change existing non-ANSI results.
         Ok(expr_fn::nvl(left, right))
     }
 }
@@ -123,6 +132,45 @@ fn coerce_conditional_result_values(
                 }
             })
             .collect());
+    }
+    if let Some(target) =
+        conditional_result_type_with_strings(&data_types, function_context.plan_config.ansi_mode)?
+    {
+        return arguments
+            .into_iter()
+            .zip(data_types)
+            .map(|(arg, source)| {
+                if source == target {
+                    return Ok(arg);
+                }
+                let arg = if is_string_type(&source) {
+                    match target {
+                        DataType::Int64 => SparkCastStringToInteger::try_new(
+                            DataType::Int64,
+                            StringIntegerCastMode::Ansi,
+                        )?
+                        .into_expr(arg),
+                        DataType::Float64 => ScalarUDF::from(SparkCastStringToFloat::try_new(
+                            DataType::Float64,
+                            false,
+                        )?)
+                        .call(vec![arg]),
+                        DataType::Boolean => {
+                            ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![arg])
+                        }
+                        _ => cast(arg, target.clone()),
+                    }
+                } else if target == DataType::Utf8
+                    && (is_temporal_type(&source)
+                        || matches!(source, DataType::Float32 | DataType::Float64))
+                {
+                    ScalarUDF::from(SparkToUtf8::new()).call(vec![arg])
+                } else {
+                    cast(arg, target.clone())
+                };
+                Ok(arg)
+            })
+            .collect();
     }
     let has_string = data_types.iter().any(is_string_type);
     let temporal_type =
@@ -161,6 +209,76 @@ fn coerce_conditional_result_values(
         arguments
     };
     Ok(arguments)
+}
+
+// STRING with INT selects BIGINT in ANSI mode and STRING otherwise.
+fn conditional_result_type_with_strings(
+    data_types: &[DataType],
+    ansi_mode: bool,
+) -> PlanResult<Option<DataType>> {
+    if !data_types.iter().any(is_string_type) {
+        return Ok(None);
+    }
+    let alternatives = data_types
+        .iter()
+        .filter(|data_type| !is_string_type(data_type) && **data_type != DataType::Null)
+        .collect::<Vec<_>>();
+    let is_numeric = |data_type: &DataType| {
+        data_type.is_signed_integer()
+            || matches!(
+                data_type,
+                DataType::Float32 | DataType::Float64 | DataType::Decimal128(..)
+            )
+    };
+    if alternatives.iter().any(|data_type| {
+        !is_numeric(data_type)
+            && !is_temporal_type(data_type)
+            && !matches!(data_type, DataType::Boolean | DataType::Binary)
+    }) {
+        return Ok(None);
+    }
+    let target = if alternatives.is_empty() {
+        Some(DataType::Utf8)
+    } else if !ansi_mode {
+        alternatives
+            .iter()
+            .all(|data_type| !matches!(data_type, DataType::Boolean | DataType::Binary))
+            .then_some(DataType::Utf8)
+    } else if alternatives.iter().all(|data_type| is_numeric(data_type)) {
+        Some(
+            if alternatives
+                .iter()
+                .any(|data_type| !data_type.is_signed_integer())
+            {
+                DataType::Float64
+            } else {
+                DataType::Int64
+            },
+        )
+    } else if alternatives
+        .iter()
+        .all(|data_type| **data_type == DataType::Boolean)
+    {
+        Some(DataType::Boolean)
+    } else if alternatives
+        .iter()
+        .all(|data_type| **data_type == DataType::Binary)
+    {
+        Some(DataType::Binary)
+    } else if alternatives
+        .iter()
+        .all(|data_type| is_temporal_type(data_type))
+    {
+        // Temporal alternatives keep the existing session-timezone conversion.
+        return Ok(None);
+    } else {
+        None
+    };
+    target.map(Some).ok_or_else(|| {
+        PlanError::invalid(format!(
+            "Incompatible conditional STRING result types: {data_types:?}"
+        ))
+    })
 }
 
 fn coerce_to_temporal(

@@ -7,24 +7,23 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#651, shared floating-point text conversion, is in progress on
-`fix/spark-floating-point-text`, based on staging `e129b129`. The candidate shares
-FLOAT/DOUBLE formatting across casts, array display, CSV and XML. Its formatter
-matches Java 21 for 30,024 exact bit patterns. The 446-row Spark reference now
-passes through public SQL. Final validation passes 437 workspace tests, zero
-failures and two inherited ignored doctests; root-crate Clippy also passes.
-Clean-context Sol/high Bulletproof Review is complete with no unresolved finding
-in this slice. It is ready for its dedicated staging PR.
+#650, conditional STRING result coercion, has resumed on
+`fix/spark-conditional-string-types`, based on staging `e6f16d90`.
+The saved candidate and 962 independent Spark observations are restored. Its
+original baseline failed 1,468 comparisons at two batch sizes. Routing implicit
+FLOAT/DOUBLE-to-STRING conversions through #651's shared formatter removes the
+thirty remaining text differences. All 437 workspace tests pass, with zero
+failures and two inherited ignored doctests, including the full strict
+conditional corpus and evaluation counters. Root-crate Clippy and formatting
+also pass. Clean-context Sol/high review completed with no unresolved actionable finding.
 
-The two separately reviewed prerequisites are merged: #652 through PR #653
-(`474183c8`) and #654 through PR #655 (`e129b129`). Both issues are closed, and
-both merge trees match their reviewed source. #654's completed local Linux
-validation has 436 passing tests, zero failures and two inherited ignored
-doctests, plus Clippy, formatting and clean-context Sol/high Bulletproof Review.
-
-#650's conditional STRING candidate remains saved locally. Resume it after #651
-with separate validation, review and a staging PR. #635 is complete through
-PR #649, merged as `86d94c3e` with its issue closed.
+#651 is complete through PR #657, merged as `e6f16d90`, and its issue is closed.
+The complete merge tree matches reviewed source `1172d50e`. All 437 local Linux
+workspace tests pass, with zero failures and two inherited ignored doctests;
+root-crate Clippy, formatting and clean-context Sol/high Bulletproof Review pass.
+The separately reviewed prerequisites #652 and #654 are complete through
+PRs #653 and #655. #635 is complete through PR #649. The signed-zero PIVOT
+matching gap remains open as #656 in S04.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
 #633 are merged through separate PRs #637 and #640-#648. Their issues are closed.
@@ -95,7 +94,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -790,6 +789,18 @@ is claimed.
   row, native DataFusion casts retain their results, and the historical replay
   needs no correction. The final Linux workspace passes 437 tests, zero failures
   and two inherited ignored doctests, plus root-crate Clippy.
+
+- #650's saved conditional STRING candidate is restored on `e6f16d90` after
+  #651 merged through PR #657. It reuses existing STRING-to-integer, floating
+  and Boolean kernels, and SparkToUtf8 for temporal/floating STRING results.
+  The 962 independent Spark observations have 811 successes and 151 required
+  errors across both ANSI modes, 18 registered input definitions, scalar/local
+  queries, both branch selections and variadic permutations. All are strict;
+  the thirty former text differences disappear without changing expectations.
+  Existing numeric/temporal references, lazy evaluation counters and native SQL
+  controls remain passing. The complete Linux workspace passes 437 tests, zero
+  failures and two inherited ignored doctests; root-crate Clippy and formatting
+  pass. Independent review completed with no unresolved actionable finding.
 
 ### Retained gaps found during S01 review
 
