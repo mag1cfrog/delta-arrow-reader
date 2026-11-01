@@ -256,6 +256,26 @@ async fn volatile_functions_run_only_during_execution() -> TestResult {
             )))
         }),
     ));
+    for data_type in ["INT", "DATE", "BOOLEAN"] {
+        let query = plan_query(
+            &session,
+            &format!(
+                "SELECT v=CAST(NULL AS {data_type}) AS compared, next_value(v) AS sequence FROM VALUES ('bad') t(v)"
+            ),
+            &SparkSqlOptions::default(),
+        )
+        .await?;
+        let error = query
+            .create_physical_plan(&session)
+            .await
+            .expect_err("a volatile sibling must not hide a deterministic cast failure");
+        assert!(
+            error.to_string().contains("CAST_INVALID_INPUT")
+                || error.to_string().contains("Cannot cast string 'bad'"),
+            "{error}"
+        );
+        assert_eq!(invocations.load(Ordering::SeqCst), 0);
+    }
     let query = plan_query(
         &session,
         "SELECT CAST(v AS INT) AS parsed, next_value(v) AS sequence FROM VALUES ('7'), ('9') t(v)",

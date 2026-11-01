@@ -14,7 +14,7 @@ use datafusion::optimizer::push_down_filter::PushDownFilter;
 use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
 use datafusion::physical_expr::create_physical_expr;
-use datafusion_common::config::ConfigOptions;
+use datafusion_common::config::{ConfigExtension, ConfigOptions};
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
 use datafusion_expr::utils::{conjunction, split_conjunction_owned};
@@ -40,6 +40,15 @@ use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToIntege
 /// Preserve early expression errors before NULL and empty-result rewrites.
 #[derive(Debug)]
 pub struct PreserveSparkExpressionErrors;
+
+datafusion_common::extensions_options! {
+    /// Query-local marker for Spark error ordering, absent from native SQL queries.
+    pub struct SparkSqlErrorSemantics {}
+}
+
+impl ConfigExtension for SparkSqlErrorSemantics {
+    const PREFIX: &'static str = "dar_spark_sql_errors";
+}
 
 fn null_literal(expr: &Expr) -> bool {
     match expr {
@@ -698,8 +707,15 @@ fn has_cast(expr: &Expr) -> Result<bool> {
 
 // Preserve string and Decimal-to-Decimal failures before local pruning.
 // Other numeric casts retain the existing arithmetic precheck.
-fn early_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
+fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) -> Result<bool> {
     expr.exists(|expr| match expr {
+        Expr::BinaryExpr(binary)
+            if spark_comparison_errors
+                && matches!(binary.op, Operator::Eq | Operator::NotEq | Operator::Lt | Operator::LtEq | Operator::Gt | Operator::GtEq)
+                && null_literal(&binary.right) =>
+        {
+            row_expression(&binary.left, true)
+        }
         Expr::Cast(cast) => {
             if null_literal(&cast.expr) || !row_expression(&cast.expr, true)? {
                 return Ok(false);
@@ -1099,6 +1115,7 @@ impl Prepare {
         exists: bool,
     ) -> Result<LogicalPlan> {
         use datafusion_expr::logical_plan::EmptyRelation;
+        let spark_comparison_errors = options.extensions.get::<SparkSqlErrorSemantics>().is_some();
         // Local VALUES conversion precedes pruning. Empty local inputs never
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
@@ -1107,11 +1124,11 @@ impl Prepare {
                     let mut casts = false;
                     let mut evaluable = true;
                     for expr in &project.expr {
-                        casts |= early_cast(expr, project.input.schema())?;
+                        casts |= early_cast(expr, project.input.schema(), spark_comparison_errors)?;
                         evaluable &= row_expression(expr, true)?;
                     }
                     if casts
-                        && evaluable
+                        && (evaluable || spark_comparison_errors)
                         && let Some(batch) = self.local_batch(&project.input)?
                     {
                         if batch.num_rows() == 0 {
@@ -1126,8 +1143,14 @@ impl Prepare {
                             .with_schema(Arc::clone(project.input.schema()))
                             .with_config_options(Arc::new(options.clone()))
                             .build();
-                        let simplifier = ExprSimplifier::new(info);
+                        let mut simplifier = ExprSimplifier::new(info);
+                        if spark_comparison_errors {
+                            simplifier = simplifier.with_left_to_right_comparison_errors();
+                        }
                         for expr in &project.expr {
+                            if !row_expression(expr, true)? {
+                                continue;
+                            }
                             // Keep local comparisons while lowering other UDFs normally.
                             let expr = expr
                                 .clone()

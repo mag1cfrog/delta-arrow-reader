@@ -146,8 +146,6 @@ def main():
                     record["result_timezone"] = "UTC"
                 if expected["status"] == "error" and name.startswith(("ntz_", "ltz_", "external_ntz_", "external_ltz_")):
                     record["error_representation"] = "timestamp_parser"
-                if ansi and name.endswith("_equal_null_local"):
-                    record["retained_difference"] = "local_null_comparison_633"
                 observations.append(record)
         assert len({(r["id"], r["ansi"], r["timezone"]) for r in observations}) == len(observations)
         metadata = {"spark_version": spark.version, "external_input": INPUT,

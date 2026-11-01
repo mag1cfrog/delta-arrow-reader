@@ -42,9 +42,12 @@ comparisons, #622, are reviewed and pushed as `bb2704f0`. NULLIF comparisons
 against a known NULL right operand, #623, are reviewed and pushed as `7cefd14a`.
 Mixed nanosecond comparisons, #627, are reviewed and pushed as `a23bebd6`.
 DATE string boundaries, #631, are reviewed and pushed as `13a2f1ef`.
-The current slice is #629, STRING comparisons with DATE and microsecond
-timestamps. Its 956 independent Spark observations retain three known local-NULL
-preparation differences under #633. The lowercase timestamp-literal separator
+STRING comparisons with DATE and microsecond timestamps, #629, are reviewed
+and pushed as `afafcd7f`. The current slice, #633, preserves local comparison
+conversion errors before NULL propagation. Its independent references cover
+temporal, numeric and BOOLEAN comparisons and native SQL controls. The three
+retained #629 observations now use strict Spark assertions. Local validation and
+independent review are complete; its staging PR is queued. The lowercase timestamp-literal separator
 gap found while checking the shared date grammar is tracked separately by #632.
 
 The active Spark frontend is developed and integrated on
@@ -697,6 +700,22 @@ because the old issue exists.
   Remote platform CI and staging integration remain pending. Exact error-stage,
   error-class and nullability parity, other Arrow timestamp units and release
   performance remain separate work.
+
+- #633 captures 452 independent Spark comparisons, including BOOLEAN, explicit
+  casts, operand order, registered/literal controls and volatile siblings. All
+  use strict result/error assertions at batch sizes 1 and 32; the original 956
+  STRING/temporal expectations are unchanged and now have no retained cases.
+  Local preparation reuses the full native simplifier with left-before-NULL
+  conversion ordering. A query-local marker keeps native SQL on the same host
+  unchanged. Independent Sol/high Bulletproof Review found and closed three
+  gaps: native-query activation, BOOLEAN-specific NULL folding and a volatile
+  sibling hiding deterministic conversion errors. Counted functions stay unused
+  during planning; native SQL still works after a failed Spark query on the same
+  host. Final workspace validation passes 434 tests, zero failures and two
+  inherited ignored doctests. Root-crate all-targets Clippy, formatting and diff
+  checks pass. No actionable review findings remain. Platform CI and the
+  separate staging PR remain pending; exact Spark error-stage parity and CLI
+  integration are outside this slice.
 
 ### Retained gaps found during S01 review
 

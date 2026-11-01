@@ -277,17 +277,32 @@ Literal NULLIF controls include numeric and BOOLEAN peers, typed DATE literals
 and conditional registered inputs. Both top-level and nested LIMIT 0 discard
 unused comparisons; an empty filter can still require a constant cast error.
 
-The references strictly match 953 observations. Three ANSI local-VALUES
-comparisons with a literal NULL retain a known difference tracked by #633:
-Spark raises CAST_INVALID_INPUT during preparation, while DAR returns NULL rows.
-Their Spark expectations remain unchanged; tests assert the retained result
-separately. These cases are not counted as compatible.
+All 956 observations use strict Spark result/error assertions, including the
+three local-VALUES comparisons with a NULL peer previously tracked by #633.
 
 Timestamp parsing still exposes the existing parser error rather than Spark's
 error-class wrapper. Marked references accept only the observed execution-error
 variants for the captured bad strings. Exact error-stage and nullability parity
 remain separate work. These references cover Spark's Date32 and microsecond
 timestamp types, not STRING comparison casts for other Arrow timestamp units.
+
+## Local comparison errors with NULL peers
+
+`local-null-comparison-spark.jsonl` contains 452 Spark 4.2.0 observations from
+`capture_local_null_comparison_spark.py`, using the reference environment above.
+It covers DATE, TIMESTAMP, TIMESTAMP_NTZ, INT and BOOLEAN in both ANSI modes,
+ordinary and null-safe comparisons, operand order, explicit CAST and TRY_CAST,
+conditional parents, empty inputs and LIMIT 0. Registered inputs and literal
+expressions distinguish local VALUES preparation from ordinary NULL propagation.
+
+In ANSI mode, `s = CAST(NULL AS DATE)` over local VALUES containing `'bad'` must
+raise a conversion error. Reversing the operands can skip the conversion.
+Volatile sibling columns test that required deterministic work is preserved
+without evaluating the volatile column during planning. The public comparison
+test checks values, types, names and errors at batch sizes 1 and 32; native SQL
+controls check the ordinary simplifier in plain and Spark-configured sessions.
+Exact Spark error classes and stages remain outside these assertions, as in
+the STRING/temporal references above.
 
 ## DATE string boundaries
 

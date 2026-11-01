@@ -126,11 +126,18 @@ date/time parsers. Invalid input follows ANSI mode, and timestamp strings use
 the session timezone. The implicit comparison cast preserves early literal and
 local-input errors without changing explicit datetime-function pruning. The
 [reference cases](tests/fixtures/README.md#string-and-temporal-comparisons)
-record the remaining local-NULL preparation difference separately.
+cover both operand orders and local versus registered inputs.
 Constant NULLIF comparisons reuse the existing whole-expression error check
 after LIMIT 0 pruning and native empty-relation propagation. Conditional parents
-still decide whether their inputs need evaluation; the generic DataFusion
-simplifier is unchanged.
+still decide whether their inputs need evaluation.
+
+Spark query planning marks its copied session state for local comparison-error
+ordering. The host session and its native SQL queries retain the default rules.
+During local input preparation, an opt-in DataFusion simplifier mode preserves
+a comparison's left conversion before a NULL right operand, including BOOLEAN
+comparisons. It keeps native UDF lowering while disabling operand reordering and
+comparison-cast removal for that pass. The ordinary simplifier defaults remain
+unchanged.
 
 NULLIF floating comparisons reuse the existing Spark float normalization and
 native comparison/validity kernels. Unmatched values retain their original bits.
