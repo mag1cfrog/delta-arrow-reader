@@ -36,6 +36,7 @@ use datafusion_common::{
     DFSchema, Result, ScalarValue, assert_or_internal_err, exec_err,
 };
 use datafusion_expr::{ColumnarValue, expr_vec_fmt};
+use datafusion_physical_expr_common::physical_expr::is_volatile;
 
 mod array_static_filter;
 mod primitive_filter;
@@ -100,28 +101,17 @@ fn evaluate_list(
     ScalarValue::iter_to_array(scalars)
 }
 
-/// Try to evaluate a list of expressions as constants.
-///
-/// Returns:
-/// - `Ok(Some(ArrayRef))` if all expressions are constants (can be evaluated on an empty RecordBatch)
-/// - `Ok(None)` if the list contains non-constant expressions
-/// - `Err(...)` only for actual errors (not for non-constant expressions)
-///
-/// This is used to detect when a list contains only literals, casts of literals,
-/// or other constant expressions.
+/// Build constant membership values without invoking volatile expressions.
+/// Failed constant evaluation is deferred to runtime, where short-circuiting may avoid it.
 fn try_evaluate_constant_list(
     list: &[Arc<dyn PhysicalExpr>],
     schema: &Schema,
-) -> Result<Option<ArrayRef>> {
-    let batch = RecordBatch::new_empty(Arc::new(schema.clone()));
-    match evaluate_list(list, &batch) {
-        Ok(array) => Ok(Some(array)),
-        Err(_) => {
-            // Non-constant expressions can't be evaluated on an empty batch
-            // This is not an error, just means we can't use a static filter
-            Ok(None)
-        }
+) -> Option<ArrayRef> {
+    if list.iter().any(is_volatile) {
+        return None;
     }
+    let batch = RecordBatch::new_empty(Arc::new(schema.clone()));
+    evaluate_list(list, &batch).ok()
 }
 
 /// Asserts that the InList expression's data type matches a list element's
@@ -240,7 +230,7 @@ impl InListExpr {
         }
 
         // Try to create a static filter if all list expressions are constants
-        let static_filter = match try_evaluate_constant_list(&list, schema)? {
+        let static_filter = match try_evaluate_constant_list(&list, schema) {
             Some(in_array) => Some(instantiate_static_filter(in_array)?),
             None => None, // Non-constant expressions, fall back to dynamic evaluation
         };
