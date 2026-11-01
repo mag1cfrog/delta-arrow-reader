@@ -7,7 +7,7 @@ use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, Proj
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::numeric_coercion::common_numeric_result_type;
+use crate::function::numeric_coercion::common_numeric_type;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -69,7 +69,7 @@ impl PlanResolver<'_> {
             if !types.iter().any(|t| matches!(t, DataType::Decimal128(..))) {
                 continue;
             }
-            let target = common_numeric_result_type(&types, false).ok_or_else(|| {
+            let target = common_numeric_type(&types, false).ok_or_else(|| {
                 PlanError::invalid(format!(
                     "Incompatible VALUES Decimal input types: {types:?}"
                 ))

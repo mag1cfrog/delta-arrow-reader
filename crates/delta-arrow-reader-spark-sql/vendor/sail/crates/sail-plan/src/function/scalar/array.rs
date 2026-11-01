@@ -32,6 +32,7 @@ use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
     SparkComparisonFloat,
 };
+use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -172,6 +173,33 @@ fn array_element(array: expr::Expr, element: expr::Expr) -> expr::Expr {
 fn array_contains(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let (mut array, mut element) = input.arguments.two()?;
+    let array_type = array.get_type(schema)?;
+    let element_type = element.get_type(schema)?;
+    let mut coerced_array_type = array_type.clone();
+    match &mut coerced_array_type {
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field)
+        | DataType::FixedSizeList(field, _) => {
+            let types = [field.data_type().clone(), element_type.clone()];
+            if types
+                .iter()
+                .any(|data_type| matches!(data_type, DataType::Decimal128(..)))
+                && let Some(target) =
+                    common_numeric_type(&types, input.function_context.plan_config.ansi_mode)
+            {
+                *field = Arc::new(field.as_ref().clone().with_data_type(target.clone()));
+                if element_type != target {
+                    element = cast(element, target);
+                }
+            }
+        }
+        _ => {}
+    }
+    if array_type != coerced_array_type {
+        array = cast(array, coerced_array_type);
+    }
     if let DataType::List(field)
     | DataType::LargeList(field)
     | DataType::FixedSizeList(field, _)

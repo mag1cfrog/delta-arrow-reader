@@ -207,9 +207,7 @@ try:
     }
     for observation in observations:
         name, ansi = observation['id'], observation['ansi']
-        if name in {'decimal_hit', 'decimal_miss', 'decimal_hit_column', 'decimal_miss_column'}:
-            observation['retained_difference'] = 'mixed_decimal_coercion'
-        elif name in {'registered_null_type_array', 'registered_null_type_empty_batch'}:
+        if name in {'registered_null_type_array', 'registered_null_type_empty_batch'}:
             observation['retained_difference'] = 'null_type_admission'
     target = Path(__file__).with_name('array-contains-spark.jsonl')
     target.write_text('\n'.join(json.dumps(record) for record in [inputs, *observations])+'\n')

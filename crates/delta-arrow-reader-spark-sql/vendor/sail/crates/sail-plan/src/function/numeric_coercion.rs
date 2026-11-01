@@ -1,14 +1,11 @@
-//! Numeric alternatives need one result type before a conditional chooses a value.
+//! Conditional values, VALUES columns and Decimal array membership share numeric coercion.
 //! For example, DECIMAL(38,20) and BIGINT share DECIMAL(38,18), retaining enough
-//! integral digits for either input. VALUES columns use the same Decimal rule.
+//! integral digits for either input.
 
 use arrow::datatypes::DataType;
 use datafusion_expr::type_coercion::binary::type_union_resolution;
 
-pub(crate) fn common_numeric_result_type(
-    data_types: &[DataType],
-    ansi_mode: bool,
-) -> Option<DataType> {
+pub(crate) fn common_numeric_type(data_types: &[DataType], ansi_mode: bool) -> Option<DataType> {
     let has_decimal = data_types
         .iter()
         .any(|data_type| matches!(data_type, DataType::Decimal128(..)));
