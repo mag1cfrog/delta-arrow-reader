@@ -24,11 +24,11 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use arrow::array::*;
+use arrow::compute::cast;
 use arrow::compute::kernels::boolean::{and_kleene, or_kleene};
 use arrow::compute::kernels::concat_elements::{
     concat_element_binary, concat_elements_utf8,
 };
-use arrow::compute::{SlicesIterator, cast, filter_record_batch};
 use arrow::datatypes::*;
 use arrow::error::ArrowError;
 use datafusion_common::cast::as_boolean_array;
@@ -336,6 +336,10 @@ impl PhysicalExpr for BinaryExpr {
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         use arrow::compute::kernels::numeric::*;
 
+        if batch.num_rows() == 0 && matches!(self.op, Operator::And | Operator::Or) {
+            return Ok(ColumnarValue::Array(new_empty_array(&DataType::Boolean)));
+        }
+
         // Evaluate left-hand side expression.
         let lhs = self.left.evaluate(batch)?;
 
@@ -347,49 +351,16 @@ impl PhysicalExpr for BinaryExpr {
                 let rhs = self.right.evaluate(batch)?;
                 return Ok(rhs);
             }
-            ShortCircuitStrategy::PreSelection(selection) => {
-                // The function `evaluate_selection` was not called for filtering and calculation,
-                // as it takes into account cases where the selection contains null values.
-                let batch = filter_record_batch(batch, selection)?;
-                let right_ret = self.right.evaluate(&batch)?;
-
-                match &right_ret {
-                    ColumnarValue::Array(array) => {
-                        // When the array on the right is all true or all false, skip the scatter process
-                        let boolean_array = array.as_boolean();
-                        if boolean_array.null_count() == 0 && !boolean_array.has_false() {
-                            return Ok(lhs);
-                        } else if boolean_array.null_count() == 0
-                            && !boolean_array.has_true()
-                        {
-                            // If the right-hand array is returned at this point,the lengths will be inconsistent;
-                            // returning a scalar can avoid this issue
-                            return Ok(ColumnarValue::Scalar(ScalarValue::Boolean(
-                                Some(false),
-                            )));
-                        }
-
-                        return pre_selection_scatter(selection, Some(boolean_array));
-                    }
-                    ColumnarValue::Scalar(scalar) => {
-                        if let ScalarValue::Boolean(v) = scalar {
-                            // When the scalar is true or false, skip the scatter process
-                            if let Some(v) = v {
-                                if *v {
-                                    return Ok(lhs);
-                                } else {
-                                    return Ok(right_ret);
-                                }
-                            } else {
-                                return pre_selection_scatter(selection, None);
-                            }
-                        } else {
-                            return internal_err!(
-                                "Expected boolean scalar value, found: {right_ret:?}"
-                            );
-                        }
-                    }
-                }
+            ShortCircuitStrategy::EvaluateRightRows(selection) => {
+                let rhs = self.right.evaluate_selection(batch, &selection)?;
+                return self
+                    .evaluate_with_resolved_args(
+                        lhs.into_array(batch.num_rows())?,
+                        &DataType::Boolean,
+                        rhs.into_array(batch.num_rows())?,
+                        &DataType::Boolean,
+                    )
+                    .map(ColumnarValue::Array);
             }
         }
 
@@ -807,211 +778,63 @@ impl BinaryExpr {
     }
 }
 
-enum ShortCircuitStrategy<'a> {
+enum ShortCircuitStrategy {
     None,
     ReturnLeft,
     ReturnRight,
-    PreSelection(&'a BooleanArray),
+    EvaluateRightRows(BooleanArray),
 }
 
-/// Based on the results calculated from the left side of the short-circuit operation,
-/// if the proportion of `true` is less than 0.2 and the current operation is an `and`,
-/// the `RecordBatch` will be filtered in advance.
-const PRE_SELECTION_THRESHOLD: f32 = 0.2;
-
-/// Checks if a logical operator (`AND`/`OR`) can short-circuit evaluation based on the left-hand side (lhs) result.
-///
-/// Short-circuiting occurs under these circumstances:
-/// - For `AND`:
-///    - if LHS is all false => short-circuit → return LHS
-///    - if LHS is all true  => short-circuit → return RHS
-///    - if LHS is mixed and true_count/sum_count <= [`PRE_SELECTION_THRESHOLD`] -> pre-selection
-/// - For `OR`:
-///    - if LHS is all true  => short-circuit → return LHS
-///    - if LHS is all false => short-circuit → return RHS
-/// # Arguments
-/// * `lhs` - The left-hand side (lhs) columnar value (array or scalar)
-/// * `lhs` - The left-hand side (lhs) columnar value (array or scalar)
-/// * `op` - The logical operator (`AND` or `OR`)
-///
-/// # Implementation Notes
-/// 1. Only works with Boolean-typed arguments (other types automatically return `false`)
-/// 2. Handles both scalar values and array values
-/// 3. For arrays, uses optimized bit counting techniques for boolean arrays
-fn check_short_circuit<'a>(
-    lhs: &'a ColumnarValue,
-    op: &Operator,
-) -> ShortCircuitStrategy<'a> {
-    // Quick reject for non-logical operators,and quick judgment when op is and
+fn check_short_circuit(lhs: &ColumnarValue, op: &Operator) -> ShortCircuitStrategy {
     let is_and = match op {
         Operator::And => true,
         Operator::Or => false,
         _ => return ShortCircuitStrategy::None,
     };
-
-    // Non-boolean types can't be short-circuited
     if lhs.data_type() != DataType::Boolean {
         return ShortCircuitStrategy::None;
     }
 
     match lhs {
         ColumnarValue::Array(array) => {
-            // Fast path for arrays - try to downcast to boolean array
-            if let Ok(bool_array) = as_boolean_array(array) {
-                // Arrays with nulls can't be short-circuited
-                if bool_array.null_count() > 0 {
-                    return ShortCircuitStrategy::None;
-                }
-
-                let len = bool_array.len();
-                if len == 0 {
-                    return ShortCircuitStrategy::None;
-                }
-
-                let true_count = bool_array.values().count_set_bits();
-                if is_and {
-                    // For AND, prioritize checking for all-false (short circuit case)
-                    // Uses optimized false_count() method provided by Arrow
-
-                    // Short circuit if all values are false
-                    if true_count == 0 {
-                        return ShortCircuitStrategy::ReturnLeft;
-                    }
-
-                    // If no false values, then all must be true
-                    if true_count == len {
-                        return ShortCircuitStrategy::ReturnRight;
-                    }
-
-                    // determine if we can pre-selection
-                    if true_count as f32 / len as f32 <= PRE_SELECTION_THRESHOLD {
-                        return ShortCircuitStrategy::PreSelection(bool_array);
-                    }
+            let left = array.as_boolean();
+            let decided_rows = if is_and {
+                left.false_count()
+            } else {
+                left.true_count()
+            };
+            if decided_rows == left.len() {
+                return ShortCircuitStrategy::ReturnLeft;
+            }
+            if decided_rows == 0 {
+                return if left.null_count() == 0 {
+                    ShortCircuitStrategy::ReturnRight
                 } else {
-                    // For OR, prioritize checking for all-true (short circuit case)
-                    // Uses optimized true_count() method provided by Arrow
-
-                    // Short circuit if all values are true
-                    if true_count == len {
-                        return ShortCircuitStrategy::ReturnLeft;
-                    }
-
-                    // If no true values, then all must be false
-                    if true_count == 0 {
-                        return ShortCircuitStrategy::ReturnRight;
-                    }
-                }
-            }
-        }
-        ColumnarValue::Scalar(scalar) => {
-            // Fast path for scalar values
-            if let ScalarValue::Boolean(Some(is_true)) = scalar {
-                // Return Left for:
-                // - AND with false value
-                // - OR with true value
-                if (is_and && !is_true) || (!is_and && *is_true) {
-                    return ShortCircuitStrategy::ReturnLeft;
-                } else {
-                    return ShortCircuitStrategy::ReturnRight;
-                }
-            }
-        }
-    }
-
-    // If we can't short-circuit, indicate that normal evaluation should continue
-    ShortCircuitStrategy::None
-}
-
-/// Creates a new boolean array based on the evaluation of the right expression,
-/// but only for positions where the left_result is true.
-///
-/// This function is used for short-circuit evaluation optimization of logical AND operations:
-/// - When left_result has few true values, we only evaluate the right expression for those positions
-/// - Values are copied from right_array where left_result is true
-/// - All other positions are filled with false values
-///
-/// # Parameters
-/// - `left_result` Boolean array with selection mask (typically from left side of AND)
-/// - `right_result` Result of evaluating right side of expression (only for selected positions)
-///
-/// # Returns
-/// A combined ColumnarValue with values from right_result where left_result is true
-///
-/// # Example
-///  Initial Data: { 1, 2, 3, 4, 5 }
-///  Left Evaluation
-///     (Condition: Equal to 2 or 3)
-///          ↓
-///  Filtered Data: {2, 3}
-///    Left Bitmap: { 0, 1, 1, 0, 0 }
-///          ↓
-///   Right Evaluation
-///     (Condition: Even numbers)
-///          ↓
-///  Right Data: { 2 }
-///    Right Bitmap: { 1, 0 }
-///          ↓
-///   Combine Results
-///  Final Bitmap: { 0, 1, 0, 0, 0 }
-///
-/// # Note
-/// Perhaps it would be better to modify `left_result` directly without creating a copy?
-/// In practice, `left_result` should have only one owner, so making changes should be safe.
-/// However, this is difficult to achieve under the immutable constraints of [`Arc`] and [`BooleanArray`].
-fn pre_selection_scatter(
-    left_result: &BooleanArray,
-    right_result: Option<&BooleanArray>,
-) -> Result<ColumnarValue> {
-    let result_len = left_result.len();
-
-    let mut result_array_builder = BooleanArray::builder(result_len);
-
-    // keep track of current position we have in right boolean array
-    let mut right_array_pos = 0;
-
-    // keep track of how much is filled
-    let mut last_end = 0;
-    // reduce if condition in for_each
-    match right_result {
-        Some(right_result) => {
-            SlicesIterator::new(left_result).for_each(|(start, end)| {
-                // the gap needs to be filled with false
-                if start > last_end {
-                    result_array_builder.append_n(start - last_end, false);
-                }
-
-                // copy values from right array for this slice
-                let len = end - start;
-                right_result
-                    .slice(right_array_pos, len)
-                    .iter()
-                    .for_each(|v| result_array_builder.append_option(v));
-
-                right_array_pos += len;
-                last_end = end;
-            });
-        }
-        None => SlicesIterator::new(left_result).for_each(|(start, end)| {
-            // the gap needs to be filled with false
-            if start > last_end {
-                result_array_builder.append_n(start - last_end, false);
+                    ShortCircuitStrategy::None
+                };
             }
 
-            // append nulls for this slice derictly
-            let len = end - start;
-            result_array_builder.append_nulls(len);
-
-            last_end = end;
-        }),
+            // NULL on the left still needs the right value to decide AND/OR.
+            let needs_right = if is_and {
+                left.values().clone()
+            } else {
+                !left.values()
+            };
+            let needs_right = match left.nulls() {
+                Some(nulls) => &needs_right | &!nulls.inner(),
+                None => needs_right,
+            };
+            ShortCircuitStrategy::EvaluateRightRows(BooleanArray::new(needs_right, None))
+        }
+        ColumnarValue::Scalar(ScalarValue::Boolean(Some(value))) => {
+            if *value == is_and {
+                ShortCircuitStrategy::ReturnRight
+            } else {
+                ShortCircuitStrategy::ReturnLeft
+            }
+        }
+        _ => ShortCircuitStrategy::None,
     }
-
-    // Fill any remaining positions with false
-    if last_end < result_len {
-        result_array_builder.append_n(result_len - last_end, false);
-    }
-    let boolean_result = result_array_builder.finish();
-
-    Ok(ColumnarValue::Array(Arc::new(boolean_result)))
 }
 
 fn concat_elements(left: &ArrayRef, right: &ArrayRef) -> Result<ArrayRef> {
@@ -5332,249 +5155,50 @@ mod tests {
     }
 
     #[test]
-    fn test_check_short_circuit() {
-        // Test with non-nullable arrays
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("a", DataType::Int32, false),
-            Field::new("b", DataType::Int32, false),
-        ]));
-        let a_array = Int32Array::from(vec![1, 3, 4, 5, 6]);
-        let b_array = Int32Array::from(vec![1, 2, 3, 4, 5]);
-        let batch = RecordBatch::try_new(
-            Arc::clone(&schema),
-            vec![Arc::new(a_array), Arc::new(b_array)],
-        )
-        .unwrap();
-
-        // op: AND left: all false
-        let left_expr = logical2physical(&logical_col("a").eq(expr_lit(2)), &schema);
-        let left_value = left_expr.evaluate(&batch).unwrap();
-        assert!(matches!(
-            check_short_circuit(&left_value, &Operator::And),
-            ShortCircuitStrategy::ReturnLeft
-        ));
-
-        // op: AND left: not all false
-        let left_expr = logical2physical(&logical_col("a").eq(expr_lit(3)), &schema);
-        let left_value = left_expr.evaluate(&batch).unwrap();
-        let ColumnarValue::Array(array) = &left_value else {
-            panic!("Expected ColumnarValue::Array");
-        };
-        let ShortCircuitStrategy::PreSelection(value) =
-            check_short_circuit(&left_value, &Operator::And)
-        else {
-            panic!("Expected ShortCircuitStrategy::PreSelection");
-        };
-        let expected_boolean_arr: Vec<_> =
-            as_boolean_array(array).unwrap().iter().collect();
-        let boolean_arr: Vec<_> = value.iter().collect();
-        assert_eq!(expected_boolean_arr, boolean_arr);
-
-        // op: OR left: all true
-        let left_expr = logical2physical(&logical_col("a").gt(expr_lit(0)), &schema);
-        let left_value = left_expr.evaluate(&batch).unwrap();
-        assert!(matches!(
-            check_short_circuit(&left_value, &Operator::Or),
-            ShortCircuitStrategy::ReturnLeft
-        ));
-
-        // op: OR left: not all true
-        let left_expr: Arc<dyn PhysicalExpr> =
-            logical2physical(&logical_col("a").gt(expr_lit(2)), &schema);
-        let left_value = left_expr.evaluate(&batch).unwrap();
-        assert!(matches!(
-            check_short_circuit(&left_value, &Operator::Or),
-            ShortCircuitStrategy::None
-        ));
-
-        // Test with nullable arrays and null values
-        let schema_nullable = Arc::new(Schema::new(vec![
-            Field::new("c", DataType::Boolean, true),
-            Field::new("d", DataType::Boolean, true),
-        ]));
-
-        // Create arrays with null values
-        let c_array = Arc::new(BooleanArray::from(vec![
-            Some(true),
-            Some(false),
-            None,
-            Some(true),
-            None,
-        ])) as ArrayRef;
-        let d_array = Arc::new(BooleanArray::from(vec![
-            Some(false),
-            Some(true),
-            Some(false),
-            None,
-            Some(true),
-        ])) as ArrayRef;
-
-        let batch_nullable = RecordBatch::try_new(
-            Arc::clone(&schema_nullable),
-            vec![Arc::clone(&c_array), Arc::clone(&d_array)],
-        )
-        .unwrap();
-
-        // Case: Mixed values with nulls - shouldn't short-circuit for AND
-        let mixed_nulls = logical2physical(&logical_col("c"), &schema_nullable);
-        let mixed_nulls_value = mixed_nulls.evaluate(&batch_nullable).unwrap();
-        assert!(matches!(
-            check_short_circuit(&mixed_nulls_value, &Operator::And),
-            ShortCircuitStrategy::None
-        ));
-
-        // Case: Mixed values with nulls - shouldn't short-circuit for OR
-        assert!(matches!(
-            check_short_circuit(&mixed_nulls_value, &Operator::Or),
-            ShortCircuitStrategy::None
-        ));
-
-        // Test with all nulls
-        let all_nulls = Arc::new(BooleanArray::from(vec![None, None, None])) as ArrayRef;
-        let null_batch = RecordBatch::try_new(
-            Arc::new(Schema::new(vec![Field::new("e", DataType::Boolean, true)])),
-            vec![all_nulls],
-        )
-        .unwrap();
-
-        let null_expr = logical2physical(&logical_col("e"), &null_batch.schema());
-        let null_value = null_expr.evaluate(&null_batch).unwrap();
-
-        // All nulls shouldn't short-circuit for AND or OR
-        assert!(matches!(
-            check_short_circuit(&null_value, &Operator::And),
-            ShortCircuitStrategy::None
-        ));
-        assert!(matches!(
-            check_short_circuit(&null_value, &Operator::Or),
-            ShortCircuitStrategy::None
-        ));
-
-        // Test with scalar values
-        // Scalar true
-        let scalar_true = ColumnarValue::Scalar(ScalarValue::Boolean(Some(true)));
-        assert!(matches!(
-            check_short_circuit(&scalar_true, &Operator::Or),
-            ShortCircuitStrategy::ReturnLeft
-        )); // Should short-circuit OR
-        assert!(matches!(
-            check_short_circuit(&scalar_true, &Operator::And),
-            ShortCircuitStrategy::ReturnRight
-        )); // Should return the RHS for AND
-
-        // Scalar false
-        let scalar_false = ColumnarValue::Scalar(ScalarValue::Boolean(Some(false)));
-        assert!(matches!(
-            check_short_circuit(&scalar_false, &Operator::And),
-            ShortCircuitStrategy::ReturnLeft
-        )); // Should short-circuit AND
-        assert!(matches!(
-            check_short_circuit(&scalar_false, &Operator::Or),
-            ShortCircuitStrategy::ReturnRight
-        )); // Should return the RHS for OR
-
-        // Scalar null
-        let scalar_null = ColumnarValue::Scalar(ScalarValue::Boolean(None));
-        assert!(matches!(
-            check_short_circuit(&scalar_null, &Operator::And),
-            ShortCircuitStrategy::None
-        ));
-        assert!(matches!(
-            check_short_circuit(&scalar_null, &Operator::Or),
-            ShortCircuitStrategy::None
-        ));
-    }
-
-    /// Test for [pre_selection_scatter]
-    /// Since [check_short_circuit] ensures that the left side does not contain null and is neither all_true nor all_false, as well as not being empty,
-    /// the following tests have been designed:
-    /// 1. Test sparse left with interleaved true/false
-    /// 2. Test multiple consecutive true blocks
-    /// 3. Test multiple consecutive true blocks
-    /// 4. Test single true at first position
-    /// 5. Test single true at last position
-    /// 6. Test nulls in right array
-    #[test]
-    fn test_pre_selection_scatter() {
-        fn create_bool_array(bools: Vec<bool>) -> BooleanArray {
-            BooleanArray::from(bools.into_iter().map(Some).collect::<Vec<_>>())
+    fn test_boolean_short_circuit_selection() {
+        for (op, expected) in [
+            (Operator::And, vec![true, false, true, true, false]),
+            (Operator::Or, vec![false, true, true, false, true]),
+        ] {
+            let left = ColumnarValue::Array(Arc::new(BooleanArray::from(vec![
+                Some(true),
+                Some(false),
+                None,
+                Some(true),
+                Some(false),
+            ])));
+            let ShortCircuitStrategy::EvaluateRightRows(selection) =
+                check_short_circuit(&left, &op)
+            else {
+                panic!("mixed Boolean rows must select the needed right operands");
+            };
+            assert_eq!(selection, BooleanArray::from(expected));
         }
-        // Test sparse left with interleaved true/false
-        {
-            // Left: [T, F, T, F, T]
-            // Right: [F, T, F] (values for 3 true positions)
-            let left = create_bool_array(vec![true, false, true, false, true]);
-            let right = create_bool_array(vec![false, true, false]);
-
-            let result = pre_selection_scatter(&left, Some(&right)).unwrap();
-            let result_arr = result.into_array(left.len()).unwrap();
-
-            let expected = create_bool_array(vec![false, false, true, false, false]);
-            assert_eq!(&expected, result_arr.as_boolean());
-        }
-        // Test multiple consecutive true blocks
-        {
-            // Left: [F, T, T, F, T, T, T]
-            // Right: [T, F, F, T, F]
+        for op in [Operator::And, Operator::Or] {
             let left =
-                create_bool_array(vec![false, true, true, false, true, true, true]);
-            let right = create_bool_array(vec![true, false, false, true, false]);
-
-            let result = pre_selection_scatter(&left, Some(&right)).unwrap();
-            let result_arr = result.into_array(left.len()).unwrap();
-
-            let expected =
-                create_bool_array(vec![false, true, false, false, false, true, false]);
-            assert_eq!(&expected, result_arr.as_boolean());
-        }
-        // Test single true at first position
-        {
-            // Left: [T, F, F]
-            // Right: [F]
-            let left = create_bool_array(vec![true, false, false]);
-            let right = create_bool_array(vec![false]);
-
-            let result = pre_selection_scatter(&left, Some(&right)).unwrap();
-            let result_arr = result.into_array(left.len()).unwrap();
-
-            let expected = create_bool_array(vec![false, false, false]);
-            assert_eq!(&expected, result_arr.as_boolean());
-        }
-        // Test single true at last position
-        {
-            // Left: [F, F, T]
-            // Right: [F]
-            let left = create_bool_array(vec![false, false, true]);
-            let right = create_bool_array(vec![false]);
-
-            let result = pre_selection_scatter(&left, Some(&right)).unwrap();
-            let result_arr = result.into_array(left.len()).unwrap();
-
-            let expected = create_bool_array(vec![false, false, false]);
-            assert_eq!(&expected, result_arr.as_boolean());
-        }
-        // Test nulls in right array
-        {
-            // Left: [F, T, F, T]
-            // Right: [None, Some(false)] (with null at first position)
-            let left = create_bool_array(vec![false, true, false, true]);
-            let right = BooleanArray::from(vec![None, Some(false)]);
-
-            let result = pre_selection_scatter(&left, Some(&right)).unwrap();
-            let result_arr = result.into_array(left.len()).unwrap();
-
-            let expected = BooleanArray::from(vec![
-                Some(false),
-                None, // null from right
-                Some(false),
-                Some(false),
-            ]);
-            assert_eq!(&expected, result_arr.as_boolean());
+                ColumnarValue::Array(Arc::new(BooleanArray::from(vec![None, None])));
+            assert!(matches!(
+                check_short_circuit(&left, &op),
+                ShortCircuitStrategy::None
+            ));
+            for value in [false, true] {
+                for left in [
+                    ColumnarValue::Scalar(ScalarValue::Boolean(Some(value))),
+                    ColumnarValue::Array(Arc::new(BooleanArray::from(vec![value; 3]))),
+                ] {
+                    let strategy = check_short_circuit(&left, &op);
+                    if value == (op == Operator::And) {
+                        assert!(matches!(strategy, ShortCircuitStrategy::ReturnRight));
+                    } else {
+                        assert!(matches!(strategy, ShortCircuitStrategy::ReturnLeft));
+                    }
+                }
+            }
         }
     }
 
     #[test]
-    fn test_and_true_preselection_returns_lhs() {
+    fn test_and_true_preserves_left_values() {
         let schema =
             Arc::new(Schema::new(vec![Field::new("c", DataType::Boolean, false)]));
         let c_array = Arc::new(BooleanArray::from(vec![false, true, false, false, false]))
@@ -5593,7 +5217,7 @@ mod tests {
         let actual: Vec<_> = result_arr.as_boolean().iter().collect();
         assert_eq!(
             expected, actual,
-            "AND with TRUE must equal LHS even with PreSelection"
+            "AND with TRUE must equal LHS when evaluating selected rows"
         );
     }
 

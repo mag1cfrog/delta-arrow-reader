@@ -7,18 +7,39 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#659, mixed Decimal ARRAY_CONTAINS coercion, is ready for its staging PR on
-`fix/spark-array-decimal-coercion`, based on staging `a5321cd3`. The saved
-candidate retains all 324 independent Spark observations and the original eight
-Decimal results unchanged. Numeric coercion runs before the merged floating
-normalization. Restoration preserves both slices' exact evaluation counters and
-all floating/layout tests. All seven membership tests pass after #665, including
-the 324 strict Decimal observations at both batch sizes. Final Linux validation
-passes 453 workspace tests, zero failures and two inherited ignored doctests,
-plus Clippy and formatting. Clean-context Sol/high Bulletproof Review rechecked
-the complete diff and both separately repaired findings without identifying a
-remaining actionable issue. Untyped NULL/nested admission stays with #156; the
-numeric membership implementation and reference expectations remain strict.
+#669, Boolean row evaluation, is ready for its staging PR on `fix/boolean-row-evaluation`,
+based on staging `716dd884`. #150 review found that mixed AND/OR batches can
+evaluate CASTs on rows already decided by the left input. Independent Spark
+references succeed; the same native query succeeds at batch size 1 but fails at
+32 in ANSI mode. Required-error and legacy controls remain intact. The repair
+uses the shared physical evaluation boundary and preserves three-valued
+results, required errors and operand evaluation counts. The 48 independent
+Spark references pass in batches of 1 and 32, including four required ANSI
+errors. Native tests record operand visits across scalar/column inputs, sliced
+null bitmaps and empty batches. The 80 retained BinaryExpr unit checks pass.
+Final Linux checks pass 455 workspace tests, zero failures and two inherited
+ignored doctests, plus root-crate Clippy, workspace formatting and diff checks.
+Clean-context Sol/high Bulletproof Review found no unresolved actionable issue.
+Mixed Boolean expressions now filter all required right-input rows regardless
+of density. S11 must compare dense/wide/nested predicates against the baseline;
+this correctness repair does not establish their performance.
+
+#150 remains open for direct Boolean/NULL reference coverage, explicit schema
+stage controls and its final independent review. Its audit also found stale
+array fixture documentation after #659: 356 of 360 original observations now
+have strict supported-input expectations, four untyped-NULL observations remain,
+and the separate 324-case Decimal corpus is strict. Correct that description in
+the coverage slice. The temporary diagnostic sources and results are retained
+outside the repository. CASE analyzed-schema nullability differs from Spark in
+the folded control; that classification remains under #149/S07.
+
+#659 merged through PR #668 at `716dd884`, whose full tree matches reviewed
+source `73f426a4`. All 324 independent Spark observations and the original eight
+Decimal results pass unchanged at both batch sizes. Final local checks pass
+453 workspace tests, zero failures and two inherited ignored doctests, plus
+Clippy and formatting. Clean-context Sol/high Bulletproof Review completed after
+rechecking both prerequisite repairs. Its issue is closed, temporary branch and
+three owned backups removed. Untyped NULL/nested admission remains with #156.
 
 #665 merged through PR #667 at `a5321cd3`, whose full tree matches reviewed
 source `5df768c1`. The shared cast boundary restricts ordinary row spans and
@@ -127,7 +148,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | Order | Work | Existing issues | Completion evidence |
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
-| S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
+| S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613, #669 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660, #663, #665 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
@@ -136,7 +157,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156, #666 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |
-| S11 | Release comparison and support statement | #157, #164, #166, #620, #626 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF selection cost; user-facing support documentation |
+| S11 | Release comparison and support statement | #157, #164, #166, #620, #626 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF and Boolean row-selection cost; user-facing support documentation |
 
 The other eleven historical performance leaves remain deferred unless these
 comparisons identify a relevant regression or bottleneck. Preserve their evidence

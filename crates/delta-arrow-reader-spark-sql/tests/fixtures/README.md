@@ -422,6 +422,21 @@ the original compressed captures remain unchanged. A live invalid INT cast
 still fails with the existing Arrow cast message instead of Spark's error code.
 The test requires that specific cast cause; diagnostic-code parity remains S07.
 
+## Boolean operand evaluation
+
+`boolean-evaluation-spark.jsonl` records 48 Spark 4.2.0 observations, including
+four required ANSI cast failures. Regenerate it with
+`capture_boolean_evaluation_spark.py` using PySpark 4.2.0 and Java 21. Its header
+contains the registered input rows; Rust replays them in batches of 1 and 32.
+
+The references cover the complete AND/OR truth tables, scalar NULL operands,
+empty results, and malformed casts on both needed and skipped rows. Tests compare
+exact Boolean values, names and types, and require returned NULLs to fit both
+native schemas. Exact Spark schema-nullability and error-text parity remain
+separate work. Direct native expression tests also record which rows each
+operand visits, including sliced buffers and scalar returns, so correct final
+values cannot hide unnecessary or duplicate evaluation.
+
 ## Conditional fallback evaluation
 
 The 72 fallback references cover COALESCE, IFNULL and NVL in both ANSI modes:
