@@ -119,6 +119,65 @@ fn register_inputs(
     Ok(())
 }
 
+async fn register_decimal_inputs(
+    session: &SessionContext,
+    inputs: &Value,
+    batch_size: usize,
+) -> TestResult {
+    for (name, input) in inputs.as_object().ok_or("missing Decimal inputs")? {
+        let rows: Vec<InputRow<String>> = serde_json::from_value(input["rows"].clone())?;
+        let first = rows.first().ok_or("empty Decimal input")?;
+        let padded = std::iter::once(first).chain(&rows).collect::<Vec<_>>();
+        let mut arrays = ListBuilder::new(StringBuilder::new());
+        for (_, array, _) in &padded {
+            if let Some(values) = array {
+                for value in values {
+                    arrays.values().append_option(value.as_deref());
+                }
+            }
+            arrays.append(array.is_some());
+        }
+        let raw = format!("{name}_strings");
+        session.register_batch(
+            &raw,
+            RecordBatch::try_from_iter(vec![
+                (
+                    "id",
+                    Arc::new(Int32Array::from_iter_values(padded.iter().map(|row| row.0)))
+                        as ArrayRef,
+                ),
+                ("a", Arc::new(arrays.finish()) as ArrayRef),
+                (
+                    "n",
+                    Arc::new(StringArray::from_iter(
+                        padded.iter().map(|row| row.2.as_deref()),
+                    )) as ArrayRef,
+                ),
+            ])?,
+        )?;
+        let frame = session
+            .sql(&format!(
+                "SELECT id,CAST(a AS {}[]) AS a,CAST(n AS {}) AS n FROM {raw}",
+                input["element_type"]
+                    .as_str()
+                    .ok_or("missing element type")?,
+                input["lookup_type"].as_str().ok_or("missing lookup type")?,
+            ))
+            .await?;
+        let batches = frame.collect().await?;
+        let schema = batches.first().ok_or("missing input batch")?.schema();
+        let padded = arrow::compute::concat_batches(&schema, &batches)?;
+        // Remove the extra leading row to exercise real offsets in typed arrays.
+        let batch = padded.slice(1, rows.len());
+        let batches = (0..batch.num_rows())
+            .step_by(batch_size)
+            .map(|start| batch.slice(start, batch_size.min(batch.num_rows() - start)))
+            .collect();
+        session.register_table(name, Arc::new(MemTable::try_new(schema, vec![batches])?))?;
+    }
+    Ok(())
+}
+
 async fn capture_query_outcome(session: &SessionContext, query: &Value) -> TestResult<Value> {
     let options = SparkSqlOptions {
         ansi_mode: query["ansi"].as_bool().ok_or("missing ANSI mode")?,
@@ -271,18 +330,6 @@ fn assert_spark_result(query: &Value, actual: &Value) -> TestResult {
 fn assert_retained_difference(query: &Value, actual: &Value, null_rows: usize) -> TestResult {
     let context = format!("{} ANSI={}: {actual}", query["id"], query["ansi"]);
     match query["retained_difference"].as_str() {
-        Some("mixed_decimal_coercion") => {
-            assert_eq!(query["expected"]["status"], "ok");
-            assert_eq!(actual["status"], "error", "{context}");
-            assert_eq!(actual["stage"], "planning", "{context}");
-            assert!(
-                actual["error"]
-                    .as_str()
-                    .ok_or("missing error")?
-                    .contains("coercion from List(Decimal128(10, 2)), Decimal128(8, 1)"),
-                "{context}"
-            );
-        }
         Some("null_type_admission") => {
             assert_eq!(
                 query["expected"]["condition"],
@@ -323,7 +370,7 @@ async fn array_contains_values_and_input_errors() -> TestResult {
             .iter()
             .filter(|q| q.get("retained_difference").is_some())
             .count(),
-        12
+        4
     );
     for batch_size in [1, 32] {
         let session = create_session(batch_size);
@@ -352,6 +399,48 @@ async fn array_contains_requires_two_arguments() -> TestResult {
                 .await
                 .is_err(),
             "{sql}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn decimal_array_membership_matches_spark() -> TestResult {
+    let records = include_str!("fixtures/array-decimal-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 325);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    for batch_size in [1, 32] {
+        let session = create_session(batch_size);
+        register_decimal_inputs(&session, &records[0]["registered_inputs"], batch_size).await?;
+        for query in &records[1..] {
+            let actual = capture_query_outcome(&session, query).await?;
+            if query["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("invalid_array_type"))
+            {
+                assert_eq!(query["expected"]["status"], "error");
+                assert_eq!(actual["status"], "error", "{query}: {actual}");
+                assert_eq!(actual["stage"], "planning", "{query}: {actual}");
+                assert!(
+                    actual["error"]
+                        .as_str()
+                        .ok_or("missing error")?
+                        .contains("does not support type Decimal128(10, 2)"),
+                    "{query}: {actual}"
+                );
+            } else {
+                assert_spark_result(query, &actual)?;
+            }
+        }
+        let native = session
+            .sql("SELECT array_has(make_array(CAST(1.20 AS DECIMAL(10,2))), CAST(1.2 AS DECIMAL(8,1)))")
+            .await;
+        assert!(
+            native.is_err(),
+            "native type admission must remain unchanged"
         );
     }
     Ok(())
@@ -437,6 +526,26 @@ async fn array_membership_evaluates_needed_operands_once() -> TestResult {
         (
             "SELECT ARRAY_CONTAINS(ARRAY(CAST('0.0' AS DOUBLE),NULL),count_float_lookup(n)) AS r FROM lookups WHERE false",
             vec![vec![]],
+            0,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(CAST(1 AS DECIMAL(8,2)),NULL), count_lookup(n)) AS r FROM lookups",
+            vec![vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(count_lookup(n),NULL), CAST(1 AS DECIMAL(8,2))) AS r FROM lookups",
+            vec![vec![Some(true), None, None]],
+            3,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(CAST(NULL AS ARRAY<DECIMAL(8,2)>), count_lookup(n)) AS r FROM lookups",
+            vec![vec![None; 3]],
+            0,
+        ),
+        (
+            "SELECT ARRAY_CONTAINS(ARRAY(count_lookup(n),NULL), CAST(NULL AS DECIMAL(8,2))) AS r FROM lookups",
+            vec![vec![None; 3]],
             0,
         ),
         (
@@ -538,6 +647,103 @@ async fn array_membership_evaluates_needed_operands_once() -> TestResult {
                 *expected_evaluated_rows,
                 "{sql}"
             );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn decimal_membership_accepts_arrow_list_layouts() -> TestResult {
+    use arrow::array::{Decimal128Array, ListArray};
+    use arrow::buffer::{NullBuffer, OffsetBuffer};
+    use std::collections::HashMap;
+
+    let field = Arc::new(
+        Field::new("amount", DataType::Decimal128(8, 1), true).with_metadata(HashMap::from([(
+            "source".to_owned(),
+            "decimal-fixture".to_owned(),
+        )])),
+    );
+    let values = Decimal128Array::from(vec![
+        Some(99),
+        Some(99),
+        Some(12),
+        None,
+        Some(12),
+        None,
+        Some(12),
+        Some(23),
+        Some(12),
+        Some(23),
+        Some(12),
+        Some(23),
+        Some(-12),
+        Some(-23),
+    ])
+    .with_precision_and_scale(8, 1)?;
+    let lists = ListArray::try_new(
+        field.clone(),
+        OffsetBuffer::new(vec![0_i32, 2, 4, 6, 8, 10, 12, 14].into()),
+        Arc::new(values),
+        Some(NullBuffer::from(vec![
+            true, true, true, true, false, true, true,
+        ])),
+    )?;
+    let lookups = Decimal128Array::from(vec![
+        Some(990),
+        Some(120),
+        Some(210),
+        Some(210),
+        Some(120),
+        None,
+        Some(-120),
+    ])
+    .with_precision_and_scale(10, 2)?;
+    for (name, data_type) in [
+        ("lists", DataType::List(field.clone())),
+        ("large_lists", DataType::LargeList(field.clone())),
+        ("fixed_lists", DataType::FixedSizeList(field.clone(), 2)),
+        ("list_views", DataType::ListView(field.clone())),
+        ("large_list_views", DataType::LargeListView(field.clone())),
+    ] {
+        let arrays = arrow::compute::cast(&lists, &data_type)?;
+        let batch = RecordBatch::try_from_iter(vec![
+            (
+                "id",
+                Arc::new(Int32Array::from_iter_values(0..7)) as ArrayRef,
+            ),
+            ("a", arrays),
+            ("n", Arc::new(lookups.clone()) as ArrayRef),
+        ])?
+        .slice(1, 6);
+        for batch_size in [1, 32] {
+            let session = create_session(batch_size);
+            let batches = (0..batch.num_rows())
+                .step_by(batch_size)
+                .map(|start| batch.slice(start, batch_size.min(batch.num_rows() - start)))
+                .collect();
+            session.register_table(
+                name,
+                Arc::new(MemTable::try_new(batch.schema(), vec![batches])?),
+            )?;
+            for ansi in [true, false] {
+                for empty in [false, true] {
+                    let suffix = if empty { " WHERE false" } else { "" };
+                    let rows = if empty {
+                        json!([])
+                    } else {
+                        json!([[true], [null], [false], [null], [null], [true]])
+                    };
+                    let query = json!({
+                        "id": name, "ansi": ansi,
+                        "sql": format!("SELECT ARRAY_CONTAINS(a,n) AS r FROM {name}{suffix} ORDER BY id"),
+                        "expected": {"status":"ok", "rows":rows,
+                            "schema":{"fields":[{"name":"r","type":"boolean"}]}},
+                    });
+                    let actual = capture_query_outcome(&session, &query).await?;
+                    assert_spark_result(&query, &actual)?;
+                }
+            }
         }
     }
     Ok(())

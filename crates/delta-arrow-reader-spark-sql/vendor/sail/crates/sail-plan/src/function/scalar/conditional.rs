@@ -18,7 +18,7 @@ use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
-use crate::function::numeric_coercion::common_numeric_result_type;
+use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 mod nullif;
@@ -93,8 +93,7 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let data_types = [left.get_type(schema)?, right.get_type(schema)?];
     if data_types.iter().any(is_temporal_type)
-        || common_numeric_result_type(&data_types, input.function_context.plan_config.ansi_mode)
-            .is_some()
+        || common_numeric_type(&data_types, input.function_context.plan_config.ansi_mode).is_some()
         || conditional_result_type_with_strings(
             &data_types,
             input.function_context.plan_config.ansi_mode,
@@ -118,9 +117,7 @@ fn coerce_conditional_result_values(
         .iter()
         .map(|arg| arg.get_type(function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
-    if let Some(target) =
-        common_numeric_result_type(&data_types, function_context.plan_config.ansi_mode)
-    {
+    if let Some(target) = common_numeric_type(&data_types, function_context.plan_config.ansi_mode) {
         return Ok(arguments
             .into_iter()
             .zip(data_types)

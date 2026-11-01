@@ -7,34 +7,30 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#665, sliced list cast bounds, is ready for its staging PR on `fix/sliced-list-casts`, based
-on staging `780f9700`. Follow-up review of #659 found that numeric list casts
-convert an entire backing child for every small batch. The structural regression
-reproduces 4096 converted values for an empty slice. A strict string-to-integer
-control also fails because an invalid value outside the selected row is cast.
-The candidate trims ordinary list ranges and compacts the union of referenced
-scalar view ranges before shared cast dispatch. Review found generic gathering
-can expand nested sharing and panic on valid dictionary keys; dedicated small
-regressions reproduced both, plus lost contiguous buffer reuse. The repair uses
-zero-copy slices for single ranges and retains the previous multi-range path for
-nested/encoded children. #666 tracks that inherited S10 limitation. Scalar
-partial-overlap, nullability and sharing checks are included. The connected
-List-to-View constructor now propagates non-nullable-target validation instead
-of panicking. Fixed-size conversions now apply the complete target child field
-and preserve row counts for zero-width arrays. Tests reproduced the ignored
-nullability and lost-row failures before those changes. Final local validation
-passes 451 workspace tests, zero failures and two inherited ignored doctests,
-plus Clippy and formatting. All 41 retained Arrow list/nested/display checks pass
-through an isolated manifest pointing to the actual source with the same Arrow
-58.4.0 versions. Clean-context Sol/high Bulletproof Review found no remaining
-actionable finding. macOS/Windows are reserved for the next checkpoint. After
-this separate PR merges, rerun #659's unchanged references before closing #665.
+#659, mixed Decimal ARRAY_CONTAINS coercion, is ready for its staging PR on
+`fix/spark-array-decimal-coercion`, based on staging `a5321cd3`. The saved
+candidate retains all 324 independent Spark observations and the original eight
+Decimal results unchanged. Numeric coercion runs before the merged floating
+normalization. Restoration preserves both slices' exact evaluation counters and
+all floating/layout tests. All seven membership tests pass after #665, including
+the 324 strict Decimal observations at both batch sizes. Final Linux validation
+passes 453 workspace tests, zero failures and two inherited ignored doctests,
+plus Clippy and formatting. Clean-context Sol/high Bulletproof Review rechecked
+the complete diff and both separately repaired findings without identifying a
+remaining actionable issue. Untyped NULL/nested admission stays with #156; the
+numeric membership implementation and reference expectations remain strict.
 
-#659 is saved in stash `a0a03c9695f6c50742b52dbb9aeac326a2e7f393`. Its unchanged
-324 Decimal references now all pass after #663; full Linux tests pass 443 cases,
-zero failures and two inherited ignored doctests. Independent review confirmed
-that the signed-zero finding is resolved but identified #665. The Decimal slice
-remains unaccepted until the shared cast repair and follow-up review finish.
+#665 merged through PR #667 at `a5321cd3`, whose full tree matches reviewed
+source `5df768c1`. The shared cast boundary restricts ordinary row spans and
+unencoded scalar view ranges before conversion. Connected repairs preserve
+field metadata/nullability and zero-width row counts, and return invalid target
+errors instead of panicking. Nested sharing, encoded storage and contiguous
+buffer reuse are protected; inherited gapped nested/encoded bounds stay in #666.
+Final local checks pass 451 workspace tests, zero failures and two inherited
+ignored doctests, plus 41 retained Arrow unit checks, Clippy and formatting.
+Clean-context Sol/high Bulletproof Review completed with no unresolved findings.
+The required #659 strict replay passes. Its issue is closed and temporary branch
+removed. macOS/Windows remain for the next checkpoint.
 
 #663 merged through PR #664 at `780f9700`, whose full tree matches reviewed
 source `7d9fa725`. Final Linux checks passed 441 tests, Clippy and formatting,
