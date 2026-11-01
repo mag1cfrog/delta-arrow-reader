@@ -201,10 +201,19 @@ async fn match_spark_comparison_coercion() -> TestResult {
             .iter()
             .filter(|case| case.get("retained_difference").is_some())
             .count(),
-        3
+        0
     );
     let string_temporal_input = string_temporal[0]["external_input"].clone();
     records.extend(string_temporal.into_iter().skip(1));
+    let local_null = include_str!("fixtures/local-null-comparison-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(local_null.len(), 453);
+    assert_eq!(local_null[0]["spark_version"], "4.2.0");
+    let local_null_input: Vec<Option<String>> =
+        serde_json::from_value(local_null[0]["external_input"].clone())?;
+    records.extend(local_null.into_iter().skip(1));
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -222,6 +231,16 @@ async fn match_spark_comparison_coercion() -> TestResult {
         register_temporal_input(&session, "external_temporal", &temporal_input)?;
         register_temporal_input(&session, "external_string_temporal", &string_temporal_input)?;
         session.register_batch(
+            "inputs",
+            RecordBatch::try_from_iter([
+                ("k", Arc::new(Int32Array::from(vec![0, 1, 2])) as ArrayRef),
+                (
+                    "s",
+                    Arc::new(StringArray::from(local_null_input.clone())) as ArrayRef,
+                ),
+            ])?,
+        )?;
+        session.register_batch(
             "nullif_input",
             RecordBatch::try_from_iter([
                 ("k", Arc::new(Int32Array::from(vec![0, 1, 2])) as ArrayRef),
@@ -235,21 +254,14 @@ async fn match_spark_comparison_coercion() -> TestResult {
         for case in &records[1..] {
             let expected = &case["expected"];
             let actual = execute_comparison_query(&session, case).await;
-            if case["retained_difference"] == "local_null_comparison_633" {
-                assert_eq!(expected["condition"], "CAST_INVALID_INPUT");
-                assert_eq!(
-                    actual?,
-                    json!({"types":["boolean"], "names":["r"], "rows":[[null],[null],[null]]})
-                );
-                continue;
-            }
             let matches = match &actual {
                 Ok(actual) if expected["status"] == "ok" => {
                     let fields = expected["schema"]["fields"]
                         .as_array()
                         .ok_or("missing Spark fields")?;
                     actual["types"] == json!(fields.iter().map(|f| &f["type"]).collect::<Vec<_>>())
-                        && actual["names"] == json!(["r"])
+                        && actual["names"]
+                            == json!(fields.iter().map(|f| &f["name"]).collect::<Vec<_>>())
                         && actual["rows"] == expected["rows"]
                 }
                 Err(error) if expected["condition"] == "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES" => {
@@ -330,7 +342,38 @@ async fn match_spark_comparison_coercion() -> TestResult {
     let configured_host = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
+    let spark_query = plan_query(
+        &configured_host,
+        "SELECT CAST(s AS INT)=CAST(NULL AS INT) AS r FROM VALUES ('bad') t(s)",
+        &SparkSqlOptions::default(),
+    )
+    .await?;
+    assert!(
+        spark_query
+            .create_physical_plan(&configured_host)
+            .await
+            .is_err_and(|error| error.to_string().contains("Cannot cast string 'bad'"))
+    );
     for session in [&native, &configured_host] {
+        for data_type in ["INT", "DATE", "TIMESTAMP"] {
+            for expression in [
+                format!("CAST(s AS {data_type})=CAST(NULL AS {data_type})"),
+                format!("CAST(NULL AS {data_type})=CAST(s AS {data_type})"),
+            ] {
+                let rows = session
+                    .sql(&format!(
+                        "SELECT {expression} AS r FROM (VALUES ('bad'), (NULL)) t(s)"
+                    ))
+                    .await?
+                    .collect()
+                    .await?;
+                let values = rows
+                    .iter()
+                    .flat_map(|batch| batch.column(0).as_boolean().iter())
+                    .collect::<Vec<_>>();
+                assert_eq!(values, [None, None], "native: {expression}");
+            }
+        }
         let native_date_error = async {
             session
                 .sql("SELECT 'bad'=DATE '2026-01-02' AS r")

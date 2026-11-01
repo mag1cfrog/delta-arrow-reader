@@ -24,13 +24,14 @@
 
 use std::sync::Arc;
 
+use datafusion::dataframe::DataFrame;
 use datafusion::error::{DataFusionError, Result};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
-use sail_plan::expression_errors::PreserveSparkExpressionErrors;
+use sail_plan::expression_errors::{PreserveSparkExpressionErrors, SparkSqlErrorSemantics};
 use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::resolver::PlanResolver;
 
@@ -72,9 +73,13 @@ impl SparkSqlQuery {
         &self,
         session: &SessionContext,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        let frame = session
-            .execute_logical_plan(self.logical_plan.clone())
-            .await?;
+        let mut state = session.state();
+        state
+            .config_mut()
+            .options_mut()
+            .extensions
+            .insert(SparkSqlErrorSemantics::default());
+        let frame = DataFrame::new(state, self.logical_plan.clone());
         let physical = frame.create_physical_plan().await?;
         rename_physical_plan(physical, &self.column_names)
     }
