@@ -2266,7 +2266,7 @@ mod tests {
 
 #[cfg(test)]
 #[test]
-fn in_value_null_check_reads_projected_output() -> datafusion_common::Result<()> {
+fn in_value_null_check_reads_projected_output() -> Result<()> {
     use crate::{
         OptimizerContext, Optimizer, simplify_expressions::SimplifyExpressions,
         decorrelate_predicate_subquery::DecorrelatePredicateSubquery,
@@ -2356,7 +2356,7 @@ fn in_value_null_check_reads_projected_output() -> datafusion_common::Result<()>
 
 #[cfg(test)]
 #[test]
-fn column_free_not_in_preserves_unknown() -> datafusion_common::Result<()> {
+fn column_free_not_in_preserves_unknown() -> Result<()> {
     use crate::{
         Optimizer, OptimizerContext,
         decorrelate_predicate_subquery::DecorrelatePredicateSubquery,

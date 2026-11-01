@@ -4212,7 +4212,7 @@ mod tests {
     }
 
     #[test]
-    fn simplify_case_null_conditions() -> datafusion_common::Result<()> {
+    fn simplify_case_null_conditions() -> Result<()> {
         use crate::simplify_expressions::{ExprSimplifier, SimplifyContext};
         use arrow::datatypes::{DataType, Field, Schema};
         use datafusion_common::{DFSchema, ScalarValue};
