@@ -105,6 +105,11 @@ because the old issue exists.
   proceeding.
 - Merge accepted slices into `feat/spark-sql-staging`, not `main`. Keep the
   staging branch separate from ordinary releases until the user requests adoption.
+- Each staging PR requires the full local Linux Spark workspace tests, root-crate
+  Clippy, formatting and clean-context review. Automatic cloud CI excludes this
+  base branch. Run the existing three-platform Spark checks at integration
+  checkpoints with `gh workflow run ci.yml --ref feat/spark-sql-staging`, including
+  before frontend adoption. PRs into main or other bases retain normal CI.
 - Give each implementation issue its own PR targeting staging. If a newly
   confirmed gap falls outside existing issue scope, create and assign a bounded
   issue before implementing it. Link the issue family through native sub-issues;

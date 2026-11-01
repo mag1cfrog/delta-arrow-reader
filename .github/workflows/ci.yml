@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    branches-ignore: [feat/spark-sql-staging]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -33,7 +35,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       cli: ${{ steps.filter.outputs.cli }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
-      spark_sql: ${{ steps.filter.outputs.spark_sql }}
+      spark_sql: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.spark_sql == 'true' }}
       package_version: ${{ steps.package-version.outputs.version }}
       pr_head_sha: ${{ github.event.pull_request.head.sha }}
       release_pr: >-
@@ -47,8 +49,16 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Validate Spark checkpoint source
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ ! -f crates/delta-arrow-reader-spark-sql/Cargo.toml ]; then
+            echo "::error::The selected ref does not contain the Spark SQL workspace."
+            exit 1
+          fi
       - name: Detect changed files
         id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v4
         with:
           filters: .github/path-filters.json
