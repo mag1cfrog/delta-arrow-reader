@@ -21,18 +21,20 @@ passed. Searched CASE condition types, #604, merged through PR #609 as
 merged through PR #611 as `929810ff` after all three platforms passed.
 Mixed-temporal promotion has a separate implementation issue, #605, in S03.
 Shared COALESCE/IFNULL/NVL evaluation, #608, merged through PR #614 as
-`16df0951` after all three platform jobs passed. NULLIF evaluation, #610, is
-reviewed and pushed as `f43bcf5b` in PR #617, with CI running. Known NULL array projections,
-#612, are reviewed and pushed as `80d79acf`; their PR follows #610. Array
+`16df0951` after all three platform jobs passed. NULLIF evaluation, #610, merged
+through PR #617 as `1e75c8bd` after the macOS infrastructure rerun and both other
+platforms passed. Issue #610 is closed. Known NULL array projections, #612, are
+reviewed and pushed as `80d79acf` in PR #625, with CI running. Array
 predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
 S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
 `04b191a6`. VALUES row-width validation, #616, is reviewed and pushed as
 `28d93682`. Mixed-temporal conditional types, #605, are reviewed and pushed as
 `22151773`. NULLIF result preservation, #618, is reviewed and pushed as
-`d0501262`. The current slice is #619, NULLIF numeric comparison coercion. Its
+`d0501262`. Numeric comparison coercion, #619, is reviewed and pushed as `28bb732a`. Its
 comparison audit assigned independent string, temporal and known-NULL-right
 findings to #621, #622 and #623. The relational coverage tracker #170 and
-reference review #141 have resumed.
+reference review #141 have resumed. The current slice is #624, Spark string-to-BOOLEAN
+CAST, a prerequisite for reusing conversions in #621.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -85,7 +87,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #621, #622, #623 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -93,7 +95,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |
-| S11 | Release comparison and support statement | #157, #164, #166, #620 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF selection cost; user-facing support documentation |
+| S11 | Release comparison and support statement | #157, #164, #166, #620, #626 | Equivalent-output size/planning/execution comparisons under the same release settings; NULLIF selection cost; user-facing support documentation |
 
 The other eleven historical performance leaves remain deferred unless these
 comparisons identify a relevant regression or bottleneck. Preserve their evidence
@@ -512,7 +514,8 @@ because the old issue exists.
   diagnostic. Linux/Windows were still running, so GitHub rejected an immediate
   job rerun. Linux and Windows then passed; the macOS job was rerun on the same
   head after the run completed. Staging merge waits for that result. Source and
-  workflow files are unchanged for the rerun.
+  workflow files are unchanged for the rerun. The retry passed and PR #617 merged
+  as `1e75c8bd`; issue #610 is closed. PR #625 now contains only #612.
 
 
 - #619 separates the existing numeric comparison promotion rule from its binary
@@ -537,6 +540,27 @@ because the old issue exists.
   required S03 work and are not counted as supported by #619. Dynamic NULL right
   columns can still require a conversion that a literal NULL skips; #623 must
   preserve that distinction.
+
+
+- Preparing #621 exposed a separate string-to-BOOLEAN CAST gap: native Arrow
+  accepts tokens such as `on` and `tr`, trims Unicode whitespace instead of
+  Spark's ASCII controls/DEL, and throws for invalid legacy CAST values. Issue
+  #624 owns this conversion repair before #621 reuses it. Both are native
+  children of #173 and assigned to `mag1cfrog`.
+- #624 captures 344 independent Spark cases. Across two batch sizes the baseline
+  has 70 success/error-kind mismatches, 136 value mismatches and 14 error-class
+  mismatches. The candidate's public-API and counted-evaluation tests pass.
+  Native DataFusion and non-string conversions retain separate controls. The final
+  workspace passes 427 tests, with zero failures and two inherited ignored
+  doctests, including the layout/slice/empty units and unchanged historical replay.
+  Root warning-denying Clippy, formatting and diff checks pass. The clean-context
+  Sol/high Bulletproof Review reports no actionable findings. The slice is ready
+  to commit; its PR and staging CI follow the existing queue.
+- The additional workspace-wide Clippy diagnostic run for #624 stops on inherited
+  vendor lint denials: 22 errors and 20 warnings at 38 unique locations. No
+  reported line was added or changed by #624. This wider check is not green.
+  Dedicated issue #626, assigned under #113, owns the S11 cleanup and complete
+  all-target warning-denying check before main adoption.
 
 ### Retained gaps found during S01 review
 

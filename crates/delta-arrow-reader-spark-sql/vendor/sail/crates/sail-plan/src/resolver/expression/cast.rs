@@ -16,6 +16,7 @@ use sail_function::scalar::datetime::spark_interval::{
 };
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
+use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInteger;
@@ -105,6 +106,12 @@ impl PlanResolver<'_> {
                 | DataType::Map(_, _)
         );
         let expr = match (expr_type, cast_to_type.clone(), is_try) {
+            (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, DataType::Boolean, _) => {
+                ScalarUDF::new_from_impl(SparkCastStringToBoolean::new(
+                    is_try || !self.config.ansi_mode,
+                ))
+                .call(vec![expr])
+            }
             (
                 DataType::Timestamp(_, None),
                 DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),

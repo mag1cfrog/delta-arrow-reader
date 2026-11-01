@@ -197,6 +197,11 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
         if matches!(frontend, SqlFrontend::Spark { .. }) {
             cases.extend([
                 (
+                    "CAST(TRY_CAST(CAST(count_first(a) AS STRING) AS BOOLEAN) AS INT)".to_string(),
+                    [4, 0, 0],
+                    vec![Some(1), None, None, None],
+                ),
+                (
                     "NULLIF(count_first(a),count_second(b))".to_string(),
                     [4, 2, 0],
                     vec![Some(1), None, Some(3), None],

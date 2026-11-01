@@ -190,6 +190,21 @@ original left expression is evaluated once and right inputs run only for
 non-NULL left rows. String comparison coercion, mixed temporal comparisons and
 known-NULL-right simplification remain separate gaps in the restart plan.
 
+## String-to-BOOLEAN casts
+
+`boolean-cast-spark.jsonl` contains 344 independent Spark 4.2.0 observations from
+`capture_boolean_cast_spark.py`. Both ANSI modes and CAST/TRY_CAST cover accepted
+whole tokens, rejected prefixes and aliases, case, ASCII controls, DEL, Unicode
+whitespace, NULLs, literal and column input, and empty results. Guarded and live
+casts distinguish required errors from discarded expressions. Hex decoding in
+the SQL keeps control bytes out of the fixture source.
+
+The public-API tests check BOOLEAN types, names, exact values and NULL
+representability at two batch sizes. Direct kernel tests cover Utf8, LargeUtf8
+and Utf8View scalars, sliced arrays and empty batches. A counted input checks
+once-per-row evaluation. Integer/BOOLEAN controls and a native DataFusion session
+check that the Spark adapter does not change other conversions.
+
 ## Conditional temporal results
 
 `conditional-spark.jsonl` records 1,382 Spark 4.2.0 observations: 380 temporal and
