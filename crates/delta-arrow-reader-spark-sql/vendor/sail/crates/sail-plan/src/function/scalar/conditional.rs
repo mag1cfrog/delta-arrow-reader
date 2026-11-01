@@ -13,7 +13,7 @@ use sail_function::scalar::spark_to_string::SparkToUtf8;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
-
+use crate::function::numeric_coercion::common_numeric_result_type;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 mod nullif;
@@ -46,7 +46,7 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             }
         }
     }
-    let branch_values = coerce_conditional_temporal_values(branch_values, &function_context)?;
+    let branch_values = coerce_conditional_result_values(branch_values, &function_context)?;
     let when_then_expr = conditions
         .into_iter()
         .zip(branch_values)
@@ -66,7 +66,7 @@ fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let (when_expr, then_expr, else_expr) = arguments.three()?;
     let (then_expr, else_expr) =
-        coerce_conditional_temporal_values(vec![then_expr, else_expr], &function_context)?.two()?;
+        coerce_conditional_result_values(vec![then_expr, else_expr], &function_context)?.two()?;
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![(Box::new(when_expr), Box::new(then_expr))],
@@ -79,14 +79,18 @@ fn coalesce(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         arguments,
         function_context,
     } = input;
-    let arguments = coerce_conditional_temporal_values(arguments, &function_context)?;
+    let arguments = coerce_conditional_result_values(arguments, &function_context)?;
     Ok(expr_fn::coalesce(arguments))
 }
 
 fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let (left, right) = input.arguments.two()?;
     let schema = input.function_context.schema;
-    if is_temporal_type(&left.get_type(schema)?) || is_temporal_type(&right.get_type(schema)?) {
+    let data_types = [left.get_type(schema)?, right.get_type(schema)?];
+    if data_types.iter().any(is_temporal_type)
+        || common_numeric_result_type(&data_types, input.function_context.plan_config.ansi_mode)
+            .is_some()
+    {
         coalesce(ScalarFunctionInput {
             arguments: vec![left, right],
             function_context: input.function_context,
@@ -97,7 +101,7 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }
 }
 
-fn coerce_conditional_temporal_values(
+fn coerce_conditional_result_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
 ) -> PlanResult<Vec<expr::Expr>> {
@@ -105,6 +109,21 @@ fn coerce_conditional_temporal_values(
         .iter()
         .map(|arg| arg.get_type(function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
+    if let Some(target) =
+        common_numeric_result_type(&data_types, function_context.plan_config.ansi_mode)
+    {
+        return Ok(arguments
+            .into_iter()
+            .zip(data_types)
+            .map(|(arg, source)| {
+                if source == target {
+                    arg
+                } else {
+                    cast(arg, target.clone())
+                }
+            })
+            .collect());
+    }
     let has_string = data_types.iter().any(is_string_type);
     let temporal_type =
         common_temporal_type(&data_types, &function_context.plan_config.session_timezone);

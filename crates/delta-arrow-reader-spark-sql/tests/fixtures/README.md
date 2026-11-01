@@ -334,6 +334,39 @@ and Utf8View scalars, sliced arrays and empty batches. A counted input checks
 once-per-row evaluation. Integer/BOOLEAN controls and a native DataFusion session
 check that the Spark adapter does not change other conversions.
 
+## Conditional numeric results
+
+`conditional-numeric-spark.jsonl` records 1,232 independent Spark 4.2.0
+observations for CASE, IF, COALESCE, IFNULL and NVL. Regenerate it with
+`capture_conditional_numeric_spark.py` using the Python/Java setup above.
+Its metadata includes registered inputs and Spark's default preference for
+integral digits when Decimal precision exceeds 38.
+
+Cases cover signed integer widths, FLOAT/DOUBLE, equal and mixed Decimal types,
+precision/scale reduction, rounding, both argument orders and ANSI modes.
+For example, DECIMAL(38,20) with BIGINT produces DECIMAL(38,18), while FLOAT with
+INT produces DOUBLE in ANSI mode and FLOAT otherwise. Decimal/floating mixtures
+produce DOUBLE. Numeric strings and nested or other Arrow numeric types remain
+outside this capture.
+
+`conditional_semantics.rs` compares exact result types and values for literals,
+local VALUES and registered inputs at batch sizes 1 and 32. IF and CASE select
+non-NULL values from each branch. Typed/untyped NULLs, empty results, variadic
+argument orders and required/unused invalid conversions have separate cases.
+Floating results use IEEE bits with a common NaN marker; Decimal strings retain
+their scale. Logical and physical types must agree, and returned NULLs must fit
+both schemas. Native SQL on the Spark-configured host retains its own result
+types. Mixed-type volatile counters in `conditional_evaluation.rs` check that
+conversion preserves branch selection and once-per-required-row evaluation.
+
+Two exact historical division outcomes have replacements in
+`reviewed-corrections.json`. Their CASE denominator now has the correct Decimal
+type, so the query reaches its invalid numerator cast instead of failing type
+coercion. Fresh Spark references require CAST_INVALID_INPUT in ANSI mode and
+a NULL DECIMAL(25,15) otherwise. The ANSI replay keeps its existing analyzer-name
+normalization; all other error fields match exactly. The compressed historical
+capture is unchanged.
+
 ## Conditional temporal results
 
 `conditional-spark.jsonl` records 1,382 Spark 4.2.0 observations: 380 temporal and
@@ -351,7 +384,7 @@ results. The aliases require two arguments; COALESCE's one- and three-argument
 controls remain valid. Numeric, string and same-type date controls check the
 alias boundary, and COALESCE retains a same-Decimal control. Non-ANSI mixed
 integer/string cases require STRING results, including an invalid numeric string.
-They catch unintended delegation of non-temporal inputs to COALESCE.
+They catch unintended delegation of string/numeric inputs to COALESCE.
 
 Returned NULLs must fit the logical and physical schemas. Exact Spark nullability
 and diagnostic-code parity remain separate work: the existing timestamp parser
@@ -360,9 +393,10 @@ code. The tests require that specific parser failure instead of accepting any
 error for those cases. The original compressed replay remains unchanged; the
 following sections identify its reviewed expectation corrections.
 
-Non-temporal alias inputs keep the native NVL path. Its existing Decimal and
-ANSI numeric/string or Boolean/string coercion differences remain S03 work;
-these temporal references do not claim those cases are Spark-compatible.
+Non-temporal aliases use COALESCE for the numeric types covered above. Other
+inputs keep the native NVL path; existing numeric/string and Boolean/string
+coercion differences remain S03 work. These temporal references do not claim
+those cases are Spark-compatible.
 Mixed DATE/LTZ/NTZ references cover COALESCE, IFNULL, NVL, IF and CASE in both
 operand orders. The common timestamp retains microsecond precision and the
 session timezone when LTZ is present; NTZ keeps wall time. Constants, all-NULL

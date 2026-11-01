@@ -1,16 +1,17 @@
-//! Conditional expressions must reject invalid conditions before choosing a branch.
-//! Shared Spark captures also cover temporal fallback values and result types.
+//! Spark references for conditional result types, chosen values and input errors.
 
 use std::error::Error;
 
-use arrow::array::{Array, AsArray};
-use arrow::datatypes::{DataType, TimeUnit, TimestampMicrosecondType};
+use arrow::array::{Array, ArrayRef, AsArray, Int32Array, StringArray};
+use arrow::datatypes::{DataType, Float32Type, Float64Type, TimeUnit, TimestampMicrosecondType};
+use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
+use std::sync::Arc;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -38,14 +39,20 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
     let plan = query.create_physical_plan(session).await?;
     let schema = plan.schema();
     assert_eq!(schema.field(0).name(), "r");
-    if matches!(
-        schema.field(0).data_type(),
-        DataType::Date32 | DataType::Timestamp(..)
-    ) {
-        assert_eq!(
-            query.logical_plan.schema().field(0).data_type(),
-            schema.field(0).data_type()
-        );
+    if case["float_encoding"] == "ieee754_bits"
+        || matches!(
+            schema.field(0).data_type(),
+            DataType::Date32 | DataType::Timestamp(..)
+        )
+    {
+        let logical_type = query.logical_plan.schema().field(0).data_type();
+        let physical_type = schema.field(0).data_type();
+        if logical_type != physical_type {
+            return Err(format!(
+                "logical type {logical_type:?} differs from physical {physical_type:?}"
+            )
+            .into());
+        }
     }
     let result_type = match schema.field(0).data_type() {
         DataType::Date32 => "date",
@@ -55,13 +62,20 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
             "timestamp"
         }
         DataType::Utf8 | DataType::Utf8View | DataType::LargeUtf8 => "string",
+        DataType::Int8 => "byte",
+        DataType::Int16 => "short",
         DataType::Int32 => "integer",
         DataType::Int64 => "long",
         DataType::Boolean => "boolean",
         DataType::Null => "void",
+        DataType::Float32 => "float",
         DataType::Float64 => "double",
-        DataType::Decimal128(10, 2) => "decimal(10,2)",
+        DataType::Decimal128(_, _) => "decimal",
         other => return Err(format!("unexpected result type: {other:?}").into()),
+    };
+    let result_type = match schema.field(0).data_type() {
+        DataType::Decimal128(precision, scale) => format!("decimal({precision},{scale})"),
+        _ => result_type.to_string(),
     };
     let batches = collect(plan, session.task_ctx()).await?;
     let mut rows = Vec::new();
@@ -78,6 +92,26 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
                     .value(row)
                     .to_string()
                     .into()
+            } else if case["float_encoding"] == "ieee754_bits" && column.data_type().is_floating() {
+                match column.data_type() {
+                    DataType::Float32 => {
+                        let value = column.as_primitive::<Float32Type>().value(row);
+                        if value.is_nan() {
+                            "nan".into()
+                        } else {
+                            format!("{:08x}", value.to_bits()).into()
+                        }
+                    }
+                    DataType::Float64 => {
+                        let value = column.as_primitive::<Float64Type>().value(row);
+                        if value.is_nan() {
+                            "nan".into()
+                        } else {
+                            format!("{:016x}", value.to_bits()).into()
+                        }
+                    }
+                    _ => unreachable!(),
+                }
             } else {
                 array_value_to_string(column.as_ref(), row)?.into()
             };
@@ -89,12 +123,21 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn match_spark_conditional_results_and_admission() -> TestResult {
-    let records = include_str!("fixtures/conditional-spark.jsonl")
+    let mut records = include_str!("fixtures/conditional-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records.len(), 1383);
+    let numeric = include_str!("fixtures/conditional-numeric-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(numeric.len(), 1233);
+    assert_eq!(numeric[0]["spark_version"], "4.2.0");
+    assert_eq!(numeric[0]["retain_fraction_digits_first"], "false");
+    let registered_inputs = numeric[0]["registered_inputs"].clone();
+    records.extend(numeric.into_iter().skip(1));
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -109,6 +152,45 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
             )
             .build(),
         );
+        for (name, input) in registered_inputs
+            .as_object()
+            .ok_or("missing registered inputs")?
+        {
+            let rows: Vec<(i32, Option<String>, Option<String>)> =
+                serde_json::from_value(input["rows"].clone())?;
+            let raw_table = format!("{name}_strings");
+            session.register_batch(
+                &raw_table,
+                RecordBatch::try_from_iter([
+                    (
+                        "k",
+                        Arc::new(Int32Array::from(
+                            rows.iter().map(|r| r.0).collect::<Vec<_>>(),
+                        )) as ArrayRef,
+                    ),
+                    (
+                        "l",
+                        Arc::new(StringArray::from(
+                            rows.iter().map(|r| r.1.clone()).collect::<Vec<_>>(),
+                        )) as ArrayRef,
+                    ),
+                    (
+                        "r",
+                        Arc::new(StringArray::from(
+                            rows.iter().map(|r| r.2.clone()).collect::<Vec<_>>(),
+                        )) as ArrayRef,
+                    ),
+                ])?,
+            )?;
+            let frame = session
+                .sql(&format!(
+                    "SELECT k,CAST(l AS {}) AS a,CAST(r AS {}) AS b FROM {raw_table}",
+                    input["left_type"].as_str().ok_or("missing left type")?,
+                    input["right_type"].as_str().ok_or("missing right type")?,
+                ))
+                .await?;
+            session.register_table(name, frame.into_view())?;
+        }
         for case in &records[1..] {
             let actual = execute_reference_query(&session, case).await;
             let expected = &case["expected"];
@@ -126,6 +208,8 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                         ) => {
                             let error = error.to_string();
                             error.contains("[CAST_INVALID_INPUT]")
+                            || (case["float_encoding"] == "ieee754_bits" && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
+                            || (case["id"] == "replay_decimal_division_after_case" && error.contains("Cannot cast Some(\"bad\") to DECIMAL(10,2)"))
                             || ((case["id"] == "case_live_cast" || case["id"].as_str().is_some_and(|id| id.starts_with("eval_")))
                                 && error.contains("Cast error: Cannot cast string 'bad' to value of Int32 type"))
                             || (case["id"]
@@ -164,12 +248,36 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                 differences.push(format!("{} ANSI={} timezone={} batch={batch_size}: expected {expected}, got {actual:?}", case["id"], case["ansi"], case["timezone"]));
             }
         }
+        let native = session
+            .sql("SELECT NVL(CAST(1.23 AS DECIMAL(10,2)),CAST(2.45 AS DECIMAL(10,2))) AS d, COALESCE(CAST(NULL AS FLOAT),CAST(16777217 AS INT)) AS f")
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(native.len(), 1);
+        assert_eq!(native[0].num_rows(), 1);
+        assert_eq!(native[0].column(0).data_type(), &DataType::Float64);
+        assert_eq!(native[0].column(1).data_type(), &DataType::Float32);
+        assert!(!native[0].column(0).is_null(0));
+        assert!(!native[0].column(1).is_null(0));
+        assert_eq!(
+            native[0].column(0).as_primitive::<Float64Type>().value(0),
+            1.23
+        );
+        assert_eq!(
+            native[0].column(1).as_primitive::<Float32Type>().value(0),
+            16_777_216.0
+        );
     }
     assert!(
         differences.is_empty(),
         "{} differences:\n{}",
         differences.len(),
-        differences.join("\n")
+        differences
+            .iter()
+            .take(30)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
     );
     Ok(())
 }

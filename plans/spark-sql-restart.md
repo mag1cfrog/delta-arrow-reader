@@ -7,48 +7,35 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-S01 is complete and merged into `feat/spark-sql-staging` by PR #599, commit
-`3f4245fc258b59c835fc683d4c34a03bbe322231`. Its final CI run passed 408 tests on
-each of Linux, macOS and Windows. Issue #165 is closed.
+#635, common numeric types in conditional results, is ready for its dedicated
+staging PR on `fix/spark-conditional-numeric-types`, based on `3f952d19`.
+The shared rule serves conditional values and Decimal VALUES columns. All 434
+workspace tests pass, with zero failures and two inherited ignored doctests;
+root-crate Clippy, formatting and diff checks also pass. Clean-context Sol/high
+Bulletproof Review found no unresolved actionable issues. The 1,232 independent
+Spark observations cover numeric results and two independently verified
+historical replay corrections. The first 1,230 references reproduced 1,600
+failed baseline assertions across two batch sizes, not 1,600 separate bugs.
+The original 942 observations remain unchanged; 288 added observations select
+non-NULL values from both IF/CASE branches for each numeric pair, argument order
+and input source. STRING/non-numeric coercion remains the next S03 slice.
 
-S02's first slice, #116 ARRAY_CONTAINS NULL semantics, merged into staging through
-PR #600 as `c4e75faf`, after all three platform jobs passed. The following #150
-conditional review has resumed. Its floating NULLIF equality fix, #601, merged
-through PR #602 as `5b4b92f5` after all three platforms passed. IFNULL/NVL temporal
-coercion, #603, merged through PR #607 as `4238a6c4` after all three platforms
-passed. Searched CASE condition types, #604, merged through PR #609 as
-`0f2b595d` after all three platforms passed. Collection-size NULL rules, #606,
-merged through PR #611 as `929810ff` after all three platforms passed.
-Mixed-temporal promotion has a separate implementation issue, #605, in S03.
-Shared COALESCE/IFNULL/NVL evaluation, #608, merged through PR #614 as
-`16df0951` after all three platform jobs passed. NULLIF evaluation, #610, merged
-through PR #617 as `1e75c8bd` after the macOS infrastructure rerun and both other
-platforms passed. Issue #610 is closed. Known NULL array projections, #612,
-merged through PR #625 as `9e16391c` after all three platform jobs passed.
-Issue #612 is closed. Array predicates at join boundaries, #613, merged through
-PR #628 as `17bc4bbb` after all three platform jobs passed. Issue #613 is closed.
-S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
-`04b191a6`, merged through PR #630 as `8d8e3e6f` after all three platform
-jobs passed. Issue #615 is closed. VALUES row-width validation, #616, is reviewed
-and pushed as `28d93682` in PR #634, with CI running. Mixed-temporal conditional types, #605, are reviewed and pushed as
-`22151773`. NULLIF result preservation, #618, is reviewed and pushed as
-`d0501262`. Numeric comparison coercion, #619, is reviewed and pushed as `28bb732a`. Its
-comparison audit assigned independent string, temporal and known-NULL-right
-findings to #621, #622 and #623. The relational coverage tracker #170 and
-reference review #141 have resumed. Spark string-to-BOOLEAN CAST, #624, is reviewed
-and pushed as `a9a87c58`. STRING comparison coercion, #621, is reviewed and
-pushed as `f3591dc7`. Session timezones for DATE, TIMESTAMP_NTZ and TIMESTAMP
-comparisons, #622, are reviewed and pushed as `bb2704f0`. NULLIF comparisons
-against a known NULL right operand, #623, are reviewed and pushed as `7cefd14a`.
-Mixed nanosecond comparisons, #627, are reviewed and pushed as `a23bebd6`.
-DATE string boundaries, #631, are reviewed and pushed as `13a2f1ef`.
-STRING comparisons with DATE and microsecond timestamps, #629, are reviewed
-and pushed as `afafcd7f`. The current slice, #633, preserves local comparison
-conversion errors before NULL propagation. Its independent references cover
-temporal, numeric and BOOLEAN comparisons and native SQL controls. The three
-retained #629 observations now use strict Spark assertions. Local validation and
-independent review are complete; its staging PR is queued. The lowercase timestamp-literal separator
-gap found while checking the shared date grammar is tracked separately by #632.
+The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
+#633 are merged through separate PRs #637 and #640-#648. Their issues are closed.
+Each actual merge tree matches its locally verified integration tree. After the
+#637 integration rerun passed 424 tests, later merges reused their completed
+Linux checks only after proving the entire independent Spark workspace matched
+the reviewed source commit exactly. The final source passed 434 tests, zero
+failures and two inherited ignored doctests, plus root-crate Clippy and formatting.
+Clean-context Sol/high Bulletproof Reviews found no unresolved actionable issues
+within each slice's scope.
+
+PR #639, merged as `8a600047`, disables automatic cloud CI only for staging PRs.
+The combined three-platform checkpoint is running at
+[run 41268882510](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41268882510)
+on `3f952d1914b7487ae1b44c3907d94491c5f352d3`. Its Linux, macOS and Windows jobs
+have started; none is claimed passed yet. Existing performance, vendor-lint and
+remaining compatibility work stays in the ordered queue below.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -101,7 +88,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -115,6 +102,13 @@ The other eleven historical performance leaves remain deferred unless these
 comparisons identify a relevant regression or bottleneck. Preserve their evidence
 when deciding whether to resume them. Do not restart micro-optimizations merely
 because the old issue exists.
+
+PR #636's Linux Spark job missed the target cache and had no Rust sccache hits.
+Matching target caches existed only on previous PR merge refs, which sibling
+PRs cannot restore. The user then selected local Linux validation for individual
+staging slices. PR #639 removes that repeated cloud-build loop and retains
+explicit remote checkpoints. No cache warmer was changed and no cache speedup
+is claimed.
 
 ## Working rules
 
@@ -721,6 +715,35 @@ because the old issue exists.
   checks pass. No actionable review findings remain. Platform CI and the
   separate staging PR remain pending; exact Spark error-stage parity and CLI
   integration are outside this slice.
+
+- #635 reuses one numeric result-type rule across CASE, IF, COALESCE, IFNULL,
+  NVL and Decimal VALUES columns. It preserves integral digits at precision 38
+  and selects DOUBLE for Decimal/floating inputs and ANSI integer/FLOAT results.
+  Existing casts and conditional evaluation perform the conversions. The new
+  capture contains 1,230 independent observations, including both selected
+  IF/CASE branches. Before the repair, 1,600 assertions differ across batch sizes
+  1 and 32; the first focused candidate passes the complete conditional corpus,
+  mixed-type counters and VALUES Decimal references. A native SQL control now
+  checks Decimal NVL and FLOAT/integer COALESCE on the configured host. Full
+  workspace validation and independent review are running; neither is claimed
+  complete yet. STRING/non-numeric coercion remains separate S03 work.
+
+- #635's first full run reached all 25,180 historical observations and found two
+  changed outcomes for one Decimal division query. Its corrected CASE result
+  removes an old function-signature mismatch. Fresh Spark 4.2.0 execution confirms
+  the candidate's ANSI bad-cast error and legacy NULL DECIMAL(25,15) result.
+  The exact SQL is added to the reproducible numeric capture, now 1,232 records,
+  and two explicit replay corrections replace those obsolete failures. The raw
+  frozen corpus and the replay matcher are unchanged. Full validation is rerunning.
+
+- #635's final full run passes 434 tests, zero failures and two inherited ignored
+  doctests, including the 25,180 historical observations and native SQL controls.
+  Root-crate warning-denying Clippy, formatting and diff checks pass. Independent
+  Sol/high Bulletproof Review inspected all twelve changed files and connected
+  consumers, checked the expanded capture and both replay corrections against
+  fresh Spark evidence, and rechecked the repaired stale status text. No
+  actionable finding remains. The separate platform checkpoint covers staging
+  before this slice; this candidate's acceptance uses the local Linux policy.
 
 ### Retained gaps found during S01 review
 
