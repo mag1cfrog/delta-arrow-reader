@@ -7,32 +7,86 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#691 is ready for its staging PR on `fix/null-extended-join-properties`, based
-on `40f03f4e`.
-Both Spark and native DataFusion SQL reproduce the grouping failure: a LEFT JOIN
-with alternating matched and missing rows returns five one-row groups instead
-of `(7,3)` and `(NULL,2)`. The shared join properties retained a non-NULL constant
-on the NULL-extended side, causing an invalid ordered aggregate. The candidate
-removes those claims while retaining column equalities, known NULL constants
-and the preserved side's metadata. Its 900 independent Spark references cover
-grouping and set multiplicities across join types, value types and empty inputs.
-Independent review found that CrossJoinExec selected the Full property rule;
-it now selects Inner, preserving both inputs' facts. The added physical check
-failed before this caller repair and passes afterward. Final Linux checks pass
-483 tests, zero failures and two inherited ignored doctests, including 4,600
-SQL comparisons. Root Clippy, formatting and diff checks pass. Clean-context
-Sol/high Bulletproof Review has no remaining actionable finding. The original
-128 outer-join captures also pass their 256 zero-sign-independent bag checks;
-64 exact sign comparisons remain different. No cross-platform or large-input
-performance result is claimed for this slice.
+### Required checkpoint after #141
 
-#689's result-normalization candidate is retained in its owned stash and
-external backup. Independent review found a context-dependent zero-rendering
-regression now tracked by #690; that issue blocks #689. The separate #691
-duplicate-count failure also occurs on pristine staging and is being repaired
-first. The 128 outer-join captures and their failures remain recorded, rather
-than being reported as compatibility passes. #141's coverage slice remains
-parked until these set-operation issues are resolved.
+Finish the current #690 -> #689 -> #687 -> #141 chain before starting another
+compatibility slice. Then synchronize GitHub state and run the three-platform
+checkpoint, since staging is 15 merges beyond the previous checkpoint:
+
+- Update #141 with #685/#686/#688/#692 and #689/#690 results; check only
+  acceptance items established by the final evidence.
+- Mark S01 complete in #113 without marking Reader/CLI integration or production
+  adoption complete.
+- Refresh current progress and the next work in #167/#173/#174; remove stale
+  next-work descriptions.
+- Move #632 from the NULL/conditional family to Dates/timestamps using the native
+  issue hierarchy.
+- Reconcile the parents of #656/#661/#666 so open work does not remain under
+  parents closed as not planned.
+- Reopen #166 and #189-#192, or establish explicit replacement issues, when their
+  corresponding S08/S11 slices begin.
+- After GitHub synchronization and the three-platform checkpoint, report the
+  remaining S04-S11 issue mapping and a revised ETA before continuing.
+
+### Set-result candidate
+
+#690 now has an approved compatibility boundary: zero-sign differences that
+follow Spark's projection/LIMIT optimization order remain explicit limitations.
+The issue keeps exact nullable-join and constant-propagation requirements,
+set equality, multiplicity, NULLs, errors, metadata and native SQL. Its acceptance
+is still unchecked until the final local validation, independent review and
+staging integration finish.
+
+The uncommitted candidate on `fix/set-operation-zero-results` is based on
+`69ee9323`. It implements the shared #690/#689 result-planning repair. These
+changes must integrate together: output normalization needs enclosing-query
+constant analysis to avoid introducing nullable-join regressions. One staging
+PR will carry that coherent fix, with separate acceptance evidence and closure
+for each issue. UNION result policy stays in #687, and #141's coverage remains
+in its owned stash until those blockers finish.
+
+INTERSECT/EXCEPT stay private temporary nodes until query resolution finishes.
+A memoized column-lineage callback shares native NULL-rejection rules without
+expanding projection expressions. Only analysis copies reduce outer joins;
+executable joins and required expressions remain intact. Native simplification
+handles constant values with query-time functions masked, and native projection
+pruning prevents folding unused growing payloads. The TABLE-argument boundary
+lowers its query before an arbitrary registered table function can hide it.
+
+The three reference corpora contain 4,096, 592 and 220 independent Spark records.
+The original 184 parent-context records are unchanged; 36 additional records
+cover the diagnosed LIMIT shapes and identity/filter controls in both floating
+widths and ANSI modes. Across configured batches and partitions the replay has
+11,440 comparisons: 11,344 require exact Spark results, and 96 exercise the
+approved zero-sign boundary. The latter represent 24 reference records across
+six explicit shapes. Their original Spark results remain recorded; either
+opposite-sign zero pair is accepted, with one row, names/types and NULL behavior
+still enforced. Separate guards reject extra/missing rows, NULLs, equal signs,
+nonzero values and applying the exception to another query shape.
+
+No product query-shape workaround was added for the retained differences.
+Earlier red results, full Spark plans and native-rule investigation are retained
+under `spark-set-bounded-analysis-2026-11-01` outside the repository. The final
+Linux workspace run passes 497 tests, with zero failures and two inherited
+ignored doctests. Root-crate all-targets Clippy passes with warnings denied.
+The fresh clean-context Sol/high Bulletproof Review has completed its source
+criteria without findings and is finalizing the evidence and source manifest.
+Staging integration remains pending.
+
+GitHub synchronization and the three-platform checkpoint remain required after
+#141, before starting another compatibility slice.
+
+#691 merged through PR #692 at `69ee9323`, whose entire tree and eight reviewed
+file hashes match source `7dc60068`. Shared physical join properties now drop
+invalid constant claims only on NULL-extended sides, preserving column equality,
+known NULLs and offset metadata. Independent review's CrossJoinExec caller fix
+has a red/green regression. Final Linux checks passed 483 tests, zero failures
+and two inherited ignored doctests, including 4,600 SQL comparisons; root Clippy,
+formatting and clean-context Sol/high Bulletproof Review passed. The original
+128 captures also passed 256 zero-sign-independent bag comparisons on that final
+runtime, with 64 exact sign differences left visible. The issue is closed and
+its implementation branches removed. Cross-platform and large-input performance
+checks remain for later checkpoints.
 
 #683 merged through PR #688 at `40f03f4e`, whose complete tree matches reviewed
 source `fc8cb9d2`. The floating comparison keys pass 660 floating-key, 512
@@ -83,7 +137,7 @@ The issue is closed and the temporary branch is removed.
 
 #141's coverage work is retained on `test/relational-query-coverage`, based on
 `06dc3ad4`. Its three new test/reference files have an owned stash and a verified
-external backup while #683 and #687 are repaired. The 128 explicit-input Spark
+external backup while #687 is repaired. The 128 explicit-input Spark
 references produce 256 native observations with 36 mismatches across nine query
 shapes. The other comparisons meet their respective references, including the
 previously approved three-valued IN policy; raw Spark differences remain visible.

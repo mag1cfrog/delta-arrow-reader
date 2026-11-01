@@ -21,7 +21,21 @@ use crate::function::result_coercion::coerce_result_values;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
+mod constant_columns;
+mod pending;
+use constant_columns::PreserveSetConstant;
+mod filter_context;
+use pending::PendingSetOperation;
+
 impl PlanResolver<'_> {
+    pub(in crate::resolver) fn lower_resolved_set_operations(
+        &self,
+        plan: LogicalPlan,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
+        Ok(pending::lower_query_sets(&plan, self.ctx.state(), state)?)
+    }
+
     pub(super) async fn resolve_query_set_operation(
         &self,
         op: spec::SetOperation,
@@ -121,9 +135,9 @@ impl PlanResolver<'_> {
                 if is_all {
                     Ok(LogicalPlanBuilder::new(left).union(right)?.build()?)
                 } else {
-                    distinct_set_operation_rows(
+                    Ok(distinct_set_operation_rows(
                         LogicalPlanBuilder::new(left).union(right)?.build()?,
-                    )
+                    )?)
                 }
             }
             SetOpType::Intersect | SetOpType::Except => {
@@ -132,37 +146,9 @@ impl PlanResolver<'_> {
                 } else {
                     JoinType::LeftAnti
                 };
-                let output_columns = left.schema().columns();
-                let mut join_keys = set_operation_comparison_keys(&left)
-                    .into_iter()
-                    .zip(set_operation_comparison_keys(&right))
-                    .collect::<Vec<_>>();
-                let (left, right) = if is_all {
-                    let left_row_number_alias = state.register_field_name("row_num");
-                    let right_row_number_alias = state.register_field_name("row_num");
-                    let left = add_duplicate_row_number(left, &left_row_number_alias)?;
-                    let right = add_duplicate_row_number(right, &right_row_number_alias)?;
-                    join_keys.push((
-                        Expr::Column(Column::from_name(left_row_number_alias)),
-                        Expr::Column(Column::from_name(right_row_number_alias)),
-                    ));
-                    (left, right)
-                } else {
-                    (distinct_set_operation_rows(left)?, right)
-                };
-                let join = Join::try_new(
-                    Arc::new(left),
-                    Arc::new(right),
-                    join_keys,
-                    None,
-                    join_type,
-                    JoinConstraint::On,
-                    NullEquality::NullEqualsNull,
-                    false,
-                )?;
-                Ok(LogicalPlanBuilder::from(LogicalPlan::Join(join))
-                    .project(output_columns)?
-                    .build()?)
+                Ok(LogicalPlan::Extension(datafusion_expr::Extension {
+                    node: Arc::new(PendingSetOperation::new(left, right, join_type, is_all)?),
+                }))
             }
         }
     }
@@ -232,6 +218,73 @@ impl PlanResolver<'_> {
     }
 }
 
+fn lower_set_operation(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    join_type: JoinType,
+    is_all: bool,
+    constant_columns: &[Option<PreserveSetConstant>],
+    under_limit_one: bool,
+    state: &mut PlanResolverState,
+) -> datafusion_common::Result<LogicalPlan> {
+    let result_exprs = left
+        .schema()
+        .iter()
+        .enumerate()
+        .map(|(index, (qualifier, field))| {
+            let column = Expr::from((qualifier, field));
+            if under_limit_one
+                || !matches!(field.data_type(), DataType::Float32 | DataType::Float64)
+            {
+                return Ok(column);
+            }
+            // ALL materializes set values even for literal inputs; DISTINCT can retain constants.
+            let result = if let Some(constant) = &constant_columns[index] {
+                ScalarUDF::from(constant.clone()).call(vec![column])
+            } else {
+                ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![column])
+            };
+            Ok(result.alias_qualified_with_metadata(
+                qualifier.cloned(),
+                field.name(),
+                Some(field.metadata().clone().into()),
+            ))
+        })
+        .collect::<datafusion_common::Result<Vec<_>>>()?;
+    let mut join_keys = set_operation_comparison_keys(&left)
+        .into_iter()
+        .zip(set_operation_comparison_keys(&right))
+        .collect::<Vec<_>>();
+    let (left, right) = if is_all {
+        let left_row_number_alias = state.register_field_name("row_num");
+        let right_row_number_alias = state.register_field_name("row_num");
+        let left = add_duplicate_row_number(left, &left_row_number_alias)?;
+        let right = add_duplicate_row_number(right, &right_row_number_alias)?;
+        join_keys.push((
+            Expr::Column(Column::from_name(left_row_number_alias)),
+            Expr::Column(Column::from_name(right_row_number_alias)),
+        ));
+        (left, right)
+    } else if under_limit_one {
+        (left, right)
+    } else {
+        (distinct_set_operation_rows(left)?, right)
+    };
+    let join = Join::try_new(
+        Arc::new(left),
+        Arc::new(right),
+        join_keys,
+        None,
+        join_type,
+        JoinConstraint::On,
+        NullEquality::NullEqualsNull,
+        false,
+    )?;
+    Ok(LogicalPlanBuilder::from(LogicalPlan::Join(join))
+        .project(result_exprs)?
+        .build()?)
+}
+
 // Normalize comparisons after coercion, without rewriting the returned values.
 fn set_operation_comparison_keys(input: &LogicalPlan) -> Vec<Expr> {
     input
@@ -248,7 +301,7 @@ fn set_operation_comparison_keys(input: &LogicalPlan) -> Vec<Expr> {
         .collect()
 }
 
-fn distinct_set_operation_rows(input: LogicalPlan) -> PlanResult<LogicalPlan> {
+fn distinct_set_operation_rows(input: LogicalPlan) -> datafusion_common::Result<LogicalPlan> {
     let keys = set_operation_comparison_keys(&input);
     if keys.iter().all(|key| matches!(key, Expr::Column(_))) {
         return Ok(LogicalPlanBuilder::from(input).distinct()?.build()?);
@@ -281,7 +334,10 @@ fn distinct_set_operation_rows(input: LogicalPlan) -> PlanResult<LogicalPlan> {
 }
 
 // Pair equal rows by occurrence so each right row matches at most one left row.
-fn add_duplicate_row_number(input: LogicalPlan, column_name: &str) -> PlanResult<LogicalPlan> {
+fn add_duplicate_row_number(
+    input: LogicalPlan,
+    column_name: &str,
+) -> datafusion_common::Result<LogicalPlan> {
     let row_number = Expr::WindowFunction(Box::new(expr::WindowFunction {
         fun: WindowFunctionDefinition::WindowUDF(row_number_udwf()),
         params: WindowFunctionParams {

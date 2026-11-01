@@ -17,7 +17,7 @@
 
 //! [`EliminateOuterJoin`] converts `LEFT/RIGHT/FULL` joins to `INNER` joins
 use crate::{OptimizerConfig, OptimizerRule};
-use datafusion_common::{Column, DFSchema, Result};
+use datafusion_common::{Column, Result};
 use datafusion_expr::logical_plan::{Join, JoinType, LogicalPlan};
 use datafusion_expr::{Expr, Filter, Operator};
 
@@ -80,32 +80,18 @@ impl OptimizerRule for EliminateOuterJoin {
         match plan {
             LogicalPlan::Filter(mut filter) => match Arc::unwrap_or_clone(filter.input) {
                 LogicalPlan::Join(join) => {
-                    let mut null_rejecting_cols: Vec<Column> = vec![];
-
-                    extract_null_rejecting_columns(
-                        &filter.predicate,
-                        &mut null_rejecting_cols,
-                        join.left.schema(),
-                        join.right.schema(),
-                        true,
-                    );
-
                     let new_join_type = if join.join_type.is_outer() {
-                        let mut left_non_nullable = false;
-                        let mut right_non_nullable = false;
-                        for col in null_rejecting_cols.iter() {
-                            if join.left.schema().has_column(col) {
-                                left_non_nullable = true;
-                            }
-                            if join.right.schema().has_column(col) {
-                                right_non_nullable = true;
-                            }
-                        }
-                        eliminate_outer(
-                            join.join_type,
-                            left_non_nullable,
-                            right_non_nullable,
-                        )
+                        let left_non_nullable = rejects_null_input(
+                            &filter.predicate,
+                            NullRejectionContext::Predicate,
+                            &mut |column, _| Ok(join.left.schema().has_column(column)),
+                        )?;
+                        let right_non_nullable = rejects_null_input(
+                            &filter.predicate,
+                            NullRejectionContext::Predicate,
+                            &mut |column, _| Ok(join.right.schema().has_column(column)),
+                        )?;
+                        eliminate_outer(join.join_type, left_non_nullable, right_non_nullable)
                     } else {
                         join.join_type
                     };
@@ -163,191 +149,65 @@ pub fn eliminate_outer(
     new_join_type
 }
 
-/// Find the columns that `expr` rejects NULL on. If any of these columns are
-/// NULL, `expr` is guaranteed to evaluate to NULL or false, and the row
-/// therefore cannot survive a WHERE clause. Matching columns are appended to
-/// `null_rejecting_cols`.
+/// Whether NULL input must make a value NULL or prevent a predicate being true.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NullRejectionContext {
+    /// A WHERE predicate rejects both false and NULL.
+    Predicate,
+    /// An enclosing expression requires a NULL value, not merely false.
+    Value,
+}
+
+/// Prove that NULL padding of one input is rejected without evaluating values.
 ///
-/// The caller uses the result to decide whether an outer join's null-padded
-/// rows could survive the predicate above the join: if a column from the
-/// nullable side appears in `null_rejecting_cols`, it cannot, and the outer
-/// join can be converted to an inner join.
-///
-/// `left_schema` and `right_schema` are the join's two child schemas.
-/// `top_level` is true at the root of the WHERE predicate and false on each
-/// recursion.
-fn extract_null_rejecting_columns(
+/// `column_rejects_null` resolves each column in the supplied context. For a
+/// direct join input it tests schema membership; a caller following projected
+/// columns can resolve their definitions without copying expression trees.
+/// Unknown expressions return false. OR requires both operands to reject the
+/// same input, even when they reference different columns from that input.
+pub fn rejects_null_input<F>(
     expr: &Expr,
-    null_rejecting_cols: &mut Vec<Column>,
-    left_schema: &Arc<DFSchema>,
-    right_schema: &Arc<DFSchema>,
-    top_level: bool,
-) {
-    match expr {
-        Expr::Column(col) => {
-            null_rejecting_cols.push(col.clone());
-        }
+    context: NullRejectionContext,
+    column_rejects_null: &mut F,
+) -> Result<bool>
+where
+    F: FnMut(&Column, NullRejectionContext) -> Result<bool>,
+{
+    use NullRejectionContext::{Predicate, Value};
+    Ok(match expr {
+        Expr::Column(column) => return column_rejects_null(column, context),
         Expr::BinaryExpr(BinaryExpr { left, op, right }) => match op {
+            Operator::And if context == Predicate => {
+                rejects_null_input(left, Predicate, column_rejects_null)?
+                    || rejects_null_input(right, Predicate, column_rejects_null)?
+            }
             Operator::And | Operator::Or => {
-                // AND distributes only down a top-level AND chain in the WHERE
-                // clause: each conjunct is independently null- rejecting, so
-                // any column either side discovers is a column the WHERE
-                // rejects NULL on. Once an AND appears below any other context,
-                // we fall back to the per-side analysis used for OR, because
-                // the context might influence whether the row is filtered.
-                if top_level && *op == Operator::And {
-                    extract_null_rejecting_columns(
-                        left,
-                        null_rejecting_cols,
-                        left_schema,
-                        right_schema,
-                        top_level,
-                    );
-                    extract_null_rejecting_columns(
-                        right,
-                        null_rejecting_cols,
-                        left_schema,
-                        right_schema,
-                        top_level,
-                    );
-                    return;
-                }
-
-                // OR (and nested AND): a row survives if EITHER operand returns
-                // true. We can credit a join side as null-rejecting only when
-                // BOTH operands independently reject NULL on a column from that
-                // side — otherwise the other branch could let the NULL row
-                // through.
-                let mut left_cols: Vec<Column> = vec![];
-                let mut right_cols: Vec<Column> = vec![];
-                extract_null_rejecting_columns(
-                    left,
-                    &mut left_cols,
-                    left_schema,
-                    right_schema,
-                    top_level,
-                );
-                extract_null_rejecting_columns(
-                    right,
-                    &mut right_cols,
-                    left_schema,
-                    right_schema,
-                    top_level,
-                );
-
-                let find_on = |cols: &[Column], schema: &DFSchema| {
-                    cols.iter().find(|c| schema.has_column(c)).cloned()
-                };
-                for schema in [left_schema, right_schema] {
-                    if let (Some(c), Some(_)) =
-                        (find_on(&left_cols, schema), find_on(&right_cols, schema))
-                    {
-                        null_rejecting_cols.push(c);
-                    }
-                }
+                rejects_null_input(left, context, column_rejects_null)?
+                    && rejects_null_input(right, context, column_rejects_null)?
             }
-            // Any other operator that DataFusion declares as NULL-on-NULL:
-            // recurse into both operands so we collect their columns.
             op if op.returns_null_on_null() => {
-                extract_null_rejecting_columns(
-                    left,
-                    null_rejecting_cols,
-                    left_schema,
-                    right_schema,
-                    false,
-                );
-                extract_null_rejecting_columns(
-                    right,
-                    null_rejecting_cols,
-                    left_schema,
-                    right_schema,
-                    false,
-                )
+                rejects_null_input(left, Value, column_rejects_null)?
+                    || rejects_null_input(right, Value, column_rejects_null)?
             }
-            // All other operators (notably including IS [ NOT ] DISTINCT FROM)
-            // are declared as not null-propagating, so they don't contribute
-            // any null-rejecting columns.
-            _ => {}
+            _ => false,
         },
-        Expr::Not(arg) | Expr::Negative(arg) => extract_null_rejecting_columns(
-            arg,
-            null_rejecting_cols,
-            left_schema,
-            right_schema,
-            false,
-        ),
-        // IS NOT NULL / IS TRUE / IS FALSE / IS NOT UNKNOWN all return FALSE on
-        // NULL input. At the top of a WHERE clause, that FALSE filters the row
-        // and so we can recurse; below the top level the surrounding context
-        // may transform that FALSE into something that accepts NULL rows,
-        // making the recursion unsound.
-        Expr::IsNotNull(arg)
-        | Expr::IsTrue(arg)
-        | Expr::IsFalse(arg)
-        | Expr::IsNotUnknown(arg) => {
-            if !top_level {
-                return;
-            }
-            extract_null_rejecting_columns(
-                arg,
-                null_rejecting_cols,
-                left_schema,
-                right_schema,
-                false,
-            )
+        Expr::Not(arg) | Expr::Negative(arg) => {
+            rejects_null_input(arg, Value, column_rejects_null)?
         }
-        Expr::Cast(Cast { expr, field: _ })
-        | Expr::TryCast(TryCast { expr, field: _ }) => extract_null_rejecting_columns(
-            expr,
-            null_rejecting_cols,
-            left_schema,
-            right_schema,
-            false,
-        ),
-        // IN list and BETWEEN are null-rejecting on the input expression:
-        // NULL input yields a NULL result, regardless of whether the list
-        // or range bounds themselves contain NULLs.
-        Expr::InList(InList { expr, .. }) => extract_null_rejecting_columns(
-            expr,
-            null_rejecting_cols,
-            left_schema,
-            right_schema,
-            false,
-        ),
-        Expr::Between(between) => extract_null_rejecting_columns(
-            &between.expr,
-            null_rejecting_cols,
-            left_schema,
-            right_schema,
-            false,
-        ),
+        Expr::IsNotNull(arg) | Expr::IsTrue(arg) | Expr::IsFalse(arg) | Expr::IsNotUnknown(arg) => {
+            context == Predicate && rejects_null_input(arg, Value, column_rejects_null)?
+        }
+        Expr::Cast(Cast { expr, field: _ }) | Expr::TryCast(TryCast { expr, field: _ }) => {
+            rejects_null_input(expr, Value, column_rejects_null)?
+        }
+        Expr::InList(InList { expr, .. }) => rejects_null_input(expr, Value, column_rejects_null)?,
+        Expr::Between(between) => rejects_null_input(&between.expr, Value, column_rejects_null)?,
         Expr::Like(Like { expr, pattern, .. }) => {
-            extract_null_rejecting_columns(
-                expr,
-                null_rejecting_cols,
-                left_schema,
-                right_schema,
-                false,
-            );
-            extract_null_rejecting_columns(
-                pattern,
-                null_rejecting_cols,
-                left_schema,
-                right_schema,
-                false,
-            );
+            rejects_null_input(expr, Value, column_rejects_null)?
+                || rejects_null_input(pattern, Value, column_rejects_null)?
         }
-        // Anything not handled above contributes no null-rejecting
-        // columns. Two categories worth calling out:
-        //   - IS NULL, IS NOT TRUE, IS NOT FALSE, IS UNKNOWN — return
-        //     TRUE on NULL input, so they actively *accept* NULL rows
-        //     and are intentionally excluded.
-        //   - Function calls (scalar / aggregate / window / UDF),
-        //     scalar subqueries, struct/list accessors, aliases,
-        //     literals, etc. — we don't have a uniform NULL-propagation
-        //     guarantee for these cases, so we conservatively skip them.
-        _ => {}
-    }
+        _ => false,
+    })
 }
 
 #[cfg(test)]
@@ -524,10 +384,7 @@ mod tests {
                 (vec![Column::from_name("a")], vec![Column::from_name("a")]),
                 None,
             )?
-            .filter(
-                col("t2.b")
-                    .in_list(vec![lit(1u32), lit(ScalarValue::UInt32(None))], false),
-            )?
+            .filter(col("t2.b").in_list(vec![lit(1u32), lit(ScalarValue::UInt32(None))], false))?
             .build()?;
 
         assert_optimized_plan_equal!(plan, @r"

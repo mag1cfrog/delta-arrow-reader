@@ -854,11 +854,14 @@ impl ScalarUDFImpl for SparkComparisonFloat {
         &self,
         args: datafusion_expr::ReturnFieldArgs,
     ) -> datafusion_common::Result<arrow::datatypes::FieldRef> {
-        Ok(Arc::new(arrow::datatypes::Field::new(
-            self.name(),
-            self.return_type(&[args.arg_fields[0].data_type().clone()])?,
-            args.arg_fields[0].is_nullable(),
-        )))
+        Ok(Arc::new(
+            arrow::datatypes::Field::new(
+                self.name(),
+                self.return_type(&[args.arg_fields[0].data_type().clone()])?,
+                args.arg_fields[0].is_nullable(),
+            )
+            .with_metadata(args.arg_fields[0].metadata().clone()),
+        ))
     }
 
     fn simplify(

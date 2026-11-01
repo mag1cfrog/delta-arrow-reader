@@ -31,3 +31,7 @@ session. The host must install `configure_spark_sql` before using `plan_query`.
 See [source provenance](UPSTREAM.md) for the retained implementation and dependency
 forks. The accepted-runtime test checks preservation of recorded outcomes; some
 of those outcomes have known Spark differences and are not compatibility passes.
+
+Floating DISTINCT set results can differ from Spark in their `0.0`/`-0.0` text
+after projection and LIMIT optimization. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
+record this limitation separately from equality, row counts and NULL behavior.

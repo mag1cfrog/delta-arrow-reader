@@ -18,6 +18,7 @@ impl PlanResolver<'_> {
     pub async fn resolve_named_plan(&self, query: spec::QueryPlan) -> PlanResult<NamedPlan> {
         let mut state = PlanResolverState::new();
         let plan = self.resolve_query_plan(query, &mut state).await?;
+        let plan = self.lower_resolved_set_operations(plan, &mut state)?;
         let plan = Self::preserve_order_sensitive_aggregate_sorts(plan)?;
         let fields = Self::get_field_names(plan.schema(), &state)?;
         Ok(NamedPlan { plan, fields })

@@ -204,3 +204,15 @@ aggregate. Preserved inputs keep their equivalences and constant metadata when
 column indexes shift. The [outer-join references](tests/fixtures/README.md#constants-after-outer-joins)
 check grouping and set multiplicities through Spark and native SQL. Cross joins
 use the inner-join property rule, since neither input is NULL-extended.
+
+INTERSECT/EXCEPT remain private logical nodes until their enclosing query is
+resolved. This lets filters restore constant zero signs before result
+normalization, including separate uses of a CTE. The vendored outer-join rule
+exposes its NULL-rejection test through a column callback, so analysis can follow
+stored projections without expanding their expressions. Analysis copies use
+native literal folding with query-time functions masked; executable inputs keep
+their required evaluations. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
+cover values, NULLs, nesting, grouping and LIMIT boundaries. Exact zero signs
+that depend on Spark's projection/LIMIT rewrite order remain a documented
+compatibility limitation, with original Spark captures retained. UNION result
+policy is unchanged.

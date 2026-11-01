@@ -627,12 +627,9 @@ checks UNION ALL against input bits, including quiet/signaling NaN payloads
 that Spark's Python transport may canonicalize.
 
 Floating metadata and native-SQL controls cover all six operations. Returned
-NULLs require nullable fields. The runtime retains original representatives;
-this verifies set equality, not general post-set FLOAT/DOUBLE-to-STRING parity
-(tracked in #687).
-For example, Spark may stringify a deduplicated registered negative zero as
-`0.0` while DAR retains `-0.0`. Literal INTERSECT and identical literal UNION
-controls preserve Spark's `-0.0` result. Nested floating keys, exact analyzed
+NULLs require nullable fields. This corpus checks equality and multiplicity;
+exact STRING and negation results have a separate corpus below. UNION DISTINCT
+representation remains tracked in #687. Nested floating keys, exact analyzed
 nullability and large-input performance are not established by this corpus.
 
 ## Constants after outer joins
@@ -661,3 +658,74 @@ known NULL constants remain valid. The preserved input keeps its constant
 metadata, including after right-column offsets. These checks do not establish
 large-input performance or exact Spark analyzed nullability. A direct physical
 cross-join test checks that both input constants survive and execute correctly.
+
+## Floating INTERSECT and EXCEPT results
+
+`set-operation-zero-results-spark.jsonl` contains 4,096 Spark 4.2.0 observations
+from `capture_set_operation_zero_results_spark.py`. It reuses the explicit input
+bits from the floating-key fixture, then records outer STRING casts and negation
+for the four INTERSECT/EXCEPT variants. For example, a registered negative zero
+intersected with positive zero renders as `0.0`; a negative-zero constant in a
+DISTINCT intersection renders as `-0.0`. ALL variants normalize either input.
+
+The cases cover FLOAT/DOUBLE coercion, NULL/NaN values, repeated and empty rows,
+multiple columns, VALUES, constant projections, filters, limits, ordinary
+constant grouping keys, aggregate values, nested sets, DISTINCT, window and
+ordered inputs, and preserved/null-extended join sides. Both ANSI modes,
+adaptive execution settings and one/two input
+partitions have independent records. The observed STRING/negation results agree
+across those adaptive/partition settings. Rust replays every record at batches
+1 and 32, checking exact strings, NULLs and multiplicities rather than equating
+zero signs. Separate controls check volatile operand visits, required cast
+errors, nested constants without optimizer rules and removal of internal
+constant markers when optimization is enabled. Stable-function counters also
+check that speculative constant analysis does not run query-time functions.
+
+`set-constant-context-spark.jsonl` adds 592 independent observations and complete
+optimized Spark plans from `capture_set_constant_context_spark.py`. These use
+two input partitions with adaptive execution disabled; Rust runs them with one
+and two target partitions at both batch sizes. A nonnull literal on INTERSECT's
+right can expose a left constant hidden by NULL extension. Nonnull scan metadata
+alone does not establish that result, and EXCEPT cannot use the same inference.
+Nested sets, nullable constants, filters, LIMIT, COALESCE and empty inputs
+distinguish those cases.
+
+VALUES projections can become local rows before Spark plans a set operation.
+The context capture distinguishes projections through filters/limits from
+projections above grouping, sorting, windows, joins and scalar subqueries. It
+also checks a nested constant result subsequently placed on an outer join's
+nullable side, Stable sibling expressions and partition-local SORT BY. Exact
+Spark analyzed nullability remains outside these assertions. STRING and negation
+results use the original Spark expectations, with the recorded zero-sign
+limitation below. UNION policy and the existing raw-bit controls are unchanged.
+
+`set-parent-context-spark.jsonl` records 220 further observations from
+`capture_set_parent_context_spark.py`. These distinguish filters outside a set,
+shared CTE references with different filters, nested sets, ordinary grouping,
+casts through aliases, and LIMIT 1 versus LIMIT 2/OFFSET/ORDER BY. Comparison
+predicates and UNION ALL branches exercise the same context propagation as
+IS NOT NULL. Boolean and NULL-accepting controls prevent treating every
+reference to a column as a nonnull guarantee. Both floating types and ANSI
+modes have independent Spark plans; Rust checks each reference in four
+batch/partition configurations. Scalar, EXISTS and IN subqueries containing
+sets also execute through the public planner. A separate complete-lowering
+test checks 8- and 40-layer nullable projection diamonds without a time limit.
+An unused growing-string expression checks that analysis prunes irrelevant
+payloads before folding. A registered table-function consumer checks that its
+TABLE argument receives an executable plan.
+
+Exact zero signs can depend on Spark's ordering of projection pruning, aggregate
+rewrites and LIMIT elimination. The approved #690 boundary retains six recorded
+query shapes as compatibility limitations: unused constant, ABS and random
+projections, one random projection, a renamed random output, and STRING casts
+before LIMIT. These account for 24 references across the two floating widths
+and ANSI modes. Spark records `[["0.0","-0.0"]]`; their permitted result is that
+row or `[["-0.0","0.0"]]`. Cardinality, NULLs and negation's opposite sign stay
+checked, as do names and types. The original Spark records and plans are unchanged.
+
+The Rust assertion lists those six shapes explicitly and checks their reference
+count. Every other row is compared exactly. Guard cases reject extra/missing
+rows, NULLs, nonzero values and equal signs in both columns. Identity projections,
+filtered limits and retained volatile outputs remain exact controls. These
+checks preserve the compatibility boundary; they do not establish exact-sign
+parity for arbitrary Spark optimizer combinations.
