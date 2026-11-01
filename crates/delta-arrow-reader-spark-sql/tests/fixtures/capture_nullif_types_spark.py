@@ -16,6 +16,24 @@ from pyspark.sql.types import DoubleType, FloatType
 
 
 def result_queries():
+    comparison_pairs = [
+        ("wide_double_decimal", "DOUBLE", "DECIMAL(38,18)", "12345678901234567890.123456789012345678", "0"),
+        ("decimal_float_precision", "DECIMAL(20,9)", "FLOAT", "16777217", "16777216"),
+        ("float_decimal_precision", "FLOAT", "DECIMAL(20,9)", "16777217", "16777217"),
+        ("int_float_precision", "INT", "FLOAT", "16777217", "16777217"),
+        ("float_int_precision", "FLOAT", "INT", "16777217", "16777217"),
+        ("long_float_precision", "BIGINT", "FLOAT", "9007199254740993", "9007199254740992"),
+        ("float_long_precision", "FLOAT", "BIGINT", "9007199254740993", "9007199254740992"),
+        ("tiny_float", "TINYINT", "FLOAT", "127", "127"),
+        ("float_tiny", "FLOAT", "TINYINT", "127", "127"),
+        ("small_float", "SMALLINT", "FLOAT", "32767", "32767"),
+        ("float_small", "FLOAT", "SMALLINT", "32767", "32767"),
+        ("negative_int_float", "INT", "FLOAT", "-16777217", "-16777217"),
+        ("negative_float_int", "FLOAT", "INT", "-16777217", "-16777217"),
+        ("negative_decimal_double", "DECIMAL(38,18)", "DOUBLE", "-12345678901234567890.123456789012345678", "-12345678901234567890.123456789012345678"),
+        ("fractional_decimal_float", "DECIMAL(10,2)", "FLOAT", "1.25", "1.25"),
+        ("fractional_float_decimal", "FLOAT", "DECIMAL(10,2)", "1.25", "1.25"),
+    ]
     pairs = [
         ("int_double", "INT", "DOUBLE", "1", "2"),
         ("double_int", "DOUBLE", "INT", "1", "2"),
@@ -33,7 +51,7 @@ def result_queries():
         ("boolean", "BOOLEAN", "BOOLEAN", "true", "false"),
         ("date", "DATE", "DATE", "'2026-01-02'", "'2026-01-03'"),
     ]
-    for name, left_type, right_type, left, right in pairs:
+    for name, left_type, right_type, left, right in pairs + comparison_pairs:
         a, b = f"CAST({left} AS {left_type})", f"CAST({right} AS {right_type})"
         null_left, null_right = f"CAST(NULL AS {left_type})", f"CAST(NULL AS {right_type})"
         for case, args in [
@@ -47,6 +65,20 @@ def result_queries():
         source = f" FROM VALUES (0,{a},{b}),(1,{null_left},{b}),(2,{a},{null_right}) t(k,a,b)"
         yield f"{name}_columns", "SELECT NULLIF(a,b) AS r" + source + " ORDER BY k"
         yield f"{name}_empty", "SELECT NULLIF(a,b) AS r" + source + " WHERE false"
+        if (name, left_type, right_type, left, right) in comparison_pairs:
+            yield f"{name}_equality", f"SELECT {a}={b} AS r"
+            yield f"{name}_equality_columns", "SELECT a=b AS r" + source + " ORDER BY k"
+    for float_type in ["FLOAT", "DOUBLE"]:
+        for token in ["NaN", "Infinity", "-Infinity"]:
+            floating = f"CAST('{token}' AS {float_type})"
+            decimal = "CAST(0 AS DECIMAL(10,2))"
+            for order, a, b in [("float_left", floating, decimal), ("decimal_left", decimal, floating)]:
+                name = f"nonfinite_{float_type.lower()}_{token}_{order}"
+                source = f" FROM VALUES (0,{a},{b}),(1,NULL,{b}),(2,{a},NULL) t(k,a,b)"
+                yield f"{name}_values", f"SELECT NULLIF({a},{b}) AS r"
+                yield f"{name}_columns", "SELECT NULLIF(a,b) AS r" + source + " ORDER BY k"
+                yield f"{name}_empty", "SELECT NULLIF(a,b) AS r" + source + " WHERE false"
+                yield f"{name}_equality", f"SELECT {a}={b} AS r"
     for name, arguments, source in [
         ("implicit_column_conversion", "a,b", " FROM VALUES (0,CAST(NULL AS INT),'bad'),(1,8,'7') t(k,a,b) ORDER BY k"),
         ("implicit_all_null_columns", "a,b", " FROM VALUES (0,CAST(NULL AS INT),'bad'),(1,NULL,'bad') t(k,a,b) ORDER BY k"),
@@ -104,8 +136,6 @@ def main():
                     expected = {"status": "error", "condition": condition}
                 assert (expected["status"] == "error") == (name.startswith("incomparable_") or (ansi and name in {"live_bad_right", "bad_left_null_right"})), (name, ansi, expected)
                 observation = {"id": name, "sql": sql, "ansi": ansi, "expected": expected}
-                if name == "wide_decimal_double_same_literal":
-                    observation["retained_difference"] = "nullif_comparison_coercion"
                 observations.append(observation)
         metadata = {"spark_version": spark.version, "timezone": "UTC",
                     "java_version": spark.sparkContext._jvm.java.lang.System.getProperty("java.version")}

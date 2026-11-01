@@ -16,6 +16,8 @@ type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 fn spark_type_name(data_type: &DataType) -> TestResult<String> {
     Ok(match data_type {
         DataType::Decimal128(precision, scale) => format!("decimal({precision},{scale})"),
+        DataType::Int8 => "byte".into(),
+        DataType::Int16 => "short".into(),
         DataType::Int32 => "integer".into(),
         DataType::Int64 => "long".into(),
         DataType::Float32 => "float".into(),
@@ -113,14 +115,14 @@ async fn match_spark_nullif_result_types() -> TestResult {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(records.len(), 241);
+    assert_eq!(records.len(), 625);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records
             .iter()
             .filter(|case| case.get("retained_difference").is_some())
             .count(),
-        2
+        0
     );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
@@ -140,13 +142,6 @@ async fn match_spark_nullif_result_types() -> TestResult {
             let expected = &case["expected"];
             let actual = execute_nullif_query(&session, case).await;
             let matches = match &actual {
-                Ok(actual) if case["retained_difference"] == "nullif_comparison_coercion" => {
-                    // Separate comparison-policy issue; a new result must tighten this assertion.
-                    expected["rows"] == json!([[null]])
-                        && actual
-                            == &json!({"types":["decimal(38,18)"], "names":["r"],
-                            "rows":[["12345678901234567890.123456789012345678"]]})
-                }
                 Ok(actual) if expected["status"] == "ok" => {
                     let fields = expected["schema"]["fields"]
                         .as_array()

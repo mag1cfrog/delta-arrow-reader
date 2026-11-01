@@ -351,6 +351,18 @@ pub(crate) fn spark_in_list(
     Ok(expr::Expr::InList(input))
 }
 
+pub(crate) fn spark_comparison_widens_to_double(
+    left: &DataType,
+    right: &DataType,
+    widen_integer_float: bool,
+) -> bool {
+    (left.is_decimal() && right.is_floating())
+        || (left.is_floating() && right.is_decimal())
+        || (widen_integer_float
+            && ((left == &DataType::Float32 && right.is_signed_integer())
+                || (right == &DataType::Float32 && left.is_signed_integer())))
+}
+
 pub(crate) fn spark_binary_expr(
     mut left: expr::Expr,
     op: Operator,
@@ -374,20 +386,19 @@ pub(crate) fn spark_binary_expr(
         if (left_type.is_numeric() || left_type == DataType::Null)
             && (right_type.is_numeric() || right_type == DataType::Null)
         {
-            let decimal_float = (left_type.is_decimal() && right_type.is_floating())
-                || (left_type.is_floating() && right_type.is_decimal());
             let ansi_float_integer = ansi_mode
                 && ((left_type == DataType::Float32 && integer_needs_double(&right, &right_type))
                     || (right_type == DataType::Float32
                         && integer_needs_double(&left, &left_type)));
-            let widen = decimal_float
-                || ansi_float_integer
+            let promote_to_double =
+                spark_comparison_widens_to_double(&left_type, &right_type, ansi_float_integer);
+            let widen = promote_to_double
                 || left_type == DataType::Float64
                 || right_type == DataType::Float64;
             let convert = |value, data_type: DataType| {
                 if data_type.is_floating() {
                     ScalarUDF::from(SparkComparisonFloat { widen }).call(vec![value])
-                } else if decimal_float || ansi_float_integer {
+                } else if promote_to_double {
                     cast(value, DataType::Float64)
                 } else {
                     value
