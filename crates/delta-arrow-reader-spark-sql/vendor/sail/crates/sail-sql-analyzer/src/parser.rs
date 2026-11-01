@@ -81,6 +81,7 @@ pub fn parse_interval(s: &str) -> SqlResult<IntervalValue> {
 }
 
 pub fn parse_date(s: &str) -> SqlResult<DateValue> {
+    let s = s.trim_matches(|c: char| c.is_ascii_control() || c == ' ');
     parse_simple!(s, create_date_parser)
 }
 

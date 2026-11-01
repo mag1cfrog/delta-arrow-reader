@@ -147,6 +147,12 @@ cover temporal coercion, lazy fallbacks, modes and timezones.
 Named-zone conversion retains ConvertTz's documented Chrono range limit; full
 i64-microsecond timestamp parity remains separate work.
 
+DATE casts and literals share the existing date parser. It trims surrounding
+ASCII controls and spaces, and only a complete date may discard a suffix after
+space or uppercase `T`. Partial dates and calendar validation retain their own
+checks. The [boundary references](tests/fixtures/README.md#date-string-boundaries)
+cover strict/tolerant casts and distinguish this repair from timestamp parsing.
+
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
