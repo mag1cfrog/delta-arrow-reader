@@ -14,7 +14,10 @@ use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
 
+mod string_temporal;
 mod timestamp;
+
+pub(crate) use string_temporal::SparkStringTemporalComparisonCast;
 
 pub(crate) fn nanosecond_comparison_cast(
     left: &DataType,
@@ -57,6 +60,7 @@ pub(crate) fn string_comparison_type(
     left: &DataType,
     right: &DataType,
     ansi_mode: bool,
+    session_timezone: &Arc<str>,
 ) -> Option<DataType> {
     let other = if left.is_string() {
         right
@@ -66,6 +70,11 @@ pub(crate) fn string_comparison_type(
         return None;
     };
     match other {
+        DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, None) => Some(other.clone()),
+        DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => Some(DataType::Timestamp(
+            TimeUnit::Microsecond,
+            Some(session_timezone.clone()),
+        )),
         DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
             Some(if ansi_mode {
                 DataType::Int64
@@ -86,6 +95,9 @@ pub(crate) fn string_comparison_type(
 
 pub(crate) fn string_comparison_cast(target: &DataType, ansi_mode: bool) -> Result<ScalarUDF> {
     Ok(match target {
+        DataType::Date32 | DataType::Timestamp(TimeUnit::Microsecond, _) => ScalarUDF::from(
+            SparkStringTemporalComparisonCast::try_new(target, ansi_mode)?,
+        ),
         DataType::Boolean => ScalarUDF::from(SparkCastStringToBoolean::new(!ansi_mode)),
         DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
             let mode = if ansi_mode {

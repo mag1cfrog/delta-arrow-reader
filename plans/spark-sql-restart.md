@@ -28,8 +28,9 @@ merged through PR #625 as `9e16391c` after all three platform jobs passed.
 Issue #612 is closed. Array predicates at join boundaries, #613, merged through
 PR #628 as `17bc4bbb` after all three platform jobs passed. Issue #613 is closed.
 S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
-`04b191a6` in PR #630, with CI running. VALUES row-width validation, #616, is reviewed and pushed as
-`28d93682`. Mixed-temporal conditional types, #605, are reviewed and pushed as
+`04b191a6`, merged through PR #630 as `8d8e3e6f` after all three platform
+jobs passed. Issue #615 is closed. VALUES row-width validation, #616, is reviewed
+and pushed as `28d93682` in PR #634, with CI running. Mixed-temporal conditional types, #605, are reviewed and pushed as
 `22151773`. NULLIF result preservation, #618, is reviewed and pushed as
 `d0501262`. Numeric comparison coercion, #619, is reviewed and pushed as `28bb732a`. Its
 comparison audit assigned independent string, temporal and known-NULL-right
@@ -40,10 +41,11 @@ pushed as `f3591dc7`. Session timezones for DATE, TIMESTAMP_NTZ and TIMESTAMP
 comparisons, #622, are reviewed and pushed as `bb2704f0`. NULLIF comparisons
 against a known NULL right operand, #623, are reviewed and pushed as `7cefd14a`.
 Mixed nanosecond comparisons, #627, are reviewed and pushed as `a23bebd6`.
-The current slice is #631, the DATE parser boundary repair needed before #629
-can reuse that parser for STRING comparisons. The #629 prototype and its 786
-independent Spark observations are saved separately while this prerequisite is
-reviewed. The new issue is assigned under the existing native temporal parent.
+DATE string boundaries, #631, are reviewed and pushed as `13a2f1ef`.
+The current slice is #629, STRING comparisons with DATE and microsecond
+timestamps. Its 956 independent Spark observations retain three known local-NULL
+preparation differences under #633. The lowercase timestamp-literal separator
+gap found while checking the shared date grammar is tracked separately by #632.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -96,9 +98,9 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision and STRING temporal comparisons |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
-| S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
+| S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
 | S07 | Arithmetic schema and diagnostic contracts | #149, #293 | Classify remaining schema/error differences; separately fix multi-output CAST error order and the retained BROUND gaps below |
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
@@ -681,6 +683,25 @@ because the old issue exists.
   checks pass. Clean-context Sol/high Bulletproof Review completed the whole
   scope and rechecked the assertion repair with no remaining findings. The slice
   is ready to commit and enter the dedicated staging PR queue.
+
+- #629 reuses SparkDate and SparkTimestamp for implicit STRING comparisons,
+  sharing ANSI mode and session-timezone selection between binary operators and
+  NULLIF. NULLIF keeps the original left value/type, and counted expressions
+  preserve one evaluation per required operand. The reference capture now has
+  956 Spark observations: 953 match strictly, while three local-NULL preparation
+  cases remain explicit under #633. Original reference SQL and expected values
+  are unchanged. Clean-context Sol/high Bulletproof Review found a missing
+  constant-NULLIF error before WHERE false; follow-up probes also caught nested
+  LIMIT 0 ordering. Both use the existing whole-expression error check and native
+  empty-relation propagation after local preparation. Numeric/BOOLEAN, typed
+  DATE literals, registered CASE and nested empty-input controls verify those
+  boundaries. The generic DataFusion simplifier is unchanged. The final workspace
+  passes 434 tests, zero failures and two inherited ignored doctests, including
+  the full historical replay. Independent review rechecked every changed file,
+  connected consumers and the repairs, with no actionable findings remaining.
+  Remote platform CI and staging integration remain pending. Exact error-stage,
+  error-class and nullability parity, other Arrow timestamp units and release
+  performance remain separate work.
 
 ### Retained gaps found during S01 review
 

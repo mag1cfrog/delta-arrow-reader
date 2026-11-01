@@ -121,6 +121,17 @@ Arrow's native boolean casts stay unchanged. The
 [reference cases](tests/fixtures/README.md#string-to-boolean-casts) include guarded
 and empty-result behavior.
 
+STRING comparisons with Spark DATE and microsecond timestamps reuse the existing
+date/time parsers. Invalid input follows ANSI mode, and timestamp strings use
+the session timezone. The implicit comparison cast preserves early literal and
+local-input errors without changing explicit datetime-function pruning. The
+[reference cases](tests/fixtures/README.md#string-and-temporal-comparisons)
+record the remaining local-NULL preparation difference separately.
+Constant NULLIF comparisons reuse the existing whole-expression error check
+after LIMIT 0 pruning and native empty-relation propagation. Conditional parents
+still decide whether their inputs need evaluation; the generic DataFusion
+simplifier is unchanged.
+
 NULLIF floating comparisons reuse the existing Spark float normalization and
 native comparison/validity kernels. Unmatched values retain their original bits.
 Comparison casts now operate on temporary values, preserving the first input's

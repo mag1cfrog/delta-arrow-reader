@@ -401,7 +401,9 @@ pub(crate) fn spark_binary_expr(
             left_type = target.clone();
             right_type = target;
         }
-        if let Some(target) = string_comparison_type(&left_type, &right_type, ansi_mode) {
+        if let Some(target) =
+            string_comparison_type(&left_type, &right_type, ansi_mode, &config.session_timezone)
+        {
             let convert = |value, source: &DataType| -> PlanResult<_> {
                 Ok(if source.is_string() {
                     string_comparison_cast(&target, ansi_mode)?.call(vec![value])

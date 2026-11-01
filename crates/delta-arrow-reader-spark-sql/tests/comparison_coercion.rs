@@ -128,26 +128,28 @@ async fn execute_comparison_query(session: &SessionContext, case: &Value) -> Tes
     Ok(json!({"types":types, "names":query.column_names, "rows":rows}))
 }
 
-fn register_temporal_input(session: &SessionContext, input: &Value) -> TestResult {
+fn register_temporal_input(session: &SessionContext, table: &str, input: &Value) -> TestResult {
     let dates: Vec<Option<i32>> = serde_json::from_value(input["date_days"].clone())?;
     let ntz: Vec<Option<i64>> = serde_json::from_value(input["ntz_us"].clone())?;
     let ltz: Vec<Option<i64>> = serde_json::from_value(input["ltz_utc_us"].clone())?;
     assert_eq!(dates.len(), 4);
-    session.register_batch(
-        "external_temporal",
-        RecordBatch::try_from_iter([
-            (
-                "k",
-                Arc::new(Int32Array::from(vec![0, 1, 2, 3])) as ArrayRef,
-            ),
-            ("d", Arc::new(Date32Array::from(dates))),
-            ("ntz", Arc::new(TimestampMicrosecondArray::from(ntz))),
-            (
-                "ltz",
-                Arc::new(TimestampMicrosecondArray::from(ltz).with_timezone("UTC")),
-            ),
-        ])?,
-    )?;
+    let mut columns = vec![
+        (
+            "k",
+            Arc::new(Int32Array::from(vec![0, 1, 2, 3])) as ArrayRef,
+        ),
+        ("d", Arc::new(Date32Array::from(dates))),
+        ("ntz", Arc::new(TimestampMicrosecondArray::from(ntz))),
+        (
+            "ltz",
+            Arc::new(TimestampMicrosecondArray::from(ltz).with_timezone("UTC")),
+        ),
+    ];
+    if let Some(strings) = input.get("strings") {
+        let strings: Vec<Option<String>> = serde_json::from_value(strings.clone())?;
+        columns.push(("s", Arc::new(StringArray::from(strings)) as ArrayRef));
+    }
+    session.register_batch(table, RecordBatch::try_from_iter(columns)?)?;
     Ok(())
 }
 
@@ -164,7 +166,7 @@ async fn match_spark_comparison_coercion() -> TestResult {
             .iter()
             .filter(|case| case.get("retained_difference").is_some())
             .count(),
-        3
+        0
     );
     let strings = include_str!("fixtures/string-comparison-spark.jsonl")
         .lines()
@@ -188,6 +190,21 @@ async fn match_spark_comparison_coercion() -> TestResult {
     assert_eq!(temporal[0]["spark_version"], "4.2.0");
     let temporal_input = temporal[0]["external_input"].clone();
     records.extend(temporal.into_iter().skip(1));
+    let string_temporal = include_str!("fixtures/string-temporal-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(string_temporal.len(), 957);
+    assert_eq!(string_temporal[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        string_temporal
+            .iter()
+            .filter(|case| case.get("retained_difference").is_some())
+            .count(),
+        3
+    );
+    let string_temporal_input = string_temporal[0]["external_input"].clone();
+    records.extend(string_temporal.into_iter().skip(1));
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -202,7 +219,8 @@ async fn match_spark_comparison_coercion() -> TestResult {
             )
             .build(),
         );
-        register_temporal_input(&session, &temporal_input)?;
+        register_temporal_input(&session, "external_temporal", &temporal_input)?;
+        register_temporal_input(&session, "external_string_temporal", &string_temporal_input)?;
         session.register_batch(
             "nullif_input",
             RecordBatch::try_from_iter([
@@ -217,14 +235,12 @@ async fn match_spark_comparison_coercion() -> TestResult {
         for case in &records[1..] {
             let expected = &case["expected"];
             let actual = execute_comparison_query(&session, case).await;
-            if case["retained_difference"] == "string_temporal_ansi_629" {
-                assert_eq!(case["ansi"], false);
-                assert_eq!(expected["rows"], json!([["bad"], [null], ["001"]]));
-                assert!(actual.is_err_and(|error| {
-                    let message = error.to_string();
-                    message.contains("Cannot cast string 'bad' to value of Date32 type")
-                        || message.contains("Error parsing timestamp from 'bad'")
-                }));
+            if case["retained_difference"] == "local_null_comparison_633" {
+                assert_eq!(expected["condition"], "CAST_INVALID_INPUT");
+                assert_eq!(
+                    actual?,
+                    json!({"types":["boolean"], "names":["r"], "rows":[[null],[null],[null]]})
+                );
                 continue;
             }
             let matches = match &actual {
@@ -244,8 +260,16 @@ async fn match_spark_comparison_coercion() -> TestResult {
                         || expected["condition"]
                             == "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION" =>
                 {
+                    let timestamp_parse_error = case["error_representation"] == "timestamp_parser"
+                        && error.downcast_ref::<datafusion::common::DataFusionError>().is_some_and(|error| {
+                            matches!(error.find_root(), datafusion::common::DataFusionError::Execution(message)
+                                if message.starts_with("error in SQL parser: found b at 0:1")
+                                    || message.starts_with("error in SQL parser: found end of input expected")
+                                    || message == "invalid argument: DateValue { year: 2026, month: 2, day: 30 }")
+                        });
                     let message = error.to_string();
-                    message.contains("[CAST_INVALID_INPUT]")
+                    timestamp_parse_error
+                        || message.contains("[CAST_INVALID_INPUT]")
                         || message.contains("Cannot cast string 'bad' to value of Int32 type")
                         || message.contains("Cannot cast string 'bad' to value of Date32 type")
                         || message.contains("Error parsing timestamp from 'bad'")
@@ -281,7 +305,7 @@ async fn match_spark_comparison_coercion() -> TestResult {
         rows[0].column(0).as_primitive::<Float64Type>().value(0),
         1.0
     );
-    register_temporal_input(&native, &temporal_input)?;
+    register_temporal_input(&native, "external_temporal", &temporal_input)?;
     let rows = native
         .sql("SELECT d=ltz AS r FROM external_temporal ORDER BY k")
         .await?
@@ -303,6 +327,24 @@ async fn match_spark_comparison_coercion() -> TestResult {
     assert!(
         native_fraction.is_err_and(|error| error.to_string().contains("Cannot cast string '1.5'"))
     );
+    let configured_host = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for session in [&native, &configured_host] {
+        let native_date_error = async {
+            session
+                .sql("SELECT 'bad'=DATE '2026-01-02' AS r")
+                .await?
+                .collect()
+                .await
+        }
+        .await;
+        assert!(native_date_error.is_err_and(|error| {
+            error
+                .to_string()
+                .contains("Cannot cast string 'bad' to value of Date32 type")
+        }));
+    }
     assert!(
         differences.is_empty(),
         "{} differences:\n{}",
