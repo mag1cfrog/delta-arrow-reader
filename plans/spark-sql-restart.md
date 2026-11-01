@@ -7,18 +7,22 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#635, common numeric types in conditional results, is ready for its dedicated
-staging PR on `fix/spark-conditional-numeric-types`, based on `3f952d19`.
-The shared rule serves conditional values and Decimal VALUES columns. All 434
-workspace tests pass, with zero failures and two inherited ignored doctests;
-root-crate Clippy, formatting and diff checks also pass. Clean-context Sol/high
-Bulletproof Review found no unresolved actionable issues. The 1,232 independent
-Spark observations cover numeric results and two independently verified
-historical replay corrections. The first 1,230 references reproduced 1,600
-failed baseline assertions across two batch sizes, not 1,600 separate bugs.
-The original 942 observations remain unchanged; 288 added observations select
-non-NULL values from both IF/CASE branches for each numeric pair, argument order
-and input source. STRING/non-numeric coercion remains the next S03 slice.
+#652, NULL results for empty CSV records, is in progress on
+`fix/spark-empty-csv-records`, based on staging `86d94c3e`. Tests using 100 independent Spark references cover final-record emptiness,
+quoting, separators, replacement values, NULL structs, sliced columns and option
+errors. All 435 workspace tests pass, with zero failures and two inherited
+ignored doctests. Root-crate Clippy, formatting and diff checks pass. Clean-context Sol/high
+Bulletproof Review found no unresolved actionable issues after repairing the
+progress-log placement. The slice is ready for its dedicated staging PR.
+
+The #651 floating-text candidate and #650 conditional STRING candidate are saved
+locally on their own branches. #652 blocks #651, which blocks #650. Resume each
+in that order, with its own checks, clean-context review and staging PR.
+
+#635 merged through PR #649 as `86d94c3e`; its issue is closed. The merged tree
+matches its reviewed source. All 434 workspace tests pass, with zero failures
+and two inherited ignored doctests, plus root-crate Clippy, formatting and
+clean-context Sol/high Bulletproof Review. No automatic PR CI ran.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
 #633 are merged through separate PRs #637 and #640-#648. Their issues are closed.
@@ -31,10 +35,11 @@ Clean-context Sol/high Bulletproof Reviews found no unresolved actionable issues
 within each slice's scope.
 
 PR #639, merged as `8a600047`, disables automatic cloud CI only for staging PRs.
-The combined three-platform checkpoint is running at
+The combined three-platform checkpoint passed at
 [run 41268882510](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41268882510)
 on `3f952d1914b7487ae1b44c3907d94491c5f352d3`. Its Linux, macOS and Windows jobs
-have started; none is claimed passed yet. Existing performance, vendor-lint and
+each passed 434 tests, zero failures and two inherited ignored doctests, plus
+formatting and root-crate Clippy. Existing performance, vendor-lint and
 remaining compatibility work stays in the ordered queue below.
 
 The active Spark frontend is developed and integrated on
@@ -744,6 +749,16 @@ is claimed.
   fresh Spark evidence, and rechecked the repaired stale status text. No
   actionable finding remains. The separate platform checkpoint covers staging
   before this slice; this candidate's acceptance uses the local Linux policy.
+
+- #652 changes only CSV record finalization: an empty encoded record becomes NULL.
+  The 100 Spark 4.2 references cover both ANSI modes and run at batch sizes 1 and
+  32. Baseline comparison found 104 result differences; the candidate has none.
+  Four existing unit tests now assert NULL validity instead of reading NULL-slot
+  bytes. Separators, quoted empty strings, replacement values and option errors
+  retain their reference results. Spark reference capture uses NO_CODEGEN because
+  its generated column path throws on a NULL CSV result; scalar and interpreted
+  results agree. Full Linux validation passes 435 tests, zero failures and the
+  same two inherited ignored doctests, plus root-crate Clippy and formatting.
 
 ### Retained gaps found during S01 review
 
