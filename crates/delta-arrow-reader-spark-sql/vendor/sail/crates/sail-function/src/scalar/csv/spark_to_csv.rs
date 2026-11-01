@@ -267,7 +267,7 @@ impl ScalarUDFImpl for SparkToCsv {
 ///
 /// # Returns
 /// A `StringArray` where each entry is the CSV representation of the struct row,
-/// or `null` if the input row was null.
+/// or `null` if the input row was null or its encoded CSV record is empty.
 fn spark_to_csv_inner(args: &[ArrayRef], session_timezone: &str) -> Result<ArrayRef> {
     if args.is_empty() || args.len() > 2 {
         return exec_err!(
@@ -347,7 +347,11 @@ fn spark_to_csv_inner(args: &[ArrayRef], session_timezone: &str) -> Result<Array
             }
         }
 
-        builder.append_value(&row);
+        if row.is_empty() {
+            builder.append_null();
+        } else {
+            builder.append_value(&row);
+        }
     }
 
     Ok(Arc::new(builder.finish()))
@@ -952,7 +956,7 @@ mod tests {
     // Numeric types
     // ---------------------------------------------------------------------------
 
-    /// Boolean values serialize as "true" / "false", null boolean → empty string.
+    /// A single NULL field produces a NULL record, not a valid empty string.
     #[test]
     fn test_to_csv_boolean_values() -> Result<()> {
         let fields = Fields::from(vec![Arc::new(Field::new("flag", DataType::Boolean, true))]);
@@ -964,7 +968,7 @@ mod tests {
         let output = result.as_any().downcast_ref::<StringArray>().unwrap();
         assert_eq!(output.value(0), "true");
         assert_eq!(output.value(1), "false");
-        assert_eq!(output.value(2), ""); // null → empty string
+        assert!(output.is_null(2));
         Ok(())
     }
 
@@ -1043,7 +1047,7 @@ mod tests {
         let output = result.as_any().downcast_ref::<StringArray>().unwrap();
         assert_eq!(output.value(0), "9.99");
         assert_eq!(output.value(1), "12.34");
-        assert_eq!(output.value(2), ""); // null decimal → empty string
+        assert!(output.is_null(2));
         Ok(())
     }
 
@@ -1149,7 +1153,7 @@ mod tests {
 
         let output = result.as_any().downcast_ref::<StringArray>().unwrap();
         assert_eq!(output.value(0), "2015-08-26");
-        assert_eq!(output.value(1), ""); // null date → empty string
+        assert!(output.is_null(1));
         Ok(())
     }
 
@@ -1339,7 +1343,7 @@ mod tests {
 
         let output = result.as_any().downcast_ref::<StringArray>().unwrap();
         assert_eq!(output.value(0), "2015-08-26");
-        assert_eq!(output.value(1), "");
+        assert!(output.is_null(1));
         Ok(())
     }
 
