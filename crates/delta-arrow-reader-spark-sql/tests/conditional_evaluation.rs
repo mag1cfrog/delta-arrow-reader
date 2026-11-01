@@ -349,6 +349,9 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                 ("DECIMAL(10,2)", "DECIMAL(8,3)"),
                 ("FLOAT", "INT"),
                 ("DECIMAL(10,2)", "DOUBLE"),
+                ("STRING", "INT"),
+                ("STRING", "DOUBLE"),
+                ("STRING", "DECIMAL(10,2)"),
             ] {
                 for (left_type, right_type) in [(left_type, right_type), (right_type, left_type)] {
                     let left = format!("CAST(count_first(a) AS {left_type})");
