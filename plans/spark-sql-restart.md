@@ -7,27 +7,30 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#684 is in progress on `fix/set-operation-input-coercion`, based on `06dc3ad4`.
-Independent mixed-type probes confirm that set operations retain the left input
-schema and compare some strings numerically before selecting their common result
-type. The patch reuses conditional numeric, string and temporal conversion rules
-before set membership and duplicate grouping. All 512 independent Spark
-references, including 74 required errors, pass at batches 1 and 32. Separate
-checks preserve output names/metadata and native DataFusion SQL; the resolver's
-BY NAME test covers reordering and missing-column NULLs against two independent
-DataFrame observations. Three-input UNION ordering matches Spark's binary
-coercion, so no flattening change is needed. Final full Linux checks pass 475
-tests with zero failures and two inherited ignored doctests; root Clippy,
-formatting and diff checks pass. Clean-context Sol/high review reports no
-remaining source finding; final receipt verification precedes the separate PR.
-Exact Spark error-stage/nullability parity, #682/#683 and performance checks
-remain separate work.
+#682 is in progress on `fix/intersect-all-multiplicity`, based on `e50edfae`.
+INTERSECT ALL now uses the EXCEPT ALL duplicate-row numbering, with a semi join
+for intersection and an anti join for subtraction. A before/after replay catches
+48 original count failures in 12 query shapes, then passes all 366 independent
+Spark references, including three required errors, at batch sizes 1 and 32.
+The 512 existing coercion references also pass, along with metadata and native
+SQL controls extended to INTERSECT ALL. The new second-column case exercises
+numbering by the complete row key. Final full Linux checks pass 476 tests with
+zero failures and two inherited ignored doctests; root Clippy, formatting and
+diff checks pass. Clean-context Sol/high review reports no remaining source
+finding; final receipt verification precedes the separate PR. #683 owns signed-zero
+and broader floating-key equality and follows this slice.
 
-#682 follows this coercion prerequisite. Its minimal integer query returns all
-three matching left rows when the right side contains one; Spark returns one.
-Reuse of the existing EXCEPT ALL row-number plan will be evaluated after both
-inputs use the common type. #683 separately owns floating signed-zero equality
-across set-operation keys and follows #682. Neither has a runtime patch or PR.
+#684 merged through PR #685 at `e50edfae`, whose complete tree and all ten
+reviewed file hashes match source `ab00eda4`. All 512 independent Spark
+references, including 74 required errors, pass at batches 1 and 32. Separate
+checks preserve output names/metadata and native DataFusion SQL; BY NAME
+reordering and missing-column NULLs match two independent DataFrame observations.
+Final Linux checks pass 475 tests with zero failures and two inherited ignored
+doctests; root Clippy, formatting and diff checks pass. Clean-context Sol/high
+Bulletproof Review completed without unresolved findings. The issue is closed,
+and its local/remote implementation branches are removed. No automatic cloud
+PR workflow ran. Exact Spark error-stage/nullability parity, #682/#683 and
+performance checks remain separate work.
 
 #678 merged through PR #681 at `06dc3ad4`, whose full tree matches reviewed
 source `d46117dc`. All 124 Spark references, including 45 required errors,
@@ -48,7 +51,7 @@ The issue is closed and the temporary branch is removed.
 
 #141's coverage work is retained on `test/relational-query-coverage`, based on
 `06dc3ad4`. Its three new test/reference files have an owned stash and a verified
-external backup while #684, #682 and #683 are repaired. The 128 explicit-input Spark
+external backup while #682 and #683 are repaired. The 128 explicit-input Spark
 references produce 256 native observations with 36 mismatches across nine query
 shapes. The other comparisons meet their respective references, including the
 previously approved three-valued IN policy; raw Spark differences remain visible.
