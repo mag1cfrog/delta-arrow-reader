@@ -816,9 +816,46 @@ cast errors. Constant false and NULL boundaries have separate observations.
 Nested aggregate/window rejection is checked before zero-count pruning, with
 valid scalar aggregate subqueries and windows over aggregates as controls.
 
-An unfiltered window is a control. FILTER on aggregate windows is a confirmed
-separate gap tracked in #697; it is outside this aggregate repair. The initial
-window references and native rejection remain recorded in that issue's evidence.
+An unfiltered window is a control. FILTER on aggregate windows has its own
+frontend references below; the original admission failure remains recorded in
+#697's evidence.
+
+## Aggregate window filters
+
+`window-filter-spark.jsonl` contains 220 independent Spark 4.2.0 observations in
+UTC. Regenerate it with `capture_window_filter_spark.py` using Python 3.12,
+PySpark 4.2.0 and Java 21. `window_filter.rs` compares complete ordered rows and
+logical/physical output types, nullability, names and metadata at batch sizes
+1 and 32. FILTER chooses contributing rows within a frame while preserving
+the window's output rows.
+
+The corpus covers ordinary and partitioned windows, bounded ROWS/RANGE,
+following and prefix frames, empty input, named windows and windows over grouped
+aggregates. It checks COUNT_IF coercion and required errors, scalar FILTER
+validation and rejection on ranking/offset functions. Direct collection and
+approximate-count outputs verify empty defaults and schema; ordinary aggregates
+guard their shared result handling. Composed array queries exercise the next
+consumer of the window result. HLL sketches cover the shared custom-UDAF builder.
+A wider frame distinguishes FIRST from LAST with multiple admitted values and
+both NULL treatments. AVG/LISTAGG with NULL arguments retain required FILTER
+errors and DOUBLE/STRING result types, with unfiltered controls.
+
+Eight records preserve a specific Spark optimizer defect and a second complete
+reference with only the implicated rule disabled:
+
+- COUNT_IF, COUNT and SUM with constant false FILTER trigger INTERNAL_ERROR
+  through `EliminateAggregateFilter`. With that rule disabled, counts are zero
+  and SUM is NULL on every input row.
+- Prefix FIRST_VALUE with IGNORE NULLS loses FILTER when `OptimizeWindowFunctions`
+  rewrites it to NTH_VALUE. Disabling that rule preserves the selected rows.
+
+Both ANSI modes retain the original outcomes and the configured references;
+successful plans are also recorded. The matcher permits these alternatives only
+for their exact IDs and checks the complete result/schema, not an arbitrary
+error or a partial row sample. The other 212 records use default Spark outcomes.
+These eight cases establish FILTER-preserving semantics, not parity with
+Spark's default buggy rewrite. Error conditions are compared with the relevant
+DAR diagnostic, without claiming identical exception text or error timing.
 
 ## Sliding window extrema
 
@@ -830,8 +867,8 @@ script registers the input rows explicitly and records complete ordered results
 and schemas.
 
 `window_extrema.rs` checks those results at batch sizes 1 and 64. Native
-DataFusion SQL covers every case; the Spark frontend covers unfiltered cases
-until its separate FILTER admission repair. These 288 comparisons check values,
+DataFusion SQL covers every case; the Spark frontend covers unfiltered cases.
+Filtered frontend cases are in the window-filter corpus above. These 288 comparisons check values,
 names, types, nullability and metadata. They protect the shared native MIN/MAX
 accumulators against returning an obsolete extremum after retraction.
 
@@ -860,13 +897,13 @@ preserving FILTER. The other 26 cases use Spark's default result. This explicit
 Spark optimizer difference remains recorded with #697, rather than counting the
 default first-value result as compatible.
 
-This corpus tests the shared executor before the separate Spark window FILTER
-frontend is integrated. A test expression planner selects aggregate FIRST/LAST
+This corpus isolates the shared executor from the Spark window FILTER frontend.
+A test expression planner selects aggregate FIRST/LAST
 instead of the native WindowUDFs. Native approximate counts are explicitly cast
 to BIGINT and defaulted to zero. The Spark collection query explicitly returns
 a nullable array when no values contribute, matching native ARRAY_AGG's default.
 Both SQL statements remain in each record. These adaptations do not establish
-Spark frontend default or schema parity; that remains part of #697.
+Spark frontend default or schema parity; the window-filter corpus checks those.
 
 Separate checks verify that required argument and FILTER errors survive, empty
 RANGE frames discard prior contributions, and incremental/prefix/peer paths do
@@ -904,8 +941,8 @@ two valid serializations to have identical bytes.
 
 `hll_empty.rs` runs all references at batch sizes 1 and 32. Sixteen FILTER window
 observations exercise the shared native executor with the retained HLL functions
-registered directly; Spark frontend FILTER admission is separately tracked in
-#697. Other observations use the public Spark planning entry point. Additional
+registered directly; the window-filter corpus checks Spark frontend FILTER
+admission. Other observations use the public Spark planning entry point. Additional
 native UDAF controls distinguish an explicit non-null default, a nullable NULL
 default and a non-null aggregate whose empty value comes from its accumulator.
 

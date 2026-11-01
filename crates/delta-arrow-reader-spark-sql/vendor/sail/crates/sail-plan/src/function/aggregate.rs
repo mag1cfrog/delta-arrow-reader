@@ -48,9 +48,9 @@ use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
-    AggFunction, AggFunctionInput, count_min_sketch_args, get_arguments_and_null_treatment,
-    get_null_treatment, hll_args_with_default_lg, hll_union_args_with_default_allow_different_lg,
-    theta_args_with_default_lg,
+    AggFunction, AggFunctionInput, FunctionContextInput, count_min_sketch_args,
+    get_arguments_and_null_treatment, get_null_treatment, hll_args_with_default_lg,
+    hll_union_args_with_default_allow_different_lg, theta_args_with_default_lg,
 };
 use crate::function::transform_count_star_wildcard_expr;
 
@@ -635,17 +635,11 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         .one()
         .map_err(|_| PlanError::invalid("`count_if` requires 1 argument"))?;
     let schema = input.function_context.schema;
-    let predicate = match predicate.get_type(schema)? {
-        DataType::Boolean | DataType::Null => predicate,
-        data_type if data_type.is_string() && input.function_context.plan_config.ansi_mode => {
-            ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![predicate])
-        }
-        other => {
-            return Err(PlanError::invalid(format!(
-                "COUNT_IF requires a BOOLEAN argument, got {other}"
-            )));
-        }
-    };
+    let predicate = coerce_count_if_predicate(
+        predicate,
+        schema,
+        input.function_context.plan_config.ansi_mode,
+    )?;
     require_deterministic_scalar_expression(&predicate, "COUNT_IF argument")?;
     if let Some(filter) = &input.filter {
         if filter.get_type(schema)? != DataType::Boolean {
@@ -653,31 +647,11 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         }
         require_deterministic_scalar_expression(filter, "COUNT_IF FILTER")?;
     }
-    let counts_no_rows = if let Some(filter) = &input.filter {
-        let state = input.function_context.session_context.state();
-        let simplifier = ExprSimplifier::new(
-            SimplifyContext::builder()
-                .with_schema(schema.clone())
-                .with_query_execution_start_time(state.execution_props().query_execution_start_time)
-                .with_config_options(state.config_options().clone())
-                .build(),
-        );
-        // Constant errors precede removal of a false FILTER or false/NULL argument.
-        let predicate = simplifier.simplify(predicate.clone())?;
-        let filter = simplifier.simplify(filter.as_ref().clone())?;
-        matches!(
-            filter,
-            expr::Expr::Literal(ScalarValue::Boolean(Some(false)), _)
-        ) || matches!(
-            predicate,
-            expr::Expr::Literal(
-                ScalarValue::Boolean(Some(false) | None) | ScalarValue::Null,
-                _
-            )
-        )
-    } else {
-        false
-    };
+    let counts_no_rows = filtered_count_if_is_constant_zero(
+        &predicate,
+        input.filter.as_deref(),
+        &input.function_context,
+    )?;
     let (argument, filter) = if counts_no_rows {
         (lit(ScalarValue::Boolean(None)), None)
     } else {
@@ -699,7 +673,57 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     }))
 }
 
-fn require_deterministic_scalar_expression(
+pub(super) fn filtered_count_if_is_constant_zero(
+    predicate: &expr::Expr,
+    filter: Option<&expr::Expr>,
+    function_context: &FunctionContextInput,
+) -> PlanResult<bool> {
+    Ok(if let Some(filter) = filter {
+        let state = function_context.session_context.state();
+        let simplifier = ExprSimplifier::new(
+            SimplifyContext::builder()
+                .with_schema(function_context.schema.clone())
+                .with_query_execution_start_time(state.execution_props().query_execution_start_time)
+                .with_config_options(state.config_options().clone())
+                .build(),
+        );
+        // Constant errors precede removal of a false FILTER or false/NULL argument.
+        let predicate = simplifier.simplify(predicate.clone())?;
+        let filter = simplifier.simplify(filter.clone())?;
+        matches!(
+            filter,
+            expr::Expr::Literal(ScalarValue::Boolean(Some(false)), _)
+        ) || matches!(
+            predicate,
+            expr::Expr::Literal(
+                ScalarValue::Boolean(Some(false) | None) | ScalarValue::Null,
+                _
+            )
+        )
+    } else {
+        false
+    })
+}
+
+pub(super) fn coerce_count_if_predicate(
+    predicate: expr::Expr,
+    schema: &DFSchema,
+    ansi_mode: bool,
+) -> PlanResult<expr::Expr> {
+    Ok(match predicate.get_type(schema)? {
+        DataType::Boolean | DataType::Null => predicate,
+        data_type if data_type.is_string() && ansi_mode => {
+            ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![predicate])
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "COUNT_IF requires a BOOLEAN argument, got {other}"
+            )));
+        }
+    })
+}
+
+pub(crate) fn require_deterministic_scalar_expression(
     expression: &expr::Expr,
     clause: &str,
 ) -> PlanResult<()> {
@@ -752,7 +776,11 @@ fn collect_set(input: AggFunctionInput) -> PlanResult<expr::Expr> {
             null_treatment,
         },
     });
-    Ok(coalesce_to_empty_array(agg, &element_type))
+    Ok(coalesce_to_empty_array(
+        agg,
+        &element_type,
+        ignore_nulls == Some(true),
+    ))
 }
 
 fn array_agg_compacted(input: AggFunctionInput) -> PlanResult<expr::Expr> {
@@ -786,15 +814,28 @@ fn array_agg_compacted(input: AggFunctionInput) -> PlanResult<expr::Expr> {
             null_treatment,
         },
     });
-    Ok(coalesce_to_empty_array(agg, &element_type))
+    Ok(coalesce_to_empty_array(
+        agg,
+        &element_type,
+        ignore_nulls == Some(true),
+    ))
 }
 
 /// Spark's `collect_list`/`collect_set` return an empty array for a group with no (non-NULL)
 /// values to collect, but DataFusion's `array_agg` returns NULL over zero rows. Coalesce the
 /// aggregate to a typed empty array so the empty case matches Spark instead of yielding NULL.
-fn coalesce_to_empty_array(agg: expr::Expr, element_type: &DataType) -> expr::Expr {
+pub(super) fn coalesce_to_empty_array(
+    agg: expr::Expr,
+    element_type: &DataType,
+    ignore_nulls: bool,
+) -> expr::Expr {
     let empty = ScalarValue::List(ScalarValue::new_list_nullable(&[], element_type));
-    coalesce(vec![agg, lit(empty)])
+    let result = coalesce(vec![agg, lit(empty)]);
+    // Native array_agg retains nullable elements even when it discards every NULL.
+    cast(
+        result,
+        DataType::new_list(element_type.clone(), !ignore_nulls),
+    )
 }
 
 fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
@@ -885,19 +926,22 @@ fn percentile_exact(input: AggFunctionInput) -> PlanResult<expr::Expr> {
 }
 
 fn approx_count_distinct(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    Ok(cast(
-        expr::Expr::AggregateFunction(AggregateFunction {
-            func: approx_distinct::approx_distinct_udaf(),
-            params: AggregateFunctionParams {
-                args: input.arguments.clone(),
-                distinct: input.distinct,
-                order_by: input.order_by,
-                filter: input.filter,
-                null_treatment: get_null_treatment(input.ignore_nulls),
-            },
-        }),
-        DataType::Int64,
-    ))
+    Ok(coalesce(vec![
+        cast(
+            expr::Expr::AggregateFunction(AggregateFunction {
+                func: approx_distinct::approx_distinct_udaf(),
+                params: AggregateFunctionParams {
+                    args: input.arguments.clone(),
+                    distinct: input.distinct,
+                    order_by: input.order_by,
+                    filter: input.filter,
+                    null_treatment: get_null_treatment(input.ignore_nulls),
+                },
+            }),
+            DataType::Int64,
+        ),
+        lit(0_i64),
+    ]))
 }
 
 fn hll_sketch_agg(input: AggFunctionInput) -> PlanResult<expr::Expr> {

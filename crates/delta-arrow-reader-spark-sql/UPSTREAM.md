@@ -245,7 +245,21 @@ Sliding MIN/MAX reset their cached result to a typed NULL when their moving
 collection becomes empty. The comparison and moving-window algorithms remain
 upstream implementations. The [window extrema references](tests/fixtures/README.md#sliding-window-extrema)
 check values leaving and reentering frames through native DataFusion SQL and
-the Spark frontend. Aggregate window FILTER admission remains separate work.
+the Spark frontend.
+
+Spark aggregate windows retain FILTER through resolution and native execution.
+Ranking and offset functions reject it, and window filters must be deterministic
+Boolean scalar expressions. Filtered FIRST/LAST use native aggregate variants;
+unfiltered calls keep their existing window implementations. COUNT_IF shares
+coercion and constant-zero checks with ordinary aggregation, while retaining
+window-specific argument evaluation and admission. Collection aggregates return
+empty arrays with non-null elements when NULLs are ignored; approximate counts
+return non-null BIGINT values, including zero on empty frames. AVG and LISTAGG
+coerce untyped NULL arguments while retaining the window, including FILTER
+evaluation and the result type. The
+[window FILTER references](tests/fixtures/README.md#aggregate-window-filters)
+also retain the original outcomes of two confirmed Spark optimizer defects
+alongside the exact FILTER-preserving configured references.
 
 The sliding window executor can also use aggregates without retraction. When
 the frame start advances, it rebuilds that accumulator from the already evaluated

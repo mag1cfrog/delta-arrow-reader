@@ -13,7 +13,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{FunctionContextInput, WinFunctionInput};
-use crate::function::get_built_in_window_function;
+use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -75,7 +75,7 @@ impl PlanResolver<'_> {
                 is_internal: _,
                 is_distinct,
                 ignore_nulls,
-                filter: None,
+                filter,
                 // TODO: `window` and `window_function` both have an `order_by` field.
                 //  Check: Which one should we use? Are they the same? Is one of them empty?
                 order_by: None,
@@ -86,11 +86,27 @@ impl PlanResolver<'_> {
                 if !named_arguments.is_empty() {
                     return Err(PlanError::todo("named window function arguments"));
                 }
+                if is_distinct && filter.is_some() {
+                    return Err(PlanError::unsupported(
+                        "DISTINCT window functions are unsupported",
+                    ));
+                }
                 let canonical_function_name = function_name.to_ascii_lowercase();
                 let (argument_display_names, arguments) = self
                     .resolve_expressions_and_names(arguments, schema, state)
                     .await?;
                 let function = get_built_in_window_function(&canonical_function_name)?;
+                let filter = match filter {
+                    Some(filter) => {
+                        let filter = self.resolve_expression(*filter, schema, state).await?;
+                        if filter.get_type(schema)? != DataType::Boolean {
+                            return Err(PlanError::invalid("window FILTER requires BOOLEAN"));
+                        }
+                        require_deterministic_scalar_expression(&filter, "window FILTER")?;
+                        Some(Box::new(filter))
+                    }
+                    None => None,
+                };
                 let input = WinFunctionInput {
                     arguments,
                     partition_by,
@@ -98,6 +114,7 @@ impl PlanResolver<'_> {
                     window_frame,
                     ignore_nulls,
                     distinct: is_distinct,
+                    filter,
                     function_context: FunctionContextInput {
                         argument_display_names: &argument_display_names,
                         plan_config: &self.config,

@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field};
+use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
     approx_distinct, approx_percentile_cont, array_agg, average, bit_and_or_xor, bool_and_or,
-    correlation, count, covariance, grouping, median, min_max, stddev, sum, variance,
+    correlation, count, covariance, first_last, grouping, median, min_max, stddev, sum, variance,
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::functions_window::cume_dist::cume_dist_udwf;
@@ -16,7 +17,7 @@ use datafusion::functions_window::row_number::row_number_udwf;
 use datafusion_common::ScalarValue;
 use datafusion_expr::expr::WindowFunctionParams;
 use datafusion_expr::{
-    AggregateUDF, ExprSchemable, WindowFrame, WindowFunctionDefinition, cast, expr, lit, when,
+    AggregateUDF, ExprSchemable, WindowFunctionDefinition, cast, expr, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use lazy_static::lazy_static;
@@ -42,7 +43,10 @@ use sail_function::aggregate::try_avg::TryAvgFunction;
 use sail_function::window::spark_ntile_udwf;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::aggregate::coerce_string_sum_arguments;
+use crate::function::aggregate::{
+    coalesce_to_empty_array, coerce_count_if_predicate, coerce_string_sum_arguments,
+    filtered_count_if_is_constant_zero,
+};
 use crate::function::common::{
     WinFunction, WinFunctionInput, count_min_sketch_args, get_arguments_and_null_treatment,
     get_null_treatment, hll_args_with_default_lg, hll_union_args_with_default_allow_different_lg,
@@ -63,8 +67,14 @@ fn nth_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
+    if filter.is_some() {
+        return Err(PlanError::invalid(
+            "FILTER is only supported for aggregate window functions",
+        ));
+    }
     let mut args = arguments;
     let null_treatment = get_null_treatment(if args.len() == 3 {
         args.pop()
@@ -86,7 +96,7 @@ fn nth_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment,
             distinct,
         },
@@ -101,25 +111,24 @@ fn avg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
-        function_context: _,
+        filter,
+        function_context,
     } = input;
     let (args, null_treatment) = get_arguments_and_null_treatment(arguments, ignore_nulls)?;
-    if args
-        .first()
-        .map(|arg| arg.get_type(input.function_context.schema))
-        .transpose()?
-        == Some(DataType::Null)
-    {
-        return Ok(lit(ScalarValue::Null));
-    }
+    let argument = args.one()?;
+    let argument = if argument.get_type(function_context.schema)? == DataType::Null {
+        cast(argument, DataType::Float64)
+    } else {
+        argument
+    };
     Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
         fun: WindowFunctionDefinition::AggregateUDF(average::avg_udaf()),
         params: WindowFunctionParams {
-            args,
+            args: vec![argument],
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment,
             distinct,
         },
@@ -134,6 +143,7 @@ fn spark_sum(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context,
     } = input;
     let arguments = coerce_string_sum_arguments(
@@ -149,7 +159,7 @@ fn spark_sum(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(ignore_nulls),
             distinct,
         },
@@ -164,17 +174,22 @@ fn first_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     let (args, null_treatment) = get_arguments_and_null_treatment(arguments, ignore_nulls)?;
     Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-        fun: WindowFunctionDefinition::WindowUDF(first_value_udwf()),
+        fun: if filter.is_some() {
+            WindowFunctionDefinition::AggregateUDF(first_last::first_value_udaf())
+        } else {
+            WindowFunctionDefinition::WindowUDF(first_value_udwf())
+        },
         params: WindowFunctionParams {
             args,
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment,
             distinct,
         },
@@ -189,17 +204,22 @@ fn last_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     let (args, null_treatment) = get_arguments_and_null_treatment(arguments, ignore_nulls)?;
     Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-        fun: WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+        fun: if filter.is_some() {
+            WindowFunctionDefinition::AggregateUDF(first_last::last_value_udaf())
+        } else {
+            WindowFunctionDefinition::WindowUDF(last_value_udwf())
+        },
         params: WindowFunctionParams {
             args,
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment,
             distinct,
         },
@@ -214,6 +234,7 @@ fn kurtosis(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     let args = arguments
@@ -229,37 +250,14 @@ fn kurtosis(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(ignore_nulls),
             distinct,
         },
     })))
 }
 
-fn aggregate_udf_window_expr(
-    func: Arc<AggregateUDF>,
-    args: Vec<expr::Expr>,
-    partition_by: Vec<expr::Expr>,
-    order_by: Vec<expr::Sort>,
-    window_frame: WindowFrame,
-    ignore_nulls: Option<bool>,
-    distinct: bool,
-) -> expr::Expr {
-    expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-        fun: WindowFunctionDefinition::AggregateUDF(func),
-        params: WindowFunctionParams {
-            args,
-            partition_by,
-            order_by,
-            window_frame,
-            filter: None,
-            null_treatment: get_null_treatment(ignore_nulls),
-            distinct,
-        },
-    }))
-}
-
-fn product(input: WinFunctionInput) -> PlanResult<expr::Expr> {
+fn build_aggregate_window(func: Arc<AggregateUDF>, input: WinFunctionInput) -> expr::Expr {
     let WinFunctionInput {
         arguments,
         partition_by,
@@ -267,20 +265,32 @@ fn product(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
-    let args = arguments
+    expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+        fun: WindowFunctionDefinition::AggregateUDF(func),
+        params: WindowFunctionParams {
+            args: arguments,
+            partition_by,
+            order_by,
+            window_frame,
+            filter,
+            null_treatment: get_null_treatment(ignore_nulls),
+            distinct,
+        },
+    }))
+}
+
+fn product(mut input: WinFunctionInput) -> PlanResult<expr::Expr> {
+    input.arguments = input
+        .arguments
         .into_iter()
         .map(|arg| expr::Expr::Cast(expr::Cast::new(Box::new(arg), DataType::Float64)))
         .collect();
-    Ok(aggregate_udf_window_expr(
+    Ok(build_aggregate_window(
         Arc::new(AggregateUDF::from(ProductFunction::new())),
-        args,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
+        input,
     ))
 }
 
@@ -292,6 +302,7 @@ fn skewness(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     let args = arguments
@@ -307,120 +318,50 @@ fn skewness(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(ignore_nulls),
             distinct,
         },
     })))
 }
 
-fn hll_sketch_agg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
-    let WinFunctionInput {
-        arguments,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
-        function_context: _,
-    } = input;
-    let args = hll_args_with_default_lg(arguments, "hll_sketch_agg")?;
-    Ok(aggregate_udf_window_expr(
+fn hll_sketch_agg(mut input: WinFunctionInput) -> PlanResult<expr::Expr> {
+    input.arguments = hll_args_with_default_lg(input.arguments, "hll_sketch_agg")?;
+    Ok(build_aggregate_window(
         Arc::new(AggregateUDF::from(HllSketchAggFunction::new())),
-        args,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
+        input,
     ))
 }
 
-fn hll_union_agg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
-    let WinFunctionInput {
-        arguments,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
-        function_context: _,
-    } = input;
-    let args = hll_union_args_with_default_allow_different_lg(arguments)?;
-    Ok(aggregate_udf_window_expr(
+fn hll_union_agg(mut input: WinFunctionInput) -> PlanResult<expr::Expr> {
+    input.arguments = hll_union_args_with_default_allow_different_lg(input.arguments)?;
+    Ok(build_aggregate_window(
         Arc::new(AggregateUDF::from(HllUnionAggFunction::new())),
-        args,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
+        input,
     ))
 }
 
-fn count_min_sketch(input: WinFunctionInput) -> PlanResult<expr::Expr> {
-    let WinFunctionInput {
-        arguments,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
-        function_context: _,
-    } = input;
-    let args = count_min_sketch_args(arguments)?;
-    Ok(aggregate_udf_window_expr(
+fn count_min_sketch(mut input: WinFunctionInput) -> PlanResult<expr::Expr> {
+    input.arguments = count_min_sketch_args(input.arguments)?;
+    Ok(build_aggregate_window(
         Arc::new(AggregateUDF::from(CountMinSketchFunction::new())),
-        args,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
+        input,
     ))
 }
 
-fn theta_sketch_agg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
-    let WinFunctionInput {
-        arguments,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
-        function_context: _,
-    } = input;
-    let args = theta_args_with_default_lg(arguments, "theta_sketch_agg")?;
-    Ok(aggregate_udf_window_expr(
+fn theta_sketch_agg(mut input: WinFunctionInput) -> PlanResult<expr::Expr> {
+    input.arguments = theta_args_with_default_lg(input.arguments, "theta_sketch_agg")?;
+    Ok(build_aggregate_window(
         Arc::new(AggregateUDF::from(ThetaSketchAggFunction::new())),
-        args,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
+        input,
     ))
 }
 
-fn theta_union_agg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
-    let WinFunctionInput {
-        arguments,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
-        function_context: _,
-    } = input;
-    let args = theta_args_with_default_lg(arguments, "theta_union_agg")?;
-    Ok(aggregate_udf_window_expr(
+fn theta_union_agg(mut input: WinFunctionInput) -> PlanResult<expr::Expr> {
+    input.arguments = theta_args_with_default_lg(input.arguments, "theta_union_agg")?;
+    Ok(build_aggregate_window(
         Arc::new(AggregateUDF::from(ThetaUnionAggFunction::new())),
-        args,
-        partition_by,
-        order_by,
-        window_frame,
-        ignore_nulls,
-        distinct,
+        input,
     ))
 }
 
@@ -432,6 +373,7 @@ fn count(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     let args = transform_count_star_wildcard_expr(arguments);
@@ -442,7 +384,7 @@ fn count(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(ignore_nulls),
             distinct,
         },
@@ -457,30 +399,38 @@ fn count_if(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
-        function_context: _,
+        filter,
+        function_context,
     } = input;
-    match arguments.len() {
-        1 => {
-            let predicate = arguments
-                .first()
-                .ok_or_else(|| PlanError::invalid("`count_if` requires 1 argument"))?
-                .clone();
-            let arg = when(predicate, lit(0)).otherwise(lit(ScalarValue::Int32(None)))?;
-            Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-                fun: WindowFunctionDefinition::AggregateUDF(count::count_udaf()),
-                params: WindowFunctionParams {
-                    args: vec![arg],
-                    partition_by,
-                    order_by,
-                    window_frame,
-                    filter: None,
-                    null_treatment: get_null_treatment(ignore_nulls),
-                    distinct,
-                },
-            })))
-        }
-        _ => Err(PlanError::invalid("`count_if` requires 1 argument")),
-    }
+    let predicate = arguments
+        .one()
+        .map_err(|_| PlanError::invalid("`count_if` requires 1 argument"))?;
+    let predicate = coerce_count_if_predicate(
+        predicate,
+        function_context.schema,
+        function_context.plan_config.ansi_mode,
+    )?;
+    let (argument, filter) =
+        if filtered_count_if_is_constant_zero(&predicate, filter.as_deref(), &function_context)? {
+            (lit(ScalarValue::Int32(None)), None)
+        } else {
+            (
+                when(predicate, lit(0)).otherwise(lit(ScalarValue::Int32(None)))?,
+                filter,
+            )
+        };
+    Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+        fun: WindowFunctionDefinition::AggregateUDF(count::count_udaf()),
+        params: WindowFunctionParams {
+            args: vec![argument],
+            partition_by,
+            order_by,
+            window_frame,
+            filter,
+            null_treatment: get_null_treatment(ignore_nulls),
+            distinct,
+        },
+    })))
 }
 
 fn collect_set(input: WinFunctionInput) -> PlanResult<expr::Expr> {
@@ -495,22 +445,29 @@ fn collect_set(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls: _,
         distinct: _,
-        function_context: _,
+        filter,
+        function_context,
     } = input;
     let arg = arguments.one()?;
-    let null_filter = Some(Box::new(arg.clone().is_not_null()));
-    Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+    let element_type = arg.get_type(function_context.schema)?;
+    let null_filter = arg.clone().is_not_null();
+    let filter = Some(Box::new(match filter {
+        Some(filter) => filter.and(null_filter),
+        None => null_filter,
+    }));
+    let aggregate = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
         fun: WindowFunctionDefinition::AggregateUDF(array_agg::array_agg_udaf()),
         params: WindowFunctionParams {
             args: vec![arg],
             partition_by,
             order_by,
             window_frame,
-            filter: null_filter,
+            filter,
             null_treatment: get_null_treatment(Some(true)),
             distinct: true,
         },
-    })))
+    }));
+    Ok(coalesce_to_empty_array(aggregate, &element_type, true))
 }
 
 fn array_agg_compacted(input: WinFunctionInput) -> PlanResult<expr::Expr> {
@@ -521,20 +478,24 @@ fn array_agg_compacted(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls: _,
         distinct,
-        function_context: _,
+        filter,
+        function_context,
     } = input;
-    Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+    let argument = arguments.one()?;
+    let element_type = argument.get_type(function_context.schema)?;
+    let aggregate = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
         fun: WindowFunctionDefinition::AggregateUDF(array_agg::array_agg_udaf()),
         params: WindowFunctionParams {
-            args: arguments,
+            args: vec![argument],
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(Some(true)),
             distinct,
         },
-    })))
+    }));
+    Ok(coalesce_to_empty_array(aggregate, &element_type, true))
 }
 
 fn listagg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
@@ -545,13 +506,16 @@ fn listagg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls: _,
         distinct,
+        filter,
         function_context,
     } = input;
     let schema = function_context.schema;
     let (agg_col, other_args) = arguments.at_least_one()?;
-    if agg_col.get_type(schema)? == DataType::Null {
-        return Ok(lit(ScalarValue::Null));
-    }
+    let agg_col = if agg_col.get_type(schema)? == DataType::Null {
+        cast(agg_col, DataType::Utf8)
+    } else {
+        agg_col
+    };
     let delim = other_args.first().cloned().unwrap_or_else(|| lit(""));
 
     let agg = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
@@ -566,7 +530,7 @@ fn listagg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             //     input.order_by
             // },
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(Some(true)),
             distinct,
         },
@@ -603,6 +567,7 @@ fn median(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     Ok(cast(
@@ -613,7 +578,7 @@ fn median(input: WinFunctionInput) -> PlanResult<expr::Expr> {
                 partition_by,
                 order_by,
                 window_frame,
-                filter: None,
+                filter,
                 null_treatment: get_null_treatment(ignore_nulls),
                 distinct,
             },
@@ -630,6 +595,7 @@ fn percentile_exact_agg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
     Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
@@ -641,7 +607,7 @@ fn percentile_exact_agg(input: WinFunctionInput) -> PlanResult<expr::Expr> {
             partition_by,
             order_by,
             window_frame,
-            filter: None,
+            filter,
             null_treatment: get_null_treatment(ignore_nulls),
             distinct,
         },
@@ -656,23 +622,27 @@ fn approx_count_distinct(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         window_frame,
         ignore_nulls,
         distinct,
+        filter,
         function_context: _,
     } = input;
-    Ok(cast(
-        expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-            fun: WindowFunctionDefinition::AggregateUDF(approx_distinct::approx_distinct_udaf()),
-            params: WindowFunctionParams {
-                args: arguments,
-                partition_by,
-                order_by,
-                window_frame,
-                filter: None,
-                null_treatment: get_null_treatment(ignore_nulls),
-                distinct,
-            },
-        })),
-        DataType::Int64,
-    ))
+    Ok(coalesce(vec![
+        cast(
+            expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+                fun: WindowFunctionDefinition::AggregateUDF(approx_distinct::approx_distinct_udaf()),
+                params: WindowFunctionParams {
+                    args: arguments,
+                    partition_by,
+                    order_by,
+                    window_frame,
+                    filter,
+                    null_treatment: get_null_treatment(ignore_nulls),
+                    distinct,
+                },
+            })),
+            DataType::Int64,
+        ),
+        lit(0_i64),
+    ]))
 }
 
 fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
@@ -720,7 +690,7 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ),
         ("bool_and", F::aggregate(bool_and_or::bool_and_udaf)),
         ("bool_or", F::aggregate(bool_and_or::bool_or_udaf)),
-        ("collect_list", F::aggregate(array_agg::array_agg_udaf)),
+        ("collect_list", F::custom(array_agg_compacted)),
         ("collect_set", F::custom(collect_set)),
         ("corr", F::aggregate(correlation::corr_udaf)),
         ("count", F::custom(count)),
@@ -850,7 +820,7 @@ mod tests {
     use arrow::datatypes::Schema;
     use datafusion::prelude::SessionContext;
     use datafusion_common::DFSchema;
-    use datafusion_expr::{ExprSchemable, col, try_cast};
+    use datafusion_expr::{ExprSchemable, WindowFrame, col, try_cast};
 
     use super::*;
     use crate::config::PlanConfig;
@@ -882,6 +852,7 @@ mod tests {
                 window_frame: window_frame.clone(),
                 ignore_nulls: None,
                 distinct: false,
+                filter: None,
                 function_context: FunctionContextInput {
                     argument_display_names: &argument_display_names,
                     plan_config: &plan_config,
