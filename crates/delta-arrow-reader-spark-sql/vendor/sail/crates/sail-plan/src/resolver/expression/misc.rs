@@ -135,6 +135,7 @@ impl PlanResolver<'_> {
             }
         };
         let plan = self.resolve_query_plan(query, state).await?;
+        let plan = self.lower_resolved_set_operations(plan, state)?;
         Ok(NamedExpr::new(
             vec!["table".to_string()],
             ScalarUDF::from(TableInput::new(Arc::new(plan))).call(vec![]),

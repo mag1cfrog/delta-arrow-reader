@@ -4,16 +4,19 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 
-use arrow::array::{Array, ArrayRef, AsArray, Float32Array, Float64Array, StringArray};
+use arrow::array::{Array, ArrayRef, AsArray, Float32Array, Float64Array};
 use arrow::datatypes::{DataType, Field, Float32Type, Float64Type, Schema};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
-use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
+
+#[path = "support/float_inputs.rs"]
+mod float_inputs;
+use float_inputs::register_float_inputs;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -39,7 +42,7 @@ async fn set_operation_float_keys_match_spark() -> TestResult {
             )
             .build(),
         );
-        register_float_inputs(&session, &records[0], batch_size)?;
+        register_float_inputs(&session, &records[0], batch_size, 2)?;
         for case in &records[1..] {
             let actual = execute_set_operation(&session, case).await;
             let expected = &case["expected"];
@@ -77,7 +80,7 @@ async fn set_operation_float_keys_match_spark() -> TestResult {
     Ok(())
 }
 
-// Spark may remove normalization during adaptive planning; set equality still equates zeros.
+// Raw representatives can vary with adaptive planning; exact STRING results have a separate corpus.
 fn equate_set_zero_signs(rows: &mut Value, fields: &[Value]) -> TestResult {
     let rows = rows.as_array_mut().ok_or("missing rows")?;
     for row in rows.iter_mut() {
@@ -182,56 +185,6 @@ async fn execute_set_operation(session: &SessionContext, case: &Value) -> TestRe
     }
     rows.sort_by_key(|row| json!(row).to_string());
     Ok(json!({"rows":rows,"fields":fields}))
-}
-
-fn register_float_inputs(
-    session: &SessionContext,
-    metadata: &Value,
-    batch_size: usize,
-) -> TestResult {
-    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
-        let rows = input["rows"].as_array().ok_or("missing input rows")?;
-        let bits = rows
-            .iter()
-            .map(|row| {
-                row[0]
-                    .as_str()
-                    .map(|value| u64::from_str_radix(value, 16))
-                    .transpose()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let column: ArrayRef = match input["type"].as_str() {
-            Some("float") => Arc::new(Float32Array::from(
-                bits.into_iter()
-                    .map(|v| v.map(|v| u32::try_from(v).map(f32::from_bits)).transpose())
-                    .collect::<Result<Vec<_>, _>>()?,
-            )),
-            Some("double") => Arc::new(Float64Array::from(
-                bits.into_iter()
-                    .map(|v| v.map(f64::from_bits))
-                    .collect::<Vec<_>>(),
-            )),
-            _ => return Err("unexpected input type".into()),
-        };
-        let labels = Arc::new(StringArray::from(
-            rows.iter().map(|row| row[1].as_str()).collect::<Vec<_>>(),
-        ));
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("k", column.data_type().clone(), true),
-            Field::new("label", DataType::Utf8, true),
-        ]));
-        let batch = RecordBatch::try_new(schema.clone(), vec![column, labels])?;
-        let mut partitions = vec![Vec::new(), Vec::new()];
-        for (partition, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
-            partitions[partition % 2]
-                .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
-        }
-        session.register_table(
-            input["name"].as_str().ok_or("missing table name")?,
-            Arc::new(MemTable::try_new(schema, partitions)?),
-        )?;
-    }
-    Ok(())
 }
 
 #[tokio::test]
