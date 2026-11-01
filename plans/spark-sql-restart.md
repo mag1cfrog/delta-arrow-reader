@@ -33,8 +33,9 @@ S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
 `d0501262`. Numeric comparison coercion, #619, is reviewed and pushed as `28bb732a`. Its
 comparison audit assigned independent string, temporal and known-NULL-right
 findings to #621, #622 and #623. The relational coverage tracker #170 and
-reference review #141 have resumed. The current slice is #624, Spark string-to-BOOLEAN
-CAST, a prerequisite for reusing conversions in #621.
+reference review #141 have resumed. Spark string-to-BOOLEAN CAST, #624, is reviewed
+and pushed as `a9a87c58`. The current slice is #621, sharing STRING comparison
+types and conversions between binary predicates and NULLIF.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -561,6 +562,26 @@ because the old issue exists.
   reported line was added or changed by #624. This wider check is not green.
   Dedicated issue #626, assigned under #113, owns the S11 cleanup and complete
   all-target warning-denying check before main adoption.
+
+- #621 captures 532 independent Spark string-comparison observations. Replaying
+  them on #624 at batch sizes 1 and 32 exposes 426 success/error differences and
+  32 value differences; these counts exclude error-message and schema differences.
+  The candidate shares comparison type selection and existing Spark conversion
+  functions. Explicit integer CAST and implicit comparisons now reuse the same
+  strict Arrow parser or legacy truncation, including ASCII control trimming.
+  The final reference expands to 684 cases with reversed boundary comparisons
+  and WHERE/JOIN consumers. All 683 in-scope cases pass at both batch sizes; one
+  ANSI known-NULL-right case remains assigned to #623. The first candidate's
+  explicit integer UDF changed guarded arithmetic and nullable-field error
+  preservation. Historical replay caught these regressions. Keeping native
+  Cast/TryCast nodes while sharing conversion policy restores all historical
+  outcomes without changing expectations. The workspace passes 428 tests with
+  the 532-reference fixture, zero failures and two inherited ignored doctests;
+  the final 684-case fixture and evaluation counters pass a focused rerun.
+  Clean-context Sol/high Bulletproof Review findings are fixed and rechecked,
+  with no actionable findings remaining. Root warning-denying Clippy, formatting
+  and diff checks pass. The slice is ready to commit; its separate PR and staging
+  CI follow the existing queue.
 
 ### Retained gaps found during S01 review
 

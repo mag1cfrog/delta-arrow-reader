@@ -1,0 +1,64 @@
+//! Spark comparisons choose a common type without changing NULLIF's result type.
+//! In ANSI mode, STRING/INT compares as BIGINT; legacy mode keeps INT.
+
+use arrow::datatypes::DataType;
+use datafusion_common::{Result, plan_err};
+use datafusion_expr::ScalarUDF;
+use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
+use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
+
+pub(crate) fn string_comparison_type(
+    left: &DataType,
+    right: &DataType,
+    ansi_mode: bool,
+) -> Option<DataType> {
+    let other = if left.is_string() {
+        right
+    } else if right.is_string() {
+        left
+    } else {
+        return None;
+    };
+    match other {
+        DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
+            Some(if ansi_mode {
+                DataType::Int64
+            } else {
+                other.clone()
+            })
+        }
+        DataType::Float32 | DataType::Float64 | DataType::Decimal128(_, _) if ansi_mode => {
+            Some(DataType::Float64)
+        }
+        DataType::Decimal128(_, scale) if *scale > 0 => Some(DataType::Float64),
+        DataType::Boolean | DataType::Float32 | DataType::Float64 | DataType::Decimal128(_, _) => {
+            Some(other.clone())
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn string_comparison_cast(target: &DataType, ansi_mode: bool) -> Result<ScalarUDF> {
+    Ok(match target {
+        DataType::Boolean => ScalarUDF::from(SparkCastStringToBoolean::new(!ansi_mode)),
+        DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
+            let mode = if ansi_mode {
+                StringIntegerCastMode::Ansi
+            } else {
+                StringIntegerCastMode::Legacy
+            };
+            ScalarUDF::from(SparkCastStringToInteger::try_new(target.clone(), mode)?)
+        }
+        DataType::Float32 | DataType::Float64 => {
+            ScalarUDF::from(SparkCastStringToFloat::try_new(target.clone(), !ansi_mode)?)
+        }
+        DataType::Decimal128(precision, scale) => ScalarUDF::from(SparkCastStringToDecimal::new(
+            *precision, *scale, !ansi_mode,
+        )),
+        _ => return plan_err!("unsupported STRING comparison type {target}"),
+    })
+}

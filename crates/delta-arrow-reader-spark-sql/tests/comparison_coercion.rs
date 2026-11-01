@@ -1,4 +1,4 @@
-//! NULLIF compares coerced values while returning the original first input.
+//! Spark comparisons share coercion while NULLIF retains its first input type and value.
 
 use std::error::Error;
 
@@ -26,11 +26,11 @@ fn spark_type_name(data_type: &DataType) -> TestResult<String> {
         DataType::Boolean => "boolean".into(),
         DataType::Date32 => "date".into(),
         DataType::Null => "void".into(),
-        other => return Err(format!("unexpected NULLIF result type: {other:?}").into()),
+        other => return Err(format!("unexpected comparison result type: {other:?}").into()),
     })
 }
 
-async fn execute_nullif_query(session: &SessionContext, case: &Value) -> TestResult<Value> {
+async fn execute_comparison_query(session: &SessionContext, case: &Value) -> TestResult<Value> {
     let options = SparkSqlOptions {
         ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
         ..SparkSqlOptions::default()
@@ -110,8 +110,8 @@ async fn execute_nullif_query(session: &SessionContext, case: &Value) -> TestRes
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn match_spark_nullif_result_types() -> TestResult {
-    let records = include_str!("fixtures/nullif-types-spark.jsonl")
+async fn match_spark_nullif_and_string_comparisons() -> TestResult {
+    let mut records = include_str!("fixtures/nullif-types-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
@@ -124,6 +124,20 @@ async fn match_spark_nullif_result_types() -> TestResult {
             .count(),
         0
     );
+    let strings = include_str!("fixtures/string-comparison-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(strings.len(), 685);
+    assert_eq!(strings[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        strings
+            .iter()
+            .filter(|case| case.get("retained_difference").is_some())
+            .count(),
+        1
+    );
+    records.extend(strings.into_iter().skip(1));
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -140,7 +154,19 @@ async fn match_spark_nullif_result_types() -> TestResult {
         );
         for case in &records[1..] {
             let expected = &case["expected"];
-            let actual = execute_nullif_query(&session, case).await;
+            let actual = execute_comparison_query(&session, case).await;
+            if case["retained_difference"] == "known_null_right_623" {
+                // #623 separately handles a statically NULL right input.
+                assert_eq!(case["id"], "null_right_known_bad");
+                assert_eq!(case["ansi"], true);
+                assert_eq!(expected["rows"], json!([["bad"]]));
+                assert!(actual.is_err_and(|error| {
+                    error
+                        .to_string()
+                        .contains("Cannot cast string 'bad' to value of Int64 type")
+                }));
+                continue;
+            }
             let matches = match &actual {
                 Ok(actual) if expected["status"] == "ok" => {
                     let fields = expected["schema"]["fields"]
@@ -158,6 +184,8 @@ async fn match_spark_nullif_result_types() -> TestResult {
                     message.contains("[CAST_INVALID_INPUT]")
                         || (case["id"] == "bad_left_null_right"
                             && message.contains("Cannot cast string 'bad' to value of Int32 type"))
+                        || (message.contains("Cannot cast string")
+                            && message.contains("to value of Int64 type"))
                 }
                 _ => false,
             };
@@ -181,6 +209,17 @@ async fn match_spark_nullif_result_types() -> TestResult {
     assert_eq!(
         rows[0].column(0).as_primitive::<Float64Type>().value(0),
         1.0
+    );
+    let native_fraction = async {
+        native
+            .sql("SELECT '1.5'=CAST(1 AS INT) AS r")
+            .await?
+            .collect()
+            .await
+    }
+    .await;
+    assert!(
+        native_fraction.is_err_and(|error| error.to_string().contains("Cannot cast string '1.5'"))
     );
     assert!(
         differences.is_empty(),

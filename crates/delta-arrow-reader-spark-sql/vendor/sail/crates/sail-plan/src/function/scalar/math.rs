@@ -2182,10 +2182,15 @@ fn spark_round_scale(
                 })?))
             }
             _ if target_type.is_string() && !ansi => {
-                use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInteger;
+                use sail_function::scalar::spark_cast_string_to_integer::{
+                    SparkCastStringToInteger, StringIntegerCastMode,
+                };
                 LiteralEvaluator::new().evaluate(
-                    &ScalarUDF::from(SparkCastStringToInteger::try_new(DataType::Int32)?)
-                        .call(vec![lit(value)]),
+                    &ScalarUDF::from(SparkCastStringToInteger::try_new(
+                        DataType::Int32,
+                        StringIntegerCastMode::Legacy,
+                    )?)
+                    .call(vec![lit(value)]),
                 )?
             }
             _ => value.cast_to(&DataType::Int32).map_err(|e| {

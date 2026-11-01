@@ -187,8 +187,30 @@ Incomparable scalar and typed-NULL inputs must fail during planning.
 
 Mixed-type volatile counters in `conditional_evaluation.rs` check that the
 original left expression is evaluated once and right inputs run only for
-non-NULL left rows. String comparison coercion, mixed temporal comparisons and
-known-NULL-right simplification remain separate gaps in the restart plan.
+non-NULL left rows. String comparisons are covered below. Mixed temporal
+comparisons and known-NULL-right simplification remain separate gaps in the
+restart plan.
+
+## String comparison coercion
+
+`string-comparison-spark.jsonl` contains 684 Spark 4.2.0 observations, captured by
+`capture_string_comparison_spark.py` with the Python/Java setup above. It covers
+STRING comparisons with integers, floating-point values, Decimal and BOOLEAN in
+both ANSI modes. For example, ANSI `'2147483648' = 1` returns false after widening
+to BIGINT; legacy `'1.5' = 1` returns true after truncation.
+
+`comparison_coercion.rs` runs these and the NULLIF result-type references at
+batch sizes 1 and 32. It compares names, logical/physical types and exact values,
+including original NULLIF strings and floating-point bits. Returned NULLs must
+fit both schemas. Literal, column, empty-input, invalid-string and comparison
+operator cases share the same assertions, including WHERE and JOIN consumers.
+Counted expressions separately check
+that required operands run once and unused NULLIF inputs do not run.
+
+One ANSI observation is explicitly retained for #623: `NULLIF('bad', CAST(NULL
+AS INT))` still tries to parse the left string. Its expected Spark result remains
+`'bad'`; it is not counted as compatible. Temporal comparison and exact Spark
+error-stage/nullability parity remain separate work.
 
 ## String-to-BOOLEAN casts
 

@@ -20,6 +20,10 @@ identifies their archived members or patches and source checksums. It separates
 the accepted source hashes from the consolidated files and records subsequent
 review fixes.
 
+Later source moves retain their original inventory paths and hashes, with a
+`renamed_to` path to the current file. Compatibility changes after consolidation
+are recorded in Git rather than rewriting the accepted source checksums.
+
 ## Dependency forks
 
 Eleven dependencies have local source overrides in this crate's Cargo.toml:
