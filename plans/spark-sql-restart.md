@@ -7,12 +7,33 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### S04 window FILTER integration
+
+The #697 candidate is restored on `48fc97d6` after #705 merged through PR #706.
+Its original 210 independent Spark records pass all 420 comparisons on the
+corrected array scalar and HLL runtime. Clean-context review added a wider frame
+to distinguish FIRST/LAST and found AVG/LISTAGG NULL shortcuts discarding FILTER
+errors and result types. Both shortcuts now preserve typed window expressions;
+unfiltered controls are included. All 440 comparisons from the expanded
+220-record corpus pass. Full Linux validation passes 513 tests, zero failures and
+two inherited ignored doctests, plus root Clippy and formatting. Clean-context
+Sol/high review found no remaining actionable issue after those repairs. The
+custom aggregate builder also forwards the existing input structure instead of
+repeating eight positional arguments. After integration, #656 is the next S04
+runtime repair before #142's remaining coverage work.
+
+Eight records retain both the original Spark outcome and a captured result with
+exactly one optimizer rule disabled. EliminateAggregateFilter causes
+INTERNAL_ERROR for constant-false FILTER; OptimizeWindowFunctions drops FILTER
+when rewriting prefix FIRST_VALUE. Exact configured results are asserted, and
+the default Spark differences remain explicit.
+
 ### HLL empty-state prerequisite for S04
 
-#705 owns HLL result nullability and physically empty window sketches, found by
-expanding #697's FILTER references after #703. All 412 original comparisons pass;
-the four added HLL references produce eight mismatches at two batch sizes. The
-210-record FILTER candidate remains saved while this independent repair is reviewed.
+#705 completed HLL result nullability and physically empty window sketches in
+PR #706, merged at `48fc97d6`. Four added #697 references exposed eight mismatches
+after its original 412 comparisons passed. The FILTER candidate is now restored
+on the repaired staging baseline.
 
 The shared executor uses the configured empty accumulator when a non-null
 aggregate otherwise inherits a NULL default. Explicit defaults and nullable
@@ -26,13 +47,15 @@ Spark's unused IS NOT NULL evaluations and required COALESCE errors are recorded
 separately. Full Linux checks pass 512 tests with zero failures and two inherited
 ignored doctests, plus root Clippy and formatting. Clean-context Sol/high review
 found no remaining actionable issue after the scalar union and API-doc repairs.
-Next merge this prerequisite, then restore #697 and its full 420 comparisons.
+The prerequisite is merged and its issue is closed; #697's original 420
+comparisons pass. Its expanded review cases are recorded above.
 
 ### Array scalar prerequisite for S04
 
-#703 owns SORT_ARRAY and ARRAY_JOIN NULL contracts, independently exposed by
-#697's collection-window schema comparisons. The FILTER candidate is saved
-outside this slice. Native operations remain in use; the Spark adapters carry
+#703 is complete through PR #704. It repairs SORT_ARRAY and ARRAY_JOIN NULL
+contracts, independently exposed by
+#697's collection-window schema comparisons. The FILTER candidate is restored
+on the merged staging baseline. Native operations remain in use; the Spark adapters carry
 input nullability and distinguish an explicit NULL replacement from an omitted
 one. Native DataFusion SQL keeps its existing contracts.
 
@@ -46,13 +69,13 @@ workspace checks pass 510 tests with no failures and two inherited ignored
 doctests; root Clippy and formatting pass. Clean-context Sol/high review found
 no remaining actionable issue after the NULL-array repair. PR #704 merged at
 `0b4c9eea`; #697's original 206-record comparison then passed in full. Its expanded
-HLL cases are owned by #705 before FILTER can complete acceptance.
+HLL cases were repaired independently in #705 before FILTER acceptance.
 
 ### S04 bounded aggregate windows
 
 #699 merged through PR #701 at `49bc810f`. #700 merged through PR #702 at
 `f7c523af`, adding bounded execution for aggregates without retraction;
-#697's FILTER frontend candidate remains saved
+#697's FILTER frontend candidate is restored
 on its separate branch. The shared window executor rebuilds only a frame
 whose start advances when the accumulator cannot retract. Existing incremental
 aggregates and expanding frames retain their current paths.
@@ -81,7 +104,7 @@ failures and two inherited ignored doctests; root Clippy and formatting pass.
 after retraction. #699 fixed this shared accumulator defect.
 #700 completed bounded frames for aggregate implementations without retraction
 support. Both are assigned native children under the active S04 parent. The
-FILTER candidate is preserved for reintegration after its remaining prerequisites.
+FILTER candidate now runs on the merged prerequisite repairs.
 
 The extrema regression has 96 independent Spark observations across four value
 types, both ANSI modes and six frame shapes. It checks native SQL and unfiltered

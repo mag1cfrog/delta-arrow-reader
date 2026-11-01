@@ -1308,6 +1308,7 @@ pub struct WinFunctionInput<'a> {
     pub window_frame: WindowFrame,
     pub ignore_nulls: Option<bool>,
     pub distinct: bool,
+    pub filter: Option<Box<expr::Expr>>,
     pub function_context: FunctionContextInput<'a>,
 }
 
@@ -1328,6 +1329,7 @@ impl WinFunctionBuilder {
                 window_frame,
                 ignore_nulls,
                 distinct,
+                filter,
                 function_context: _function_context,
             } = input;
             let null_treatment = get_null_treatment(ignore_nulls);
@@ -1338,7 +1340,7 @@ impl WinFunctionBuilder {
                     partition_by,
                     order_by,
                     window_frame,
-                    filter: None,
+                    filter,
                     null_treatment,
                     distinct,
                 },
@@ -1358,8 +1360,14 @@ impl WinFunctionBuilder {
                 window_frame,
                 ignore_nulls,
                 distinct,
+                filter,
                 function_context,
             } = input;
+            if filter.is_some() {
+                return Err(PlanError::invalid(
+                    "FILTER is only supported for aggregate window functions",
+                ));
+            }
             let null_treatment = get_null_treatment(ignore_nulls);
             let win_func_expr = expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
                 fun: WindowFunctionDefinition::WindowUDF(f()),
@@ -1368,7 +1376,7 @@ impl WinFunctionBuilder {
                     partition_by,
                     order_by,
                     window_frame,
-                    filter: None,
+                    filter,
                     null_treatment,
                     distinct,
                 },
