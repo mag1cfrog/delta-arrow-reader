@@ -280,6 +280,9 @@ impl PhysicalExpr for InListExpr {
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         let num_rows = batch.num_rows();
+        if num_rows == 0 {
+            return Ok(ColumnarValue::Array(new_empty_array(&DataType::Boolean)));
+        }
         let value = self.expr.evaluate(batch)?;
         // ponytail: keep smaller batches on hashing; lower the cutoff only
         // after measuring their vectorized-comparison setup cost.
@@ -337,10 +340,17 @@ impl PhysicalExpr for InListExpr {
                 // comparator for unsupported types (nested, RunEndEncoded, etc.).
                 let value = value.into_array(num_rows)?;
                 let lhs_supports_arrow_eq = supports_arrow_eq(value.data_type());
+                let lookup_nulls = value.logical_nulls();
+                let mut remaining = BooleanArray::new(
+                    lookup_nulls.as_ref().map_or_else(
+                        || BooleanBuffer::new_set(num_rows),
+                        |nulls| nulls.inner().clone(),
+                    ),
+                    None,
+                );
 
-                // Helper: compare value against a single list expression
-                let compare_one = |expr: &Arc<dyn PhysicalExpr>| -> Result<BooleanArray> {
-                    match expr.evaluate(batch)? {
+                let compare_one = |item: ColumnarValue| -> Result<BooleanArray> {
+                    match item {
                         ColumnarValue::Array(array) => {
                             if array.data_type() == &DataType::Null {
                                 return Ok(BooleanArray::new_null(num_rows));
@@ -358,8 +368,10 @@ impl PhysicalExpr for InListExpr {
                                 let buffer = BooleanBuffer::collect_bool(num_rows, |i| {
                                     cmp(i, i).is_eq()
                                 });
-                                let nulls =
-                                    NullBuffer::union(value.nulls(), array.nulls());
+                                let nulls = NullBuffer::union(
+                                    lookup_nulls.as_ref(),
+                                    array.logical_nulls().as_ref(),
+                                );
                                 Ok(BooleanArray::new(buffer, nulls))
                             }
                         }
@@ -383,27 +395,47 @@ impl PhysicalExpr for InListExpr {
                                 let buffer = BooleanBuffer::collect_bool(num_rows, |i| {
                                     cmp(i, 0).is_eq()
                                 });
-                                Ok(BooleanArray::new(buffer, value.nulls().cloned()))
+                                Ok(BooleanArray::new(buffer, lookup_nulls.clone()))
                             }
                         }
                     }
                 };
 
-                // Evaluate first expression directly to avoid a redundant
-                // or_kleene with an all-false accumulator.
-                let mut found = if let Some(first) = self.list.first() {
-                    compare_one(first)?
-                } else {
-                    BooleanArray::new(BooleanBuffer::new_unset(num_rows), None)
-                };
-
-                for expr in self.list.iter().skip(1) {
-                    // Short-circuit: if every non-null row is already true,
-                    // no further list items can change the result.
-                    if found.null_count() == 0 && !found.has_false() {
+                // Empty native lists retain false even for a NULL lookup.
+                let mut found = BooleanArray::new(
+                    BooleanBuffer::new_unset(num_rows),
+                    if self.list.is_empty() {
+                        None
+                    } else {
+                        lookup_nulls.clone()
+                    },
+                );
+                for (index, expr) in self.list.iter().enumerate() {
+                    if index > 0 {
+                        let matched = match found.nulls() {
+                            Some(valid) => found.values() & valid.inner(),
+                            None => found.values().clone(),
+                        };
+                        let unmatched = !&matched;
+                        remaining =
+                            BooleanArray::new(remaining.values() & &unmatched, None);
+                    }
+                    // NULL lookup rows and prior matches cannot need another item.
+                    if !remaining.has_true() {
                         break;
                     }
-                    found = or_kleene(&found, &compare_one(expr)?)?;
+                    // Literals need no filtered batch, including the short-float path.
+                    let item = if expr.is::<crate::expressions::Literal>() {
+                        expr.evaluate(batch)?
+                    } else {
+                        expr.evaluate_selection(batch, &remaining)?
+                    };
+                    let compared = compare_one(item)?;
+                    found = if index == 0 {
+                        compared
+                    } else {
+                        or_kleene(&found, &compared)?
+                    };
                 }
 
                 if self.negated { not(&found)? } else { found }
@@ -901,7 +933,12 @@ mod tests {
                                     kind == "scalar" && values.is_null(start);
                                 assert_eq!(
                                     filter.calls.load(Ordering::Relaxed),
-                                    if vectorized || scalar_null { 0 } else { 2 }
+                                    if batch.num_rows() == 0 || vectorized || scalar_null
+                                    {
+                                        0
+                                    } else {
+                                        2
+                                    }
                                 );
                             }
                         }
@@ -3738,8 +3775,7 @@ mod tests {
         Ok(())
     }
 
-    /// Short-circuit must NOT skip when nulls are present (three-valued logic).
-    /// Even if all non-null values are true, null rows keep the result as null.
+    /// NULL lookup rows stay NULL when all other rows have already matched.
     #[test]
     fn test_in_list_with_columns_short_circuit_with_nulls() -> Result<()> {
         // a IN (b, c) where a has nulls

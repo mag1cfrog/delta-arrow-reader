@@ -437,6 +437,28 @@ separate work. Direct native expression tests also record which rows each
 operand visits, including sliced buffers and scalar returns, so correct final
 values cannot hide unnecessary or duplicate evaluation.
 
+## IN-list operand evaluation
+
+`in-list-evaluation-spark.jsonl` records 28 Spark 4.2.0 observations, including
+six required ANSI cast failures. Regenerate it with
+`capture_in_list_evaluation_spark.py` using the Python/Java setup above. The
+header contains the input rows and schema; `in_list_semantics.rs` replays them
+in batches of 1 and 32 and checks exact Boolean results, names and types.
+
+Long lists and computed lookups retain native membership execution. For example,
+`a IN (b,c,99,CAST(CASE WHEN a=b THEN 'bad' ELSE '1' END AS INT))` must skip the
+CAST on rows matched by `b`. Moving that CAST first must still fail in ANSI mode.
+A NULL lookup skips list operands, while a NULL list item leaves a non-NULL
+lookup unresolved until a later match. Both IN and NOT IN have these controls.
+
+`in_list_evaluation.rs` records the rows visited by the lookup and each list
+operand, including scalar results, sliced validity buffers, dictionary values
+containing NULL and empty batches. Separate controls preserve native empty-list
+results and volatile execution across repeated calls. Static-filter and float
+membership controls remain in the retained DataFusion unit suite. Dense/wide
+and nested-input filtering costs are still part of the S11 comparison; these
+correctness fixtures do not establish performance or exact schema/error parity.
+
 ## Conditional fallback evaluation
 
 The 72 fallback references cover COALESCE, IFNULL and NVL in both ANSI modes:
