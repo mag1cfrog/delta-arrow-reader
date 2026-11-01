@@ -7,10 +7,29 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### S04 sliding extrema prerequisite
+
+#697's independent window FILTER comparison exposed stale native MIN/MAX values
+after retraction. #699 owns this shared accumulator defect and blocks #697.
+#700 separately owns bounded frames for aggregate implementations without
+retraction support. Both are assigned native children under the active S04 parent.
+The FILTER candidate is preserved while #699 is reviewed as its own PR.
+
+The extrema regression has 96 independent Spark observations across four value
+types, both ANSI modes and six frame shapes. It checks native SQL and unfiltered
+Spark planning at two batch sizes, for 288 comparisons. The unchanged registry
+dependency failed 240 comparisons. The repair resets the cached scalar to a
+typed NULL when the moving collection has no value; it keeps upstream ordering
+and moving-window logic. All 288 comparisons pass. Full Linux workspace checks
+pass 502 tests with no failures and two inherited ignored doctests; root Clippy,
+workspace formatting and the changed dependency's upstream formatting pass.
+Clean-context Sol/high Bulletproof Review found no actionable issues.
+
 ### S04 aggregate FILTER behavior
 
 #142 is reopened on the current staging baseline. #696 owns COUNT_IF aggregate
-FILTER results and evaluation/admission boundaries. #697 separately owns FILTER
+FILTER results and evaluation/admission boundaries, merged in PR #698 at
+`99a8da61`. #697 separately owns FILTER
 on aggregate window expressions. Both are native children of #171 and blockers
 of #142. #656 remains a separate floating PIVOT repair.
 

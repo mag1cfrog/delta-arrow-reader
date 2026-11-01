@@ -80,6 +80,12 @@
       "version": "1.0.6",
       "registry_archive_sha256": "52a9f232fbd6f550bc0137dcb5f99ab674071ac2d690ac69704593cb4abbea56",
       "source": "vendor/dependencies/lexical-parse-float"
+    },
+    {
+      "package": "datafusion-functions-aggregate",
+      "version": "54.1.0",
+      "registry_archive_sha256": "89bc17041e424a47ed062f43df24d84aab8b57c4c3221e5c1a5eef46d6c5718b",
+      "source": "vendor/dependencies/datafusion-functions-aggregate"
     }
   ],
   "accepted_files": [

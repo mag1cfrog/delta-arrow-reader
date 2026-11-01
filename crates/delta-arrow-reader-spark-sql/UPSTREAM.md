@@ -26,11 +26,12 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Eleven dependencies have local source overrides in this crate's Cargo.toml:
+Twelve dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
+| DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic and buffer handling changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
 
@@ -233,3 +234,9 @@ matching Spark's complex-predicate evaluation. Native simplification handles
 constant zero-count cases, and the existing STRING-to-BOOLEAN function supplies
 ANSI input conversion. The [COUNT_IF references](tests/fixtures/README.md#count_if-aggregate-filters)
 cover results, schema and error boundaries.
+
+Sliding MIN/MAX reset their cached result to a typed NULL when their moving
+collection becomes empty. The comparison and moving-window algorithms remain
+upstream implementations. The [window extrema references](tests/fixtures/README.md#sliding-window-extrema)
+check values leaving and reentering frames through native DataFusion SQL and
+the Spark frontend. Aggregate window FILTER admission remains separate work.

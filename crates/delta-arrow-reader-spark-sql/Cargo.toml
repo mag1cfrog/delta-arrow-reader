@@ -141,6 +141,7 @@ arrow-array = { path = "vendor/dependencies/arrow-array" }
 arrow-cast = { path = "vendor/dependencies/arrow-cast" }
 datafusion-expr = { path = "vendor/dependencies/datafusion-expr" }
 datafusion-functions = { path = "vendor/dependencies/datafusion-functions" }
+datafusion-functions-aggregate = { path = "vendor/dependencies/datafusion-functions-aggregate" }
 datafusion-optimizer = { path = "vendor/dependencies/datafusion-optimizer" }
 datafusion-physical-expr = { path = "vendor/dependencies/datafusion-physical-expr" }
 datafusion-physical-expr-common = { path = "vendor/dependencies/datafusion-physical-expr-common" }

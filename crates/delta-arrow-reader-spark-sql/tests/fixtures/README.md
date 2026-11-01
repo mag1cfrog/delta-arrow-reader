@@ -802,3 +802,25 @@ valid scalar aggregate subqueries and windows over aggregates as controls.
 An unfiltered window is a control. FILTER on aggregate windows is a confirmed
 separate gap tracked in #697; it is outside this aggregate repair. The initial
 window references and native rejection remain recorded in that issue's evidence.
+
+## Sliding window extrema
+
+`window-extrema-spark.jsonl` contains 96 Spark 4.2.0 observations in UTC, with
+ANSI mode enabled and disabled. Integer, DOUBLE, STRING and Decimal values enter
+and leave ROWS/RANGE frames, including all-NULL frames, FILTER admitting no rows,
+partition boundaries, following frames and cumulative controls. The capture
+script registers the input rows explicitly and records complete ordered results
+and schemas.
+
+`window_extrema.rs` checks those results at batch sizes 1 and 64. Native
+DataFusion SQL covers every case; the Spark frontend covers unfiltered cases
+until its separate FILTER admission repair. These 288 comparisons check values,
+names, types, nullability and metadata. They protect the shared native MIN/MAX
+accumulators against returning an obsolete extremum after retraction.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_window_extrema_spark.py
+cargo test --locked --workspace --test window_extrema
+```
