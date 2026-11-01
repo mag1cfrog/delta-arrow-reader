@@ -283,18 +283,6 @@ fn assert_retained_difference(query: &Value, actual: &Value, null_rows: usize) -
                 "{context}"
             );
         }
-        Some("inner_join_null_pruning") => {
-            assert_eq!(query["expected"]["rows"], json!([[0]]));
-            assert_eq!(actual["status"], "error", "{context}");
-            assert_eq!(actual["stage"], "physical_planning", "{context}");
-            assert!(
-                actual["error"]
-                    .as_str()
-                    .ok_or("missing error")?
-                    .contains("Cannot cast string 'bad' to value of Int32 type"),
-                "{context}"
-            );
-        }
         Some("null_type_admission") => {
             assert_eq!(
                 query["expected"]["condition"],
@@ -329,13 +317,13 @@ async fn array_contains_values_and_input_errors() -> TestResult {
     assert_eq!(inputs.timezone, "UTC");
     assert_eq!(inputs.legacy_size_of_null, "true");
     let queries: Vec<Value> = lines.map(serde_json::from_str).collect::<Result<_, _>>()?;
-    assert_eq!(queries.len(), 256);
+    assert_eq!(queries.len(), 360);
     assert_eq!(
         queries
             .iter()
             .filter(|q| q.get("retained_difference").is_some())
             .count(),
-        14
+        12
     );
     for batch_size in [1, 32] {
         let session = create_session(batch_size);
@@ -432,6 +420,26 @@ async fn array_membership_preserves_volatile_lookup_evaluation() -> TestResult {
             "SELECT ARRAY_CONTAINS(ARRAY(1,NULL),n) AS r, ARRAY_CONTAINS(ARRAY(2,NULL),n) AS other FROM (SELECT count_lookup(n) AS n FROM lookups) t",
             vec![vec![Some(true), None, None], vec![None, None, Some(true)]],
             3,
+        ),
+        (
+            "SELECT l.n IS NULL AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups) l JOIN range(2) u ON ARRAY_CONTAINS(l.a,l.n)",
+            vec![vec![]],
+            0,
+        ),
+        (
+            "SELECT l.n IS NULL AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups) l LEFT JOIN range(1) u ON ARRAY_CONTAINS(l.a,l.n) ORDER BY l.n NULLS LAST",
+            vec![vec![Some(false), Some(false), Some(true)]],
+            3,
+        ),
+        (
+            "SELECT l.n IS NULL AS r FROM (SELECT ARRAY(1,2) AS a, count_lookup(n) AS n FROM lookups) l JOIN range(2) u ON ARRAY_CONTAINS(l.a,l.n)",
+            vec![vec![Some(false); 4]],
+            3,
+        ),
+        (
+            "SELECT true AS r FROM lookups l LEFT JOIN (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups) u ON ARRAY_CONTAINS(u.a,u.n)",
+            vec![vec![Some(true); 3]],
+            0,
         ),
         (
             "SELECT ARRAY_CONTAINS(a,n) AS r FROM (SELECT CAST(NULL AS ARRAY<INT>) AS a, count_lookup(n) AS n FROM lookups WHERE n<0) t",

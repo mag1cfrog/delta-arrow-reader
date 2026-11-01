@@ -106,6 +106,50 @@ queries += [
     {'id':'projection_filter_local_values', 'sql':"SELECT 1 AS r FROM (SELECT ARRAY(CAST(v AS INT)) AS a, CAST(NULL AS INT) AS n FROM VALUES ('bad') t(v)) s WHERE ARRAY_CONTAINS(a,n)"},
     {'id':'projection_filter_live_error', 'sql':"SELECT 1 AS r FROM (SELECT ARRAY(CAST('bad' AS INT)) AS a, 1 AS n FROM range(2)) t WHERE ARRAY_CONTAINS(a,n)"},
 ]
+for null_input, array, lookup in [
+    ('lookup', "ARRAY(CAST('bad' AS INT),2)", 'CAST(NULL AS INT)'),
+    ('array', 'CAST(NULL AS ARRAY<INT>)', "CAST('bad' AS INT)"),
+]:
+    for join_name, join_sql in [
+        ('inner', 'JOIN'), ('left', 'LEFT JOIN'), ('right', 'RIGHT JOIN'),
+        ('full', 'FULL JOIN'), ('semi', 'LEFT SEMI JOIN'), ('anti', 'LEFT ANTI JOIN'),
+    ]:
+        for bad_side in ['left', 'right']:
+            left = f'(SELECT {array} AS a, {lookup} AS n FROM range(2)) l' if bad_side == 'left' else 'range(2) l'
+            right = f'(SELECT {array} AS a, {lookup} AS n FROM range(3)) u' if bad_side == 'right' else 'range(3) u'
+            side = 'l' if bad_side == 'left' else 'u'
+            queries.append({
+                'id':f'join_{join_name}_{bad_side}_null_{null_input}',
+                'sql':f'SELECT COUNT(*) AS r FROM {left} {join_sql} {right} ON ARRAY_CONTAINS({side}.a,{side}.n)',
+            })
+        queries.append({
+            'id':f'join_{join_name}_cross_inputs_null_{null_input}',
+            'sql':f'SELECT COUNT(*) AS r FROM (SELECT {array} AS a FROM range(2)) l {join_sql} (SELECT {lookup} AS n FROM range(3)) u ON ARRAY_CONTAINS(l.a,u.n)',
+        })
+queries += [
+    {'id':'join_inner_local_values', 'sql':"SELECT COUNT(*) AS r FROM range(2) l JOIN (SELECT ARRAY(CAST(v AS INT)) AS a, CAST(NULL AS INT) AS n FROM VALUES ('bad') t(v)) u ON ARRAY_CONTAINS(u.a,u.n)"},
+    {'id':'join_left_local_values', 'sql':"SELECT COUNT(*) AS r FROM range(2) l LEFT JOIN (SELECT ARRAY(CAST(v AS INT)) AS a, CAST(NULL AS INT) AS n FROM VALUES ('bad') t(v)) u ON ARRAY_CONTAINS(u.a,u.n)"},
+    {'id':'join_inner_subquery_cast', 'sql':"SELECT COUNT(*) AS r FROM range(2) l JOIN (SELECT ARRAY((SELECT CAST('bad' AS INT))) AS a, CAST(NULL AS INT) AS n FROM range(3)) u ON ARRAY_CONTAINS(u.a,u.n)"},
+    {'id':'join_left_subquery_cast', 'sql':"SELECT COUNT(*) AS r FROM (SELECT ARRAY((SELECT CAST('bad' AS INT))) AS a, CAST(NULL AS INT) AS n FROM range(2)) l LEFT JOIN range(3) u ON ARRAY_CONTAINS(l.a,l.n)"},
+]
+join_left_input = "(SELECT id, CAST(NULL AS ARRAY<INT>) AS a, CAST('bad' AS INT) AS n FROM range(2)) l"
+for name, predicate in [
+    ('coalesce', 'COALESCE(ARRAY_CONTAINS(l.a,l.n),true)'),
+    ('cross_or', 'ARRAY_CONTAINS(l.a,l.n) OR l.id=u.id'),
+    ('cross_and', 'ARRAY_CONTAINS(l.a,l.n) AND l.id=u.id'),
+    ('local_or', 'ARRAY_CONTAINS(l.a,l.n) OR l.id>=0'),
+    ('is_null', 'ARRAY_CONTAINS(l.a,l.n) IS NULL'),
+]:
+    queries.append({'id':f'join_compound_{name}', 'sql':f'SELECT COUNT(*) AS r FROM {join_left_input} JOIN range(3) u ON {predicate}'})
+queries += [
+    {'id':'join_cte_aliases', 'sql':"WITH source AS (SELECT ARRAY(CAST('bad' AS INT),2) AS a, CAST(NULL AS INT) AS n FROM range(2)) SELECT COUNT(*) AS r FROM (SELECT * FROM source) l JOIN range(3) u ON ARRAY_CONTAINS(l.a,l.n)"},
+    {'id':'join_left_required_output_error', 'sql':"SELECT l.id AS r, u.n AS absent FROM range(2) l LEFT JOIN (SELECT CAST(NULL AS ARRAY<INT>) AS a, CAST('bad' AS INT) AS n FROM range(3)) u ON ARRAY_CONTAINS(u.a,u.n) ORDER BY l.id"},
+    {'id':'join_right_required_output_error', 'sql':f'SELECT u.id AS r, l.n AS absent FROM {join_left_input} RIGHT JOIN range(3) u ON ARRAY_CONTAINS(l.a,l.n) ORDER BY u.id'},
+    {'id':'join_left_nullable_output', 'sql':"SELECT l.id AS r, u.id AS absent FROM range(2) l LEFT JOIN (SELECT id, CAST(NULL AS ARRAY<INT>) AS a, CAST('bad' AS INT) AS n FROM range(3)) u ON ARRAY_CONTAINS(u.a,u.n) ORDER BY l.id"},
+    {'id':'join_right_nullable_output', 'sql':f'SELECT u.id AS r, l.id AS absent FROM {join_left_input} RIGHT JOIN range(3) u ON ARRAY_CONTAINS(l.a,l.n) ORDER BY u.id'},
+    {'id':'join_empty_inner_input', 'sql':f"SELECT COUNT(*) AS r FROM {join_left_input.replace('range(2)', 'range(0)')} JOIN range(3) u ON ARRAY_CONTAINS(l.a,l.n)"},
+    {'id':'join_empty_preserved_input', 'sql':f"SELECT COUNT(*) AS r FROM {join_left_input.replace('range(2)', 'range(0)')} LEFT JOIN range(3) u ON ARRAY_CONTAINS(l.a,l.n)"},
+]
 assert len({case['id'] for case in queries}) == len(queries)
 spark = SparkSession.builder.master('local[1]').appName('dar-array-null-reference').config('spark.ui.enabled','false').config('spark.sql.shuffle.partitions','1').config('spark.sql.session.timeZone','UTC').config('spark.sql.legacy.sizeOfNull','true').getOrCreate()
 try:
@@ -153,7 +197,7 @@ try:
         if case['id'].startswith(('invalid_', 'registered_null_type_'))
         or (ansi and case['id'] in {'live_bad_lookup', 'live_bad_array', 'live_bad_lookup_column', 'live_bad_array_column'})
     }
-    assert {(r['id'], r['ansi']) for r in observations if r['expected']['status'] == 'error' and not r['id'].startswith('projection_')} == expected_errors
+    assert {(r['id'], r['ansi']) for r in observations if r['expected']['status'] == 'error' and not r['id'].startswith(('projection_', 'join_'))} == expected_errors
     inputs = {
         "spark_version": spark.version, "timezone": spark.conf.get('spark.sql.session.timeZone'),
         "legacy_size_of_null": spark.conf.get('spark.sql.legacy.sizeOfNull'),
@@ -165,8 +209,6 @@ try:
         name, ansi = observation['id'], observation['ansi']
         if name in {'decimal_hit', 'decimal_miss', 'decimal_hit_column', 'decimal_miss_column'}:
             observation['retained_difference'] = 'mixed_decimal_coercion'
-        elif ansi and name in {'projection_inner_join_null_lookup', 'projection_inner_join_null_array'}:
-            observation['retained_difference'] = 'inner_join_null_pruning'
         elif name in {'registered_null_type_array', 'registered_null_type_empty_batch'}:
             observation['retained_difference'] = 'null_type_admission'
     target = Path(__file__).with_name('array-contains-spark.jsonl')

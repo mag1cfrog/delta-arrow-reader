@@ -40,24 +40,21 @@ disabling parallelism is a fix.
 ## Array membership
 
 `array-contains-spark.jsonl` starts with input rows and Spark settings, followed by
-256 independent query observations. Regenerate it with
+360 independent query observations. Regenerate it with
 `capture_array_contains_spark.py` in a Python 3.12 environment containing
 `pyspark==4.2.0`, with Java 21 available. Rust tests use the committed captures.
 
-The tests compare values, output names and types for 242 supported-input cases in
+The tests compare values, output names and types for 348 supported-input cases in
 both one-row and larger batches. Returned NULLs must be representable in both
 output schemas. Logical nullability can remain conservative, and constant folding
 can narrow physical nullability; exact Spark nullability parity is separate S07
 work. The volatile-lookup and direct-function tests check evaluation count and
 all-NULL batch cardinality separately.
 
-Fourteen observations have explicit `retained_difference` labels. Their assertions
+Twelve observations have explicit `retained_difference` labels. Their assertions
 preserve the relevant boundary without counting them as Spark-compatible:
 
 - Mixed Decimal precisions still fail coercion. Equal Decimal types are covered.
-- INNER JOIN still evaluates the unused cast in two ANSI cases, tracked in
-  [issue #613](https://github.com/mag1cfrog/delta-arrow-reader/issues/613). LEFT JOIN
-  keeps its required cast error.
 - Untyped NULL columns remain admitted, unlike Spark. Their membership results
   now follow the NULL rule across the complete batch; the admission gap remains.
 
@@ -67,6 +64,14 @@ expressions still needed by another output. Aggregate arguments and sort keys
 retain their earlier input preparation, including ANSI failures. Local VALUES
 and required scalar-subquery errors remain visible. Volatile counters in both ANSI modes check that unused
 inputs do not run and shared required inputs run once per row.
+
+Join references cover INNER, LEFT, RIGHT, FULL, LEFT SEMI and LEFT ANTI joins,
+both input sides, compound predicates, aliases, empty inputs, local VALUES and
+scalar-subquery preparation. Native predicate movement exposes only the
+permitted single-input filters to NULL simplification. Preserved outer/anti
+inputs, cross-input predicates and required outputs keep their ANSI errors.
+Returned outer-join NULLs must fit the output schema. Additional counters check
+shared live values, duplicated join results and unused versus preserved inputs.
 
 For local lookup-cost comparisons, run
 `cargo bench --locked --bench array_contains --profile dev` on each revision with
