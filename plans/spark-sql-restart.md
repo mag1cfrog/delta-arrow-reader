@@ -7,25 +7,36 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#671 is ready for its staging PR on `fix/in-list-row-evaluation`, based on
-`280689b7`. It selects unresolved, non-NULL lookup rows before each dynamic list
-operand, reusing selection/scatter and equality/Kleene kernels. Empty native
-lists retain their prior Boolean results. Empty batches skip lookup and list
-evaluation; literal operands avoid filtering the batch, including the short-float
-path. The #674 NullArray guard and both regression tests are retained.
+#150's coverage slice is ready for a staging PR on `test/null-conditional-coverage` at
+`c726c9c9`. All 70 independent Spark observations, including six required ANSI
+cast errors, pass at batch sizes 1 and 32. Full local Linux checks pass 465 tests
+with zero failures and two inherited ignored doctests; root Clippy and formatting
+also pass. The clean-context Sol/high Bulletproof Review is complete with no
+unresolved findings. The PR must merge before the issue is closed.
+This slice adds references, replay assertions and fixture documentation only.
 
-All 28 independent Spark observations, including six required ANSI failures,
-pass at batch sizes 1 and 32. Native counters cover mixed/matched/unmatched/NULL
-and scalar inputs, exact visits, sliced buffers and empty batches. A scalar-zero
-case and pinned-Arrow setup assertion ensure an invalid true comparison bit is
-not counted as a match. Final focused checks pass eight native tests plus the
-Spark replay. Combined Linux workspace checks pass 464 tests with zero failures
-and two inherited ignored doctests; all 55 retained native InList units, root
-Clippy and formatting pass. Only the extra scalar-zero test case postdates the
-full run; the final focused suite and Clippy include it. Independent clean-context
-Sol/high review has no unresolved source findings. Dense/wide/nested filtering
-cost remains an S11 check. The owned restoration stash is retained until merge;
-#150 remains pending its own restored coverage and review.
+The original 34 conditional queries were replayed in both modes and batch sizes.
+Only the known MAP NULLIF admission difference remains in status/values after
+typed display normalization. ARRAY NULLIF returns the expected NULL array. The
+old temporary collector required logical-null handling for NullArray; that was
+an evidence-collection defect. MAP admission stays queued under #156/S10, and
+exact schema/error contracts stay in #149/S07. The new schema controls record
+Spark analyzed/optimized and native resolved/physical fields separately. Fixture
+documentation now counts 356 strict original array cases, four remaining
+untyped-NULL admission cases, and the separate 324-case Decimal corpus.
+
+#671 merged through PR #676 at `c726c9c9`, whose complete tree matches reviewed
+source `761db6f2`. Dynamic list operands run only on unresolved, non-NULL lookup
+rows. All 28 independent Spark observations, including six required ANSI errors,
+pass at batch sizes 1 and 32. Native checks cover exact visits, logical NULLs,
+scalar inputs, empty batches, slices and invalid comparison bits. Final focused
+checks pass eight native tests plus the Spark replay; combined Linux workspace
+checks pass 464 tests with zero failures and two inherited ignored doctests.
+All 55 retained native InList units, root Clippy and formatting pass. The extra
+scalar-zero test case postdates the full run and passes the final focused suite
+and Clippy. Clean-context Sol/high review has no unresolved findings. The issue
+is closed; its temporary branch and restoration stash are removed. Filtering
+cost remains an S11 check, and cross-platform validation remains for a checkpoint.
 
 #674 merged through PR #675 at `280689b7`, whose complete tree matches reviewed
 source `fb209761`. Native dynamic NullArray list items now return unknown and can
@@ -46,20 +57,6 @@ Bulletproof Review completed after two test-only fixes, with no unresolved
 findings. The issue is closed and temporary branches removed. No automatic
 cloud PR checks ran, consistent with the staging policy; this is not a new
 cross-platform checkpoint or performance claim.
-
-#150's reference/coverage changes are pending on `test/null-conditional-coverage`.
-Its earlier 54-case replay and 456-test workspace gates passed, but those gates
-predate the expanded failing references and do not establish final readiness.
-The fixture documentation correction covers 356 strict original array cases,
-four remaining untyped-NULL admission cases and the 324-case Decimal corpus.
-Replaying the original 34 queries in both modes and two batch sizes leaves only
-the known MAP NULLIF admission difference in result status/values after typed
-display normalization. Its ARRAY NULLIF case returns the expected NULL array.
-The old temporary collector needed logical-null handling for NullArray; that
-collector issue is not a runtime defect. Schema stages and specific error
-contracts are inspected separately. MAP admission remains queued under frozen
-#156/S10 and is not a completed repair. Final review and all gates must be
-repeated after #671 merges; no coverage PR is ready yet.
 
 #669 merged through PR #670 at `686f8126`, whose full tree matches reviewed
 source `1818f397`. The shared Boolean evaluation path uses existing row
