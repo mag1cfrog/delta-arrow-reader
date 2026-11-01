@@ -1010,6 +1010,20 @@ impl AggregateFunctionExpr {
         self.fun.default_value(data_type)
     }
 
+    /// The accumulator must contain no rows and retain this expression's arguments.
+    pub(crate) fn evaluate_empty_window(
+        &self,
+        empty_accumulator: &mut dyn Accumulator,
+    ) -> Result<ScalarValue> {
+        let default = self.default_value(self.field().data_type())?;
+        if default.is_null() && !self.is_nullable() {
+            // A type-only NULL default cannot represent a configured non-null result.
+            empty_accumulator.evaluate()
+        } else {
+            Ok(default)
+        }
+    }
+
     /// Indicates whether the aggregation function is monotonic as a set
     /// function. See [`SetMonotonicity`] for details.
     pub fn set_monotonicity(&self) -> SetMonotonicity {
