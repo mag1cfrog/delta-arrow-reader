@@ -756,3 +756,34 @@ parity is not established. No original reference is rewritten or allowed an
 alternative result in this corpus. Shared counters also verify that both volatile
 UNION operands execute once, and invalid ANSI casts remain errors for all six
 set operators. Existing raw-bit, metadata and native-SQL controls remain required.
+
+### Relational query coverage
+
+`capture_relational_queries_spark.py` records 128 independent Spark 4.2.0
+observations in `relational-queries-spark.jsonl`, over explicit nullable inputs
+with duplicates and empty tables. The two ANSI modes cover 64 query shapes.
+`relational_queries.rs` replays them at batch sizes 1 and 32, checking ordered
+rows, names, logical/physical types, metadata and representable NULL values.
+The scalar multi-row cases must fail for cardinality, not an arbitrary error.
+
+The capture covers projections, filters, ordinary/null-safe/USING joins, nested
+and shadowed CTEs, reused CTEs, all six set operators, scalar subqueries,
+correlated aggregates, EXISTS and Decimal VALUES. Numeric floating zero signs
+are equivalent in this row comparison. Observable post-set STRING/negation
+results and raw UNION ALL bits have separate exact tests described above.
+Decimal rounding and mixed-width input rules also retain their larger dedicated
+VALUES and coercion captures.
+
+The four projected IN/NOT IN shapes preserve the approved SQL three-valued
+policy, including false/true for empty subqueries. Both raw Spark rows and the
+policy rows remain recorded. Eight records carry this policy; four differ from
+Spark. The replay checks the exact ID-specific policy rows before accepting
+an override, so an unrelated case cannot acquire an exception through fixture
+metadata. The other 120 records use the independent Spark result directly.
+
+This is coverage and gap routing, not a claim of full relational compatibility.
+Nested qualified scalar-subquery execution and live unaggregated correlated
+cardinality behavior remain owned by #140 for S09. The eight historical ANSI
+UNION/LIMIT early-error differences remain owned by #149 for S07; their complete
+accepted-runtime alternatives remain explicit. Exact Spark error-stage and
+analyzed-nullability parity are not established by the row/schema checks here.

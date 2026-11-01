@@ -28,27 +28,29 @@ checkpoint, since staging is 15 merges beyond the previous checkpoint:
 - After GitHub synchronization and the three-platform checkpoint, report the
   remaining S04-S11 issue mapping and a revised ETA before continuing.
 
-### UNION result slice
+### Relational coverage acceptance
 
-#690 and #689 are accepted and closed. PR #693 merged their shared repair into
-staging at `a56f2509`, with its complete tree matching reviewed source
-`cb82972c`. The approved boundary retains explicitly recorded zero-sign
-differences caused by Spark's projection/LIMIT optimization order; equality,
-multiplicity, NULLs, errors, metadata and native SQL remain required.
+#690 and #689 closed after PR #693 merged at `a56f2509`. #687 closed after PR #694
+merged at `47fe3946`; its complete tree matches reviewed source `824f8ce0`.
+The UNION repair passed all 664 new comparisons, the existing result/raw-bit/
+metadata/native-SQL controls, 499 Linux workspace tests, root Clippy and a fresh
+clean-context Sol/high Bulletproof Review. The final focused replay also passed.
 
-The current `fix/union-zero-results` branch addresses #687. Its independent
-capture contains 332 Spark observations for UNION and UNION ALL, including
-constant and registered inputs, aliases, nested sets, empty inputs, both ANSI
-modes and partition/adaptive controls. Baseline failures expose unnormalized
-materialized negative zeros. The candidate reuses the shared result projection,
-with bounded branch identity checks before folding. All 664 new comparisons and
-the existing result, raw-bit, metadata and native-SQL tests pass. The full Linux
-workspace passes 499 tests, zero failures and two inherited ignored doctests.
-Root all-target Clippy, formatting and diff checks pass. The final focused replay
-also passes after short-circuiting identity comparisons for UNION ALL and unequal
-branches. Independent Sol/high Bulletproof Review found no actionable source
-issues; its final evidence and source manifest accompany the staging PR.
-#141's coverage remains in its owned stash until #687 finishes.
+The current `test/relational-query-acceptance` branch restores #141's 128 original
+Spark records. All 256 batch-size comparisons pass on the repaired staging
+runtime. Four projected IN shapes retain their previously approved SQL NULL
+policy; their raw Spark results are unchanged. The matcher now verifies their
+exact ID-specific policy rows and rejects overrides on unrelated cases.
+
+Fresh probes recheck #140's nested qualified scalar queries and live correlated
+ROUND/BROUND cardinality cases. These remain a separate S09 execution gap, not
+supported relational behavior. The eight retained UNION/LIMIT early-error cases
+remain S07/#149 work. Full Linux validation passes 500 tests, zero failures and two inherited ignored
+doctests, including the complete 25,180-observation historical replay. Root
+all-target Clippy, formatting and diff checks pass. Clean-context Sol/high
+Bulletproof Review found no actionable issue after correcting an obsolete
+progress paragraph. The coverage PR and three-platform checkpoint remain
+pending; platform acceptance is not yet checked on #141.
 
 INTERSECT/EXCEPT stay private temporary nodes until query resolution finishes.
 A memoized column-lineage callback shares native NULL-rejection rules without
@@ -140,20 +142,19 @@ pass. The connected replay fixes four arity panics without changing its other
 representation assumption and a stale progress claim, with no remaining finding.
 The issue is closed and the temporary branch is removed.
 
-#141's coverage work is retained on `test/relational-query-coverage`, based on
-`06dc3ad4`. Its three new test/reference files have an owned stash and a verified
-external backup while #687 is repaired. The 128 explicit-input Spark
-references produce 256 native observations with 36 mismatches across nine query
-shapes. The other comparisons meet their respective references, including the
-previously approved three-valued IN policy; raw Spark differences remain visible.
-The original count/coercion fixes are merged. Floating equality and post-set
-zero rendering have separate issues; the old coverage capture still needs a
-replay after those repairs. No coverage PR is ready yet.
+At the initial #141 coverage snapshot (`06dc3ad4`), the 128 references produced
+36 mismatches across nine query shapes. The saved files were restored onto
+`47fe3946` after the independent count/coercion, floating equality, outer-join
+and post-set representation repairs merged. Their replay now passes all 256
+comparisons, preserving the original Spark captures and the approved IN NULL
+policy. Current validation and checkpoint status is recorded above.
 
 The original 164 historical observations have fresh Spark 4.2 and pre-#678 native
 captures. #678 repairs their two literal-false filter observations, with exact
-replacement expectations verified by the full replay. Remaining correlated and
-UNION error-order classification stays with S09/S07. Final coverage review and
+replacement expectations verified by the full replay. The fresh 24-case correlated probe confirms #140 remains an S09 execution gap:
+Spark returns rows for four nested-qualified cases and cardinality errors for
+twenty live ROUND/BROUND cases; DAR rejects physical planning in all 24.
+UNION/LIMIT early-error differences remain S07/#149 work. Final coverage review and
 an explicit three-platform checkpoint remain required before this leaf closes.
 
 #150 merged through PR #677 at `d32ae7d6`, whose entire tree matches reviewed
