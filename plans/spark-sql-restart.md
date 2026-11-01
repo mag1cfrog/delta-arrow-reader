@@ -7,23 +7,46 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#650, conditional STRING result coercion, has resumed on
-`fix/spark-conditional-string-types`, based on staging `e6f16d90`.
-The saved candidate and 962 independent Spark observations are restored. Its
-original baseline failed 1,468 comparisons at two batch sizes. Routing implicit
-FLOAT/DOUBLE-to-STRING conversions through #651's shared formatter removes the
-thirty remaining text differences. All 437 workspace tests pass, with zero
-failures and two inherited ignored doctests, including the full strict
-conditional corpus and evaluation counters. Root-crate Clippy and formatting
-also pass. Clean-context Sol/high review completed with no unresolved actionable finding.
+#660, Decimal cast preservation in comparisons, is in progress on
+`fix/spark-decimal-comparison-casts`, based on staging `30a284f2`. The #659
+Decimal array-membership candidate exposed an existing optimizer rewrite that
+removes a precision-reducing cast before comparison. Its strict reference
+expects true after rounding, while the physical plan compares the original
+fraction and returns NULL. Repair the shared dependency rule before resuming
+array coercion; do not add a separate membership-only workaround.
 
-#651 is complete through PR #657, merged as `e6f16d90`, and its issue is closed.
-The complete merge tree matches reviewed source `1172d50e`. All 437 local Linux
-workspace tests pass, with zero failures and two inherited ignored doctests;
-root-crate Clippy, formatting and clean-context Sol/high Bulletproof Review pass.
-The separately reviewed prerequisites #652 and #654 are complete through
-PRs #653 and #655. #635 is complete through PR #649. The signed-zero PIVOT
-matching gap remains open as #656 in S04.
+The candidate now preserves Decimal rounding and range checks in shared binary
+comparison and IN rewrites. Its independent Spark capture has 152 observations.
+Two legacy Decimal-to-small-integer CAST cases retain a separate kernel gap:
+Spark wraps overflow, while the existing converter raises a range error even
+in a direct projection. #661 owns that S07 repair; its original successful
+Spark expectations remain unchanged. Seventeen targeted optimizer unit tests
+pass, including adjacent integer-capacity boundaries, safe cast removal and the
+existing Decimal/DOUBLE inverse checks. Negative-scale Decimal sources retain
+their casts because the pinned reverse-literal conversion can panic; physical
+evaluation verifies the retained expressions. The final Linux workspace passes
+438 tests, zero failures and two inherited ignored doctests. Root-crate Clippy,
+formatting and the final comparison target pass. Independent review's stale
+optimizer assertions and boundary-coverage findings are repaired; no actionable
+source finding remains. The slice is ready for its dedicated staging PR.
+
+#659 and its 324 independent Spark observations are saved in stash
+`d98545829dbf5254b4773bdb62e792922f03700a`. Its original eight Decimal planning
+failures and volatile counters pass with common numeric coercion, but the new
+rounding mismatch remains a failing assertion. The candidate is unaccepted.
+
+#650 and #651 are complete through PRs #658 and #657. Their complete merge trees
+match the reviewed sources, and their issues are closed. Final local checks pass
+437 tests, zero failures and two inherited ignored doctests, plus root-crate
+Clippy, formatting and clean-context Sol/high Bulletproof Review. Their temporary
+branches and owned backups are cleaned up.
+
+The three-platform checkpoint on `30a284f2a89fcb9222129098b0c1f8b9075ea098` is
+[run 41276527898](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41276527898).
+Linux, macOS and Windows each passed 437 tests, zero failures and two inherited
+ignored doctests, plus formatting and root-crate Clippy. That checkpoint covers
+its recorded baseline, not the new #660 candidate. #656's separate signed-zero
+PIVOT matching gap stays in S04.
 
 The ten reviewed slices #618, #619, #624, #621, #622, #623, #627, #631, #629 and
 #633 are merged through separate PRs #637 and #640-#648. Their issues are closed.
@@ -94,11 +117,11 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
 | S04 | Conditional aggregation and window contracts | #142, #656 | A separate COUNT_IF FILTER fix, floating PIVOT signed-zero equality, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #631, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
-| S07 | Arithmetic schema and diagnostic contracts | #149, #293 | Classify remaining schema/error differences; separately fix multi-output CAST error order and the retained BROUND gaps below |
+| S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661 | Classify remaining schema/error differences; separately fix multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |

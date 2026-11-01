@@ -105,6 +105,42 @@ pub(super) fn unwrap_cast_in_comparison_for_binary(
     }
 }
 
+fn can_unwrap_decimal_cast(source: &DataType, target: &DataType) -> bool {
+    if !source.is_decimal() && !target.is_decimal() {
+        return true;
+    }
+    // A literal can round-trip even when casting the column rounds or overflows.
+    let (precision, scale) = match source {
+        DataType::Decimal32(p, s)
+        | DataType::Decimal64(p, s)
+        | DataType::Decimal128(p, s)
+        | DataType::Decimal256(p, s) => (i16::from(*p), i16::from(*s)),
+        DataType::Int8 | DataType::UInt8 => (3, 0),
+        DataType::Int16 | DataType::UInt16 => (5, 0),
+        DataType::Int32 | DataType::UInt32 => (10, 0),
+        DataType::Int64 => (19, 0),
+        DataType::UInt64 => (20, 0),
+        _ => return false,
+    };
+    // The reverse-literal converter panics for a negative Decimal scale.
+    if scale < 0 {
+        return false;
+    }
+    match target {
+        DataType::Decimal32(p, s)
+        | DataType::Decimal64(p, s)
+        | DataType::Decimal128(p, s)
+        | DataType::Decimal256(p, s) => {
+            i16::from(*s) >= scale && i16::from(*p) - i16::from(*s) >= precision - scale
+        }
+        DataType::Int8 => scale <= 0 && precision - scale <= 2,
+        DataType::Int16 => scale <= 0 && precision - scale <= 4,
+        DataType::Int32 => scale <= 0 && precision - scale <= 9,
+        DataType::Int64 => scale <= 0 && precision - scale <= 18,
+        _ => false,
+    }
+}
+
 pub(super) fn is_cast_expr_and_support_unwrap_cast_in_comparison_for_binary(
     info: &SimplifyContext,
     expr: &Expr,
@@ -114,16 +150,21 @@ pub(super) fn is_cast_expr_and_support_unwrap_cast_in_comparison_for_binary(
     match (expr, literal) {
         (
             Expr::TryCast(TryCast {
-                expr: left_expr, ..
+                expr: left_expr,
+                field,
             })
             | Expr::Cast(Cast {
-                expr: left_expr, ..
+                expr: left_expr,
+                field,
             }),
             Expr::Literal(lit_val, _),
         ) => {
             let Ok(expr_type) = info.get_data_type(left_expr) else {
                 return false;
             };
+            if !can_unwrap_decimal_cast(&expr_type, field.data_type()) {
+                return false;
+            }
 
             let Ok(lit_type) = info.get_data_type(literal) else {
                 return false;
@@ -147,10 +188,12 @@ pub(super) fn is_cast_expr_and_support_unwrap_cast_in_comparison_for_inlist(
     list: &[Expr],
 ) -> bool {
     let (Expr::TryCast(TryCast {
-        expr: left_expr, ..
+        expr: left_expr,
+        field,
     })
     | Expr::Cast(Cast {
-        expr: left_expr, ..
+        expr: left_expr,
+        field,
     })) = expr
     else {
         return false;
@@ -160,7 +203,9 @@ pub(super) fn is_cast_expr_and_support_unwrap_cast_in_comparison_for_inlist(
         return false;
     };
 
-    if !is_supported_type(&expr_type) {
+    if !is_supported_type(&expr_type)
+        || !can_unwrap_decimal_cast(&expr_type, field.data_type())
+    {
         return false;
     }
 
@@ -614,38 +659,132 @@ mod tests {
     }
 
     #[test]
-    fn test_unwrap_cast_with_decimal_lit_comparison() {
+    fn test_decimal_comparison_keeps_rounding_and_overflow_casts() {
         let schema = expr_test_schema();
-        // integer to decimal
-        // c3 < INT64(16) -> c3 < (CAST(INT64(16) AS DECIMAL(18,2));
-        let expr_lt = try_cast(col("c3"), DataType::Int64).lt(lit(16i64));
-        let expected = col("c3").lt(lit_decimal(1600, 18, 2));
-        assert_eq!(optimize_test(expr_lt, &schema), expected);
+        for expr in [
+            try_cast(col("c3"), DataType::Int64).lt(lit(16i64)),
+            cast(col("c3"), DataType::Decimal128(10, 0)).lt(lit_decimal(123, 10, 0)),
+            cast(col("c3"), DataType::Decimal128(10, 3)).lt(lit_decimal(1230, 10, 3)),
+            cast(col("c1"), DataType::Decimal128(10, 2)).lt(lit_decimal(12300, 10, 2)),
+        ] {
+            assert_eq!(optimize_test(expr.clone(), &schema), expr);
+        }
 
         // c3 < INT64(NULL)
         let c1_lt_lit_null = cast(col("c3"), DataType::Int64).lt(null_i64());
         let expected = null_bool();
         assert_eq!(optimize_test(c1_lt_lit_null, &schema), expected);
+    }
 
-        // decimal to decimal
-        // c3 < Decimal(123,10,0) -> c3 < CAST(DECIMAL(123,10,0) AS DECIMAL(18,2)) -> c3 < DECIMAL(12300,18,2)
+    #[test]
+    fn test_decimal_comparison_unwraps_value_preserving_casts() {
+        let schema = expr_test_schema();
         let expr_lt =
-            cast(col("c3"), DataType::Decimal128(10, 0)).lt(lit_decimal(123, 10, 0));
-        let expected = col("c3").lt(lit_decimal(12300, 18, 2));
-        assert_eq!(optimize_test(expr_lt, &schema), expected);
-
-        // c3 < Decimal(1230,10,3) -> c3 < CAST(DECIMAL(1230,10,3) AS DECIMAL(18,2)) -> c3 < DECIMAL(123,18,2)
-        let expr_lt =
-            cast(col("c3"), DataType::Decimal128(10, 3)).lt(lit_decimal(1230, 10, 3));
+            cast(col("c3"), DataType::Decimal128(19, 3)).lt(lit_decimal(1230, 19, 3));
         let expected = col("c3").lt(lit_decimal(123, 18, 2));
         assert_eq!(optimize_test(expr_lt, &schema), expected);
 
-        // decimal to integer
-        // c1 < Decimal(12300, 10, 2) -> c1 < CAST(DECIMAL(12300,10,2) AS INT32) -> c1 < INT32(123)
         let expr_lt =
-            cast(col("c1"), DataType::Decimal128(10, 2)).lt(lit_decimal(12300, 10, 2));
+            try_cast(col("c3"), DataType::Decimal128(18, 2)).lt(lit_decimal(123, 18, 2));
+        let expected = col("c3").lt(lit_decimal(123, 18, 2));
+        assert_eq!(optimize_test(expr_lt, &schema), expected);
+
+        let expr_lt =
+            cast(col("c1"), DataType::Decimal128(12, 2)).lt(lit_decimal(12300, 12, 2));
         let expected = col("c1").lt(lit(123i32));
         assert_eq!(optimize_test(expr_lt, &schema), expected);
+
+        let schema = Arc::new(
+            DFSchema::from_unqualified_fields(
+                vec![Field::new("whole", DataType::Decimal128(2, 0), true)].into(),
+                HashMap::new(),
+            )
+            .unwrap(),
+        );
+        let expr = try_cast(col("whole"), DataType::Int8).eq(lit(12i8));
+        assert_eq!(
+            optimize_test(expr, &schema),
+            col("whole").eq(lit_decimal(12, 2, 0))
+        );
+    }
+
+    #[test]
+    fn test_decimal_to_integer_rewrite_range_boundaries() -> Result<()> {
+        use arrow::array::{AsArray, Decimal128Array};
+        use arrow::record_batch::RecordBatch;
+        use datafusion_physical_expr::{
+            create_physical_expr, execution_props::ExecutionProps,
+        };
+
+        for (precision, scale, target, can_unwrap) in [
+            (2, 0, DataType::Int8, true),
+            (3, 0, DataType::Int8, false),
+            (4, 0, DataType::Int16, true),
+            (5, 0, DataType::Int16, false),
+            (9, 0, DataType::Int32, true),
+            (10, 0, DataType::Int32, false),
+            (18, 0, DataType::Int64, true),
+            (19, 0, DataType::Int64, false),
+            (1, -1, DataType::Int8, false),
+            (2, -1, DataType::Int8, false),
+        ] {
+            let source = DataType::Decimal128(precision, scale);
+            let schema = Arc::new(DFSchema::from_unqualified_fields(
+                vec![Field::new("n", source.clone(), true)].into(),
+                HashMap::new(),
+            )?);
+            for converted in [
+                cast(col("n"), target.clone()),
+                try_cast(col("n"), target.clone()),
+            ] {
+                let literal = ScalarValue::Int32(Some(0));
+                let original = converted.clone().eq(lit(literal.cast_to(&target)?));
+                let expected = if can_unwrap {
+                    col("n").eq(lit(literal.cast_to(&source)?))
+                } else {
+                    original.clone()
+                };
+                let optimized = optimize_test(original, &schema);
+                assert_eq!(optimized, expected);
+                if scale < 0 {
+                    let values =
+                        Decimal128Array::from(vec![Some(-9), None, Some(0), Some(9)])
+                            .with_precision_and_scale(precision, scale)?;
+                    let batch = RecordBatch::try_from_iter(vec![(
+                        "n",
+                        Arc::new(values) as arrow::array::ArrayRef,
+                    )])?;
+                    let result = create_physical_expr(
+                        &optimized,
+                        &schema,
+                        &ExecutionProps::new(),
+                    )?
+                    .evaluate(&batch)?
+                    .into_array(batch.num_rows())?;
+                    assert_eq!(
+                        result.as_boolean().iter().collect::<Vec<_>>(),
+                        vec![Some(false), None, Some(true), Some(false)],
+                    );
+                }
+
+                let literals = |data_type: &DataType| -> Result<Vec<Expr>> {
+                    [0, 10, 20, 30, 40]
+                        .map(|value| {
+                            ScalarValue::Int32(Some(value)).cast_to(data_type).map(lit)
+                        })
+                        .into_iter()
+                        .collect()
+                };
+                let original = converted.in_list(literals(&target)?, false);
+                let expected = if can_unwrap {
+                    col("n").in_list(literals(&source)?, false)
+                } else {
+                    original.clone()
+                };
+                assert_eq!(optimize_test(original, &schema), expected);
+            }
+        }
+        Ok(())
     }
 
     #[test]
