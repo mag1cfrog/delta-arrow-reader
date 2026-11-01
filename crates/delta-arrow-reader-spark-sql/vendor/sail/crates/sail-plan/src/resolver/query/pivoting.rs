@@ -7,7 +7,9 @@ use datafusion::functions_aggregate::count::count_udaf;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{Column, DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunctionParams, NullTreatment};
-use datafusion_expr::{ExprSchemable, LogicalPlan, Projection, ScalarUDF, col, expr, lit, when};
+use datafusion_expr::{
+    ExprSchemable, LogicalPlan, Operator, Projection, ScalarUDF, col, expr, lit, when,
+};
 use datafusion_functions_nested::expr_fn as nested_fn;
 use sail_common::spec;
 use sail_common_datafusion::display::ArrayFormatter;
@@ -16,6 +18,7 @@ use sail_function::scalar::explode;
 use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::spark_binary_expr;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -44,7 +47,7 @@ impl PlanResolver<'_> {
         let input = self.resolve_query_plan(*input, state).await?;
         let schema = input.schema().clone();
 
-        let mut pivot_columns = self.resolve_expressions(columns, &schema, state).await?;
+        let pivot_columns = self.resolve_expressions(columns, &schema, state).await?;
         let column_arity = pivot_columns.len();
         let pivot_column = match column_arity {
             0 => {
@@ -52,8 +55,8 @@ impl PlanResolver<'_> {
                     "pivot column required".to_string(),
                 ));
             }
-            1 => pivot_columns.swap_remove(0),
-            _ => make_pivot_struct(pivot_columns),
+            1 => pivot_columns[0].clone(),
+            _ => make_pivot_struct(pivot_columns.clone()),
         };
 
         let aggregates = self
@@ -148,7 +151,7 @@ impl PlanResolver<'_> {
                 if spark_uses_pivot_first && scalar_is_nan(&scalar) {
                     lit(false)
                 } else {
-                    pivot_column.clone().eq(lit(scalar))
+                    self.pivot_value_matches(&pivot_columns, scalar, &schema)?
                 }
             };
             // On the PivotFirst path, an absent (group, pivot-value) combination is NULL even
@@ -190,6 +193,38 @@ impl PlanResolver<'_> {
         }
 
         self.rewrite_aggregate(input, projections, grouping, None, false, state)
+    }
+
+    fn pivot_value_matches(
+        &self,
+        columns: &[expr::Expr],
+        value: ScalarValue,
+        schema: &DFSchemaRef,
+    ) -> PlanResult<expr::Expr> {
+        let equal = |column: &expr::Expr, value| {
+            spark_binary_expr(
+                column.clone(),
+                Operator::IsNotDistinctFrom,
+                lit(value),
+                schema,
+                &self.config,
+            )
+        };
+        match (columns, value) {
+            ([column], value) => equal(column, value),
+            (columns, ScalarValue::Struct(values)) => {
+                // Compare each pivot column so floating equality and NULL matching apply inside the tuple.
+                columns.iter().zip(values.columns()).try_fold(
+                    lit(true),
+                    |matches, (column, values)| {
+                        Ok(matches.and(equal(column, ScalarValue::try_from_array(values, 0)?)?))
+                    },
+                )
+            }
+            _ => Err(PlanError::invalid(
+                "multiple pivot columns require a struct value",
+            )),
+        }
     }
 
     /// Compute the implicit grouping columns for a SQL `PIVOT` with no explicit

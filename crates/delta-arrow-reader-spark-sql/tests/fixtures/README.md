@@ -952,3 +952,36 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 python tests/fixtures/capture_hll_empty_spark.py
 cargo test --locked --workspace --test hll_empty
 ```
+
+## Floating PIVOT keys
+
+`pivot-float-keys-spark.jsonl` records 128 Spark 4.2.0 observations in UTC and
+both ANSI modes. The inputs preserve FLOAT/DOUBLE bit patterns for both zero
+signs, distinct NaN payloads, infinities and finite values. Nullable, repeated
+and empty inputs cover scalar and multiple pivot columns, grouped counts,
+numeric aggregates and text/list aggregates. Rust checks complete rows, column
+names, types, nullability and metadata at batch sizes 1 and 32.
+
+The references distinguish Spark's numeric PivotFirst path from its general
+aggregate path. A scalar NaN pivot value has no match on PivotFirst; NaNs within
+a multi-column key can match. An absent numeric count cell is NULL, while a
+general-path count is zero. String collections of the pivot key verify that
+comparison does not replace the original zero signs in aggregate arguments.
+Native SQL controls compare ordinary and null-safe equality in an unconfigured
+session and a session that has already planned Spark PIVOT.
+
+Duplicate pivot values are covered on the general path. Spark's PivotFirst path
+instead raises `INVALID_ARRAY_INDEX` in ANSI mode and returns NULL cells in
+legacy mode for the tested duplicate values. That separate reference difference
+remains under aggregate coverage in issue 142.
+
+Multiple aggregates use explicit aliases. Generated names for unaliased
+aggregate expressions remain a separate compatibility gap tracked in
+[issue 708](https://github.com/mag1cfrog/delta-arrow-reader/issues/708).
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_pivot_float_keys_spark.py
+cargo test --locked --workspace --test pivot_float_keys
+```
