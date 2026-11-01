@@ -7,33 +7,34 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#674 has a candidate repair on `fix/untyped-null-in-list`, based on staging
-`ca5dd5b8`. The native constructor already admits DataType::Null list columns;
-the dynamic array path now returns an unknown comparison for those values,
-matching its scalar-NULL behavior instead of sending mismatched types to Arrow.
-The direct reproduction uses `a=[1,2]`, `n=NullArray(2)` and `b=[1,3]`:
-`a IN (n,b)` should be `[true,NULL]`; NOT IN should be `[false,NULL]`. Both
-previously reported `Invalid comparison operation: Int32 == Null`.
+#671 is ready for its staging PR on `fix/in-list-row-evaluation`, based on
+`280689b7`. It selects unresolved, non-NULL lookup rows before each dynamic list
+operand, reusing selection/scatter and equality/Kleene kernels. Empty native
+lists retain their prior Boolean results. Empty batches skip lookup and list
+evaluation; literal operands avoid filtering the batch, including the short-float
+path. The #674 NullArray guard and both regression tests are retained.
 
-Tests cover primitive and nested lookup values, NULL items first/last/alone,
-typed and untyped NULL controls, scalar and array lookups, sliced/empty inputs,
-result nullability, type rejection and required errors after NULL. The new issue
-is assigned, is a native child of #173 and blocks #671. Final Linux workspace
-checks pass 459 tests with zero failures and two inherited ignored doctests;
-all 55 retained InList unit tests, root Clippy and formatting pass. Independent
-clean-context Sol/high review has found no actionable source issue. Broader
-nested Spark admission remains #156/S10; this change only repairs an already
-admitted native NULL representation.
+All 28 independent Spark observations, including six required ANSI failures,
+pass at batch sizes 1 and 32. Native counters cover mixed/matched/unmatched/NULL
+and scalar inputs, exact visits, sliced buffers and empty batches. A scalar-zero
+case and pinned-Arrow setup assertion ensure an invalid true comparison bit is
+not counted as a match. Final focused checks pass eight native tests plus the
+Spark replay. Combined Linux workspace checks pass 464 tests with zero failures
+and two inherited ignored doctests; all 55 retained native InList units, root
+Clippy and formatting pass. Only the extra scalar-zero test case postdates the
+full run; the final focused suite and Clippy include it. Independent clean-context
+Sol/high review has no unresolved source findings. Dense/wide/nested filtering
+cost remains an S11 check. The owned restoration stash is retained until merge;
+#150 remains pending its own restored coverage and review.
 
-#671's seven-file candidate is saved in the owned stash recorded outside the
-repository as `pending-row-selection-stash.json`, with source copies and hashes.
-Its 28 independent Spark observations/six required errors pass at both batch
-sizes, and native operand visits, logical NULLs, scalar results, slices and empty
-input pass. Linux workspace checks pass 462 tests with zero failures and two
-inherited ignored doctests; all 55 retained InList unit tests pass. It is not
-ready for a PR: finish #674 separately, restore the candidate, rerun connected
-checks and complete Clippy/format gates and independent review. No requirement
-is counted as passed by deferral. #671 still blocks #150.
+#674 merged through PR #675 at `280689b7`, whose complete tree matches reviewed
+source `fb209761`. Native dynamic NullArray list items now return unknown and can
+be resolved by a later match, without bypassing type validation or required
+operand errors. Final Linux workspace checks pass 459 tests with zero failures
+and two inherited ignored doctests; 55 retained native InList units, root Clippy
+and formatting pass. Clean-context Sol/high Bulletproof Review found no unresolved
+issue. The issue is closed and the temporary branch removed. Broader nested
+Spark admission remains #156/S10; no cross-platform/performance claim is made.
 
 #672 merged through PR #673 at `ca5dd5b8`, whose entire tree matches reviewed
 source `be743b39`. A recursive volatility precheck prevents planning calls and
