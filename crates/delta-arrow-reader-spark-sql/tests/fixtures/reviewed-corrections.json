@@ -656,5 +656,79 @@
     "physical_nullable": [
       true
     ]
+  },
+  "replay/empty-input-scalar-cases/2973/ei_control_direct_where_false_False_true": {
+    "status": "ok",
+    "types": [
+      "Int64",
+      "Boolean"
+    ],
+    "rows": [
+      [
+        null,
+        "false"
+      ],
+      [
+        "0",
+        "false"
+      ],
+      [
+        "1",
+        "false"
+      ],
+      [
+        "4",
+        "false"
+      ]
+    ],
+    "output_names": [
+      "k",
+      "r"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/empty-input-scalar-cases/2974/ei_control_direct_where_false_True_true": {
+    "status": "ok",
+    "types": [
+      "Int64",
+      "Boolean"
+    ],
+    "rows": [
+      [
+        null,
+        "true"
+      ],
+      [
+        "0",
+        "true"
+      ],
+      [
+        "1",
+        "true"
+      ],
+      [
+        "4",
+        "true"
+      ]
+    ],
+    "output_names": [
+      "k",
+      "r"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
   }
 }
