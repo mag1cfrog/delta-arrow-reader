@@ -2,7 +2,9 @@
 
 use std::error::Error;
 
-use arrow::array::{Array, ArrayRef, AsArray, Date32Array, Int32Array, TimestampMicrosecondArray};
+use arrow::array::{
+    Array, ArrayRef, AsArray, Date32Array, Int32Array, StringArray, TimestampMicrosecondArray,
+};
 use arrow::datatypes::{DataType, Float32Type, Float64Type, TimeUnit, TimestampMicrosecondType};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
@@ -155,14 +157,14 @@ async fn match_spark_comparison_coercion() -> TestResult {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(records.len(), 625);
+    assert_eq!(records.len(), 721);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records
             .iter()
             .filter(|case| case.get("retained_difference").is_some())
             .count(),
-        0
+        3
     );
     let strings = include_str!("fixtures/string-comparison-spark.jsonl")
         .lines()
@@ -175,7 +177,7 @@ async fn match_spark_comparison_coercion() -> TestResult {
             .iter()
             .filter(|case| case.get("retained_difference").is_some())
             .count(),
-        1
+        0
     );
     records.extend(strings.into_iter().skip(1));
     let temporal = include_str!("fixtures/temporal-comparison-spark.jsonl")
@@ -201,18 +203,27 @@ async fn match_spark_comparison_coercion() -> TestResult {
             .build(),
         );
         register_temporal_input(&session, &temporal_input)?;
+        session.register_batch(
+            "nullif_input",
+            RecordBatch::try_from_iter([
+                ("k", Arc::new(Int32Array::from(vec![0, 1, 2])) as ArrayRef),
+                (
+                    "a",
+                    Arc::new(StringArray::from(vec![Some("bad"), Some("001"), None])) as ArrayRef,
+                ),
+                ("b", Arc::new(Int32Array::from(vec![None; 3])) as ArrayRef),
+            ])?,
+        )?;
         for case in &records[1..] {
             let expected = &case["expected"];
             let actual = execute_comparison_query(&session, case).await;
-            if case["retained_difference"] == "known_null_right_623" {
-                // #623 separately handles a statically NULL right input.
-                assert_eq!(case["id"], "null_right_known_bad");
-                assert_eq!(case["ansi"], true);
-                assert_eq!(expected["rows"], json!([["bad"]]));
+            if case["retained_difference"] == "string_temporal_ansi_629" {
+                assert_eq!(case["ansi"], false);
+                assert_eq!(expected["rows"], json!([["bad"], [null], ["001"]]));
                 assert!(actual.is_err_and(|error| {
-                    error
-                        .to_string()
-                        .contains("Cannot cast string 'bad' to value of Int64 type")
+                    let message = error.to_string();
+                    message.contains("Cannot cast string 'bad' to value of Date32 type")
+                        || message.contains("Error parsing timestamp from 'bad'")
                 }));
                 continue;
             }
@@ -228,11 +239,16 @@ async fn match_spark_comparison_coercion() -> TestResult {
                 Err(error) if expected["condition"] == "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES" => {
                     error.to_string().contains("is not comparable")
                 }
-                Err(error) if expected["condition"] == "CAST_INVALID_INPUT" => {
+                Err(error)
+                    if expected["condition"] == "CAST_INVALID_INPUT"
+                        || expected["condition"]
+                            == "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION" =>
+                {
                     let message = error.to_string();
                     message.contains("[CAST_INVALID_INPUT]")
-                        || (case["id"] == "bad_left_null_right"
-                            && message.contains("Cannot cast string 'bad' to value of Int32 type"))
+                        || message.contains("Cannot cast string 'bad' to value of Int32 type")
+                        || message.contains("Cannot cast string 'bad' to value of Date32 type")
+                        || message.contains("Error parsing timestamp from 'bad'")
                         || (message.contains("Cannot cast string")
                             && message.contains("to value of Int64 type"))
                         || (case["id"]

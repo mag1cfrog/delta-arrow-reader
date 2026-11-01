@@ -121,8 +121,6 @@ def main():
                         raise
                     expected = {"status": "error", "condition": condition}
                 record = {"id": name, "sql": sql, "ansi": ansi, "expected": expected}
-                if name == "null_right_known_bad" and ansi:
-                    record["retained_difference"] = "known_null_right_623"
                 observations.append(record)
         metadata = {"spark_version": spark.version, "timezone": "UTC",
                     "java_version": spark.sparkContext._jvm.java.lang.System.getProperty("java.version")}

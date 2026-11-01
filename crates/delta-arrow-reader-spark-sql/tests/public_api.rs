@@ -28,6 +28,57 @@ fn session() -> SessionContext {
 }
 
 #[tokio::test]
+async fn native_cast_functions_lower_before_local_preparation() -> TestResult {
+    let session = session();
+    for expression in [
+        "arrow_cast(v,'Int32')",
+        "arrow_try_cast(v,'Int32')",
+        "cast_to_type(v,CAST(0 AS INT))",
+        "try_cast_to_type(v,CAST(0 AS INT))",
+    ] {
+        let batches = session
+            .sql(&format!(
+                "SELECT CAST(v AS INT) AS x,{expression} AS y FROM (VALUES ('1'),(NULL)) t(v)"
+            ))
+            .await?
+            .collect()
+            .await?;
+        let mut rows = Vec::new();
+        for batch in batches {
+            assert_eq!(batch.schema().field(0).name(), "x");
+            assert_eq!(batch.schema().field(1).name(), "y");
+            assert!(
+                batch
+                    .columns()
+                    .iter()
+                    .all(|column| column.data_type() == &DataType::Int32)
+            );
+            for row in 0..batch.num_rows() {
+                rows.push(
+                    batch
+                        .columns()
+                        .iter()
+                        .map(|column| {
+                            if column.is_null(row) {
+                                Ok(None)
+                            } else {
+                                array_value_to_string(column.as_ref(), row).map(Some)
+                            }
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                );
+            }
+        }
+        assert_eq!(
+            rows,
+            [vec![Some("1".into()); 2], vec![None; 2]],
+            "{expression}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn reject_ragged_values_before_column_coercion() -> TestResult {
     let session = session();
     for ansi_mode in [true, false] {

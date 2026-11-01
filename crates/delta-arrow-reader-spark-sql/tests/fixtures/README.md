@@ -167,9 +167,10 @@ local development-profile results do not establish release throughput.
 
 ## NULLIF result types
 
-`nullif-types-spark.jsonl` stores 624 independent Spark 4.2.0 observations from
-`capture_nullif_types_spark.py`, using the same Python/Java setup. Every case has
-a strict Spark result or error assertion. Numeric promotion covers Decimal with
+`nullif-types-spark.jsonl` stores 720 independent Spark 4.2.0 observations from
+`capture_nullif_types_spark.py`, using the same Python/Java setup. It has 717
+strict Spark result/error assertions and three retained differences described
+below. Numeric promotion covers Decimal with
 FLOAT/DOUBLE and signed integers with FLOAT, including positive and negative
 precision boundaries, both operand orders and ANSI modes. Ordinary equality
 controls exercise the shared promotion rule alongside NULLIF. NaN and both
@@ -188,7 +189,18 @@ Incomparable scalar and typed-NULL inputs must fail during planning.
 Mixed-type volatile counters in `conditional_evaluation.rs` check that the
 original left expression is evaluated once and right inputs run only for
 non-NULL left rows. String and mixed temporal comparisons are covered below.
-Known-NULL-right simplification remains a separate gap in the restart plan.
+
+The 96 known-NULL-right observations distinguish literal and projected constants
+from dynamic NULL columns. A registered STRING column compared with a literal
+NULL can retain `bad` without parsing it. A runtime NULL column can still require
+that conversion, and Spark's local VALUES preparation can fail before the same
+constant comparison is removed. Explicit failing left casts, invalid argument
+types, empty inputs and volatile expressions retain separate controls.
+
+Three non-ANSI STRING/DATE/LTZ/NTZ column cases retain the frontend's strict cast
+error, although Spark returns the original strings. Their expected reference
+values remain unchanged, and #629 owns the conversion repair. These cases are
+not counted as compatible.
 
 ## String comparison coercion
 
@@ -206,10 +218,9 @@ operator cases share the same assertions, including WHERE and JOIN consumers.
 Counted expressions separately check
 that required operands run once and unused NULLIF inputs do not run.
 
-One ANSI observation is explicitly retained for #623: `NULLIF('bad', CAST(NULL
-AS INT))` still tries to parse the left string. Its expected Spark result remains
-`'bad'`; it is not counted as compatible. Mixed temporal comparisons are covered
-below. Exact Spark error-stage/nullability parity remains separate work.
+`NULLIF('bad', CAST(NULL AS INT))` now strictly checks the unchanged Spark result
+`'bad'`. Mixed temporal comparisons are covered below. Exact Spark
+error-stage/nullability parity remains separate work.
 
 ## Temporal comparison coercion
 

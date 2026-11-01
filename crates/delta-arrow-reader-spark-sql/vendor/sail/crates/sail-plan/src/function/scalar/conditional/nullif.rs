@@ -27,6 +27,7 @@ pub(crate) struct SparkNullIf {
     native: NullIfFunc,
     ansi_mode: bool,
     session_timezone: Arc<str>,
+    preserve_local_comparison: bool,
 }
 
 impl SparkNullIf {
@@ -35,7 +36,15 @@ impl SparkNullIf {
             native: NullIfFunc::new(),
             ansi_mode,
             session_timezone,
+            preserve_local_comparison: false,
         }
+    }
+
+    // Local VALUES conversion precedes the normal known-NULL-right rewrite.
+    pub(crate) fn for_local_values(&self) -> Self {
+        let mut function = Self::new(self.ansi_mode, self.session_timezone.clone());
+        function.preserve_local_comparison = true;
+        function
     }
 
     fn comparison_type(&self, left: &DataType, right: &DataType) -> Result<DataType> {
@@ -90,14 +99,21 @@ impl ScalarUDFImpl for SparkNullIf {
     }
 
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
-        if matches!(args.first(), Some(Expr::Literal(value, _)) if value.is_null()) {
-            // Keep comparability validation even when the right input is discarded.
+        let [left, right] = take_function_args(self.name(), args.as_slice())?;
+        let null_left = matches!(left, Expr::Literal(value, _) if value.is_null());
+        let null_right = !self.preserve_local_comparison
+            && matches!(right, Expr::Literal(value, _) if value.is_null());
+        if null_left || null_right {
+            // Comparability still applies when equality needs no evaluation.
             let original =
                 ScalarUDF::from(Self::new(self.ansi_mode, self.session_timezone.clone()))
-                    .call(args);
-            return Ok(ExprSimplifyResult::Simplified(lit(
-                ScalarValue::try_new_null(&info.get_data_type(&original)?)?,
-            )));
+                    .call(args.clone());
+            let result_type = info.get_data_type(&original)?;
+            return Ok(ExprSimplifyResult::Simplified(if null_left {
+                lit(ScalarValue::try_new_null(&result_type)?)
+            } else {
+                left.clone()
+            }));
         }
         Ok(ExprSimplifyResult::Original(args))
     }

@@ -36,8 +36,9 @@ comparison audit assigned independent string, temporal and known-NULL-right
 findings to #621, #622 and #623. The relational coverage tracker #170 and
 reference review #141 have resumed. Spark string-to-BOOLEAN CAST, #624, is reviewed
 and pushed as `a9a87c58`. STRING comparison coercion, #621, is reviewed and
-pushed as `f3591dc7`. The current slice is #622, session timezones for DATE,
-TIMESTAMP_NTZ and TIMESTAMP comparisons.
+pushed as `f3591dc7`. Session timezones for DATE, TIMESTAMP_NTZ and TIMESTAMP
+comparisons, #622, are reviewed and pushed as `bb2704f0`. The current slice is
+#623, NULLIF comparisons against a known NULL right operand.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -90,7 +91,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion and nanosecond precision |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision and STRING temporal comparisons |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -609,6 +610,27 @@ because the old issue exists.
   Bulletproof Review rechecked both repairs and the full scope with no remaining
   actionable findings. The slice is ready to commit; its dedicated staging PR
   follows the existing queue.
+
+- #623 adds 96 independent known-NULL-right references without changing the
+  previous 624 NULLIF observations. Spark distinguishes constants, dynamic NULL
+  columns and early local VALUES conversion. The initial generic simplification
+  erased local errors, so local prechecks preserve NULLIF comparisons while the
+  existing projected-NULL machinery simplifies ordinary plans. NULLIF still
+  validates comparability and returns
+  its original left expression once. Three pre-existing non-ANSI STRING/temporal
+  cast failures have dedicated #629, assigned as a native child of #173. Their
+  Spark expected values stay intact and the current errors remain explicit.
+  Clean-context Sol/high review found a native conversion-UDF lowering regression
+  in the first precheck repair. A public host-session test reproduced it. The
+  repair restores the full native ExprSimplifier and marks only temporary local
+  NULLIF copies to preserve their comparisons; those copies never enter the
+  returned plan. Four native conversion functions, the comparison corpus and
+  evaluation counters pass the recheck. Independent review has no remaining
+  actionable findings. The final workspace run passes 432 tests with no failures
+  and the same two inherited ignored doctests; the 25,180 historical observations
+  require no new corrections. Root warning-denying Clippy, formatting and diff
+  checks pass. The slice is ready to commit and enter the dedicated staging PR
+  queue.
 
 ### Retained gaps found during S01 review
 
