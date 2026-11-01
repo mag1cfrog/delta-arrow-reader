@@ -160,11 +160,7 @@ impl ScalarFunctionExpr {
     ) -> Self {
         Self {
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
-            short_circuit_null: fun.inner().short_circuits_on_null_first_arg()
-                && args.iter().skip(1).any(|arg| {
-                    arg.downcast_ref::<Column>().is_none()
-                        && arg.downcast_ref::<Literal>().is_none()
-                }),
+            short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
             fun,
             name: name.to_owned(),
             args,
@@ -200,11 +196,7 @@ impl ScalarFunctionExpr {
         let return_field = fun.return_field_from_args(ret_args)?;
         Ok(Self {
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
-            short_circuit_null: fun.inner().short_circuits_on_null_first_arg()
-                && args.iter().skip(1).any(|arg| {
-                    arg.downcast_ref::<Column>().is_none()
-                        && arg.downcast_ref::<Literal>().is_none()
-                }),
+            short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
             fun,
             name,
             args,

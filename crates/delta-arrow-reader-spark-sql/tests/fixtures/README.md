@@ -154,9 +154,9 @@ the independently verified NULLIF results. It does not add alternatives:
 the old negative-zero output now fails. The original compressed captures stay
 unchanged, and unused correction IDs fail the complete replay.
 
-Mixed-input return types and nested-type admission remain separate conditional
-findings. Unused-operand checks are described below. These tests do not establish
-full NULLIF or Spark compatibility.
+Mixed-input return types have their own references below. Nested-type admission
+remains separate conditional work. Unused-operand checks are described below.
+These tests do not establish full NULLIF or Spark compatibility.
 
 Run `cargo bench --locked --bench nullif --profile dev` on both revisions with the
 same profile and benchmark source/target declaration. It records planning and
@@ -164,6 +164,29 @@ execution samples for nullable/nonnullable DOUBLE columns and constant operands,
 using 262,144 rows, two warm-ups and eleven samples per case. These inputs have
 equivalent outputs before and after the fix. Timing has no pass/fail threshold;
 local development-profile results do not establish release throughput.
+
+## NULLIF result types
+
+`nullif-types-spark.jsonl` stores 240 independent Spark 4.2.0 observations from
+`capture_nullif_types_spark.py`, using the same Python/Java setup. Of these, 238
+are strict Spark comparisons and two retain the known Decimal/floating comparison
+difference. The retained assertions require the exact existing native result;
+they do not treat that result as Spark-compatible.
+
+Mixed numeric, Decimal and string inputs check that the comparison type does not
+replace the first argument's result type or value. Cases include a BIGINT beyond
+DOUBLE's exact integer range, a wide Decimal, leading zeros in a string, FLOAT
+bits, both typed and untyped NULLs, columns and empty results. Boolean and DATE
+provide unchanged controls. Both ANSI modes and two batch sizes check exact
+types, values, output names and NULL representability. Required invalid casts
+still fail, while NULL-left rows skip invalid right operands. Direct INT/STRING
+column and literal operands check implicit conversion as well as explicit casts.
+Incomparable scalar and typed-NULL inputs must fail during planning.
+
+Mixed-type volatile counters in `conditional_evaluation.rs` check that the
+original left expression is evaluated once and right inputs run only for
+non-NULL left rows. Comparison policy remains separate: Decimal/DOUBLE equality
+still follows the native Decimal common type instead of Spark's DOUBLE choice.
 
 ## Conditional temporal results
 
@@ -250,5 +273,12 @@ The counted-input tests check one left evaluation per row and right evaluation
 only for non-NULL left rows, including dictionary input with NULL values.
 A direct physical-expression test uses operands that fail if called, so it
 detects operand evaluation on an empty batch for NULLIF and checked arithmetic.
-Mixed-input result types keep their existing coercion contract pending the
-separate S03 repair.
+Mixed-input value and type preservation is covered by the [result-type references](#nullif-result-types).
+
+The required NULL-row selection adds work even for simple right operands. Five
+alternating development-profile comparisons of the NULLIF benchmark measured
+nullable-left column cases at 3.20-3.82 times the previous cost (roughly 0.89-1.37 ms
+for 262,144 rows). Nonnullable-left and scalar-left controls remained near their
+previous cost. These measurements isolate the selection change; they do not
+establish release throughput or checked-arithmetic cost. S11 issue #620 retains
+that performance assessment before frontend adoption.
