@@ -117,8 +117,13 @@ equality correction from the remaining result-type and evaluation differences.
 
 IFNULL and NVL use the existing COALESCE planning path when either argument is
 temporal, retaining their two-argument arity. Other inputs keep the native NVL
-path. The [reference cases](tests/fixtures/README.md#ifnull-and-nvl-temporal-results)
+path. CASE, IF and fallback functions share mixed DATE/LTZ/NTZ promotion with
+microsecond precision and session-timezone interpretation. Local-time conversion
+reuses the same expression builder as explicit CAST and SEQUENCE, including
+Spark's DST gap/overlap rules. The [reference cases](tests/fixtures/README.md#conditional-temporal-results)
 cover temporal coercion, lazy fallbacks, modes and timezones.
+Named-zone conversion retains ConvertTz's documented Chrono range limit; full
+i64-microsecond timestamp parity remains separate work.
 
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain

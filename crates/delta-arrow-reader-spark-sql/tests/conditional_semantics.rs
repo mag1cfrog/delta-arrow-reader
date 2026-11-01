@@ -37,6 +37,16 @@ async fn execute_reference_query(session: &SessionContext, case: &Value) -> Test
     let logical_nullable = query.logical_plan.schema().field(0).is_nullable();
     let plan = query.create_physical_plan(session).await?;
     let schema = plan.schema();
+    assert_eq!(schema.field(0).name(), "r");
+    if matches!(
+        schema.field(0).data_type(),
+        DataType::Date32 | DataType::Timestamp(..)
+    ) {
+        assert_eq!(
+            query.logical_plan.schema().field(0).data_type(),
+            schema.field(0).data_type()
+        );
+    }
     let result_type = match schema.field(0).data_type() {
         DataType::Date32 => "date",
         DataType::Timestamp(TimeUnit::Microsecond, None) => "timestamp_ntz",
@@ -84,7 +94,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(records.len(), 563);
+    assert_eq!(records.len(), 1383);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(

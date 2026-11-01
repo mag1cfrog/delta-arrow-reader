@@ -162,6 +162,87 @@ def encode_reference_value(value, data_type):
     return None if value is None else str(value)
 
 
+def conditional_sql(function, condition, left, right):
+    if function == "IF":
+        return f"IF({condition}, {left}, {right})"
+    if function == "CASE":
+        return f"CASE WHEN {condition} THEN {left} ELSE {right} END"
+    return f"{function}({left}, {right})"
+
+
+def mixed_temporal_queries(timezone):
+    if timezone in {"UTC", "America/Phoenix"}:
+        scenarios = [("ordinary", "2026-01-02 03:04:05.123456")]
+        pairs = [("DATE", "TIMESTAMP"), ("DATE", "TIMESTAMP_NTZ"), ("TIMESTAMP_NTZ", "TIMESTAMP")]
+        selections = ["left", "right", "both_null", "columns", "empty"]
+    elif timezone == "America/New_York":
+        scenarios = [("spring_gap", "2026-03-08 02:30:00.123456"), ("fall_overlap", "2026-11-01 01:30:00.123456")]
+        pairs = [("TIMESTAMP_NTZ", "TIMESTAMP")]
+        selections = ["left", "columns"]
+    else:
+        scenarios = [("fixed_offset", "2026-01-02 03:04:05.123456")]
+        pairs = [("TIMESTAMP_NTZ", "TIMESTAMP")]
+        selections = ["left"]
+    for scenario, text in scenarios:
+        for pair in pairs:
+            for left_type, right_type in [pair, pair[::-1]]:
+                left_value = f"CAST('{text[:10] if left_type == 'DATE' else text}' AS {left_type})"
+                right_value = f"CAST('{text[:10] if right_type == 'DATE' else text}' AS {right_type})"
+                left_null = f"CAST(NULL AS {left_type})"
+                right_null = f"CAST(NULL AS {right_type})"
+                for selection in selections:
+                    left = left_value if selection == "left" else left_null
+                    right = right_value if selection == "right" else right_null
+                    condition = "true" if selection == "left" else "false"
+                    suffix = ""
+                    if selection in {"columns", "empty"}:
+                        left, right, condition = "a", "b", "id=0"
+                        count = 3 if selection == "columns" else 0
+                        suffix = f" FROM (SELECT id, CASE WHEN id=0 THEN {left_value} ELSE {left_null} END AS a, CASE WHEN id=1 THEN {right_value} ELSE {right_null} END AS b FROM range({count})) t ORDER BY id"
+                    for function in ["COALESCE", "IFNULL", "NVL", "IF", "CASE"]:
+                        expression = conditional_sql(function, condition, left, right)
+                        name = f"mixed_{scenario}_{left_type.lower()}_{right_type.lower()}_{selection}_{function.lower()}"
+                        yield name, f"SELECT {expression} AS r{suffix}"
+    if timezone in {"UTC", "America/Phoenix"}:
+        for left_type in ["DATE", "TIMESTAMP_NTZ"]:
+            left_value = f"CAST('2026-01-02 03:04:05.123456' AS {left_type})"
+            other_value = f"CAST('2026-01-03 04:05:06.234567' AS {left_type})"
+            for selection in ["unused", "required", "column_unused"]:
+                left = f"CAST(NULL AS {left_type})" if selection == "required" else left_value
+                condition = "false" if selection == "required" else "true"
+                suffix = ""
+                if selection == "column_unused":
+                    left = "a"
+                    condition = "id>=0"
+                    suffix = f" FROM (SELECT id, CASE WHEN id=0 THEN {left_value} ELSE {other_value} END AS a FROM range(2)) t ORDER BY id"
+                right = "CAST('bad' AS TIMESTAMP)"
+                for function in ["COALESCE", "IFNULL", "NVL", "IF", "CASE"]:
+                    expression = conditional_sql(function, condition, left, right)
+                    name = f"mixed_lazy_{left_type.lower()}_timestamp_{selection}_{function.lower()}"
+                    yield name, f"SELECT {expression} AS r{suffix}"
+
+
+def capture_conditional_result(spark, sql):
+    try:
+        frame = spark.sql(sql)
+        schema = frame.schema.jsonValue()
+        rows = [[encode_reference_value(row[0], schema["fields"][0]["type"])] for row in frame.collect()]
+        return dict(status="ok", schema=schema, rows=rows)
+    except Exception as error:
+        condition = error_condition(error)
+        if condition not in {
+            "CAST_INVALID_INPUT",
+            "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+            "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+            "DIVIDE_BY_ZERO",
+            "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+            "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+            "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+        }:
+            raise
+        return dict(status="error", condition=condition)
+
+
 spark = (
     SparkSession.builder.master("local[1]")
     .appName("dar-conditional-reference")
@@ -202,24 +283,14 @@ try:
                 queries.extend(fallback_evaluation_queries())
                 queries.extend(nullif_evaluation_queries())
             for name, sql in queries:
-                try:
-                    frame = spark.sql(sql)
-                    schema = frame.schema.jsonValue()
-                    rows = [[encode_reference_value(row[0], schema["fields"][0]["type"])] for row in frame.collect()]
-                    expected = dict(status="ok", schema=schema, rows=rows)
-                except Exception as error:
-                    condition = error_condition(error)
-                    if condition not in {
-                        "CAST_INVALID_INPUT",
-                        "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-                        "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-                        "DIVIDE_BY_ZERO",
-                        "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-                        "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-                        "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-                    }:
-                        raise
-                    expected = dict(status="error", condition=condition)
+                expected = capture_conditional_result(spark, sql)
+                records.append(dict(id=name, sql=sql, ansi=ansi, timezone=timezone, expected=expected))
+    for timezone in ["UTC", "America/Phoenix", "America/New_York", "+05:45"]:
+        spark.conf.set("spark.sql.session.timeZone", timezone)
+        for ansi in [True, False]:
+            spark.conf.set("spark.sql.ansi.enabled", str(ansi).lower())
+            for name, sql in mixed_temporal_queries(timezone):
+                expected = capture_conditional_result(spark, sql)
                 records.append(dict(id=name, sql=sql, ansi=ansi, timezone=timezone, expected=expected))
     output = Path(__file__).with_name("conditional-spark.jsonl")
     metadata = dict(spark_version=spark.version, timestamp_encoding="microseconds since 1970-01-01; TIMESTAMP in UTC, TIMESTAMP_NTZ in wall time")

@@ -26,9 +26,10 @@ and pushed as `f43bcf5b`; its PR follows #608. Known NULL array projections,
 #612, are reviewed and pushed as `80d79acf`; their PR follows #610. Array
 predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
 S03's #615, scalar VALUES Decimal common types, is reviewed and pushed as
-`04b191a6`. The current slice is #616, rejecting inconsistent VALUES row widths
-before column coercion. The relational coverage tracker #170 and reference
-review #141 have resumed.
+`04b191a6`. VALUES row-width validation, #616, is reviewed and pushed as
+`28d93682`. The current slice, #605 mixed-temporal conditional types, has passed
+local checks and independent review and is ready to commit. The
+relational coverage tracker #170 and reference review #141 have resumed.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -442,6 +443,29 @@ because the old issue exists.
   found no actionable issue after tracing SQL grammar, direct AST boundaries,
   error precedence, caller paths and assertion faults. Remote platform CI and
   staging integration remain pending.
+- #616 is committed and pushed as `28d93682`. S03 continues with the already
+  assigned mixed-temporal issue #605. The 700 added Spark observations preserve
+  all 562 prior conditional records and cover five functions, both ANSI modes,
+  DATE/LTZ/NTZ operand orders, selected/all-NULL/column/empty cases, New York DST
+  transitions and a fixed offset. The pre-fix public test reports 920 differences
+  across two batch sizes; the candidate passes all 1,262 references. Existing
+  local-time conversion is shared with CAST and SEQUENCE, rather than copied.
+  The first full workspace run passes without historical corrections. A further
+  120 references exercise unused constant/column and required invalid temporal
+  fallbacks; the final corpus has 1,382 observations. Temporal logical/physical
+  type equality and the physical output name are now checked explicitly. The
+  full workspace passes 423 tests, zero failures and the same two inherited
+  ignored doctests, including the complete historical replay without further
+  corrections. Formatting and CI-equivalent Clippy pass. The clean-context
+  Sol/high reviewer independently checked all added reference rows, types and
+  errors and found no remaining actionable finding. Remote CI and staging
+  integration remain pending.
+- #605 review traced an inherited `ConvertTz` limitation: conversions between
+  different zones rely on Chrono and do not cover Spark's full i64-microsecond
+  timestamp range. The new conditional path reuses this existing converter.
+  The current corpus verifies ordinary dates and DST/fixed-offset boundaries,
+  not the full range. S05 must reproduce and route that limitation before making
+  a broader support claim; it is not silently accepted as complete parity.
 
 ### Retained gaps found during S01 review
 
