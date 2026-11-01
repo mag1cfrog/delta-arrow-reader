@@ -7,6 +7,25 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### Array scalar prerequisite for S04
+
+#703 owns SORT_ARRAY and ARRAY_JOIN NULL contracts, independently exposed by
+#697's collection-window schema comparisons. The FILTER candidate is saved
+outside this slice. Native operations remain in use; the Spark adapters carry
+input nullability and distinguish an explicit NULL replacement from an omitted
+one. Native DataFusion SQL keeps its existing contracts.
+
+The independent Spark capture has 112 observations over six input schemas and
+scalar calls in both ANSI modes. The initial unchanged frontend fails 112 of
+192 comparisons. Clean-context review identified untyped NULL arrays as an
+additional gap; the expanded reference reproduced 12 failures before repair.
+NULL arrays now receive the required list types, and direct adapter tests cover
+zero-row batches and argument errors. All 224 reference comparisons pass. Linux
+workspace checks pass 510 tests with no failures and two inherited ignored
+doctests; root Clippy and formatting pass. Clean-context Sol/high review found
+no remaining actionable issue after the NULL-array repair. After #703, restore
+#697 and rerun its 206-record comparison and Linux checks.
+
 ### S04 bounded aggregate windows
 
 #699 merged through PR #701 at `49bc810f`. #700 now owns bounded execution for

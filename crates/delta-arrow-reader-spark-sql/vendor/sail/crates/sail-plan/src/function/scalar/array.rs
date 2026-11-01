@@ -10,13 +10,14 @@ use datafusion_expr::{
     when,
 };
 use datafusion_functions_nested::make_array::make_array;
-use datafusion_functions_nested::string::ArrayToString;
 use datafusion_spark::function::array::expr_fn as array_fn;
 use sail_common::utils::string::SPARK_WHITESPACE_OR_ISO_CONTROL_CHARACTERS;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::array::array_intersect::ArrayIntersect;
+use sail_function::scalar::array::array_join::ArrayJoin;
 use sail_function::scalar::array::array_position::SparkArrayPosition;
+use sail_function::scalar::array::array_sort_by_direction::ArraySortByDirection;
 use sail_function::scalar::array::arrays_zip::ArraysZip;
 use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::array::spark_array_compact::SparkArrayCompact;
@@ -127,6 +128,11 @@ fn sort_array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             )));
         }
     };
+    let array = if array.get_type(input.function_context.schema)? == DataType::Null {
+        cast(array, DataType::new_list(DataType::Null, true))
+    } else {
+        array
+    };
     let (sort, nulls) = match asc {
         expr::Expr::Literal(ScalarValue::Boolean(Some(true)), _metadata) => (
             lit(ScalarValue::Utf8(Some("ASC".to_string()))),
@@ -142,7 +148,7 @@ fn sort_array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             )));
         }
     };
-    Ok(expr_fn::array_sort(array, sort, nulls))
+    Ok(ScalarUDF::from(ArraySortByDirection::default()).call(vec![array, sort, nulls]))
 }
 
 fn array_append(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -540,7 +546,7 @@ pub(super) fn list_built_in_array_functions() -> Vec<(&'static str, ScalarFuncti
         ("array_except", F::binary(expr_fn::array_except)),
         ("array_insert", F::custom(array_insert)),
         ("array_intersect", F::udf(ArrayIntersect::new())),
-        ("array_join", F::udf(ArrayToString::new())),
+        ("array_join", F::udf(ArrayJoin::default())),
         ("array_max", F::udf(ArrayMax::new())),
         ("array_min", F::udf(ArrayMin::new())),
         ("array_position", F::udf(SparkArrayPosition::new())),

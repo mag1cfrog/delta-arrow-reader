@@ -66,6 +66,23 @@ unchanged.
 This corpus covers scalar numeric columns. Nested-value common typing and exact
 Spark error-stage/nullability parity have separate review scopes.
 
+## Array sorting and joining
+
+`array-sort-join-spark.jsonl` contains 112 Spark 4.2.0 observations and their input
+tables. Regenerate it with `capture_array_sort_join_spark.py` using Python 3.12,
+PySpark 4.2.0 and Java 21. Rust compares complete ordered values and schema fields
+at batch sizes 1 and 32, including child nullability and public column names.
+
+Six input schemas vary array, delimiter, replacement and element nullability.
+The queries cover both sort directions, omitted and explicit NULL replacements,
+empty/all-NULL arrays, duplicate elements, composed sorting/joining and empty
+input in both ANSI modes. Native DataFusion controls retain its different
+explicit-NULL replacement behavior. Scalar queries also cover untyped NULL
+arguments, including SORT_ARRAY's ARRAY<VOID> result. Direct adapter tests cover
+zero-row batches and argument errors despite NULL inputs.
+This fixture does not establish ordering or
+formatting parity for arbitrary nested and floating array elements.
+
 ## Array membership
 
 `array-contains-spark.jsonl` starts with input rows and Spark settings, followed by

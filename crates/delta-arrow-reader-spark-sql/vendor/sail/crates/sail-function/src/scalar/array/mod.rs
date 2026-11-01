@@ -1,7 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 pub mod array_contains;
 pub mod array_intersect;
+pub mod array_join;
 pub mod array_position;
+pub mod array_sort_by_direction;
 pub mod arrays_zip;
 pub mod lambda_utils;
 pub mod spark_array;
