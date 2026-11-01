@@ -582,3 +582,26 @@ Unbalanced INTERSECT ALL counts and signed-zero set keys remain separate fixes;
 this corpus does not claim those already work. The timestamp parser retains its
 native error text; Spark error classification and error-stage parity remain
 separate schema/error-contract work.
+
+## ALL set-operation duplicates
+
+`set-operation-duplicates-spark.jsonl` records 366 independent Spark 4.2.0
+observations, including three required errors, from `capture_set_operation_duplicates_spark.py`, using the same PySpark/Java
+reference environment. The inputs include unbalanced counts, all-NULL rows,
+empty tables, multiple-column rows, values that become equal after conversion,
+integer/Decimal coercion and registered FLOAT/DOUBLE columns containing NaNs.
+All six set operators and both input orientations provide controls for UNION,
+DISTINCT and EXCEPT behavior. Required casts and column-count errors retain
+specific failure assertions.
+
+The Rust replay compares row values and multiplicity, output names/types and
+returned-NULL schema safety in both ANSI modes at batch sizes 1 and 32. Registered
+input batches are distributed over two partitions; numbering must count equal
+rows across input batch and partition boundaries. The second-column case checks
+that duplicate groups include every column, rather than only the first key.
+Existing set-operation controls also check metadata and unchanged native SQL
+for INTERSECT ALL.
+
+NaNs here use canonical payloads. Signed-zero and other floating-key equality
+remain the separate #683 work. The replay does not claim exact Spark analyzed
+nullability, error-stage parity or measured large-input performance.

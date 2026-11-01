@@ -214,20 +214,22 @@ async fn set_coercion_preserves_output_names_and_field_metadata() -> TestResult 
         vec![Arc::new(Int32Array::from(vec![Some(1), None]))],
     )?;
     session.register_batch("counts", batch)?;
-    let query = plan_query(
-        &session,
-        "SELECT value FROM counts INTERSECT SELECT CAST(1 AS BIGINT)",
-        &SparkSqlOptions::default(),
-    )
-    .await?;
-    assert_eq!(query.column_names, ["value"]);
-    let physical = query.create_physical_plan(&session).await?;
-    assert_eq!(physical.schema().field(0).name(), "value");
-    assert_eq!(physical.schema().field(0).data_type(), &DataType::Int64);
-    assert_eq!(physical.schema().field(0).metadata(), field.metadata());
-    let rows = collect(physical, session.task_ctx()).await?;
-    assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
-    assert_eq!(array_value_to_string(rows[0].column(0).as_ref(), 0)?, "1");
+    for operation in ["INTERSECT", "INTERSECT ALL"] {
+        let query = plan_query(
+            &session,
+            &format!("SELECT value FROM counts {operation} SELECT CAST(1 AS BIGINT)"),
+            &SparkSqlOptions::default(),
+        )
+        .await?;
+        assert_eq!(query.column_names, ["value"]);
+        let physical = query.create_physical_plan(&session).await?;
+        assert_eq!(physical.schema().field(0).name(), "value");
+        assert_eq!(physical.schema().field(0).data_type(), &DataType::Int64);
+        assert_eq!(physical.schema().field(0).metadata(), field.metadata());
+        let rows = collect(physical, session.task_ctx()).await?;
+        assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
+        assert_eq!(array_value_to_string(rows[0].column(0).as_ref(), 0)?, "1");
+    }
     Ok(())
 }
 
@@ -240,6 +242,7 @@ async fn native_sql_keeps_its_set_operation_coercion() -> TestResult {
     for sql in [
         "SELECT '01' AS value UNION ALL SELECT 1",
         "SELECT CAST(1 AS INT) AS value INTERSECT SELECT CAST(1 AS BIGINT)",
+        "SELECT v FROM (VALUES(1),(1),(1)) l(v) INTERSECT ALL SELECT v FROM (VALUES(1)) r(v)",
     ] {
         let expected = native.sql(sql).await?.collect().await?;
         let actual = configured.sql(sql).await?.collect().await?;

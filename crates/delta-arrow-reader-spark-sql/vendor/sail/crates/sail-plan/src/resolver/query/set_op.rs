@@ -43,7 +43,9 @@ impl PlanResolver<'_> {
             self.coerce_set_operation_inputs(left, right)?
         };
         match set_op_type {
-            SetOpType::Intersect => Ok(LogicalPlanBuilder::intersect(left, right, is_all)?),
+            SetOpType::Intersect if !is_all => {
+                Ok(LogicalPlanBuilder::intersect(left, right, false)?)
+            }
             SetOpType::Union => {
                 let (left, right) = if by_name {
                     let left_names = Self::get_field_names(left.schema(), state)?;
@@ -125,7 +127,12 @@ impl PlanResolver<'_> {
                         .build()?)
                 }
             }
-            SetOpType::Except => {
+            SetOpType::Intersect | SetOpType::Except => {
+                let join_type = if matches!(set_op_type, SetOpType::Intersect) {
+                    JoinType::LeftSemi
+                } else {
+                    JoinType::LeftAnti
+                };
                 let mut join_keys = left
                     .schema()
                     .fields()
@@ -142,50 +149,8 @@ impl PlanResolver<'_> {
                 let plan = if is_all {
                     let left_row_number_alias = state.register_field_name("row_num");
                     let right_row_number_alias = state.register_field_name("row_num");
-                    let left_row_number_window =
-                        Expr::WindowFunction(Box::new(expr::WindowFunction {
-                            fun: WindowFunctionDefinition::WindowUDF(row_number_udwf()),
-                            params: WindowFunctionParams {
-                                args: vec![],
-                                partition_by: left
-                                    .schema()
-                                    .fields()
-                                    .iter()
-                                    .map(|field| Expr::Column(Column::from_name(field.name())))
-                                    .collect::<Vec<_>>(),
-                                order_by: vec![],
-                                window_frame: WindowFrame::new(None),
-                                filter: None,
-                                null_treatment: Some(NullTreatment::RespectNulls),
-                                distinct: false,
-                            },
-                        }))
-                        .alias(left_row_number_alias.as_str());
-                    let right_row_number_window =
-                        Expr::WindowFunction(Box::new(expr::WindowFunction {
-                            fun: WindowFunctionDefinition::WindowUDF(row_number_udwf()),
-                            params: WindowFunctionParams {
-                                args: vec![],
-                                partition_by: right
-                                    .schema()
-                                    .fields()
-                                    .iter()
-                                    .map(|field| Expr::Column(Column::from_name(field.name())))
-                                    .collect::<Vec<_>>(),
-                                order_by: vec![],
-                                window_frame: WindowFrame::new(None),
-                                filter: None,
-                                null_treatment: Some(NullTreatment::RespectNulls),
-                                distinct: false,
-                            },
-                        }))
-                        .alias(right_row_number_alias.as_str());
-                    let left = LogicalPlanBuilder::from(left)
-                        .window(vec![left_row_number_window])?
-                        .build()?;
-                    let right = LogicalPlanBuilder::from(right)
-                        .window(vec![right_row_number_window])?
-                        .build()?;
+                    let left = add_duplicate_row_number(left, &left_row_number_alias)?;
+                    let right = add_duplicate_row_number(right, &right_row_number_alias)?;
                     let left_join_columns = join_keys
                         .iter()
                         .map(|(left_col, _)| left_col.clone())
@@ -197,7 +162,7 @@ impl PlanResolver<'_> {
                     LogicalPlanBuilder::from(left)
                         .join_detailed(
                             right,
-                            JoinType::LeftAnti,
+                            join_type,
                             join_keys.into_iter().unzip(),
                             None,
                             NullEquality::NullEqualsNull,
@@ -209,7 +174,7 @@ impl PlanResolver<'_> {
                         .distinct()?
                         .join_detailed(
                             right,
-                            JoinType::LeftAnti,
+                            join_type,
                             join_keys.into_iter().unzip(),
                             None,
                             NullEquality::NullEqualsNull,
@@ -284,6 +249,31 @@ impl PlanResolver<'_> {
             });
         Ok((left?, right?))
     }
+}
+
+// Pair equal rows by occurrence so each right row matches at most one left row.
+fn add_duplicate_row_number(input: LogicalPlan, column_name: &str) -> PlanResult<LogicalPlan> {
+    let row_number = Expr::WindowFunction(Box::new(expr::WindowFunction {
+        fun: WindowFunctionDefinition::WindowUDF(row_number_udwf()),
+        params: WindowFunctionParams {
+            args: vec![],
+            partition_by: input
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| Expr::Column(Column::from_name(field.name())))
+                .collect(),
+            order_by: vec![],
+            window_frame: WindowFrame::new(None),
+            filter: None,
+            null_treatment: Some(NullTreatment::RespectNulls),
+            distinct: false,
+        },
+    }))
+    .alias(column_name);
+    Ok(LogicalPlanBuilder::from(input)
+        .window(vec![row_number])?
+        .build()?)
 }
 
 #[cfg(test)]
