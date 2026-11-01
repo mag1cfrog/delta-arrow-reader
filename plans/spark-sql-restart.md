@@ -7,13 +7,39 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### S04 bounded aggregate windows
+
+#699 merged through PR #701 at `49bc810f`. #700 now owns bounded execution for
+aggregates without retraction; #697's FILTER frontend candidate remains saved
+on its separate branch. The shared window executor rebuilds only a frame
+whose start advances when the accumulator cannot retract. Existing incremental
+aggregates and expanding frames retain their current paths.
+
+The new independent references also expose stale contributions after a RANGE
+frame becomes physically empty, affecting SUM/COUNT as well as extrema. #700
+includes clearing that shared state. All 84 complete result/schema comparisons
+pass at three batch sizes. Twenty-six references use default Spark results;
+the two filtered-prefix references preserve FILTER by disabling Spark's
+FIRST_VALUE-to-NTH_VALUE rewrite, whose original incorrect results and plans
+are retained. Native approximate counts and collection defaults differ from
+Spark; paired reference SQL makes conversions explicit. Final Spark frontend
+defaults and nullability remain part of #697's acceptance.
+
+Work counters confirm linear processing for retractable, expanding and unchanged
+peer frames. The 24-case timing run completes all new cases; the 12 previously
+supported cases have median changes from -4% to +7% in this local run. A wide
+non-retracting collection suffix grows from 265 ms at 4,096 rows to 1,038 ms at
+8,192 rows, confirming quadratic recomputation. That cost is explicit rather
+than a performance-equivalence claim. Full Linux checks pass 506 tests with no
+failures and two inherited ignored doctests; root Clippy and formatting pass.
+
 ### S04 sliding extrema prerequisite
 
 #697's independent window FILTER comparison exposed stale native MIN/MAX values
-after retraction. #699 owns this shared accumulator defect and blocks #697.
+after retraction. #699 fixed this shared accumulator defect.
 #700 separately owns bounded frames for aggregate implementations without
 retraction support. Both are assigned native children under the active S04 parent.
-The FILTER candidate is preserved while #699 is reviewed as its own PR.
+The FILTER candidate is preserved for reintegration after #700's separate PR.
 
 The extrema regression has 96 independent Spark observations across four value
 types, both ANSI modes and six frame shapes. It checks native SQL and unfiltered

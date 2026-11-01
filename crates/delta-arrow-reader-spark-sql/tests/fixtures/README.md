@@ -824,3 +824,46 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 python tests/fixtures/capture_window_extrema_spark.py
 cargo test --locked --workspace --test window_extrema
 ```
+
+## Bounded aggregate windows
+
+`bounded-window-spark.jsonl` records 28 Spark 4.2.0 queries, their complete ordered
+rows and schemas, and explicit native SQL equivalents. Inputs include partitions,
+duplicate values, NULLs, true/false/NULL filters and ties with equal values, so
+FIRST/LAST results do not depend on an unspecified order within a peer group.
+Seven frames cover bounded ROWS/RANGE, empty gaps, following rows, prefixes and
+suffixes. Both ANSI modes are captured; these numeric inputs have no mode-specific
+coercion. Rust checks each reference at batch sizes 1, 4 and 64.
+
+For the filtered prefix case in each ANSI mode, Spark's `OptimizeWindowFunctions`
+rule rewrites FIRST_VALUE to NTH_VALUE and drops FILTER. The original rows and
+optimized plan are retained. Those two cases also capture the same Spark query
+with only that rule disabled; DAR must match that complete result and schema,
+preserving FILTER. The other 26 cases use Spark's default result. This explicit
+Spark optimizer difference remains recorded with #697, rather than counting the
+default first-value result as compatible.
+
+This corpus tests the shared executor before the separate Spark window FILTER
+frontend is integrated. A test expression planner selects aggregate FIRST/LAST
+instead of the native WindowUDFs. Native approximate counts are explicitly cast
+to BIGINT and defaulted to zero. The Spark collection query explicitly returns
+a nullable array when no values contribute, matching native ARRAY_AGG's default.
+Both SQL statements remain in each record. These adaptations do not establish
+Spark frontend default or schema parity; that remains part of #697.
+
+Separate checks verify that required argument and FILTER errors survive, empty
+RANGE frames discard prior contributions, and incremental/prefix/peer paths do
+not repeatedly process old rows. A counting accumulator measures work without
+timing thresholds. The benchmark reports planning/execution failures separately
+and measures execution after two warmups, retaining five samples per case:
+
+```sh
+python tests/fixtures/capture_bounded_window_spark.py
+cargo test --locked --workspace --test bounded_windows
+cargo test --locked --workspace --bench bounded_windows
+```
+
+Use the same Python 3.12, PySpark 4.2.0 and Java 21 setup as the other references.
+Compare benchmark runs with the same build profile and idle machine. Newly
+supported non-retracting aggregates can scan every moving frame; timings should
+be interpreted alongside row count and frame width, not as a constant-cost path.

@@ -34,8 +34,7 @@ use arrow::record_batch::RecordBatch;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::{Accumulator, WindowFrame};
 
-/// A window expr that takes the form of an aggregate function that
-/// can be incrementally computed over sliding windows.
+/// An aggregate over sliding windows, using incremental updates when supported.
 ///
 /// See comments on [`WindowExpr`] for more details.
 #[derive(Debug)]
@@ -189,7 +188,7 @@ impl WindowExpr for SlidingAggregateWindowExpr {
 
 impl AggregateWindowExpr for SlidingAggregateWindowExpr {
     fn get_accumulator(&self) -> Result<Box<dyn Accumulator>> {
-        self.aggregate.create_sliding_accumulator()
+        self.aggregate.create_window_accumulator()
     }
 
     fn filter_expr(&self) -> Option<&Arc<dyn PhysicalExpr>> {
@@ -207,17 +206,28 @@ impl AggregateWindowExpr for SlidingAggregateWindowExpr {
         filter_mask: Option<&BooleanArray>,
     ) -> Result<ScalarValue> {
         if cur_range.start == cur_range.end {
+            if !last_range.is_empty() {
+                *accumulator = self.get_accumulator()?;
+            }
             self.aggregate
                 .default_value(self.aggregate.field().data_type())
         } else {
+            let recompute_frame = cur_range.start != last_range.start
+                && !accumulator.supports_retract_batch();
+            let update_start = if recompute_frame {
+                // shortcut: rescan this frame until the UDAF implements retraction.
+                *accumulator = self.get_accumulator()?;
+                cur_range.start
+            } else {
+                last_range.end
+            };
             // Accumulate any new rows that have entered the window:
-            let update_bound = cur_range.end - last_range.end;
+            let update_bound = cur_range.end - update_start;
             if update_bound > 0 {
-                let slice_mask =
-                    filter_mask.map(|m| m.slice(last_range.end, update_bound));
+                let slice_mask = filter_mask.map(|m| m.slice(update_start, update_bound));
                 let update: Vec<ArrayRef> = value_slice
                     .iter()
-                    .map(|v| v.slice(last_range.end, update_bound))
+                    .map(|v| v.slice(update_start, update_bound))
                     .map(|arr| match &slice_mask {
                         Some(m) => filter_array(&arr, m),
                         None => Ok(arr),
@@ -228,7 +238,7 @@ impl AggregateWindowExpr for SlidingAggregateWindowExpr {
 
             // Remove rows that have now left the window:
             let retract_bound = cur_range.start - last_range.start;
-            if retract_bound > 0 {
+            if retract_bound > 0 && !recompute_frame {
                 let slice_mask =
                     filter_mask.map(|m| m.slice(last_range.start, retract_bound));
                 let retract: Vec<ArrayRef> = value_slice
