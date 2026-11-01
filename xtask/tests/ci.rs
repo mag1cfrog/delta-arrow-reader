@@ -669,6 +669,92 @@ fn check_ci_results(values: &[(&str, &str)]) -> Result<Output> {
 }
 
 #[test]
+fn staging_prs_use_local_checks_and_keep_other_base_branches_in_ci() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    assert_eq!(
+        ci["on"]["pull_request"],
+        json!({"branches-ignore": ["feat/spark-sql-staging"]})
+    );
+    assert!(ci["on"]["workflow_dispatch"].is_object());
+    Ok(())
+}
+
+#[test]
+fn manual_spark_checkpoints_validate_the_source_and_run_all_platforms() -> Result<()> {
+    let source = include_str!("../../.github/workflows/ci.yml");
+    let ci: Value = serde_yaml_ng::from_str(source)?;
+    let changes = &ci["jobs"]["changes"];
+    assert_eq!(
+        changes["outputs"]["spark_sql"],
+        "${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.spark_sql == 'true' }}"
+    );
+    for output in [
+        "code",
+        "rust_docs",
+        "tooling",
+        "python",
+        "cli",
+        "selective_read",
+    ] {
+        assert_eq!(
+            changes["outputs"][output],
+            format!("${{{{ steps.filter.outputs.{output} }}}}")
+        );
+    }
+    let steps = changes["steps"].as_array().unwrap();
+    let filter = steps.iter().find(|step| step["id"] == "filter").unwrap();
+    assert_eq!(filter["if"], "github.event_name == 'pull_request'");
+    let validation = steps
+        .iter()
+        .find(|step| step["name"] == "Validate Spark checkpoint source")
+        .unwrap();
+    assert_eq!(validation["if"], "github.event_name == 'workflow_dispatch'");
+
+    let script = workflow_script(source, "Validate Spark checkpoint source");
+    let directory = test_dir("spark-checkpoint-source");
+    let run = || {
+        Command::new("bash")
+            .args(["-e", "-c", &script])
+            .current_dir(&directory)
+            .output()
+    };
+    let missing = run()?;
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stdout)
+            .contains("does not contain the Spark SQL workspace")
+    );
+    let workspace = directory.join("crates/delta-arrow-reader-spark-sql");
+    fs::create_dir_all(&workspace)?;
+    fs::write(workspace.join("Cargo.toml"), "[workspace]\n")?;
+    let present = run()?;
+    assert!(present.status.success(), "{present:?}");
+    fs::remove_dir_all(directory)?;
+
+    let spark = &ci["jobs"]["spark-sql"];
+    assert_eq!(
+        spark["strategy"]["matrix"]["os"],
+        json!(["ubuntu-latest", "macos-latest", "windows-2022"])
+    );
+    let commands: Vec<_> = spark["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|step| step["run"].as_str())
+        .filter(|command| command.starts_with("cargo "))
+        .collect();
+    assert_eq!(
+        commands,
+        [
+            "cargo fmt --all -- --check",
+            "cargo clippy --locked -p delta-arrow-reader-spark-sql --all-targets --no-deps -- -D warnings",
+            "cargo test --locked --workspace",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
 fn spark_sql_sources_require_the_isolated_workspace_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for (path, expected) in [
