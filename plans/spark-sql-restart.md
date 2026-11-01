@@ -7,18 +7,30 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-#682 is in progress on `fix/intersect-all-multiplicity`, based on `e50edfae`.
-INTERSECT ALL now uses the EXCEPT ALL duplicate-row numbering, with a semi join
-for intersection and an anti join for subtraction. A before/after replay catches
-48 original count failures in 12 query shapes, then passes all 366 independent
-Spark references, including three required errors, at batch sizes 1 and 32.
-The 512 existing coercion references also pass, along with metadata and native
-SQL controls extended to INTERSECT ALL. The new second-column case exercises
-numbering by the complete row key. Final full Linux checks pass 476 tests with
+#683 is in progress on `fix/set-operation-floating-keys`, based on `5a1b5ff9`.
+The set resolver reuses `SparkComparisonFloat` for comparison keys after type
+coercion, including DISTINCT grouping and ALL occurrence numbering. Original
+result values and UNION ALL remain unchanged. Independent contract review found
+that Spark's adaptive aggregate removal changes physical zero representatives;
+set equality checks therefore equate zero signs while retaining raw reference
+bits and exact UNION ALL/plain/arithmetic controls. General post-set string
+formatting remains with #687. The focused replay passes 660 floating-key, 512
+coercion and 366 duplicate-count Spark references at batch sizes 1 and 32, plus
+UNION ALL bit-preservation, metadata and native-SQL controls. Final full Linux
+checks pass 480 tests with zero failures and two inherited ignored doctests;
+root Clippy, formatting and diff checks pass. Clean-context Sol/high Bulletproof
+Review reports no actionable findings. Final source receipts precede the
+dedicated staging PR.
+
+#682 merged through PR #686 at `5a1b5ff9`, whose complete tree and seven reviewed
+file hashes match source `c441fd54`. The duplicate-row numbering repair passes
+all 366 independent Spark references at batches 1 and 32, plus 512 coercion
+references and metadata/native controls. Final Linux checks passed 476 tests,
 zero failures and two inherited ignored doctests; root Clippy, formatting and
-diff checks pass. Clean-context Sol/high review reports no remaining source
-finding; final receipt verification precedes the separate PR. #683 owns signed-zero
-and broader floating-key equality and follows this slice.
+diff checks passed. Clean-context Sol/high Bulletproof Review completed without
+unresolved findings. Its issue is closed and owned implementation branches are
+removed. No automatic PR workflow ran; macOS/Windows remain for the integration
+checkpoint.
 
 #684 merged through PR #685 at `e50edfae`, whose complete tree and all ten
 reviewed file hashes match source `ab00eda4`. All 512 independent Spark
@@ -51,11 +63,13 @@ The issue is closed and the temporary branch is removed.
 
 #141's coverage work is retained on `test/relational-query-coverage`, based on
 `06dc3ad4`. Its three new test/reference files have an owned stash and a verified
-external backup while #682 and #683 are repaired. The 128 explicit-input Spark
+external backup while #683 and #687 are repaired. The 128 explicit-input Spark
 references produce 256 native observations with 36 mismatches across nine query
 shapes. The other comparisons meet their respective references, including the
 previously approved three-valued IN policy; raw Spark differences remain visible.
-The two set-operation causes have separate issues. No coverage PR is ready yet.
+The original count/coercion fixes are merged. Floating equality and post-set
+zero rendering have separate issues; the old coverage capture still needs a
+replay after those repairs. No coverage PR is ready yet.
 
 The original 164 historical observations have fresh Spark 4.2 and pre-#678 native
 captures. #678 repairs their two literal-false filter observations, with exact

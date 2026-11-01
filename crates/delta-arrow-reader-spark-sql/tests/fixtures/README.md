@@ -578,8 +578,8 @@ retained resolver's by-name input API is checked separately by an inline unit
 test against the header's independent DataFrame API observations, including
 reordered columns and missing-column NULLs. Integration controls
 check output names, field metadata and unchanged native DataFusion SQL.
-Unbalanced INTERSECT ALL counts and signed-zero set keys remain separate fixes;
-this corpus does not claim those already work. The timestamp parser retains its
+The duplicate-count and floating-key corpora below cover INTERSECT ALL
+multiplicity and signed-zero equality separately. The timestamp parser retains its
 native error text; Spark error classification and error-stage parity remain
 separate schema/error-contract work.
 
@@ -602,6 +602,35 @@ that duplicate groups include every column, rather than only the first key.
 Existing set-operation controls also check metadata and unchanged native SQL
 for INTERSECT ALL.
 
-NaNs here use canonical payloads. Signed-zero and other floating-key equality
-remain the separate #683 work. The replay does not claim exact Spark analyzed
+NaNs here use canonical payloads. The floating-key corpus below covers signed
+zeros and different NaN payloads. The replay does not claim exact Spark analyzed
 nullability, error-stage parity or measured large-input performance.
+
+## Floating set keys
+
+`set-operation-float-keys-spark.jsonl` retains 660 independent Spark 4.2.0
+observations from `capture_set_operation_float_keys_spark.py`, using the same
+PySpark/Java environment. It covers FLOAT and DOUBLE, positive/negative zero,
+different NaN payloads, infinities, finite values, NULLs, multiple columns and
+empty inputs. All six set operations run in both operand orders and ANSI modes;
+additional cases check mixed types, computed inputs and literal results cast to
+STRING after the set operation. The Rust replay uses batch sizes 1 and 32 with
+two input partitions.
+
+The capture retains the finite result bits. For operations that compare rows,
+the replay equates positive and negative zero while still checking exact row
+multiplicity, other finite values, types and names. Spark can change the chosen
+zero representative when adaptive optimization removes an aggregate, so its
+physical zero sign is not the equality oracle. UNION ALL, plain projection and
+unrelated arithmetic retain exact finite-bit assertions. A separate Rust test
+checks UNION ALL against input bits, including quiet/signaling NaN payloads
+that Spark's Python transport may canonicalize.
+
+Floating metadata and native-SQL controls cover all six operations. Returned
+NULLs require nullable fields. The runtime retains original representatives;
+this verifies set equality, not general post-set FLOAT/DOUBLE-to-STRING parity
+(tracked in #687).
+For example, Spark may stringify a deduplicated registered negative zero as
+`0.0` while DAR retains `-0.0`. Literal INTERSECT and identical literal UNION
+controls preserve Spark's `-0.0` result. Nested floating keys, exact analyzed
+nullability and large-input performance are not established by this corpus.

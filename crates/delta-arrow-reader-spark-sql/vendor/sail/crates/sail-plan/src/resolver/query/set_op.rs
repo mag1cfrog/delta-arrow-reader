@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use arrow::datatypes::DataType;
+use datafusion::functions_aggregate::expr_fn::first_value;
 use datafusion::functions_window::row_number::row_number_udwf;
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion_common::{Column, JoinType, NullEquality, ScalarValue};
@@ -8,13 +10,13 @@ use datafusion_expr::expr::WindowFunctionParams;
 use datafusion_expr::type_coercion::binary::type_union_resolution;
 use datafusion_expr::utils::merge_schema;
 use datafusion_expr::{
-    Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, WindowFrame, WindowFunctionDefinition,
-    expr,
+    Expr, ExprSchemable, Join, JoinConstraint, LogicalPlan, LogicalPlanBuilder, ScalarUDF,
+    WindowFrame, WindowFunctionDefinition, expr,
 };
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::FunctionContextInput;
+use crate::function::common::{FunctionContextInput, SparkComparisonFloat};
 use crate::function::result_coercion::coerce_result_values;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
@@ -43,9 +45,6 @@ impl PlanResolver<'_> {
             self.coerce_set_operation_inputs(left, right)?
         };
         match set_op_type {
-            SetOpType::Intersect if !is_all => {
-                Ok(LogicalPlanBuilder::intersect(left, right, false)?)
-            }
             SetOpType::Union => {
                 let (left, right) = if by_name {
                     let left_names = Self::get_field_names(left.schema(), state)?;
@@ -122,9 +121,9 @@ impl PlanResolver<'_> {
                 if is_all {
                     Ok(LogicalPlanBuilder::new(left).union(right)?.build()?)
                 } else {
-                    Ok(LogicalPlanBuilder::new(left)
-                        .union_distinct(right)?
-                        .build()?)
+                    distinct_set_operation_rows(
+                        LogicalPlanBuilder::new(left).union(right)?.build()?,
+                    )
                 }
             }
             SetOpType::Intersect | SetOpType::Except => {
@@ -133,55 +132,37 @@ impl PlanResolver<'_> {
                 } else {
                     JoinType::LeftAnti
                 };
-                let mut join_keys = left
-                    .schema()
-                    .fields()
-                    .iter()
-                    .zip(right.schema().fields().iter())
-                    .map(|(left_field, right_field)| {
-                        (
-                            Column::from_name(left_field.name()),
-                            Column::from_name(right_field.name()),
-                        )
-                    })
+                let output_columns = left.schema().columns();
+                let mut join_keys = set_operation_comparison_keys(&left)
+                    .into_iter()
+                    .zip(set_operation_comparison_keys(&right))
                     .collect::<Vec<_>>();
-
-                let plan = if is_all {
+                let (left, right) = if is_all {
                     let left_row_number_alias = state.register_field_name("row_num");
                     let right_row_number_alias = state.register_field_name("row_num");
                     let left = add_duplicate_row_number(left, &left_row_number_alias)?;
                     let right = add_duplicate_row_number(right, &right_row_number_alias)?;
-                    let left_join_columns = join_keys
-                        .iter()
-                        .map(|(left_col, _)| left_col.clone())
-                        .collect::<Vec<_>>();
                     join_keys.push((
-                        Column::from_name(left_row_number_alias),
-                        Column::from_name(right_row_number_alias),
+                        Expr::Column(Column::from_name(left_row_number_alias)),
+                        Expr::Column(Column::from_name(right_row_number_alias)),
                     ));
-                    LogicalPlanBuilder::from(left)
-                        .join_detailed(
-                            right,
-                            join_type,
-                            join_keys.into_iter().unzip(),
-                            None,
-                            NullEquality::NullEqualsNull,
-                        )?
-                        .project(left_join_columns)?
-                        .build()
+                    (left, right)
                 } else {
-                    LogicalPlanBuilder::from(left)
-                        .distinct()?
-                        .join_detailed(
-                            right,
-                            join_type,
-                            join_keys.into_iter().unzip(),
-                            None,
-                            NullEquality::NullEqualsNull,
-                        )?
-                        .build()
-                }?;
-                Ok(plan)
+                    (distinct_set_operation_rows(left)?, right)
+                };
+                let join = Join::try_new(
+                    Arc::new(left),
+                    Arc::new(right),
+                    join_keys,
+                    None,
+                    join_type,
+                    JoinConstraint::On,
+                    NullEquality::NullEqualsNull,
+                    false,
+                )?;
+                Ok(LogicalPlanBuilder::from(LogicalPlan::Join(join))
+                    .project(output_columns)?
+                    .build()?)
             }
         }
     }
@@ -251,18 +232,61 @@ impl PlanResolver<'_> {
     }
 }
 
+// Normalize comparisons after coercion, without rewriting the returned values.
+fn set_operation_comparison_keys(input: &LogicalPlan) -> Vec<Expr> {
+    input
+        .schema()
+        .iter()
+        .map(|(qualifier, field)| {
+            let column = Expr::from((qualifier, field));
+            if matches!(field.data_type(), DataType::Float32 | DataType::Float64) {
+                ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![column])
+            } else {
+                column
+            }
+        })
+        .collect()
+}
+
+fn distinct_set_operation_rows(input: LogicalPlan) -> PlanResult<LogicalPlan> {
+    let keys = set_operation_comparison_keys(&input);
+    if keys.iter().all(|key| matches!(key, Expr::Column(_))) {
+        return Ok(LogicalPlanBuilder::from(input).distinct()?.build()?);
+    }
+    let fields = input.schema().clone();
+    let representatives = fields
+        .columns()
+        .into_iter()
+        .map(|column| first_value(Expr::Column(column), vec![]));
+    // Keep original representatives; building the aggregate also preserves its nullable result schema.
+    let aggregate = LogicalPlanBuilder::from(input)
+        .aggregate(keys, representatives)?
+        .build()?;
+    let output = aggregate
+        .schema()
+        .iter()
+        .skip(fields.fields().len())
+        .zip(fields.iter())
+        .map(|((qualifier, field), (output_qualifier, output_field))| {
+            Expr::from((qualifier, field)).alias_qualified_with_metadata(
+                output_qualifier.cloned(),
+                output_field.name(),
+                Some(output_field.metadata().clone().into()),
+            )
+        })
+        .collect::<Vec<_>>();
+    Ok(LogicalPlanBuilder::from(aggregate)
+        .project(output)?
+        .build()?)
+}
+
 // Pair equal rows by occurrence so each right row matches at most one left row.
 fn add_duplicate_row_number(input: LogicalPlan, column_name: &str) -> PlanResult<LogicalPlan> {
     let row_number = Expr::WindowFunction(Box::new(expr::WindowFunction {
         fun: WindowFunctionDefinition::WindowUDF(row_number_udwf()),
         params: WindowFunctionParams {
             args: vec![],
-            partition_by: input
-                .schema()
-                .fields()
-                .iter()
-                .map(|field| Expr::Column(Column::from_name(field.name())))
-                .collect(),
+            partition_by: set_operation_comparison_keys(&input),
             order_by: vec![],
             window_frame: WindowFrame::new(None),
             filter: None,
