@@ -769,6 +769,22 @@ pub fn cast_with_options(
     if from_type == to_type {
         return Ok(make_array(array.to_data()));
     }
+    // Trim list slices before child conversion; complex gapped views retain their existing path.
+    let visible_list = if matches!(
+        to_type,
+        List(_) | LargeList(_) | ListView(_) | LargeListView(_) | FixedSizeList(..)
+    ) {
+        match from_type {
+            List(_) => trim_list_for_cast(array.as_list::<i32>())?,
+            LargeList(_) => trim_list_for_cast(array.as_list::<i64>())?,
+            ListView(_) => compact_list_view_for_cast(array.as_list_view::<i32>())?,
+            LargeListView(_) => compact_list_view_for_cast(array.as_list_view::<i64>())?,
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let array = visible_list.as_deref().unwrap_or(array);
     match (from_type, to_type) {
         (Null, _) => Ok(new_null_array(to_type, array.len())),
         (RunEndEncoded(index_type, _), _) => match index_type.data_type() {
@@ -847,11 +863,12 @@ pub fn cast_with_options(
             }
             let array = array.as_fixed_size_list();
             let values = cast_with_options(array.values(), list_to.data_type(), cast_options)?;
-            Ok(Arc::new(FixedSizeListArray::try_new(
+            Ok(Arc::new(FixedSizeListArray::try_new_with_length(
                 list_to.clone(),
                 *size_from,
                 values,
                 array.nulls().cloned(),
+                array.len(),
             )?))
         }
         (ListView(_), ListView(to)) => cast_list_view_values::<i32>(array, to, cast_options),
