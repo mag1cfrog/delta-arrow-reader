@@ -73,19 +73,24 @@ Spark error-stage/nullability parity have separate review scopes.
 `capture_array_contains_spark.py` in a Python 3.12 environment containing
 `pyspark==4.2.0`, with Java 21 available. Rust tests use the committed captures.
 
-The tests compare values, output names and types for 348 supported-input cases in
+The tests compare values, output names and types for 356 supported-input cases in
 both one-row and larger batches. Returned NULLs must be representable in both
 output schemas. Logical nullability can remain conservative, and constant folding
 can narrow physical nullability; exact Spark nullability parity is separate S07
 work. The volatile-lookup and direct-function tests check evaluation count and
 all-NULL batch cardinality separately.
 
-Twelve observations have explicit `retained_difference` labels. Their assertions
-preserve the relevant boundary without counting them as Spark-compatible:
+Four observations have the `null_type_admission` retained-difference label.
+Untyped NULL columns remain admitted, unlike Spark. Their membership results
+follow the NULL rule across the complete batch; the admission gap remains with
+#156 and is not counted as Spark-compatible.
 
-- Mixed Decimal precisions still fail coercion. Equal Decimal types are covered.
-- Untyped NULL columns remain admitted, unlike Spark. Their membership results
-  now follow the NULL rule across the complete batch; the admission gap remains.
+Mixed Decimal precisions now have strict expectations. The separate
+`array-decimal-spark.jsonl` adds 324 observations, including six required errors,
+for Decimal, integer and floating inputs. Regenerate it with
+`capture_array_decimal_spark.py` using the same Spark/Java environment. These
+checks cover precision limits, argument order, NULLs, empty and sliced inputs,
+and floating NaN/zero comparisons in both ANSI modes.
 
 The projection cases distinguish a known NULL from a merely nullable input.
 They cover aliases, CTEs, filters, grouping keys/sets, windows, empty input and
@@ -421,6 +426,31 @@ Their exact replay IDs now require planning errors in `reviewed-corrections.json
 the original compressed captures remain unchanged. A live invalid INT cast
 still fails with the existing Arrow cast message instead of Spark's error code.
 The test requires that specific cast cause; diagnostic-code parity remains S07.
+
+## NULL comparisons and schema stages
+
+`null-logic-spark.jsonl` adds 70 Spark observations for NOT, NULL-safe equality,
+IN/NOT IN and three conditional schema controls. Regenerate it with
+`capture_null_logic_spark.py` using PySpark 4.2.0 and Java 21. Its header records
+the registered integer input schema and rows. Rust replays both ANSI modes in
+batches of 1 and 32, comparing exact values, names, types and the six required
+ANSI cast failures. A list match must beat a NULL entry; a miss with a NULL
+entry remains NULL. Skipped and required dynamic casts test list evaluation.
+
+The schema controls record each stage separately. Native `logical_plan` fields
+are resolved before session analysis and optimization; they are not Spark's
+analyzed schema. The values below are the output field's `nullable` flag:
+
+| Control | Spark analyzed | Spark optimized | Native resolved | Native physical |
+| --- | --- | --- | --- | --- |
+| Constant true CASE with a NULL else branch | false | false | true | false |
+| Constant true IF with a NULL else branch | true | false | true | false |
+| IF with a nullable column condition | true | true | true | true |
+
+All three controls return the captured values and INT type. The tests preserve
+the conservative native resolved field while checking optimizer narrowing and
+live NULL output. Exact schema-nullability parity remains #149/S07 work; these
+stage observations do not claim that parity.
 
 ## Boolean operand evaluation
 
