@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -152,7 +153,7 @@ impl CrossJoinExec {
         let eq_properties = join_equivalence_properties(
             left.equivalence_properties().clone(),
             right.equivalence_properties().clone(),
-            &JoinType::Full,
+            &JoinType::Inner,
             schema,
             &[false, false],
             None,

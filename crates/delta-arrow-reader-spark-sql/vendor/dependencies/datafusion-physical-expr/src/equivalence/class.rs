@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -22,7 +23,7 @@ use std::sync::Arc;
 use std::vec::IntoIter;
 
 use super::ProjectionMapping;
-use crate::expressions::Literal;
+use crate::expressions::{Column, Literal};
 use crate::physical_expr::add_offset_to_expr;
 use crate::projection::ProjectionTargets;
 use crate::{PhysicalExpr, PhysicalExprRef, PhysicalSortExpr, PhysicalSortRequirement};
@@ -244,6 +245,26 @@ impl EquivalenceClass {
         self.exprs.is_empty() || (self.exprs.len() == 1 && self.constant.is_none())
     }
 
+    // Missing join rows null all columns together; other expressions need not become null.
+    fn with_null_extension(&self) -> Self {
+        let mut result = Self::new(
+            self.exprs
+                .iter()
+                .filter(|expr| {
+                    expr.downcast_ref::<Column>().is_some()
+                        || expr
+                            .downcast_ref::<Literal>()
+                            .is_some_and(|lit| lit.value().is_null())
+                })
+                .cloned(),
+        );
+        if matches!(&self.constant, Some(AcrossPartitions::Uniform(Some(value))) if value.is_null())
+        {
+            result.constant = self.constant.clone();
+        }
+        result
+    }
+
     /// Adds the given offset to all columns in the expressions inside this
     /// class. This is used when schemas are appended, e.g. in joins.
     pub fn try_with_offset(&self, offset: isize) -> Result<Self> {
@@ -256,6 +277,7 @@ impl EquivalenceClass {
         {
             cls.push(expr_result?);
         }
+        cls.constant = self.constant.clone();
         Ok(cls)
     }
 }
@@ -776,12 +798,30 @@ impl EquivalenceGroup {
         let group = match join_type {
             JoinType::Inner | JoinType::Left | JoinType::Full | JoinType::Right => {
                 let mut result = Self::new(
-                    self.iter().cloned().chain(
-                        right_equivalences
-                            .iter()
-                            .map(|cls| cls.try_with_offset(left_size as _))
-                            .collect::<Result<Vec<_>>>()?,
-                    ),
+                    self.iter()
+                        .map(|cls| {
+                            if matches!(join_type, JoinType::Right | JoinType::Full) {
+                                cls.with_null_extension()
+                            } else {
+                                cls.clone()
+                            }
+                        })
+                        .chain(
+                            right_equivalences
+                                .iter()
+                                .map(|cls| {
+                                    let cls = if matches!(
+                                        join_type,
+                                        JoinType::Left | JoinType::Full
+                                    ) {
+                                        cls.with_null_extension()
+                                    } else {
+                                        cls.clone()
+                                    };
+                                    cls.try_with_offset(left_size as _)
+                                })
+                                .collect::<Result<Vec<_>>>()?,
+                        ),
                 );
                 // In we have an inner join, expressions in the "on" condition
                 // are equal in the resulting table.
