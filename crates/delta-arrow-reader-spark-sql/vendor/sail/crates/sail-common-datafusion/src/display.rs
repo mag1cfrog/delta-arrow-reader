@@ -26,7 +26,7 @@ use crate::formatter::{
     IntervalDayTimeFormatter, IntervalMonthDayNanoFormatter, IntervalYearMonthFormatter,
     Time32MillisecondFormatter, Time32SecondFormatter, Time64MicrosecondFormatter,
     Time64NanosecondFormatter, TimestampMicrosecondFormatter, TimestampMillisecondFormatter,
-    TimestampNanosecondFormatter, TimestampSecondFormatter,
+    TimestampNanosecondFormatter, TimestampSecondFormatter, format_float32, format_float64,
 };
 use crate::variant::is_marked_variant_storage_type;
 
@@ -273,20 +273,11 @@ macro_rules! primitive_display {
 }
 
 macro_rules! primitive_display_float {
-    ($($t:ty),+) => {
+    ($($t:ty => $format:ident),+) => {
         $(impl<'a> DisplayIndex for &'a PrimitiveArray<$t>
         {
             fn write(&self, idx: usize, f: &mut dyn Write) -> FormatResult {
-                let value = self.value(idx);
-                let mut buffer = ryu::Buffer::new();
-                if value.is_infinite() {
-                    if !value.is_sign_positive() {
-                        f.write_str("-")?;
-                    }
-                    f.write_str("Infinity")?;
-                } else {
-                    f.write_str(buffer.format(value))?;
-                }
+                f.write_str(&$format(self.value(idx)))?;
                 Ok(())
             }
         })+
@@ -295,7 +286,7 @@ macro_rules! primitive_display_float {
 
 primitive_display!(Int8Type, Int16Type, Int32Type, Int64Type);
 primitive_display!(UInt8Type, UInt16Type, UInt32Type, UInt64Type);
-primitive_display_float!(Float32Type, Float64Type);
+primitive_display_float!(Float32Type => format_float32, Float64Type => format_float64);
 
 impl DisplayIndex for &PrimitiveArray<Float16Type> {
     fn write(&self, idx: usize, f: &mut dyn Write) -> FormatResult {

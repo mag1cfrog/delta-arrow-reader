@@ -9,6 +9,9 @@ use datafusion::arrow::temporal_conversions::{
 };
 use datafusion_common::arrow::temporal_conversions::{date32_to_datetime, date64_to_datetime};
 
+mod float;
+pub use float::{format_float32, format_float64};
+
 pub struct BinaryFormatter<'a>(pub &'a [u8]);
 
 impl Display for BinaryFormatter<'_> {

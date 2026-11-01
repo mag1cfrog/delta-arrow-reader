@@ -196,6 +196,13 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
             ));
         }
         if matches!(frontend, SqlFrontend::Spark { .. }) {
+            for floating_type in ["FLOAT", "DOUBLE"] {
+                cases.push((
+                    format!("CAST(CAST(CAST(CAST(count_first(a) AS {floating_type}) AS STRING) AS {floating_type}) AS INT)"),
+                    [4, 0, 0],
+                    vec![Some(1), None, Some(3), None],
+                ));
+            }
             cases.extend([
                 (
                     "CAST(TRY_CAST(CAST(count_first(a) AS STRING) AS BOOLEAN) AS INT)".to_string(),
