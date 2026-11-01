@@ -29,8 +29,8 @@ use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::cast_local_timestamp_to_ltz;
 use crate::function::is_spark_compatible_arrow_fixed_offset;
+use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -125,7 +125,7 @@ impl PlanResolver<'_> {
                         cast(expr, cast_to_type)
                     }
                 } else {
-                    cast_local_timestamp_to_ltz(expr, &timezone)
+                    cast_local_timestamp_expr_to_ltz(expr, &timezone)
                 }
             }
             (_, DataType::Utf8, _) if expr_is_variant => cast(

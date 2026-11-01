@@ -48,6 +48,7 @@ async fn execute_query(
                 sql,
                 &SparkSqlOptions {
                     ansi_mode,
+                    session_timezone: "America/Phoenix".into(),
                     ..SparkSqlOptions::default()
                 },
             )
@@ -229,6 +230,22 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                 ),
                 (
                     "CAST(CAST(count_first(a) AS STRING)=count_second(b) AS INT)".to_string(),
+                    [4, 4, 0],
+                    vec![Some(0), None, Some(0), None],
+                ),
+                // DATEDIFF's result-width gap is separate (#152); counters use bounded INT days.
+                (
+                    "CAST(DATEDIFF(NULLIF(date_add(DATE '2026-01-01',count_first(a)),CAST(date_add(DATE '2026-01-01',count_second(b)) AS TIMESTAMP)),DATE '2026-01-01') AS INT)".to_string(),
+                    [4, 2, 0],
+                    vec![Some(1), None, Some(3), None],
+                ),
+                (
+                    "CAST(DATEDIFF(CAST(NULLIF(CAST(date_add(DATE '2026-01-01',count_first(a)) AS TIMESTAMP_NTZ),CAST(date_add(DATE '2026-01-01',count_second(b)) AS TIMESTAMP)) AS DATE),DATE '2026-01-01') AS INT)".to_string(),
+                    [4, 2, 0],
+                    vec![Some(1), None, Some(3), None],
+                ),
+                (
+                    "CAST(date_add(DATE '2026-01-01',count_first(a))=CAST(date_add(DATE '2026-01-01',count_second(b)) AS TIMESTAMP) AS INT)".to_string(),
                     [4, 4, 0],
                     vec![Some(0), None, Some(0), None],
                 ),

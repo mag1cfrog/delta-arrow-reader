@@ -1,7 +1,10 @@
 //! Spark comparisons choose a common type without changing NULLIF's result type.
 //! In ANSI mode, STRING/INT compares as BIGINT; legacy mode keeps INT.
 
-use arrow::datatypes::DataType;
+use std::sync::Arc;
+
+use crate::function::temporal_coercion::common_temporal_type;
+use arrow::datatypes::{DataType, TimeUnit};
 use datafusion_common::{Result, plan_err};
 use datafusion_expr::ScalarUDF;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
@@ -61,4 +64,28 @@ pub(crate) fn string_comparison_cast(target: &DataType, ansi_mode: bool) -> Resu
         )),
         _ => return plan_err!("unsupported STRING comparison type {target}"),
     })
+}
+
+pub(crate) fn temporal_comparison_type(
+    left: &DataType,
+    right: &DataType,
+    session_timezone: &Arc<str>,
+) -> Option<DataType> {
+    // shortcut: keep existing nanosecond comparisons until precision-preserving
+    // session-zone conversion is implemented in #627.
+    if [left, right]
+        .iter()
+        .any(|data_type| matches!(data_type, DataType::Timestamp(TimeUnit::Nanosecond, _)))
+    {
+        return None;
+    }
+    if ![left, right].iter().all(|data_type| {
+        matches!(
+            data_type,
+            DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _) | DataType::Null
+        )
+    }) {
+        return None;
+    }
+    common_temporal_type(&[left.clone(), right.clone()], session_timezone)
 }

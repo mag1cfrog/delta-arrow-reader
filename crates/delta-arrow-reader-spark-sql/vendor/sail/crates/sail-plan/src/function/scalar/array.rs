@@ -28,7 +28,8 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput, cast_local_timestamp_to_ltz};
+use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
@@ -355,7 +356,7 @@ fn sequence_cast(
         (
             DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, None),
             DataType::Timestamp(TimeUnit::Microsecond, Some(timezone)),
-        ) => cast_local_timestamp_to_ltz(argument, timezone),
+        ) => cast_local_timestamp_expr_to_ltz(argument, timezone),
         _ => cast(argument, target_type.clone()),
     })
 }

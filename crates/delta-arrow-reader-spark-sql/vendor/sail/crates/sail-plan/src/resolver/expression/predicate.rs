@@ -146,14 +146,9 @@ impl PlanResolver<'_> {
         let high = self.resolve_expression(high, schema, state).await?;
 
         // DataFusion's BETWEEN operator has a bug, so we construct the expression manually.
-        let greater_eq = spark_binary_expr(
-            expr.clone(),
-            Operator::GtEq,
-            low,
-            schema,
-            self.config.ansi_mode,
-        )?;
-        let less_eq = spark_binary_expr(expr, Operator::LtEq, high, schema, self.config.ansi_mode)?;
+        let greater_eq =
+            spark_binary_expr(expr.clone(), Operator::GtEq, low, schema, &self.config)?;
+        let less_eq = spark_binary_expr(expr, Operator::LtEq, high, schema, &self.config)?;
         let between_expr = expr::Expr::BinaryExpr(BinaryExpr::new(
             Box::new(greater_eq),
             Operator::And,
@@ -178,13 +173,7 @@ impl PlanResolver<'_> {
         let right = self.resolve_expression(right, schema, state).await?;
         Ok(NamedExpr::new(
             vec!["is_distinct_from".to_string()],
-            spark_binary_expr(
-                left,
-                Operator::IsDistinctFrom,
-                right,
-                schema,
-                self.config.ansi_mode,
-            )?,
+            spark_binary_expr(left, Operator::IsDistinctFrom, right, schema, &self.config)?,
         ))
     }
 
@@ -204,7 +193,7 @@ impl PlanResolver<'_> {
                 Operator::IsNotDistinctFrom,
                 right,
                 schema,
-                self.config.ansi_mode,
+                &self.config,
             )?,
         ))
     }
