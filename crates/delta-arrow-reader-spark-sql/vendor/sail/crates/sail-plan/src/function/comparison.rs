@@ -14,6 +14,45 @@ use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
 
+mod timestamp;
+
+pub(crate) fn nanosecond_comparison_cast(
+    left: &DataType,
+    right: &DataType,
+    session_timezone: &Arc<str>,
+) -> Option<ScalarUDF> {
+    if left == right
+        || ![left, right]
+            .iter()
+            .any(|data_type| matches!(data_type, DataType::Timestamp(TimeUnit::Nanosecond, _)))
+        || ![left, right].iter().all(|data_type| {
+            matches!(
+                data_type,
+                DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _)
+            )
+        })
+    {
+        return None;
+    }
+    if matches!(
+        (left, right),
+        (
+            DataType::Timestamp(TimeUnit::Nanosecond, Some(_)),
+            DataType::Timestamp(TimeUnit::Nanosecond, Some(_))
+        )
+    ) {
+        // Tagged timestamps already contain instants in the same unit.
+        return None;
+    }
+    let local_timezone = [left, right]
+        .iter()
+        .any(|data_type| matches!(data_type, DataType::Timestamp(_, Some(_))))
+        .then(|| session_timezone.clone());
+    Some(ScalarUDF::from(
+        timestamp::SparkTimestampComparisonValue::new(local_timezone),
+    ))
+}
+
 pub(crate) fn string_comparison_type(
     left: &DataType,
     right: &DataType,
@@ -71,8 +110,7 @@ pub(crate) fn temporal_comparison_type(
     right: &DataType,
     session_timezone: &Arc<str>,
 ) -> Option<DataType> {
-    // shortcut: keep existing nanosecond comparisons until precision-preserving
-    // session-zone conversion is implemented in #627.
+    // Nanosecond pairs use exact comparison values or retain their identical unit.
     if [left, right]
         .iter()
         .any(|data_type| matches!(data_type, DataType::Timestamp(TimeUnit::Nanosecond, _)))
