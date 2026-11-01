@@ -240,3 +240,15 @@ collection becomes empty. The comparison and moving-window algorithms remain
 upstream implementations. The [window extrema references](tests/fixtures/README.md#sliding-window-extrema)
 check values leaving and reentering frames through native DataFusion SQL and
 the Spark frontend. Aggregate window FILTER admission remains separate work.
+
+The sliding window executor can also use aggregates without retraction. When
+the frame start advances, it rebuilds that accumulator from the already evaluated
+argument arrays and FILTER mask. Retractable aggregates keep incremental updates;
+expanding and unchanged frames reuse their accumulated state. Physically empty
+frames clear the previous state before later rows can reuse it. The public
+`create_sliding_accumulator` method still requires retraction support.
+
+Rebuilding costs work proportional to the selected frames' total size, which can
+be quadratic for wide moving frames. Native retraction remains the optimization
+path for those aggregates. The [bounded window checks](tests/fixtures/README.md#bounded-aggregate-windows)
+cover results, errors, incremental work bounds and repeatable timing cases.
