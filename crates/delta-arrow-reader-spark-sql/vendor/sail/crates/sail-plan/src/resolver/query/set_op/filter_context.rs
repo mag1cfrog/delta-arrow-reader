@@ -306,8 +306,8 @@ impl NullSideLineage<'_> {
                         .as_any()
                         .downcast_ref::<PendingSetOperation>()
                     {
-                        !set.is_all
-                            && input == 0
+                        (set.set_op_type == sail_common::spec::SetOpType::Union
+                            || (!set.is_all && input == 0))
                             && self.column_rejects_null(depth + 1, index, context)?
                     } else if let Some(sort) = extension
                         .node
