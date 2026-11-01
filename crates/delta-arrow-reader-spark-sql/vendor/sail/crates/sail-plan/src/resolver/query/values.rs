@@ -23,6 +23,7 @@ impl PlanResolver<'_> {
                 let value = self.resolve_expressions(value, &schema, state).await?;
                 results.push(value);
             }
+            Self::coerce_values_decimal_columns(&mut results, &schema)?;
             let _nan_column_indices = Self::resolve_values_nan_types(&mut results, &schema)?;
             let _map_column_indices = Self::resolve_values_map_types(&mut results, &schema)?;
             Ok::<_, PlanError>(results)
@@ -42,6 +43,65 @@ impl PlanResolver<'_> {
             expr,
             Arc::new(plan),
         )?))
+    }
+
+    fn coerce_values_decimal_columns(
+        values: &mut [Vec<Expr>],
+        schema: &DFSchemaRef,
+    ) -> PlanResult<()> {
+        let columns = values.first().map_or(0, Vec::len);
+        if values.iter().any(|row| row.len() != columns) {
+            // The native VALUES builder reports malformed row dimensions.
+            return Ok(());
+        }
+        for column in 0..columns {
+            let types = values
+                .iter()
+                .map(|row| row[column].get_type(schema))
+                .collect::<Result<Vec<_>, _>>()?;
+            if !types.iter().any(|t| matches!(t, DataType::Decimal128(..))) {
+                continue;
+            }
+            let mut integral_digits = 0;
+            let mut fractional_digits = 0;
+            let mut has_float = false;
+            for data_type in &types {
+                let (precision, scale) = match data_type {
+                    DataType::Decimal128(precision, scale) => {
+                        (i16::from(*precision), i16::from(*scale))
+                    }
+                    DataType::Int8 => (3, 0),
+                    DataType::Int16 => (5, 0),
+                    DataType::Int32 => (10, 0),
+                    DataType::Int64 => (20, 0),
+                    DataType::Null => continue,
+                    DataType::Float32 | DataType::Float64 => {
+                        has_float = true;
+                        continue;
+                    }
+                    other => {
+                        return Err(PlanError::invalid(format!(
+                            "Incompatible VALUES Decimal input type: {other}"
+                        )));
+                    }
+                };
+                integral_digits = integral_digits.max(precision - scale);
+                fractional_digits = fractional_digits.max(scale);
+            }
+            let target = if has_float {
+                DataType::Float64
+            } else {
+                // Spark preserves integral digits when the common precision exceeds 38.
+                let scale = fractional_digits.min(38 - integral_digits);
+                DataType::Decimal128((integral_digits + scale) as u8, scale as i8)
+            };
+            for (row, source) in values.iter_mut().zip(types) {
+                if source != target {
+                    row[column] = cast(row[column].clone(), target.clone());
+                }
+            }
+        }
+        Ok(())
     }
 
     fn resolve_values_nan_types(

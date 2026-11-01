@@ -23,8 +23,10 @@ Mixed-temporal promotion has a separate implementation issue, #605, in S03.
 Shared COALESCE/IFNULL/NVL evaluation, #608, is reviewed and pushed as `0425d50b`
 in PR #614, with CI running. NULLIF evaluation, #610, is reviewed
 and pushed as `f43bcf5b`; its PR follows #608. Known NULL array projections,
-#612, are reviewed and pushed as `80d79acf`; their PR follows #610. The current
-slice is #613, array predicates at join boundaries.
+#612, are reviewed and pushed as `80d79acf`; their PR follows #610. Array
+predicates at join boundaries, #613, are reviewed and pushed as `7dcfda7a`.
+The current slice is S03's #615, scalar VALUES Decimal common types. The
+relational coverage tracker #170 and reference review #141 have resumed.
 
 The active Spark frontend is developed and integrated on
 `feat/spark-sql-staging`. Each implementation PR targets it and contains one
@@ -77,7 +79,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | --- | --- | --- | --- |
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
-| S03 | Decimal and conditional input coercion | #141, #150, #605 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
+| S03 | Decimal and conditional input coercion | #141, #150, #605, #615 | VALUES Decimal/integer values and types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion |
 | S04 | Conditional aggregation and window contracts | #142 | A separate COUNT_IF FILTER fix, then aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
@@ -407,6 +409,24 @@ because the old issue exists.
 - #611 passed all three platform jobs and merged into staging as `929810ff`.
   Issue #606 is closed. The separate conditional-evaluation PR #614 now targets
   staging with one implementation commit; its detailed validation is a comment.
+- #613 is committed and pushed as `7dcfda7a`. S03 starts with #615, the bounded
+  scalar VALUES Decimal repair under the resumed #170 relational tracker. The
+  #141 coverage review keeps its wider relational scope; its historical body
+  remains in a comment. Fresh Spark 4.2.0 captures confirm the Decimal(38,38)/INT
+  result must be Decimal(38,28), including fractional rounding. BIGINT and
+  floating inputs expose related type differences. The first 130-observation
+  reference corpus catches 164 value/type/admission differences across two batch
+  sizes after excluding error-wording and test-decoder discrepancies. The final
+  142-observation corpus also covers exact historical SQL and MAP rejection in
+  both operand orders. Decimal typing now precedes MAP normalization so invalid
+  original types remain visible. Five historical expectations have independent
+  Spark replacements; the frozen corpus and prior corrections remain unchanged.
+  The sole unordered historical query compares duplicate-preserving multisets.
+  Final workspace validation passes 422 tests, zero failures and the same two
+  inherited ignored doctests, including the complete historical replay.
+  Formatting and Clippy pass. The clean-context Sol/high reviewer audited the
+  final eight files, connected paths and validation with no remaining actionable
+  finding. Remote platform CI and staging integration remain pending.
 
 ### Retained gaps found during S01 review
 

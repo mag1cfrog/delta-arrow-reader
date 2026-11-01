@@ -105,6 +105,11 @@ exposes eligible one-sided filters before that simplification; outer/anti
 preservation rules remain with DataFusion. Its references and remaining
 differences are described in the [fixture notes](tests/fixtures/README.md#array-membership).
 
+Scalar VALUES columns containing Decimal inputs use Spark common numeric types
+before native VALUES construction. Precision reduction preserves integral digits,
+and Decimal/floating mixtures become DOUBLE. Existing casts perform the value
+conversion; native arithmetic and non-Decimal VALUES typing are unchanged.
+
 NULLIF floating comparisons reuse the existing Spark float normalization and
 native comparison/validity kernels. Unmatched values retain their original bits.
 The [NULLIF references](tests/fixtures/README.md#floating-nullif) separate this
