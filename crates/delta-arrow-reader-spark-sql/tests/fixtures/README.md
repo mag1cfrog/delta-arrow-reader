@@ -986,6 +986,45 @@ UNION/LIMIT early-error differences remain owned by #149 for S07; their complete
 accepted-runtime alternatives remain explicit. Exact Spark error-stage and
 analyzed-nullability parity are not established by the row/schema checks here.
 
+## Guaranteed single-row correlated scalars
+
+`single-row-correlated-spark.jsonl` records 202 independent Spark 4.2.0
+observations in UTC and both ANSI modes. Populated, empty and NULL-valued outer
+providers cover scalar projections and alias chains over a one-row relation,
+with and without an unrelated CAST. Live, dead and conditional DIV/CAST cases
+keep their required errors. The Rust replay compares complete rows, names,
+types, nullability and metadata for 152 references at batch sizes 1 and 32.
+This includes zero/one/multiple-row uncorrelated inner controls and projected
+EXISTS. Required cardinality errors must report the cardinality failure.
+
+The other references record explicit boundaries. Eighteen correlated queries
+over real inner relations and 24 queries with a volatile scalar result retain
+their scalar plans during preparation; this checks that the one-row rewrite
+does not consume them. Their Spark execution results are preserved as evidence
+for #140, and are not claimed as passing runtime comparisons. Spark evaluates a
+volatile alias reused as `x+x` once per outer row, so substituting that alias
+twice would be incorrect. The replay does check unused volatile outputs, and a
+separate counting UDF test checks zero evaluations during planning and one per
+executed outer row for a volatile sibling. Empty outer input evaluates no rows.
+
+Six raw projected IN records retain Spark's NULL behavior; separate tests keep
+the approved SQL three-valued policy and native DataFusion behavior. Two raw
+RAND observations keep their original values and schemas as observations only;
+random values from independent executions are not treated as equal. The
+double-nested scalar references require Spark's unresolved-column error. This
+bounded repair does not complete correlated cardinality or volatile scalar
+execution under #140. The original PIVOT/control references remain unchanged
+in the PIVOT fixture and require their separate integration replay.
+
+From the Spark crate directory, use the pinned Python/Java setup above and a
+fresh output path to preserve the committed evidence:
+
+```sh
+single_row_capture=$(mktemp -d)
+python tests/fixtures/capture_single_row_correlated_spark.py "$single_row_capture/single-row-correlated-spark.jsonl"
+cargo test --workspace --test single_row_correlated
+```
+
 ## COUNT_IF aggregate filters
 
 `count-if-spark.jsonl` contains 164 independent Spark 4.2.0 observations from

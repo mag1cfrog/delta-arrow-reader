@@ -232,9 +232,11 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
         // Borrow first: ordinary queries require no rewritten plan or batch allocation.
+        let is_spark_query = options.extensions.get::<SparkSqlErrorSemantics>().is_some();
         let mut found = false;
         let mut check_arithmetic = false;
         let mut check_cast = false;
+        let mut has_correlated_scalar = false;
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
@@ -253,6 +255,9 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
                 check_cast |= has_cast(expr)?;
+                has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
+                })?;
                 check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
                 has_null_sensitive_comparison |= expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<ArrayContains>() || f.func.inner().is::<SparkNullIf>()))
@@ -268,6 +273,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         if !found
             && !check_arithmetic
             && !check_cast
+            && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
         {
@@ -286,7 +292,6 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         } else {
             plan
         };
-        let is_spark_query = options.extensions.get::<SparkSqlErrorSemantics>().is_some();
         let plan = if check_cast || check_arithmetic {
             plan.transform_down_up_with_subqueries(|node| {
                 // Correlated EXISTS drops unused filter subqueries before their preparation.
@@ -454,6 +459,32 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                 })
             })?
             .data
+        } else {
+            plan
+        };
+        // The same OneRowRelation rewrite must work without an incidental CAST.
+        let plan = if has_correlated_scalar && !check_cast {
+            plan.transform_up_with_subqueries(|node| {
+                let schema = datafusion_expr::utils::merge_schema(&node.inputs());
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                node.map_expressions(|expr| {
+                    let name = names.save(&expr);
+                    Ok(expr.transform_up(|expr| {
+                        if let Expr::ScalarSubquery(subquery) = &expr
+                            && !subquery.outer_ref_columns.is_empty()
+                            && subquery.outer_ref_columns.iter().all(|outer| {
+                                matches!(outer, Expr::OuterReferenceColumn(_, column) if schema.has_column(column))
+                            })
+                            && let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
+                            && expressions.len() == 1
+                            && row_expression(&expressions[0], true)?
+                        {
+                            return Ok(Transformed::yes(expressions.remove(0)));
+                        }
+                        Ok(Transformed::no(expr))
+                    })?.update_data(|expr| name.restore(expr)))
+                })
+            })?.data
         } else {
             plan
         };

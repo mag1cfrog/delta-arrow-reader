@@ -1,0 +1,367 @@
+//! Single-row correlated projections use their outer row without a scalar executor.
+
+use std::error::Error;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+
+use arrow::datatypes::DataType;
+use datafusion::common::tree_node::TreeNodeRecursion;
+use datafusion::execution::SessionStateBuilder;
+use datafusion::logical_expr::{ColumnarValue, LogicalPlan, Volatility, create_udf};
+use datafusion::optimizer::AnalyzerRule;
+use datafusion::physical_plan::collect;
+use datafusion::prelude::{SessionConfig, SessionContext};
+use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use sail_plan::expression_errors::{PreserveSparkExpressionErrors, SparkSqlErrorSemantics};
+use serde_json::Value;
+
+#[path = "support/spark_inputs.rs"]
+mod spark_inputs;
+#[path = "support/spark_results.rs"]
+mod spark_results;
+
+type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
+
+fn references() -> TestResult<Vec<Value>> {
+    let records = include_str!("fixtures/single-row-correlated-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len(), 203);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    Ok(records)
+}
+
+fn session(batch_size: usize) -> SessionContext {
+    SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(batch_size)
+                        .with_target_partitions(2),
+                ),
+        )
+        .build(),
+    )
+}
+
+fn register_counter(session: &SessionContext) -> Arc<AtomicUsize> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    session.register_udf(create_udf(
+        "count_row",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Volatile,
+        Arc::new(move |arguments| {
+            let arrays = ColumnarValue::values_to_arrays(arguments)?;
+            assert!(!arrays[0].is_empty(), "evaluated an empty batch");
+            counter.fetch_add(arrays[0].len(), Ordering::SeqCst);
+            Ok(ColumnarValue::Array(arrays[0].clone()))
+        }),
+    ));
+    calls
+}
+
+fn contains_scalar(plan: &LogicalPlan) -> TestResult<bool> {
+    let mut found = false;
+    plan.apply_with_subqueries(|node| {
+        node.apply_expressions(|expr| {
+            found |= expr.contains_scalar_subquery();
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    Ok(found)
+}
+
+#[tokio::test]
+async fn single_row_projections_match_spark() -> TestResult {
+    let records = references()?;
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        let calls = register_counter(&session);
+        let mut checked = 0;
+        for case in &records[1..] {
+            let id = case["id"].as_str().ok_or("missing ID")?;
+            // Correlated inner relations, projected IN and volatile results
+            // retain separate execution contracts; their raw references stay intact.
+            if id.contains("_correlated_")
+                || id.contains("_projected_in")
+                || id.contains("_volatile_direct_")
+                || id.contains("_volatile_nested_")
+                || id == "volatile_rand_raw"
+            {
+                continue;
+            }
+            calls.store(0, Ordering::SeqCst);
+            let actual = spark_results::capture_spark_query_result(&session, case).await;
+            let expected = &case["expected"];
+            let matches = match &actual {
+                Ok(actual) if expected["status"] == "ok" => {
+                    actual["rows"] == expected["rows"] && actual["schema"] == expected["schema"]
+                }
+                Err(error) if expected["status"] == "error" => {
+                    let error = error.to_string();
+                    match expected["condition"].as_str() {
+                        Some("DIVIDE_BY_ZERO") => error.contains("Divide by zero error"),
+                        Some("CAST_INVALID_INPUT") => {
+                            error.contains("Cannot cast string 'bad' to value of Int32 type")
+                        }
+                        Some("UNRESOLVED_COLUMN.WITHOUT_SUGGESTION") => {
+                            error.contains("cannot resolve attribute")
+                                && error.contains("p")
+                                && error.contains("id")
+                        }
+                        Some("SCALAR_SUBQUERY_TOO_MANY_ROWS") => {
+                            error.contains("Scalar subquery returned more than one row")
+                        }
+                        _ => false,
+                    }
+                }
+                _ => false,
+            };
+            assert_eq!(
+                calls.load(Ordering::SeqCst),
+                0,
+                "{id}: unused volatile projection executed"
+            );
+            if !matches {
+                differences.push(format!(
+                    "{id} ANSI={} batch={batch_size}: expected {expected}, got {actual:?}",
+                    case["ansi"]
+                ));
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, 152);
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_sql_and_projected_predicates_keep_their_contracts() -> TestResult {
+    let records = references()?;
+    let configured = session(32);
+    let native = SessionContext::new();
+    for context in [&configured, &native] {
+        spark_inputs::register_recorded_inputs(context, &records[0], 32)?;
+    }
+    let spark = plan_query(
+        &configured,
+        "SELECT p.id,(SELECT p.id) AS r FROM inputs p",
+        &SparkSqlOptions::default(),
+    )
+    .await?;
+    collect(
+        spark.create_physical_plan(&configured).await?,
+        configured.task_ctx(),
+    )
+    .await?;
+    for sql in [
+        "SELECT p.id,(SELECT MAX(i.id) FROM inputs i) AS r FROM inputs p ORDER BY p.id NULLS FIRST",
+        "SELECT p.id,p.id IN (SELECT i.id FROM inputs i) AS included,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS present FROM inputs p ORDER BY p.id NULLS FIRST",
+        "SELECT p.id,p.id IN (SELECT i.id FROM empty_inputs i) AS included,EXISTS(SELECT i.id FROM empty_inputs i WHERE i.id=p.id) AS present FROM inputs p ORDER BY p.id NULLS FIRST",
+    ] {
+        let expected = native.sql(sql).await?.collect().await?;
+        let actual = configured.sql(sql).await?.collect().await?;
+        assert_eq!(actual, expected, "{sql}");
+    }
+    for ansi_mode in [true, false] {
+        for sql in [
+            "SELECT p.id,p.id IN (SELECT i.id FROM inputs i) AS included,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS present FROM inputs p ORDER BY p.id NULLS FIRST",
+            "SELECT p.id,p.id IN (SELECT i.id FROM empty_inputs i) AS included,EXISTS(SELECT i.id FROM empty_inputs i WHERE i.id=p.id) AS present FROM inputs p ORDER BY p.id NULLS FIRST",
+        ] {
+            let query = plan_query(
+                &configured,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let batches = collect(
+                query.create_physical_plan(&configured).await?,
+                configured.task_ctx(),
+            )
+            .await?;
+            let mut rows = Vec::new();
+            for batch in &batches {
+                for row in 0..batch.num_rows() {
+                    use arrow::array::Array;
+                    rows.push(
+                        (0..batch.num_columns())
+                            .map(|column| {
+                                let array = batch.column(column);
+                                if array.is_null(row) {
+                                    Ok(None)
+                                } else {
+                                    arrow::util::display::array_value_to_string(array.as_ref(), row)
+                                        .map(Some)
+                                }
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+            }
+            let empty = sql.contains("FROM empty_inputs");
+            assert_eq!(
+                rows[0],
+                vec![
+                    None,
+                    if empty { Some("false".into()) } else { None },
+                    Some("false".into())
+                ]
+            );
+            assert_eq!(rows.len(), 4);
+            for (index, row) in rows[1..].iter().enumerate() {
+                let truth = (!empty).to_string();
+                assert_eq!(
+                    row,
+                    &vec![Some(index.to_string()), Some(truth.clone()), Some(truth)]
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn lowering_does_not_evaluate_volatile_siblings() -> TestResult {
+    let records = references()?;
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        let calls = register_counter(&session);
+        for ansi_mode in [true, false] {
+            for (table, expected_rows) in [("inputs", 4), ("empty_inputs", 0)] {
+                for suffix in ["", ",CAST(7 AS INT) AS incidental"] {
+                    calls.store(0, Ordering::SeqCst);
+                    let sql = format!(
+                        "SELECT (SELECT p.id) AS r,count_row(p.id) AS observed{suffix} FROM {table} p"
+                    );
+                    let query = plan_query(
+                        &session,
+                        &sql,
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    assert_eq!(
+                        calls.load(Ordering::SeqCst),
+                        0,
+                        "{sql}: planning executed rows"
+                    );
+                    let batches = collect(physical, session.task_ctx()).await?;
+                    assert_eq!(calls.load(Ordering::SeqCst), expected_rows, "{sql}");
+                    assert_eq!(
+                        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                        expected_rows
+                    );
+                    for batch in batches {
+                        assert_eq!(batch.column(0), batch.column(1), "{sql}");
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn real_relations_and_volatile_aliases_are_not_inlined() -> TestResult {
+    let records = references()?;
+    let session = session(1);
+    spark_inputs::register_recorded_inputs(&session, &records[0], 1)?;
+    let calls = register_counter(&session);
+    let mut options = session.state().config_options().as_ref().clone();
+    options.extensions.insert(SparkSqlErrorSemantics::default());
+    let mut checked = 0;
+    for case in &records[1..] {
+        let id = case["id"].as_str().ok_or("missing ID")?;
+        if !id.contains("_correlated_")
+            && !id.contains("_volatile_direct_")
+            && !id.contains("_volatile_nested_")
+        {
+            continue;
+        }
+        let query = plan_query(
+            &session,
+            case["sql"].as_str().ok_or("missing SQL")?,
+            &SparkSqlOptions {
+                ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                ..SparkSqlOptions::default()
+            },
+        )
+        .await?;
+        let prepared = PreserveSparkExpressionErrors.analyze(query.logical_plan, &options)?;
+        assert!(
+            contains_scalar(&prepared)?,
+            "{id}: lost the retained scalar execution boundary"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "{id}: planning executed a volatile producer"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 42);
+    Ok(())
+}
+
+#[tokio::test]
+async fn single_row_scalar_plan_route() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    session.register_batch(
+        "inputs",
+        arrow::record_batch::RecordBatch::try_from_iter([(
+            "id",
+            std::sync::Arc::new(arrow::array::Int32Array::from(vec![Some(1), None]))
+                as arrow::array::ArrayRef,
+        )])?,
+    )?;
+    for suffix in ["", ",CAST(7 AS INT) AS incidental"] {
+        let sql = format!(
+            "SELECT p.id AS id,(SELECT p.id) AS correlated_id{suffix} \
+             FROM (SELECT id FROM inputs) p"
+        );
+        let query = plan_query(&session, &sql, &SparkSqlOptions::default()).await?;
+        let mut state = session.state();
+        state
+            .config_mut()
+            .options_mut()
+            .extensions
+            .insert(SparkSqlErrorSemantics::default());
+        eprintln!(
+            "SQL: {sql}\nRESOLVED:\n{}",
+            query.logical_plan.display_indent_schema()
+        );
+        let analyzed = state.analyzer().execute_and_check(
+            query.logical_plan.clone(),
+            state.config_options(),
+            |_, _| {},
+        )?;
+        eprintln!("ANALYZED:\n{}", analyzed.display_indent_schema());
+        let optimized = state.optimize(&query.logical_plan)?;
+        eprintln!("OPTIMIZED:\n{}", optimized.display_indent_schema());
+        assert!(!contains_scalar(&analyzed)?, "{sql}");
+        assert!(!contains_scalar(&optimized)?, "{sql}");
+        query.create_physical_plan(&session).await?;
+    }
+    Ok(())
+}
