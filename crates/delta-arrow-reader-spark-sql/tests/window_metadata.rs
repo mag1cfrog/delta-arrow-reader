@@ -109,7 +109,7 @@ async fn window_metadata_keeps_native_sql_unchanged() -> TestResult {
             let logical = frame.schema().clone();
             let physical = frame.create_physical_plan().await?;
             for (index, field) in physical.schema().fields().iter().enumerate() {
-                assert_eq!(logical.field(index), field.as_ref());
+                assert_eq!(logical.field(index).as_ref(), field.as_ref());
                 if index > 0 {
                     assert_eq!(field.metadata().get("purpose"), Some(&"window-key".into()));
                 }
