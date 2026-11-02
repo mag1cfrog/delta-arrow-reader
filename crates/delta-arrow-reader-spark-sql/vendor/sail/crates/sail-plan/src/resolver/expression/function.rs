@@ -1,5 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use datafusion_common::DFSchemaRef;
+use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
 use datafusion_expr::{EmptyRelation, Expr, LogicalPlan, expr};
@@ -10,6 +11,7 @@ use sail_function::scalar::multi_expr::MultiExpr;
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
+use crate::function::float_keys::normalize_spark_float_key;
 use crate::function::{
     get_built_in_aggregate_function, get_built_in_function, is_higher_order_function,
 };
@@ -147,7 +149,22 @@ impl PlanResolver<'_> {
                     schema,
                 },
             };
+            // Normalize only the DISTINCT operations retained by the function builder.
             func(input)?
+                .transform_up(|mut expression| {
+                    if let Expr::AggregateFunction(function) = &mut expression
+                        && function.params.distinct
+                    {
+                        function.params.args = std::mem::take(&mut function.params.args)
+                            .into_iter()
+                            .map(|arg| normalize_spark_float_key(arg, schema))
+                            .collect::<datafusion_common::Result<_>>()?;
+                        Ok(Transformed::yes(expression))
+                    } else {
+                        Ok(Transformed::no(expression))
+                    }
+                })
+                .data()?
         } else if let Ok(udf) = self.ctx.udf(&canonical_function_name) {
             if is_distinct || ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
                 return Err(PlanError::invalid("invalid scalar function clause"));

@@ -18,6 +18,7 @@ use super::constant_columns::{
 use super::filter_context::EnclosingQueryContext;
 use super::lower_set_operation;
 use crate::function::common::SparkComparisonFloat;
+use crate::function::float_keys::NormalizeNestedFloatKeys;
 use crate::resolver::state::PlanResolverState;
 
 pub(super) fn lower_query_sets(
@@ -185,7 +186,8 @@ fn retain_constant_group_value(expr: Expr) -> Expr {
             Expr::Alias(alias)
         }
         Expr::ScalarFunction(mut function)
-            if function.func.inner().is::<SparkComparisonFloat>() =>
+            if function.func.inner().is::<SparkComparisonFloat>()
+                || function.func.inner().is::<NormalizeNestedFloatKeys>() =>
         {
             function.args.remove(0)
         }

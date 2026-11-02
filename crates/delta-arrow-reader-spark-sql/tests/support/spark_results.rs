@@ -2,7 +2,7 @@
 
 use std::error::Error;
 
-use arrow::array::{Array, AsArray, ListArray};
+use arrow::array::{Array, AsArray, ListArray, StructArray};
 use arrow::datatypes::{DataType, Float32Type, Float64Type};
 use arrow::util::display::array_value_to_string;
 use datafusion::physical_plan::collect;
@@ -35,9 +35,15 @@ pub(crate) async fn capture_spark_query_result(
         .map(|(index, field)| {
             assert_eq!(field.name(), &query.column_names[index]);
             let logical = query.logical_plan.schema().field(index);
-            assert_eq!(logical.data_type(), field.data_type());
-            assert_eq!(logical.is_nullable(), field.is_nullable());
-            assert_eq!(logical.metadata(), field.metadata());
+            if logical.data_type() != field.data_type()
+                || logical.is_nullable() != field.is_nullable()
+                || logical.metadata() != field.metadata()
+            {
+                return Err(format!(
+                    "logical field {logical:?} differs from physical field {field:?}"
+                )
+                .into());
+            }
             Ok(
                 json!({"name":field.name(), "type":spark_schema_type(field.data_type())?,
                   "nullable":field.is_nullable(), "metadata":field.metadata()}),
@@ -62,13 +68,19 @@ pub(crate) async fn capture_spark_query_result(
 
 fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
     Ok(match data_type {
+        DataType::Int8 => json!("byte"),
         DataType::Int32 => json!("integer"),
         DataType::Int64 => json!("long"),
+        DataType::Boolean => json!("boolean"),
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
             "elementType":spark_schema_type(field.data_type())?,"containsNull":field.is_nullable()}),
+        DataType::Struct(fields) => json!({"type":"struct", "fields":fields.iter()
+            .map(|field| Ok(json!({"name":field.name(), "type":spark_schema_type(field.data_type())?,
+                "nullable":field.is_nullable(), "metadata":field.metadata()})))
+            .collect::<TestResult<Vec<_>>>()?}),
         other => return Err(format!("unexpected Spark output type: {other}").into()),
     })
 }
@@ -87,6 +99,19 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
             json!(
                 (0..values.len())
                     .map(|index| encode_value(values.as_ref(), index))
+                    .collect::<TestResult<Vec<_>>>()?
+            )
+        }
+        DataType::Struct(_) => {
+            let values = column
+                .as_any()
+                .downcast_ref::<StructArray>()
+                .ok_or("expected struct")?;
+            json!(
+                values
+                    .columns()
+                    .iter()
+                    .map(|field| encode_value(field.as_ref(), row))
                     .collect::<TestResult<Vec<_>>>()?
             )
         }

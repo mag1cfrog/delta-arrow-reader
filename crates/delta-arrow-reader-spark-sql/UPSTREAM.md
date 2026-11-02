@@ -304,6 +304,18 @@ without ordering lowers to its equivalent ROWS frame. The
 [window admission references](tests/fixtures/README.md#window-admission)
 preserve Spark's expression-sensitive offset-frame rules and valid controls.
 
+Spark grouping and DISTINCT normalize floating zeros and NaNs inside array and
+struct keys. The same scalar comparison rule handles each floating leaf;
+container validity, field metadata and nonfloating values are preserved.
+Only DISTINCT operations retained after function resolution receive normalized
+arguments. Ordinary aggregate inputs and native SQL keep their original values.
+The [floating-key references](tests/fixtures/README.md#floating-grouping-and-distinct)
+cover equality and payload preservation, including COLLECT_SET windows.
+Set lowering recognizes the nested normalizer when restoring constant grouping
+values and tracing NULL rejection. List-view packing grows its temporary index
+buffer with selected elements, avoiding a reserve based on unrelated backing
+storage.
+
 Empty windows retain explicit aggregate defaults. A non-null aggregate with a
 generic NULL default instead evaluates its initialized empty accumulator, so
 query arguments such as HLL sketch precision survive. Both cumulative and sliding

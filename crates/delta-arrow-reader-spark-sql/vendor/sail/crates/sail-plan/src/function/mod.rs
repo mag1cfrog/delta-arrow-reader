@@ -15,6 +15,7 @@ use crate::function::common::ScalarFunction;
 mod aggregate;
 pub(crate) mod common;
 mod comparison;
+pub(crate) mod float_keys;
 mod generator;
 pub(crate) mod numeric_coercion;
 pub(crate) mod result_coercion;

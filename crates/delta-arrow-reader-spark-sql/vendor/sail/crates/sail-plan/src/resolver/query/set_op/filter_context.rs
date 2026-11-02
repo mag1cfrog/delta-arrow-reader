@@ -15,6 +15,7 @@ use sail_logical_plan::sort::SortWithinPartitionsNode;
 use super::constant_columns::fold_immutable_expression;
 use super::pending::PendingSetOperation;
 use crate::function::common::SparkComparisonFloat;
+use crate::function::float_keys::NormalizeNestedFloatKeys;
 
 #[derive(Default)]
 pub(super) struct EnclosingQueryContext<'a> {
@@ -190,7 +191,8 @@ impl NullSideLineage<'_> {
                 Ok(match expr {
                     Expr::Alias(alias) => Transformed::yes(*alias.expr),
                     Expr::ScalarFunction(mut function)
-                        if function.func.inner().is::<SparkComparisonFloat>() =>
+                        if function.func.inner().is::<SparkComparisonFloat>()
+                            || function.func.inner().is::<NormalizeNestedFloatKeys>() =>
                     {
                         Transformed::yes(function.args.remove(0))
                     }
