@@ -151,6 +151,7 @@ fn register_inputs(session: &SessionContext, metadata: &Value) -> TestResult {
 
 fn output_field(field: &Field, visible_name: &str) -> TestResult<Value> {
     let kind = match field.data_type() {
+        DataType::Int32 => "integer",
         DataType::Interval(IntervalUnit::YearMonth) => "interval year to month",
         DataType::Duration(TimeUnit::Microsecond) => "interval day to second",
         DataType::Timestamp(TimeUnit::Microsecond, timezone)
@@ -172,13 +173,15 @@ async fn observe(session: &SessionContext, case: &Value) -> TestResult<Value> {
             ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
             session_timezone: "UTC".into(), ..Default::default()
         }).await?;
-        assert_eq!(query.column_names, ["r"]);
-        observed["schema"] = json!({"type":"struct","fields":[output_field(query.logical_plan.schema().field(0), "r")?]});
+        assert_eq!(query.column_names.len(), 1);
+        let visible_name = &query.column_names[0];
+        observed["column_names"] = json!(query.column_names);
+        observed["schema"] = json!({"type":"struct","fields":[output_field(query.logical_plan.schema().field(0), visible_name)?]});
         let physical = query.create_physical_plan(session).await?;
         let schema = physical.schema();
         assert_eq!(schema.fields().len(), 1);
-        assert_eq!(schema.field(0).name(), "r");
-        observed["physical_schema"] = json!({"type":"struct","fields":[output_field(schema.field(0), "r")?]});
+        assert_eq!(schema.field(0).name(), visible_name);
+        observed["physical_schema"] = json!({"type":"struct","fields":[output_field(schema.field(0), visible_name)?]});
         let mut rows = Vec::new();
         for batch in collect(physical, session.task_ctx()).await? {
             assert_eq!(batch.schema(), schema);
@@ -240,6 +243,69 @@ fn matches_error(observed: &Value, expected: &Value) -> TestResult<bool> {
     Ok(error.contains(phrase))
 }
 
+fn compare_observation(
+    case: &Value,
+    observed: &Value,
+    differences: &mut Vec<String>,
+) -> TestResult {
+    let expected = &case["expected"];
+    let label = format!("{} ANSI={}", case["id"], case["ansi"]);
+    if expected.get("schema").is_some() && observed["schema"] != expected["schema"] {
+        differences.push(format!(
+            "{label}: public schema: expected {}, got {}",
+            expected["schema"], observed["schema"]
+        ));
+    }
+    if expected["error_phase"] == "public_schema" && observed.get("schema").is_some() {
+        differences.push(format!(
+            "{label}: exposed a public schema before a required analysis error"
+        ));
+    }
+    if let Some(fields) = expected["schema"]["fields"].as_array() {
+        let names = fields
+            .iter()
+            .map(|field| field["name"].clone())
+            .collect::<Vec<_>>();
+        if observed["column_names"] != json!(names) {
+            differences.push(format!("{label}: public output names differ: {observed}"));
+        }
+    }
+    let mut later = observed["physical_schema"].clone();
+    if later.is_object() && expected.get("schema").is_some() {
+        let public_nullable = expected["schema"]["fields"][0]["nullable"]
+            .as_bool()
+            .ok_or("missing nullability")?;
+        let later_nullable = later["fields"][0]["nullable"]
+            .as_bool()
+            .ok_or("missing later nullability")?;
+        if later_nullable && !public_nullable {
+            differences.push(format!("{label}: physical schema widened requiredness"));
+        }
+        later["fields"][0]["nullable"] = json!(public_nullable);
+        if later != expected["schema"] {
+            differences.push(format!(
+                "{label}: physical schema: expected {}, got {}",
+                expected["schema"], observed["physical_schema"]
+            ));
+        }
+    } else if expected.get("optimized_schema").is_some() {
+        differences.push(format!("{label}: missing physical schema"));
+    }
+    if expected.get("error_phase").is_some() {
+        if !matches_error(observed, expected)? {
+            differences.push(format!(
+                "{label}: expected error {}, got {observed}",
+                expected["error_message"]
+            ));
+        }
+        return Ok(());
+    }
+    if observed["rows"] != expected_rows(expected)? || observed.get("error").is_some() {
+        differences.push(format!("{label}: expected {expected}, got {observed}"));
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn year_month_scaling_matches_independent_spark_references() -> TestResult {
     let records = references()?;
@@ -266,7 +332,7 @@ async fn year_month_scaling_matches_independent_spark_references() -> TestResult
     let mut compared = 0;
     for case in &records[1..] {
         assert!(identities.insert((case["id"].to_string(), case["ansi"].to_string())));
-        // #749 and #710 replay these retained unaliased consumers in the combined gate.
+        // The strict original-consumer test replays these unaliased records.
         if case["context"] == "original_unaliased" {
             original_consumers += 1;
             continue;
@@ -286,46 +352,7 @@ async fn year_month_scaling_matches_independent_spark_references() -> TestResult
             "year-month observation: {}",
             json!({"id":case["id"],"ansi":case["ansi"],"observed":observed})
         );
-        let label = format!("{} ANSI={}", case["id"], case["ansi"]);
-        if observed["schema"] != expected["schema"] {
-            differences.push(format!(
-                "{label}: public schema: expected {}, got {}",
-                expected["schema"], observed["schema"]
-            ));
-        }
-        let mut later = observed["physical_schema"].clone();
-        if later.is_object() {
-            let public_nullable = expected["schema"]["fields"][0]["nullable"]
-                .as_bool()
-                .ok_or("missing nullability")?;
-            let later_nullable = later["fields"][0]["nullable"]
-                .as_bool()
-                .ok_or("missing later nullability")?;
-            if later_nullable && !public_nullable {
-                differences.push(format!("{label}: physical schema widened requiredness"));
-            }
-            later["fields"][0]["nullable"] = json!(public_nullable);
-            if later != expected["schema"] {
-                differences.push(format!(
-                    "{label}: physical schema: expected {}, got {}",
-                    expected["schema"], observed["physical_schema"]
-                ));
-            }
-        } else if expected.get("optimized_schema").is_some() {
-            differences.push(format!("{label}: missing physical schema"));
-        }
-        if expected.get("error_phase").is_some() {
-            if !matches_error(&observed, expected)? {
-                differences.push(format!(
-                    "{label}: expected error {}, got {observed}",
-                    expected["error_message"]
-                ));
-            }
-            continue;
-        }
-        if observed["rows"] != expected_rows(expected)? || observed.get("error").is_some() {
-            differences.push(format!("{label}: expected {expected}, got {observed}"));
-        }
+        compare_observation(case, &observed, &mut differences)?;
     }
     assert_eq!(
         (identities.len(), original_consumers, controls, compared),
@@ -386,5 +413,78 @@ async fn native_interval_arithmetic_keeps_its_existing_results_and_errors() -> T
             }
         }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn original_year_month_consumers_match_spark() -> TestResult {
+    let records = references()?;
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(SessionConfig::new().with_batch_size(2)),
+        )
+        .build(),
+    );
+    register_inputs(&session, &records[0])?;
+    let mut differences = Vec::new();
+    let mut count = 0;
+    for case in &records[1..] {
+        if case["context"] != "original_unaliased" {
+            continue;
+        }
+        count += 1;
+        let observed = observe(&session, case).await?;
+        eprintln!(
+            "year-month original observation: {}",
+            json!({"id":case["id"],"ansi":case["ansi"],"observed":observed})
+        );
+        compare_observation(case, &observed, &mut differences)?;
+    }
+    assert_eq!(count, 24);
+    assert!(
+        differences.is_empty(),
+        "#749/#710 original consumer contract remains required:\n{}",
+        differences.join("\n")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn connected_year_month_contract_matches_spark() -> TestResult {
+    let records = include_str!("fixtures/year-month-connected-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 91);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(SessionConfig::new().with_batch_size(2)),
+        )
+        .build(),
+    );
+    register_inputs(&session, &records[0])?;
+    let mut identities = BTreeSet::new();
+    let mut differences = Vec::new();
+    for case in &records[1..] {
+        assert!(identities.insert((case["id"].to_string(), case["ansi"].to_string())));
+        assert_eq!(
+            case["expected"]["schema"],
+            case["expected"]["analyzed_schema"]
+        );
+        let observed = observe(&session, case).await?;
+        eprintln!(
+            "year-month connected observation: {}",
+            json!({"id":case["id"],"ansi":case["ansi"],"observed":observed})
+        );
+        compare_observation(case, &observed, &mut differences)?;
+    }
+    assert_eq!(identities.len(), 90);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

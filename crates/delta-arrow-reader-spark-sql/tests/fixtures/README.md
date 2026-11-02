@@ -5,6 +5,40 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Year-month interval scaling
+
+`year-month-scaling-spark.jsonl` contains 266 independent Spark 4.2.0
+observations in UTC and both ANSI modes. It includes all 24 original unaliased
+consumers, literal and typed column operands, exact fractional rounding, NULLs,
+zero divisors, overflow and timestamp microseconds. The capture script reads
+the original SQL and ANSI settings from this committed fixture and recomputes
+every expected result. Its source hash protects the retained input queries.
+
+`year-month-connected-spark.jsonl` adds 90 independent observations covering
+false filters, unused projections, LIMIT 0, inline VALUES, CASE and NULL parents.
+Both fixtures retain public, analyzed and available optimized schemas, exact
+rows, and the captured error conditions, classes and messages.
+
+From this crate, use Python 3.12 with PySpark 4.2.0 and Java 21 and pass fresh
+output paths. The scripts refuse to overwrite existing captures:
+
+```sh
+year_month_capture_dir="$(mktemp -d)"
+python tests/fixtures/capture_year_month_scaling_spark.py "$year_month_capture_dir/year-month-scaling-spark.jsonl"
+python tests/fixtures/capture_year_month_connected_spark.py "$year_month_capture_dir/year-month-connected-spark.jsonl"
+cargo test --locked --workspace --test year_month_scaling -- --nocapture
+```
+
+The active `original_year_month_consumers_match_spark` test compares all 24
+unmodified consumers, including generated names and metadata. It requires the
+qualifier-name and generated-alias repairs in #749 and #710. The active
+`connected_year_month_contract_matches_spark` test compares all 90 complete
+outcomes and retains the CASE declaration and inline VALUES requirements owned
+by #721 and #722. Failures on these prerequisites remain acceptance failures;
+the focused arithmetic test does not replace either complete replay. The
+separate day-time control records the existing public division requiredness
+gap owned by #782 while checking its physical fields and exact values.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
