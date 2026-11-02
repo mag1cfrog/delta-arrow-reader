@@ -425,11 +425,13 @@ generated labels; their executable expressions retain declared parameter names.
 The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
 record remaining STRUCT schema, alias display and metadata differences separately.
 
-Qualified column references bind before unqualified struct-field access. With a
-relation alias `p`, a scalar `id` and a struct column `p`, `p.id` selects the scalar
-column and `p.p.id` selects the struct field. Duplicate columns at the selected
-priority remain ambiguous. Nested extraction uses that binding, so an invalid
-qualified path cannot fall back to a different struct column. This shared rule
+Column resolution checks catalog/schema/table, schema/table, table, then
+unqualified columns. All matching base columns in the first matching tier
+participate in ambiguity checking before nested extraction. With a relation
+alias `p`, a scalar `id` and a struct column `p`, `p.id` selects the scalar column
+and `p.p.id` selects the struct field. For a table `p.p` with scalar columns `p`
+and `id`, `p.p.id` selects the schema-qualified `id`. An invalid nested path at
+the selected tier cannot fall back to a different column. This shared rule
 also applies to `IDENTIFIER`, grouping, ordering and window expressions; wildcard
 qualifier matching keeps its existing rules. The
 [precedence references](tests/fixtures/README.md#qualified-column-precedence)

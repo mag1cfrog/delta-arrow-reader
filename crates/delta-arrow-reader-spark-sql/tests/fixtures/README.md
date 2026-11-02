@@ -1723,17 +1723,33 @@ struct path could succeed. USING joins exercise hidden qualified keys and both
 qualified and unqualified stars. The existing PIVOT records remain unchanged;
 their replay requires the separate source-alias implementation in #744.
 
+`qualified-overlap-review-spark.jsonl` adds 18 independent references for a real
+`spark_catalog / p / p` relation with nullable scalar `p` and `id` columns.
+Catalog/schema/table qualification takes priority over schema/table, then table,
+then unqualified lookup. The records cover overlapping names, case variants,
+qualified suffixes, aliases and invalid extraction from an aliased scalar.
+
 `qualified_column_precedence.rs` compares full rows and schemas at batch sizes
 1 and 32 with two provider partitions. Required resolution failures must occur
 during planning, including on empty input. Native SQL compares complete schemas
-and batches before and after Spark planning. The shared resolver's unit test
-also checks field-order independence, multipart relation suffixes, nested display
-names, fallback and qualified ambiguity.
+and batches before and after Spark planning. The overlap test explicitly
+registers the catalog, schema and provider, then compares all 36 runtime
+observations. Shared resolver unit tests also check field-order independence,
+overlapping qualifier tiers with viable nested alternatives, duplicate ambiguity
+within the selected tier, invalid scalar extraction, nested display names and
+struct-only fallback.
+
+The strict result comparisons retain the separately observed constructed-struct
+schema and hidden-USING metadata failures. Resolving column names alone does not
+complete this corpus's result-schema acceptance.
 
 Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 
 ```sh
 python tests/fixtures/capture_qualified_column_precedence_spark.py
+python tests/fixtures/capture_qualified_overlap_review_spark.py /tmp/qualified-overlap-review-spark.jsonl
+cp /tmp/qualified-overlap-review-spark.jsonl tests/fixtures/qualified-overlap-review-spark.jsonl
 cargo test --locked --workspace --test qualified_column_precedence
 cargo test --locked --workspace -p sail-plan qualified_columns_win_without_hiding_ambiguity
+cargo test --locked --workspace -p sail-plan namespace_tiers_bind_before_nested_access_and_duplicate_checks
 ```

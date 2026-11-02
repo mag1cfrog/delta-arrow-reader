@@ -112,38 +112,32 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<Option<NamedExpr>> {
-        let candidates = Self::generate_qualified_nested_field_candidates(name.parts());
-        let mut candidates = schema
-            .iter()
-            .flat_map(|(qualifier, field)| {
+        let mut candidates = vec![];
+        // Spark tries catalog/schema/table, schema/table, table, then unqualified columns.
+        for (q, column_name, inner) in
+            Self::generate_qualified_nested_field_candidates(name.parts())
+        {
+            for (qualifier, field) in schema.iter() {
                 let Ok(info) = state.get_field_info(field.name()) else {
-                    return vec![];
+                    continue;
                 };
-                candidates
-                    .iter()
-                    .filter_map(|(q, name, inner)| {
-                        if (!info.is_hidden() || q.is_some())
-                            && qualifier_matches(q.as_ref(), qualifier)
-                            && info.name().eq_ignore_ascii_case(name.as_ref())
-                        {
-                            Some((q.is_some(), qualifier, field, *name, *inner))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-            .collect::<Vec<_>>();
-        // A qualified column binds before unqualified struct-field fallback.
-        if candidates.iter().any(|(qualified, ..)| *qualified) {
-            candidates.retain(|(qualified, ..)| *qualified);
+                if (!info.is_hidden() || q.is_some())
+                    && qualifier_matches(q.as_ref(), qualifier)
+                    && info.name().eq_ignore_ascii_case(column_name.as_ref())
+                {
+                    candidates.push((qualifier, field, column_name, inner));
+                }
+            }
+            if !candidates.is_empty() {
+                break;
+            }
         }
         if candidates.len() > 1 {
             return Err(PlanError::AnalysisError(format!(
                 "ambiguous attribute: {name:?}"
             )));
         }
-        let Some((_, qualifier, field, name, inner)) = candidates.pop() else {
+        let Some((qualifier, field, name, inner)) = candidates.pop() else {
             return Ok(None);
         };
         let Some(expr) = Self::resolve_potentially_nested_field(
@@ -345,11 +339,12 @@ impl PlanResolver<'_> {
         name: &[T],
     ) -> Vec<(Option<TableReference>, &T, &[T])> {
         let mut out = vec![];
-        if let [n1, x @ ..] = name {
-            out.push((None, n1, x));
-        }
-        if let [n1, n2, x @ ..] = name {
-            out.push((Some(TableReference::bare(n1.as_ref())), n2, x));
+        if let [n1, n2, n3, n4, x @ ..] = name {
+            out.push((
+                Some(TableReference::full(n1.as_ref(), n2.as_ref(), n3.as_ref())),
+                n4,
+                x,
+            ));
         }
         if let [n1, n2, n3, x @ ..] = name {
             out.push((
@@ -358,12 +353,11 @@ impl PlanResolver<'_> {
                 x,
             ));
         }
-        if let [n1, n2, n3, n4, x @ ..] = name {
-            out.push((
-                Some(TableReference::full(n1.as_ref(), n2.as_ref(), n3.as_ref())),
-                n4,
-                x,
-            ));
+        if let [n1, n2, x @ ..] = name {
+            out.push((Some(TableReference::bare(n1.as_ref())), n2, x));
+        }
+        if let [n1, x @ ..] = name {
+            out.push((None, n1, x));
         }
         out
     }
@@ -505,6 +499,90 @@ mod tests {
                 Err(PlanError::AnalysisError(message)) if message.starts_with("ambiguous attribute")
             ));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn namespace_tiers_bind_before_nested_access_and_duplicate_checks() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        for qualifier in [
+            TableReference::partial("p", "p"),
+            TableReference::full("spark_catalog", "p", "p"),
+            TableReference::full("p", "p", "p"),
+        ] {
+            for reversed in [false, true] {
+                let mut state = PlanResolverState::new();
+                let id = Arc::new(Field::new(
+                    state.register_field_name("id"),
+                    DataType::Int32,
+                    true,
+                ));
+                let nested = Arc::new(Field::new(
+                    state.register_field_name("p"),
+                    DataType::Struct(
+                        vec![Arc::new(Field::new("id", DataType::Int32, true))].into(),
+                    ),
+                    true,
+                ));
+                let mut fields = vec![
+                    (Some(qualifier.clone()), id.clone()),
+                    (Some(qualifier.clone()), nested),
+                ];
+                if reversed {
+                    fields.reverse();
+                }
+                let schema = Arc::new(DFSchema::new_with_metadata(
+                    fields.clone(),
+                    Default::default(),
+                )?);
+                let mut names = vec![spec::ObjectName::from(["p", "p", "id"])];
+                if let Some(catalog) = qualifier.catalog() {
+                    names.push([catalog, "p", "p", "id"].into());
+                }
+                for name in &names {
+                    assert_eq!(
+                        resolver.resolve_field_or_nested_field(name, &schema, &mut state)?,
+                        Some(NamedExpr::new(
+                            vec!["id".into()],
+                            col((Some(&qualifier), &id)),
+                        )),
+                    );
+                }
+                fields.push((
+                    Some(qualifier.clone()),
+                    Arc::new(Field::new(
+                        state.register_field_name("id"),
+                        DataType::Int32,
+                        true,
+                    )),
+                ));
+                let duplicates = Arc::new(DFSchema::new_with_metadata(fields, Default::default())?);
+                for name in &names {
+                    assert!(matches!(
+                        resolver.resolve_field_or_nested_field(name, &duplicates, &mut state),
+                        Err(PlanError::AnalysisError(message))
+                            if message == format!("ambiguous attribute: {name:?}")
+                    ));
+                }
+            }
+        }
+        let mut state = PlanResolverState::new();
+        let scalar = Arc::new(Field::new(
+            state.register_field_name("p"),
+            DataType::Int32,
+            true,
+        ));
+        let schema = Arc::new(DFSchema::new_with_metadata(
+            vec![(Some(TableReference::bare("p")), scalar)],
+            Default::default(),
+        )?);
+        let name = spec::ObjectName::from(["p", "p", "id"]);
+        assert!(matches!(
+            resolver.resolve_expression_attribute(name.clone(), false, &schema, &mut state),
+            Err(PlanError::AnalysisError(message))
+                if message == format!("attribute {name:?} is missing from the schema: cannot resolve attribute")
+        ));
         Ok(())
     }
 }

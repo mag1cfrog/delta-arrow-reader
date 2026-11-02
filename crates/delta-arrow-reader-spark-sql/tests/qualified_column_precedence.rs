@@ -1,7 +1,11 @@
 //! Qualified columns bind before unqualified struct access in shared expressions.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
+use datafusion::catalog::CatalogProvider;
+use datafusion::catalog::memory::{MemoryCatalogProvider, MemorySchemaProvider};
+use datafusion::common::TableReference;
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -164,5 +168,103 @@ async fn qualified_column_precedence_leaves_native_sql_unchanged() -> TestResult
             );
         }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn qualified_namespace_overlap_matches_spark() -> TestResult {
+    let records = include_str!("fixtures/qualified-overlap-review-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    assert_eq!(records[0]["case_sensitive"], false);
+    assert_eq!(records.len() - 1, 18);
+    assert_eq!(
+        records[0]["inputs"]
+            .as_array()
+            .ok_or("missing inputs")?
+            .len(),
+        1
+    );
+    assert_eq!(records[0]["inputs"][0]["name"], "p.p");
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert_eq!(case["input"], "p.p");
+        assert!(identities.insert((
+            case["id"].as_str().ok_or("missing ID")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+    }
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2)
+                            .with_create_default_catalog_and_schema(false)
+                            .with_default_catalog_and_schema("spark_catalog", "p"),
+                    ),
+            )
+            .build(),
+        );
+        let catalog = Arc::new(MemoryCatalogProvider::new());
+        catalog.register_schema("p", Arc::new(MemorySchemaProvider::new()))?;
+        assert!(session.register_catalog("spark_catalog", catalog).is_none());
+        register_recorded_inputs(&session, &records[0], batch_size)?;
+        let provider = session
+            .table_provider(TableReference::full("spark_catalog", "p", "p"))
+            .await?;
+        assert_eq!(provider.schema().field(0).name(), "p");
+        assert_eq!(provider.schema().field(1).name(), "id");
+        for case in &records[1..] {
+            comparisons += 1;
+            let (matched, actual) = if let Some(condition) = case["expected"]["condition"].as_str()
+            {
+                assert_eq!(case["id"], "alias_invalid_nested");
+                assert_eq!(condition, "INVALID_EXTRACT_BASE_FIELD_TYPE");
+                let cause = "attribute ObjectName([Identifier(\"p\"), Identifier(\"p\"), Identifier(\"id\")]) is missing from the schema: cannot resolve attribute";
+                match plan_query(
+                    &session,
+                    case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions {
+                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                        session_timezone: "UTC".into(),
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await
+                {
+                    Err(error) => {
+                        let matched = matches!(&error,
+                            DataFusionError::External(source)
+                                if matches!(source.downcast_ref::<PlanError>(),
+                                    Some(PlanError::AnalysisError(message)) if message == cause));
+                        (matched, json!({"planning_error":error.to_string()}))
+                    }
+                    Ok(_) => (false, json!({"planning_succeeded":true})),
+                }
+            } else {
+                match capture_spark_query_result(&session, case).await {
+                    Ok(actual) => (actual == case["expected"], actual),
+                    Err(error) => (false, json!({"error":error.to_string()})),
+                }
+            };
+            if !matched {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: expected {}, got {actual}",
+                    case["id"], case["ansi"], case["expected"]
+                ));
+            }
+        }
+    }
+    assert_eq!(comparisons, 36);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
