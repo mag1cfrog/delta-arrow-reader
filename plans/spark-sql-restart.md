@@ -9,9 +9,9 @@ has been reviewed. Publish the final support contract separately.
 
 ### Parallel execution and review
 
-The current batch separates floating window keys (#726), window output names
-(#727), and floating MIN/MAX (#730). Sol/xhigh implementers own
-isolated worktrees. Available agent slots take independent implementation,
+The current batch completes window output names (#727) and floating MIN/MAX
+(#730), with the remaining dependencies recorded below. Sol/xhigh implementers
+own isolated worktrees. Available agent slots take independent implementation,
 analysis or review tasks; a task need not occupy an entire issue. The coordinator
 schedules all Rust builds and Spark captures serially, reconciles integration,
 and owns this plan. New clean-context Sol/xhigh agents independently review each
