@@ -785,8 +785,8 @@ impl<T: Clone + PartialOrd> Default for MovingMin<T> {
 impl<T: Clone + PartialOrd> MovingMin<T> {
     /// Allocated queue buffer bytes, excluding inline `Self` and heap allocations owned by `T`.
     pub fn buffer_bytes(&self) -> usize {
-        self.push_stack.capacity() * std::mem::size_of::<(T, T)>()
-            + self.pop_stack.capacity() * std::mem::size_of::<(T, T)>()
+        self.push_stack.capacity() * size_of::<(T, T)>()
+            + self.pop_stack.capacity() * size_of::<(T, T)>()
     }
 
     /// Creates a new `MovingMin` to keep track of the minimum in a sliding
