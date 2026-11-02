@@ -315,12 +315,16 @@ impl PlanResolver<'_> {
         }
     }
 
-    pub(super) async fn resolve_named_expressions(
+    /// A direct column CAST keeps its column name when used as an output.
+    pub(super) async fn resolve_named_output_expressions(
         &self,
         expressions: Vec<spec::Expr>,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<Vec<NamedExpr>> {
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = false;
         let mut results: Vec<NamedExpr> = Vec::with_capacity(expressions.len());
         for expression in expressions {
             let named_expr = self
@@ -357,12 +361,16 @@ impl PlanResolver<'_> {
         Ok(results)
     }
 
-    pub(super) async fn resolve_expressions_and_names(
+    /// Nested CASTs remain visible in the enclosing expression's display name.
+    pub(super) async fn resolve_expression_arguments(
         &self,
         expressions: Vec<spec::Expr>,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<(Vec<String>, Vec<expr::Expr>)> {
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = true;
         let mut names: Vec<String> = Vec::with_capacity(expressions.len());
         let mut exprs: Vec<expr::Expr> = Vec::with_capacity(expressions.len());
         for expression in expressions {

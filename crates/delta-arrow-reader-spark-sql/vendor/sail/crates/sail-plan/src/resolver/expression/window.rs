@@ -93,7 +93,7 @@ impl PlanResolver<'_> {
                 }
                 let canonical_function_name = function_name.to_ascii_lowercase();
                 let (argument_display_names, arguments) = self
-                    .resolve_expressions_and_names(arguments, schema, state)
+                    .resolve_expression_arguments(arguments, schema, state)
                     .await?;
                 let function = get_built_in_window_function(&canonical_function_name)?;
                 let filter = match filter {

@@ -507,6 +507,9 @@ impl SparkPlanFormatter {
             "hll_sketch_agg" | "theta_sketch_agg" | "theta_union_agg" => Ok(
                 format_function_with_default_argument(name, arguments, 1, "12"),
             ),
+            "sort_array" => Ok(format_function_with_default_argument(
+                name, arguments, 1, "true",
+            )),
             "hll_union" => Ok(format_function_with_default_argument(
                 name, arguments, 2, "false",
             )),

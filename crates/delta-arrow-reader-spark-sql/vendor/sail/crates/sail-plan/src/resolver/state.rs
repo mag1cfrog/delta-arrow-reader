@@ -35,6 +35,8 @@ impl FieldInfo {
 #[derive(Debug, Clone, Default)]
 pub(super) struct PlanResolverStateConfig {
     pub arrow_allow_large_var_types: bool,
+    /// Nested names retain CAST; standalone casts of named columns keep the column name.
+    pub include_cast_in_expression_name: bool,
 }
 
 #[derive(Debug, Default)]
