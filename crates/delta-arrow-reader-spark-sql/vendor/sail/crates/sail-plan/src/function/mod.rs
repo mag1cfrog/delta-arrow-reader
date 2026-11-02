@@ -21,6 +21,7 @@ mod generator;
 pub(crate) mod numeric_coercion;
 pub(crate) mod result_coercion;
 pub(crate) mod scalar;
+pub(crate) mod sort_keys;
 mod table;
 pub(crate) mod temporal_coercion;
 mod window;

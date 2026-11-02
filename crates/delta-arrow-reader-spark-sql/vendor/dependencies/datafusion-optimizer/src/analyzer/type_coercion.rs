@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -967,6 +968,17 @@ fn coerce_window_frame(
     schema: &DFSchema,
     expressions: &[Sort],
 ) -> Result<WindowFrame> {
+    // Peer and unbounded RANGE boundaries do not perform offset arithmetic.
+    if window_frame.units == WindowFrameUnits::Range
+        && !expressions.is_empty()
+        && [&window_frame.start_bound, &window_frame.end_bound]
+            .iter()
+            .all(|bound| {
+                bound.is_unbounded() || matches!(bound, WindowFrameBound::CurrentRow)
+            })
+    {
+        return Ok(window_frame);
+    }
     let mut window_frame = window_frame;
     let target_type = match window_frame.units {
         WindowFrameUnits::Range => {

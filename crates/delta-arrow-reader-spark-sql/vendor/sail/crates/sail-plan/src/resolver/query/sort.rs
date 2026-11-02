@@ -1,8 +1,9 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use async_recursion::async_recursion;
 use datafusion_common::Column;
-use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
+use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_expr::expr::{Alias, Sort};
 use datafusion_expr::{
     Aggregate, Expr, Extension, LogicalPlan, LogicalPlanBuilder, Projection, Window,
@@ -12,6 +13,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_logical_plan::sort::SortWithinPartitionsNode;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -30,16 +32,29 @@ impl PlanResolver<'_> {
             .resolve_query_sort_orders_by_plan(&input, &order, state)
             .await?;
         let sorts = Self::rebase_query_sort_orders(sorts, &input)?;
-        if is_global {
-            Ok(LogicalPlanBuilder::from(input).sort(sorts)?.build()?)
-        } else {
-            // TODO: Use the logical plan builder to include logic such as expression rebase.
-            //   We can build a plan with a `Sort` node and then replace it with the
-            //   `SortWithinPartitions` node using a tree node rewriter.
-            Ok(LogicalPlan::Extension(Extension {
-                node: Arc::new(SortWithinPartitionsNode::new(Arc::new(input), sorts, None)),
-            }))
-        }
+        let plan = LogicalPlanBuilder::from(input).sort(sorts)?.build()?;
+        // Grouping placeholders and hidden sort columns are resolved before key typing.
+        Ok(plan
+            .transform_down(|plan| {
+                let LogicalPlan::Sort(mut sort) = plan else {
+                    return Ok(Transformed::no(plan));
+                };
+                for expression in &mut sort.expr {
+                    expression.expr = spark_sort_key(expression.expr.clone(), sort.input.schema())?;
+                }
+                let plan = if is_global {
+                    LogicalPlan::Sort(sort)
+                } else {
+                    LogicalPlan::Extension(Extension {
+                        node: Arc::new(SortWithinPartitionsNode::new(
+                            sort.input, sort.expr, sort.fetch,
+                        )),
+                    })
+                };
+                // The builder adds only this sort and an optional projection above it.
+                Ok(Transformed::new(plan, true, TreeNodeRecursion::Jump))
+            })
+            .data()?)
     }
 
     /// Rebase sort expressions using aggregation expressions when the aggregate plan
