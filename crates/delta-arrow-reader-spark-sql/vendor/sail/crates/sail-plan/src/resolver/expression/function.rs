@@ -572,15 +572,18 @@ impl PlanResolver<'_> {
                             .or(expression_name)
                             .unwrap_or_else(|| projection_name.clone()),
                     );
-                    let expr = if identifier_argument
-                        && matches!(&other, Expr::Column(_) | Expr::OuterReferenceColumn(_, _))
-                    {
-                        other.alias(format!("col{}", argument_index + 1))
-                    } else if let Some(field_name) = field_name
+                    let expr = if let Some(field_name) = field_name
                         && matches!(&other, Expr::ScalarFunction(ScalarFunction { func, .. })
                             if func.inner().is::<GetFieldFunc>() || func.inner().is::<ArrayStructField>())
                     {
                         other.alias(field_name)
+                    } else if identifier_argument
+                        || !matches!(
+                            &other,
+                            Expr::Column(_) | Expr::OuterReferenceColumn(_, _) | Expr::Alias(_)
+                        )
+                    {
+                        other.alias(format!("col{}", argument_index + 1))
                     } else if is_dotted_attribute
                         && !matches!(other, Expr::OuterReferenceColumn(..))
                         && other.contains_outer()
