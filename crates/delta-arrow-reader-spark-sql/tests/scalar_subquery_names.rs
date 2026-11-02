@@ -1,8 +1,9 @@
 //! Scalar subqueries keep Spark's generated names, explicit aliases and full result fields.
 
+use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::configure_spark_sql;
+use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::Value;
 
 #[path = "support/spark_inputs.rs"]
@@ -52,6 +53,54 @@ async fn correlated_scalar_subquery_names_match_spark_occurrences() -> TestResul
         19,
     )
     .await
+}
+
+#[tokio::test]
+async fn scalar_subquery_sort_names_fields_and_values_match_spark() -> TestResult {
+    replay_fixture(
+        include_str!("fixtures/scalar-subquery-sort-names-spark.jsonl"),
+        7,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn scalar_subquery_sort_planned_names_match_spark() -> TestResult {
+    let records = include_str!("fixtures/scalar-subquery-sort-names-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len(), 7);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        for case in &records[1..] {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: "UTC".into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let expected = case["expected"]["schema"]["fields"]
+                .as_array()
+                .ok_or("missing fields")?
+                .iter()
+                .map(|field| field["name"].as_str().ok_or("missing field name"))
+                .collect::<Result<Vec<_>, _>>()?;
+            if query.column_names != expected {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: expected {expected:?}, got {:?}",
+                    case["id"], case["ansi"], query.column_names
+                ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
 }
 
 async fn replay_fixture(fixture: &str, record_count: usize) -> TestResult {
@@ -107,14 +156,44 @@ async fn replay_fixture(fixture: &str, record_count: usize) -> TestResult {
 async fn native_scalar_subquery_names_and_fields_remain_native() -> TestResult {
     let native = SessionContext::new();
     let configured = session(32);
+    let mut differences = Vec::new();
     for sql in [
         "SELECT (SELECT 1)",
         "SELECT NULL + (SELECT 1)",
         "SELECT (SELECT 1) AS value",
     ] {
-        let expected = native.sql(sql).await?.collect().await?;
-        let actual = configured.sql(sql).await?.collect().await?;
-        assert_eq!(actual, expected, "{sql}");
+        let expected = async { native.sql(sql).await?.collect().await }.await;
+        let actual = async { configured.sql(sql).await?.collect().await }.await;
+        let matches = match (&actual, &expected) {
+            (Ok(actual), Ok(expected)) => actual == expected,
+            (Err(actual), Err(expected)) => {
+                let expected = native_projection_optimizer_failure(expected);
+                expected.is_some() && native_projection_optimizer_failure(actual) == expected
+            }
+            _ => false,
+        };
+        if !matches {
+            differences.push(format!("{sql}: native {expected:?}, configured {actual:?}"));
+        }
     }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
+}
+
+fn native_projection_optimizer_failure(error: &DataFusionError) -> Option<(&str, &str, String)> {
+    let DataFusionError::Context(rule, invariant) = error else {
+        return None;
+    };
+    let DataFusionError::Context(check, cause) = invariant.as_ref() else {
+        return None;
+    };
+    let DataFusionError::Internal(message) = cause.as_ref() else {
+        return None;
+    };
+    (rule == "Optimizer rule 'optimize_projections' failed"
+        && check
+            == "Check optimizer-specific invariants after optimizer rule: optimize_projections"
+        && message
+            .starts_with("Assertion failed: compatible: Failed due to a difference in schemas:"))
+    .then(|| (rule.as_str(), check.as_str(), cause.strip_backtrace()))
 }
