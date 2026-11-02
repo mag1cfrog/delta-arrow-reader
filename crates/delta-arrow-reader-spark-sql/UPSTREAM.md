@@ -382,6 +382,8 @@ Resolved nested fields carry separate projection and expression display names.
 Direct dot projections keep the leaf name; enclosing expressions keep the field
 path without its relation qualifier. Function arguments, casts and extraction
 use the display name while projections retain their existing names and metadata.
+Bound lambda variables use Spark's `namedlambdavariable()` placeholder in
+generated labels; their executable expressions retain declared parameter names.
 The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
 record remaining STRUCT schema, alias display and metadata differences separately.
 
