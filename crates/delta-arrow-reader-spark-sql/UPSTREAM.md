@@ -106,6 +106,18 @@ explicitly NULL replacement, unlike native array_to_string's omitted-value rule.
 Untyped NULL arrays are given the list types required by Spark before native use.
 The native SQL functions retain their original behavior.
 
+STRING-to-FLOAT/DOUBLE casts retain Spark's nullable result declaration in both
+ANSI and legacy modes. This keeps NULL predicates from discarding a required
+conversion. Parsing and invalid-input behavior remain with the existing kernel;
+constant folding can still narrow a physical field after evaluating the cast.
+The [cast references](tests/fixtures/README.md#string-to-floating-cast-nullability)
+compare analyzed nullability with Spark and check physical schemas against
+returned NULLs.
+Native IS DISTINCT FROM and IS NOT DISTINCT FROM schema inference declares
+nonnullable results even for nullable operands. Both expression nullability and
+field construction use that rule, as does the physical expression, preserving
+NULL-safe comparison consumers.
+
 ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
 batch results. The Spark analyzer exposes known NULLs through projection/alias

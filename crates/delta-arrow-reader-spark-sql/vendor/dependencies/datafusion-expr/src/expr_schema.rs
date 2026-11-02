@@ -28,7 +28,7 @@ use crate::higher_order_function::HigherOrderReturnFieldArgs;
 use crate::type_coercion::functions::value_fields_with_higher_order_udf_and_lambdas;
 use crate::type_coercion::functions::{UDFCoercionExt, fields_with_udf};
 use crate::udf::ReturnFieldArgs;
-use crate::{LogicalPlan, Projection, Subquery, WindowFunctionDefinition, utils};
+use crate::{LogicalPlan, Operator, Projection, Subquery, WindowFunctionDefinition, utils};
 use arrow::compute::can_cast_types;
 use arrow::datatypes::FieldRef;
 use arrow::datatypes::{DataType, Field};
@@ -373,6 +373,10 @@ impl ExprSchemable for Expr {
             }
             // No input rows still produce a scalar NULL.
             Expr::ScalarSubquery(_) => Ok(true),
+            Expr::BinaryExpr(BinaryExpr {
+                op: Operator::IsDistinctFrom | Operator::IsNotDistinctFrom,
+                ..
+            }) => Ok(false),
             Expr::BinaryExpr(BinaryExpr { left, right, .. }) => {
                 Ok(left.nullable(input_schema)? || right.nullable(input_schema)?)
             }
@@ -535,7 +539,8 @@ impl ExprSchemable for Expr {
                 Ok(Arc::new(Field::new(
                     &schema_name,
                     coercer.get_result_type()?,
-                    lhs_nullable || rhs_nullable,
+                    !matches!(op, Operator::IsDistinctFrom | Operator::IsNotDistinctFrom)
+                        && (lhs_nullable || rhs_nullable),
                 )))
             }
             Expr::WindowFunction(window_function) => {

@@ -37,6 +37,37 @@ S07, not a new supported Spark behavior. Fixing that gap must replace these
 alternatives with strict Spark expectations. Neither scheduler retries nor
 disabling parallelism is a fix.
 
+## String-to-floating cast nullability
+
+`floating-cast-nullability-spark.jsonl` contains 172 Spark 4.2.0 observations.
+Regenerate it with `capture_floating_cast_nullability_spark.py` using Python 3.12,
+PySpark 4.2.0 and Java 21. It covers FLOAT/DOUBLE, valid/invalid/NULL strings,
+CAST/TRY_CAST, NULL predicates, grouping/HAVING, EXISTS/count consumers, empty
+and unreachable input, and implicit comparison/ANSI COALESCE conversions.
+NULL-safe comparison controls keep their nonnullable result even when a cast
+operand is nullable, including IS NULL consumers that can discard that comparison.
+
+Rust compares complete rows, names, types, metadata and analyzed nullability
+at batch sizes 1 and 32 in both ANSI modes. Constant folding can narrow physical
+nullability without changing the analyzed schema; physical fields must fit the
+analyzed schema and every returned NULL. Invalid conversions must report CAST_INVALID_INPUT;
+other errors fail the comparison. Native DataFusion controls retain their
+original cast behavior. Native IS [NOT] DISTINCT FROM checks also verify its
+nonnullable logical and physical result on NULL and non-NULL operands.
+Integer DIV schemas are a separate repair. Legacy
+COALESCE selects STRING in these mixed-input cases and is outside this cast
+scope; its independently recorded conservative schema remains S07 work.
+
+`floating-schema-replay-spark.jsonl` preserves independent observations for the
+252 exact historical corrections in this repair. Regenerate it with
+`capture_floating_schema_replay_spark.py`; committed IDs select SQL from the
+unchanged frozen corpus. Of these corrections, 250 change only nullability and
+two restore required HAVING conversion errors. Every changed nullability field
+matches the Spark analyzed schema. Unchanged conservative fields retain their
+previous values. The four projected-IN IS FALSE observations retain the approved
+SQL NULL policy described below; their original Spark rows remain in this file.
+The historical matcher and its raw corpus are unchanged.
+
 ## VALUES Decimal inputs
 
 `values-decimal-spark.jsonl` records scalar VALUES column types and rows from

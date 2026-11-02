@@ -330,7 +330,8 @@ impl PhysicalExpr for BinaryExpr {
     }
 
     fn nullable(&self, input_schema: &Schema) -> Result<bool> {
-        Ok(self.left.nullable(input_schema)? || self.right.nullable(input_schema)?)
+        Ok(!matches!(self.op, Operator::IsDistinctFrom | Operator::IsNotDistinctFrom)
+            && (self.left.nullable(input_schema)? || self.right.nullable(input_schema)?))
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
