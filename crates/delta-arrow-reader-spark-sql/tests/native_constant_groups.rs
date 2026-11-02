@@ -19,7 +19,7 @@ use serde_json::Value;
 mod spark_results;
 use spark_results::{TestResult, capture_spark_query_result};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 struct NativeSnapshot {
     schema: SchemaRef,
     rows: Vec<Vec<Option<String>>>,
@@ -130,6 +130,12 @@ async fn spark_setup_preserves_native_constant_groups_before_and_after_spark() -
                 let provider = Arc::new(MemTable::try_new(schema.clone(), vec![batches])?);
                 native.register_table("inputs", provider.clone())?;
                 configured.register_table("inputs", provider)?;
+                let empty = Arc::new(MemTable::try_new(
+                    schema.clone(),
+                    vec![vec![RecordBatch::new_empty(schema.clone())]],
+                )?);
+                native.register_table("empty_inputs", empty.clone())?;
+                configured.register_table("empty_inputs", empty)?;
                 for after_spark in [false, true] {
                     if after_spark {
                         let query = plan_query(&configured,
@@ -152,6 +158,9 @@ async fn spark_setup_preserves_native_constant_groups_before_and_after_spark() -
                         "SELECT low FROM (SELECT MIN(k) AS low FROM inputs GROUP BY CAST(1 AS INT)) g",
                         "SELECT (SELECT MIN(k) FROM inputs GROUP BY CAST(1 AS INT)) AS low",
                         "SELECT EXISTS(SELECT MIN(k) FROM inputs GROUP BY CAST(1 AS INT)) AS present",
+                        "SELECT EXISTS(SELECT MIN(k) FROM empty_inputs GROUP BY CAST(1 AS INT)) AS present",
+                        "SELECT EXISTS(SELECT MIN(k) FROM inputs WHERE false GROUP BY CAST(1 AS INT)) AS present",
+                        "SELECT EXISTS(SELECT MIN(CAST('bad' AS INT)) FROM inputs GROUP BY CAST(1 AS INT)) AS present",
                         "SELECT COUNT(*) AS n FROM inputs GROUP BY CAST('bad' AS INT)",
                         "SELECT CAST('bad' AS INT) AS bad, COUNT(*) AS n FROM inputs GROUP BY CAST('bad' AS INT)",
                     ] {
@@ -172,7 +181,17 @@ async fn spark_setup_preserves_native_constant_groups_before_and_after_spark() -
                                 "native control failed: {sql}: {expected:?}"
                             );
                         }
-                        if actual != expected {
+                        let matches = match (&actual, &expected) {
+                            (Ok(actual), Ok(expected)) => {
+                                actual.schema == expected.schema
+                                    && actual.rows == expected.rows
+                                    && !actual.logical_plan.contains("__spark_grouping_key")
+                                    && !actual.physical_plan.contains("__spark_grouping_key")
+                            }
+                            (Err(actual), Err(expected)) => actual == expected,
+                            _ => false,
+                        };
+                        if !matches {
                             differences.push(format!("{:?} ANSI={ansi_mode} batch={batch_size} after_spark={after_spark} {sql}: expected {expected:?}, got {actual:?}", schema.field(1).data_type()));
                         }
                     }
