@@ -426,7 +426,10 @@ async fn nested_sort_keys_are_typed_after_grouping_and_hidden_column_rebasing() 
                             .as_array()
                             .ok_or("missing rows")?
                             .iter()
-                            .find(|row| row[0] == id.to_string())
+                            .find(|row| {
+                                row[0].as_str().and_then(|value| value.parse::<i32>().ok())
+                                    == Some(*id)
+                            })
                             .ok_or("unexpected ID")?;
                         let position = reference[2]
                             .as_str()
