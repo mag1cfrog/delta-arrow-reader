@@ -1794,3 +1794,18 @@ python tests/fixtures/recapture_string_binary_spark.py \
 
 The replayer uses recorded input schemas, rows, SQL and settings. It ignores
 expected result fields and collects fresh observations directly from Spark.
+
+## UNHEX string representations
+
+`unhex-spark.jsonl` preserves 28 independent Spark 4.2.0 observations for literals
+and explicitly typed required, nullable and empty providers in both ANSI modes.
+It includes empty/NULL values, mixed-case and odd-length hex, malformed text,
+Unicode and whitespace. The exact runtime, JAR hashes, schemas and settings are
+recorded in the fixture; fresh outputs can be collected with the shared replayer.
+
+`unhex.rs` compares all 168 schema/value results across Utf8, LargeUtf8 and
+Utf8View at batch sizes 1 and 32. Kernel tests also cover sliced arrays,
+out-of-line view strings, scalar forms, strict-helper errors and parser-buffer
+reset after invalid text. Native encoding controls run before and after Spark
+queries. HEX result fields and binary representations remain a separate #784
+slice; these tests establish no family-wide binary compatibility claim.

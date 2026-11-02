@@ -492,3 +492,9 @@ native adapter, preserving Binary, LargeBinary and BinaryView results. An omitte
 length is INT_MAX for both strings and binary values.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
 cover analyzed fields, executed values and native SQL preservation.
+
+UNHEX reads Utf8, LargeUtf8 and Utf8View through the same byte parser and row
+builder. Invalid hexadecimal text remains NULL, odd-length text retains its
+leading zero nibble, and the existing strict internal helper keeps its error
+behavior. The [UNHEX references](tests/fixtures/README.md#unhex-string-representations)
+cover complete fields and values without changing native encoding functions.

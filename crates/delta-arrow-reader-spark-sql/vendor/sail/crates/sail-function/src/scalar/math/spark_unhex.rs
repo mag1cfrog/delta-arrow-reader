@@ -1,7 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{BinaryBuilder, OffsetSizeTrait};
+use datafusion::arrow::array::{AsArray, BinaryBuilder, OffsetSizeTrait};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
 use datafusion_common::cast::as_generic_string_array;
@@ -101,32 +101,40 @@ fn unhex(hex_str: &str, result: &mut Vec<u8>) -> Result<(), DataFusionError> {
     Ok(())
 }
 
+fn unhex_strings<'a>(
+    strings: impl Iterator<Item = Option<&'a str>>,
+    fail_on_error: bool,
+) -> Result<ColumnarValue> {
+    let mut encoded = Vec::new();
+    let mut builder = BinaryBuilder::new();
+    for item in strings {
+        if let Some(s) = item {
+            if unhex(s, &mut encoded).is_ok() {
+                builder.append_value(encoded.as_slice());
+            } else if fail_on_error {
+                return exec_err!("Input to unhex is not a valid hex string: {s}");
+            } else {
+                builder.append_null();
+            }
+            encoded.clear();
+        } else {
+            builder.append_null();
+        }
+    }
+    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+}
+
 fn spark_unhex_inner<T: OffsetSizeTrait>(
     array: &ColumnarValue,
     fail_on_error: bool,
 ) -> Result<ColumnarValue, DataFusionError> {
     match array {
+        ColumnarValue::Array(array) if array.data_type() == &DataType::Utf8View => {
+            unhex_strings(array.as_string_view().iter(), fail_on_error)
+        }
         ColumnarValue::Array(array) => {
             let string_array = as_generic_string_array::<T>(array)?;
-
-            let mut encoded = Vec::new();
-            let mut builder = BinaryBuilder::new();
-
-            for item in string_array.iter() {
-                if let Some(s) = item {
-                    if unhex(s, &mut encoded).is_ok() {
-                        builder.append_value(encoded.as_slice());
-                    } else if fail_on_error {
-                        return exec_err!("Input to unhex is not a valid hex string: {s}");
-                    } else {
-                        builder.append_null();
-                    }
-                    encoded.clear();
-                } else {
-                    builder.append_null();
-                }
-            }
-            Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+            unhex_strings(string_array.iter(), fail_on_error)
         }
         ColumnarValue::Scalar(ScalarValue::Utf8(Some(string)))
         | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(string)))
@@ -182,5 +190,88 @@ pub fn spark_unhex(args: &[ColumnarValue]) -> Result<ColumnarValue, DataFusionEr
         }
         DataType::LargeUtf8 => spark_unhex_inner::<i64>(val_to_unhex, fail_on_error),
         other => exec_err!("The first argument must be a Utf8, Utf8View, or LargeUtf8: {other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{
+        ArrayRef, BinaryArray, LargeStringArray, StringArray, StringViewArray,
+    };
+
+    use super::*;
+
+    #[test]
+    fn unhex_borrows_each_string_representation_and_resets_after_invalid_text() -> Result<()> {
+        let values = vec![
+            Some("prefix"),
+            Some(""),
+            Some("00FF"),
+            None,
+            Some("F"),
+            Some("aBc"),
+            Some("414g"),
+            Some("42"),
+            Some("é"),
+            Some("0123456789abcdef0123456789abcdef"),
+            Some("suffix"),
+        ];
+        let arrays: [ArrayRef; 3] = [
+            Arc::new(StringArray::from(values.clone())),
+            Arc::new(LargeStringArray::from(values.clone())),
+            Arc::new(StringViewArray::from(values)),
+        ];
+        let expected = BinaryArray::from(vec![
+            Some(b"".as_slice()),
+            Some(b"\x00\xff".as_slice()),
+            None,
+            Some(b"\x0f".as_slice()),
+            Some(b"\x0a\xbc".as_slice()),
+            None,
+            Some(b"B".as_slice()),
+            None,
+            Some(b"\x01\x23\x45\x67\x89\xab\xcd\xef\x01\x23\x45\x67\x89\xab\xcd\xef".as_slice()),
+        ]);
+        for array in arrays {
+            let input = ColumnarValue::Array(array.slice(1, 9));
+            let output = spark_unhex(std::slice::from_ref(&input))?.into_array(9)?;
+            assert_eq!(output.data_type(), &DataType::Binary);
+            assert_eq!(output.as_binary::<i32>(), &expected);
+            let Err(error) = spark_unhex(&[
+                input,
+                ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))),
+            ]) else {
+                return internal_err!("strict conversion must reject invalid text");
+            };
+            assert!(error.to_string().contains("414g"));
+            let empty = spark_unhex(&[ColumnarValue::Array(array.slice(0, 0))])?.into_array(0)?;
+            assert_eq!(empty.data_type(), &DataType::Binary);
+            assert!(empty.is_empty());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unhex_preserves_scalar_empty_odd_invalid_and_null_results() -> Result<()> {
+        for (text, expected) in [
+            (Some(""), Some(vec![])),
+            (Some("F"), Some(vec![15])),
+            (Some("aBc"), Some(vec![10, 188])),
+            (Some("414g"), None),
+            (None, None),
+        ] {
+            for value in [
+                ScalarValue::Utf8(text.map(str::to_owned)),
+                ScalarValue::LargeUtf8(text.map(str::to_owned)),
+                ScalarValue::Utf8View(text.map(str::to_owned)),
+            ] {
+                let output = spark_unhex(&[ColumnarValue::Scalar(value)])?;
+                let ColumnarValue::Scalar(output) = output else {
+                    return internal_err!("expected scalar UNHEX output");
+                };
+                assert_eq!(output, ScalarValue::Binary(expected.clone()));
+            }
+        }
+        Ok(())
     }
 }
