@@ -6,6 +6,7 @@ use std::sync::Arc;
 use arrow::array::StringArray;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use datafusion::common::DFSchema;
 use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
@@ -22,13 +23,31 @@ use spark_results::{TestResult, capture_spark_query_result};
 
 #[tokio::test]
 async fn using_key_metadata_matches_spark() -> TestResult {
-    let records = include_str!("fixtures/using-key-metadata-spark.jsonl")
+    let mut records = include_str!("fixtures/using-key-metadata-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
     assert_eq!(records.len() - 1, 156);
+    for (fixture, count) in [
+        (
+            include_str!("fixtures/using-key-metadata-followup-spark.jsonl"),
+            32,
+        ),
+        (
+            include_str!("fixtures/using-key-metadata-boundaries-spark.jsonl"),
+            48,
+        ),
+    ] {
+        let followup = fixture
+            .lines()
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(followup.len() - 1, count);
+        assert_eq!(followup[0], records[0]);
+        records.extend_from_slice(&followup[1..]);
+    }
     let mut identities = BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -96,6 +115,20 @@ async fn using_key_metadata_matches_spark() -> TestResult {
 
 #[tokio::test]
 async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
+    async fn capture_native(
+        session: &SessionContext,
+        sql: &str,
+    ) -> TestResult<(DFSchema, Arc<Schema>, Vec<RecordBatch>)> {
+        let frame = session.sql(sql).await?;
+        let logical = frame.schema().clone();
+        let physical = frame.create_physical_plan().await?;
+        Ok((
+            logical,
+            physical.schema(),
+            collect(physical, session.task_ctx()).await?,
+        ))
+    }
+
     let metadata: Value = serde_json::from_str(
         include_str!("fixtures/using-key-metadata-spark.jsonl")
             .lines()
@@ -109,6 +142,8 @@ async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
     for session in [&native, &configured] {
         register_recorded_inputs(session, &metadata, 32)?;
     }
+    let mut differences = Vec::new();
+    let mut snapshots = Vec::new();
     for shape in ["mixed", "nulls", "empty"] {
         for join in ["INNER", "LEFT", "RIGHT", "FULL", "LEFT SEMI", "LEFT ANTI"] {
             let sql = format!(
@@ -116,20 +151,48 @@ async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
                  FROM left_{shape} l {join} JOIN right_{shape} r USING(id) \
                  ORDER BY result_id,result_value"
             );
-            let mut results = Vec::new();
-            for session in [&native, &configured] {
-                let frame = session.sql(&sql).await?;
-                let logical = frame.schema().clone();
-                let physical = frame.create_physical_plan().await?;
-                assert_eq!(logical.as_arrow(), physical.schema().as_ref());
-                for field in physical.schema().fields() {
-                    assert!(!field.metadata().contains_key("__metadata_col"));
-                }
-                results.push(collect(physical, session.task_ctx()).await?);
+            let expected = capture_native(&native, &sql).await;
+            let before = capture_native(&configured, &sql).await;
+            if expected.is_err() || before.as_ref().ok() != expected.as_ref().ok() {
+                differences.push(format!(
+                    "{sql} before Spark: expected {expected:?}, got {before:?}"
+                ));
             }
-            assert_eq!(results[0], results[1], "{sql}");
+            snapshots.push((sql, expected, before));
         }
     }
+    let spark_result: TestResult = async {
+        let query = plan_query(
+            &configured,
+            "SELECT l.*,r.* FROM left_mixed l FULL JOIN right_mixed r USING(id)",
+            &SparkSqlOptions::default(),
+        )
+        .await?;
+        collect(
+            query.create_physical_plan(&configured).await?,
+            configured.task_ctx(),
+        )
+        .await?;
+        Ok(())
+    }
+    .await;
+    if let Err(error) = spark_result {
+        differences.push(format!("Spark USING exercise failed: {error}"));
+    }
+    for (sql, expected, before) in snapshots {
+        let after = capture_native(&configured, &sql).await;
+        if after.is_err() || after.as_ref().ok() != expected.as_ref().ok() {
+            differences.push(format!(
+                "{sql} after Spark: expected native {expected:?}, got {after:?}"
+            ));
+        }
+        if after.as_ref().ok() != before.as_ref().ok() {
+            differences.push(format!(
+                "{sql} after Spark: expected configured baseline {before:?}, got {after:?}"
+            ));
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
 
