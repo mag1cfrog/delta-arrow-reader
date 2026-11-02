@@ -110,6 +110,25 @@ async fn struct_identifier_names_values_and_metadata_match_spark() -> TestResult
 }
 
 #[tokio::test]
+async fn struct_identifier_positions_after_wildcards_match_spark() -> TestResult {
+    let wildcard_records = include_str!("fixtures/struct-identifier-wildcard-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(wildcard_records.len() - 1, 4);
+    assert_eq!(wildcard_records[0]["inputs"].as_array().unwrap().len(), 1);
+    let records = records()?;
+    let empty_input = records[0]["inputs"]
+        .as_array()
+        .ok_or("missing inputs")?
+        .iter()
+        .find(|input| input["name"] == "struct_empty")
+        .ok_or("missing empty input")?;
+    assert_eq!(&wildcard_records[0]["inputs"][0], empty_input);
+    compare_spark_cases(&wildcard_records, None).await
+}
+
+#[tokio::test]
 async fn native_struct_results_are_unchanged() -> TestResult {
     let records = records()?;
     let native = SessionContext::new();
