@@ -98,8 +98,8 @@ names and four DATE-window results. No remaining failure is treated as passing.
 The expanded floating extrema capture has 256 independent Spark references.
 Ordered windows retain exact payload assertions. Unordered whole-window checks
 allow only eligible original extrema bits and require one representative per
-window, including reversed partition order. TopK and statistics controls remain
-pending candidate execution; cost evidence is separate from correctness.
+window, including reversed partition order. TopK and statistics controls pass in
+the focused integrated candidate; cost evidence is separate from correctness.
 
 #746 restricts constant-group and EXISTS preparation to Spark queries. Native
 queries retain DataFusion's floating extrema bits, empty aggregate EXISTS results
@@ -142,14 +142,29 @@ and two inherited ignored doctests, plus formatting and root-crate Clippy. The
 metadata already missing before physical optimizer rules remains tracked under
 #710; this repair does not claim to restore it.
 
-#730 passes 536 complete comparisons and eight comparisons with the already
-recorded #710 generated-alias-marker difference. Scalar floating ORDER BY (#752)
-and the statistics repair (#753) remain its integration prerequisites. #752's
-independent ordering checks pass 408 comparisons. Its 204 references and the 24
-grouped-extrema references are a byte-preserved split of the original 228-record
-capture. The grouped cases will join the same mandatory replay with #730, along
-with the original MAX/DESC/LIMIT and native heap eligibility controls. No case is
-discarded; grouped acceptance stays pending until the combined runtime passes.
+#730 focused execution at `28e623d8` passes 536 complete comparisons and eight
+comparisons with the recorded #710 generated-alias-marker difference. The scalar
+floating ORDER BY and statistics prerequisites are integrated. The same mandatory
+ordering replay now passes all 228 references at both batch sizes, for 456
+comparisons. Its 204 scalar and 24 grouped-extrema references preserve every
+byte of the original capture records. The original MAX/DESC/LIMIT and native heap
+eligibility controls, statistics tests and native constant-group checks all pass.
+The manual cost test passes with 16 baseline/candidate observations. Ordinary
+frontend aggregates cost 13 to 53 microseconds more than baseline; narrow and
+wide windows take about 20% less time. This is a small sample without a timing
+acceptance threshold, retained in `extrema-integrated-cost-comparison.json`.
+
+Full Linux workspace validation at `bb51b094` passes 593 tests across 77 suites
+with zero failures and three ignored tests: two inherited doctests and the manual
+cost test already run separately. The complete replay retains all 456 scalar
+ordering comparisons and 544 extrema comparisons, including the eight explicit
+#710 marker records. Clippy passes. The sole reported formatting difference in
+the scalar ordering test has been corrected without changing its logic. Final
+review, staging PR merge and issue closure remain pending.
+
+PR #759 merged the #752 ordering prerequisite at `d68c686f`. Its worktree,
+local/remote branches and temporary posting files are removed. Issue #752 remains
+open until the complete #730 integration is accepted.
 
 #744 has 108 focused PIVOT references and 78 supplemental alias/qualifier probes;
 its complete source review has no new finding, with execution still pending.
@@ -162,9 +177,11 @@ Its two independent captures contain 364 cases; candidate execution is pending.
 
 #748 separates projection leaf names from enclosing-expression paths, including
 lambda parameters. Its original 172 references and 12 new lambda references are
-unchanged. Runtime follows the small compile correction found during independent
-review. Existing STRUCT child and construction labels have owner #757; generated
-metadata and complete OVER names remain #710 and #727. These named gaps are not
+unchanged. PR #760 merged this prerequisite at `b40dcd08`; its worktree,
+local/remote branches and temporary posting files are removed. Issue #748 remains
+open until the complete #727 integration is accepted. Existing STRUCT child and
+construction labels have owner #757; generated metadata and complete OVER names
+remain #710 and #727. These named gaps are not
 accepted as complete schema parity. Interval qualifiers remain #749's separate
 repair before the full window-name integration can complete.
 

@@ -21,10 +21,20 @@ use spark_inputs::register_recorded_inputs;
 use spark_results::{TestResult, capture_spark_query_result};
 
 fn reference_cases() -> TestResult<Vec<Value>> {
-    Ok(include_str!("fixtures/scalar-float-ordering-spark.jsonl")
+    let mut records: Vec<Value> = include_str!("fixtures/scalar-float-ordering-spark.jsonl")
         .lines()
         .map(serde_json::from_str)
-        .collect::<Result<_, _>>()?)
+        .collect::<Result<_, _>>()?;
+    let mut grouped: Vec<Value> =
+        include_str!("fixtures/scalar-float-grouped-ordering-spark.jsonl")
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<_, _>>()?;
+    assert_eq!(records.len() - 1, 204);
+    assert_eq!(grouped.len() - 1, 24);
+    assert_eq!(records[0], grouped.remove(0));
+    records.extend(grouped);
+    Ok(records)
 }
 
 fn raw_float_bits(array: &dyn Array, row: usize) -> TestResult<Value> {
@@ -69,7 +79,7 @@ async fn scalar_float_order_matches_spark_without_changing_payloads() -> TestRes
     let records = reference_cases()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 204);
+    assert_eq!(records.len() - 1, 228);
     assert_eq!(
         records[0]["inputs"]
             .as_array()

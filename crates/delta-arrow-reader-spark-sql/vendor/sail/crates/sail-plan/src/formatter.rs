@@ -528,7 +528,7 @@ impl SparkPlanFormatter {
                 let arguments = arguments.join(", ");
                 Ok(format!("{name}({arguments})"))
             }
-            "sum" => {
+            "sum" | "min" | "max" => {
                 let mut args = arguments.join(", ");
                 if is_distinct {
                     args = format!("DISTINCT {args}");

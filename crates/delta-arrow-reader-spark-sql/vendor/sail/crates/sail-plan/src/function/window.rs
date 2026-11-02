@@ -7,7 +7,7 @@ use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_K
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
     approx_distinct, approx_percentile_cont, array_agg, average, bit_and_or_xor, bool_and_or,
-    correlation, count, covariance, first_last, grouping, median, min_max, stddev, sum, variance,
+    correlation, count, covariance, first_last, grouping, median, stddev, sum, variance,
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::functions_window::cume_dist::cume_dist_udwf;
@@ -60,6 +60,15 @@ use crate::function::transform_count_star_wildcard_expr;
 lazy_static! {
     static ref BUILT_IN_WINDOW_FUNCTIONS: HashMap<&'static str, WinFunction> =
         HashMap::from_iter(list_built_in_window_functions());
+}
+
+fn extrema(input: WinFunctionInput, is_max: bool) -> PlanResult<expr::Expr> {
+    let function = crate::function::float_extrema::extrema_udaf(
+        &input.arguments,
+        input.function_context.schema,
+        is_max,
+    )?;
+    Ok(build_aggregate_window(function, input))
 }
 
 fn nth_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
@@ -722,14 +731,14 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
         ("last", F::custom(last_value)),
         ("last_value", F::custom(last_value)),
         ("listagg", F::custom(listagg)),
-        ("max", F::aggregate(min_max::max_udaf)),
+        ("max", F::custom(|input| extrema(input, true))),
         (
             "max_by",
             F::aggregate(|| Arc::new(AggregateUDF::from(MaxByFunction::new()))),
         ),
         ("mean", F::aggregate(average::avg_udaf)),
         ("median", F::custom(median)),
-        ("min", F::aggregate(min_max::min_udaf)),
+        ("min", F::custom(|input| extrema(input, false))),
         (
             "min_by",
             F::aggregate(|| Arc::new(AggregateUDF::from(MinByFunction::new()))),

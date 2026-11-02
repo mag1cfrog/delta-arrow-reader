@@ -31,7 +31,7 @@ Twelve dependencies have local source overrides in this crate's Cargo.toml:
 | Source | Version | Retained changes |
 | --- | --- | --- |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
-| DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains |
+| DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic and buffer handling changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
 
@@ -102,6 +102,28 @@ list views and children hidden by NULL parents. Grouping normalization retains
 its existing type and storage rules. Native DataFusion SQL
 continues to use its own ordering. The [ordering and frame references](tests/fixtures/README.md#nested-ordering-and-window-frames)
 cover the separate query and window consumers.
+
+Spark FLOAT/DOUBLE MIN/MAX use a private Sail planning adapter with typed
+scalar/group state and a retractable typed payload wrapper over DataFusion's
+existing MovingMin queue. Shared comparison normalization operates on copies;
+the selected input bits remain intact. Equal keys retain the left value during
+updates and merges, and ordered windows retain the earliest eligible value in
+the current frame. Spark can remove upstream aggregate sorts, so unordered
+partition schedules can select different original zero/NaN representatives.
+Other types and native DataFusion SQL retain their existing implementations.
+
+The adapter does not advertise native `is_descending` TopK execution: that heap
+uses a different floating order. Its statistics hook retains exact nonzero,
+non-NaN minima: hidden NaNs compare above those values. It also substitutes
+proven empty/all-NULL results and a single non-NULL, nonzero, non-NaN maximum.
+Ordinary bounds do not establish NaN absence or an observed zero sign; the
+DataFusion column-statistics contract has no NaN count. Other cases retain the
+typed scan/aggregate path. These restrictions prevent incorrect shortcut
+answers without changing native optimization rules. The added MovingMin
+`buffer_bytes` accessor counts both retained queue buffer capacities, excluding
+inline state and allocations owned by a generic element; the Spark element
+stores only inline values. The [extrema references](tests/fixtures/README.md#floating-minmax)
+cover returned bits, schemas, filters, DISTINCT and native controls.
 
 ## Licenses and maintenance
 
@@ -419,10 +441,10 @@ Projected values and aggregate results retain their original bits. Direction,
 outer NULL placement and LIMIT remain the sort operator's responsibility.
 The [scalar ordering references](tests/fixtures/README.md#scalar-floating-query-order)
 cover ordinary sorting, projected and hidden keys, subqueries, dictionary
-decoding and native SQL before and after Spark planning. This is the independent
-ORDER BY prerequisite in #752; its grouped MAX acceptance remains pending until
-the floating extrema slice in #730 integrates the preserved grouped references
-and original MAX DESC LIMIT control.
+decoding and native SQL before and after Spark planning. The grouped references
+combine this ORDER BY prerequisite in #752 with the floating extrema slice in
+#730. The original MAX DESC LIMIT control in `floating_extrema.rs` also checks
+the combined behavior and guards against the native aggregate heap shortcut.
 
 ### Exact statistics aggregate results
 

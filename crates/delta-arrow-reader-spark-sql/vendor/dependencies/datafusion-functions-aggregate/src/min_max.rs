@@ -1,4 +1,4 @@
-// Modified for DAR: clear cached sliding extrema when no contributing value remains.
+// Modified for DAR: reset empty sliding extrema and expose shallow queue buffer accounting.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -783,6 +783,12 @@ impl<T: Clone + PartialOrd> Default for MovingMin<T> {
 }
 
 impl<T: Clone + PartialOrd> MovingMin<T> {
+    /// Allocated queue buffer bytes, excluding inline `Self` and heap allocations owned by `T`.
+    pub fn buffer_bytes(&self) -> usize {
+        self.push_stack.capacity() * size_of::<(T, T)>()
+            + self.pop_stack.capacity() * size_of::<(T, T)>()
+    }
+
     /// Creates a new `MovingMin` to keep track of the minimum in a sliding
     /// window.
     #[inline]
