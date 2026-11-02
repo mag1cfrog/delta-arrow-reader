@@ -148,6 +148,70 @@ async fn single_row_projections_match_spark() -> TestResult {
 }
 
 #[tokio::test]
+async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
+    let records = include_str!("fixtures/single-row-correlated-metadata-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len(), 25);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        let calls = register_counter(&session);
+        let mut checked = 0;
+        for case in &records[1..] {
+            let id = case["id"].as_str().ok_or("missing ID")?;
+            calls.store(0, Ordering::SeqCst);
+            let planned = async {
+                let query = plan_query(
+                    &session,
+                    case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions {
+                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                        session_timezone: "UTC".into(),
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
+                query.create_physical_plan(&session).await?;
+                TestResult::Ok(())
+            }
+            .await;
+            assert_eq!(
+                calls.load(Ordering::SeqCst),
+                0,
+                "{id} ANSI={} batch={batch_size}: planning executed a volatile sibling",
+                case["ansi"]
+            );
+            let actual = match planned {
+                Ok(()) => spark_results::capture_spark_query_result(&session, case).await,
+                Err(error) => Err(error),
+            };
+            let expected = &case["expected"];
+            assert_eq!(expected["status"], "ok");
+            let expected_calls = case["evaluated_rows"].as_u64().ok_or("missing row count")?;
+            let observed_calls = calls.load(Ordering::SeqCst) as u64;
+            let matches = actual.as_ref().is_ok_and(|actual| {
+                actual["rows"] == expected["rows"] && actual["schema"] == expected["schema"]
+            });
+            if !matches || observed_calls != expected_calls {
+                differences.push(format!(
+                    "{id} ANSI={} batch={batch_size}: expected {expected} and {expected_calls} evaluated rows, got {actual:?} and {observed_calls} evaluated rows",
+                    case["ansi"]
+                ));
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, 24);
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn native_sql_and_projected_predicates_keep_their_contracts() -> TestResult {
     let records = references()?;
     let configured = session(32);
