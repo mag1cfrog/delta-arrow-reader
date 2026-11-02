@@ -68,18 +68,7 @@ fn extrema(input: WinFunctionInput, is_max: bool) -> PlanResult<expr::Expr> {
         input.function_context.schema,
         is_max,
     )?;
-    Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
-        fun: WindowFunctionDefinition::AggregateUDF(function),
-        params: WindowFunctionParams {
-            args: input.arguments,
-            partition_by: input.partition_by,
-            order_by: input.order_by,
-            window_frame: input.window_frame,
-            filter: input.filter,
-            null_treatment: get_null_treatment(input.ignore_nulls),
-            distinct: input.distinct,
-        },
-    })))
+    Ok(build_aggregate_window(function, input))
 }
 
 fn nth_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
