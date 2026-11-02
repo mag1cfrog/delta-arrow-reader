@@ -36,8 +36,13 @@ impl PlanResolver<'_> {
         let named_source = matches!(
             &expr,
             spec::Expr::Alias { .. }
+                | spec::Expr::Literal(_)
                 | spec::Expr::UnresolvedAttribute { .. }
+                | spec::Expr::UnresolvedExtractValue { .. }
                 | spec::Expr::IdentifierClause { .. }
+                | spec::Expr::UnresolvedDate { .. }
+                | spec::Expr::UnresolvedTime { .. }
+                | spec::Expr::UnresolvedTimestamp { .. }
         );
         let mut named_expr = self.resolve_named_expression(expr, schema, state).await?;
         if !needs_projection_expansion(&named_expr.expr)
@@ -50,13 +55,8 @@ impl PlanResolver<'_> {
                     "ARROW:extension:name" | "ARROW:extension:metadata"
                 )
             });
-        } else if !named_source
-            && matches!(
-                named_expr.expr,
-                expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
-            )
-        {
-            // Identity-lowered expressions regain source metadata only after optimization.
+        } else if !named_source && inherits_alias_metadata(&named_expr.expr) {
+            // Computed aliases regain source metadata only after optimization.
             named_expr.expr = drop_inherited_column_metadata_for_analysis(named_expr.expr);
         }
         let NamedExpr {
