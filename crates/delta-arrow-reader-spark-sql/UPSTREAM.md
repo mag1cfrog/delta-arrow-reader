@@ -333,3 +333,13 @@ windows use this rule; nullable aggregates retain their NULL default. HLL sketch
 and union aggregates expose non-null binary results. Scalar estimation and union
 inherit their inputs' nullability. The [HLL references](tests/fixtures/README.md#empty-hll-sketches)
 check empty-state configuration, schemas, FILTER and downstream consumers.
+
+### Derived window metadata
+
+Spark value-returning windows remove inherited top-level user metadata from
+LAG/LEAD, FIRST/LAST/NTH_VALUE and their aliases. A result adapter in the Spark
+window factory keeps nested data types, nullability, values and Arrow extension
+metadata intact. Projected input fields and native DataFusion SQL retain their
+metadata. The [metadata references](tests/fixtures/README.md#derived-window-metadata)
+cover both ANSI modes, aliases, subqueries, NULL handling and empty input.
+Generated-alias marker parity remains tracked separately by #710.
