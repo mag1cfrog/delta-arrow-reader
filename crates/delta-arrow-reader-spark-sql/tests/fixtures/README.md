@@ -1265,6 +1265,27 @@ python tests/fixtures/capture_floating_group_keys_spark.py
 cargo test --locked --workspace --test floating_group_keys
 ```
 
+## Native constant-group preservation
+
+`native_constant_groups.rs` registers the same Arrow providers and configuration
+in plain and Spark-configured DataFusion sessions. Native queries run before the
+first Spark query and after a Spark constant-group aggregate in each ANSI mode.
+The checks reject Spark grouping keys in optimized logical and physical plans
+and compare complete output schemas, row multisets and original FLOAT/DOUBLE
+bits at batch sizes 1 and 32. Inputs
+include both zero signs, signed NaN payloads, infinities and NULL. Ordinary and
+constant groups, empty inputs, derived tables, scalar subqueries, EXISTS and
+required CAST errors protect the native planning boundary. EXISTS controls use
+both an empty provider and a false filter, plus a failing aggregate argument.
+
+The same test target reuses 12 independent `array-contains-spark.jsonl` records
+for Spark empty groups, discarded and required CASTs, and scalar subqueries in
+both ANSI modes. It introduces no new Spark expected results.
+
+```sh
+cargo test --locked --workspace --test native_constant_groups
+```
+
 ## Nested collection results
 
 `nested-collections-spark.jsonl` contains 722 independent Spark 4.2.0 observations

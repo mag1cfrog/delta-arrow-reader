@@ -65,9 +65,11 @@ Each platform ran 70 suites with 562 passing tests, zero failures and two
 inherited ignored doctests, plus formatting and Clippy. Workflow run
 `41416355015` completed successfully before further staging integration.
 
-### In progress: floating windows, output names and extrema
+### Floating windows complete; output names and extrema in progress
 
-The floating window repair passes all 1,696 comparisons against the unchanged
+PR #750 completed #726 at staging `bbc65cc3`. Its worktree, local and remote
+branches, and temporary posting files are removed. The floating window repair
+passes all 1,696 comparisons against the unchanged
 848-reference capture. The baseline matched 1,376 and retained 320 row differences.
 Comparison keys now follow Spark zero/NaN equality without changing projected
 payloads. Dictionary FLOAT/DOUBLE RANGE bounds use the decoded numeric type;
@@ -87,16 +89,37 @@ The new output-name capture has 276 successful Spark references. Baseline testin
 retains the original schema and planning differences. Source aliases before PIVOT
 (#744) and equivalent LEAD expressions left unlowered (#745) have separate runtime
 owners. Keep those original queries and references when using focused naming
-controls. Nested-field and interval-expression labels still need classification.
+controls. Nested-field labels (#748), interval-expression labels (#749), and
+DATE RANGE arithmetic (#747) now have assigned issues. The focused label replay
+matches 476 of 552 comparisons. Its 76 failures remain recorded by cause: 36
+PIVOT syntax, 12 equivalent-window lowering, 12 nested-field names, 12 interval
+names and four DATE-window results. No remaining failure is treated as passing.
 
-The floating extrema probe preserves original JVM bits and complete schemas.
-Baseline results match 24 of 48 comparisons; the other 24 differ in values.
-The implementation is isolated while full independent captures and bounded cost
-controls run. Native optimization shortcuts require a Spark-compatible ordering
-contract and sufficient statistics; their correctness and cost remain under
-review. MIN/MAX and output names remain under validation. Native constant-group
-preparation now has its own repair owner (#746). Keep the original native
-comparison failure until that prerequisite is verified.
+The expanded floating extrema capture has 256 independent Spark references.
+Ordered windows retain exact payload assertions. Unordered whole-window checks
+allow only eligible original extrema bits and require one representative per
+window, including reversed partition order. TopK and statistics controls remain
+pending candidate execution; cost evidence is separate from correctness.
+
+#746 restricts constant-group and EXISTS preparation to Spark queries. Native
+queries retain DataFusion's floating extrema bits, empty aggregate EXISTS results
+and required CAST errors. The regression performs 240 native comparisons across
+FLOAT/DOUBLE, batch sizes, ANSI settings and before/after Spark use, plus 12
+existing independent Spark grouping/error records. Direct-plan Spark unit tests
+now attach the same query-local marker as the public entry point. The validated
+candidate passes 571 tests across 72 Linux workspace suites, with zero failures
+and two inherited ignored doctests, plus formatting and root-crate Clippy.
+Independent clean-context review has no unresolved source finding. Its dedicated
+staging PR and cleanup remain pending.
+
+#745 has 66 independently captured Spark references, with 48 results and 18
+required admission errors. Its candidate stabilizes equivalent window identities
+and preserves ROW_NUMBER dependencies through aliases; runtime validation is
+next. #744 has 108 focused PIVOT references and 78 supplemental alias/qualifier
+probes. #747 retains 294 DATE RANGE observations, including wide-offset behavior.
+Interval qualifiers are currently lost before Arrow lowering; numeric day bounds
+and qualifier preservation will be assessed separately without waiving interval
+admission or naming differences.
 
 ### Completed S04 nested collection result types
 
