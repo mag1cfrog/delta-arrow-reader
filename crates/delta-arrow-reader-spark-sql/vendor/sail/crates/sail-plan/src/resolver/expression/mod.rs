@@ -627,10 +627,18 @@ mod tests {
                             .create_physical_plan()
                             .await?;
                         assert_eq!(physical.schema().field(0).metadata(), &expected);
+                        let schema = physical.schema();
                         let batches =
                             datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
                         let mut values = Vec::new();
                         for batch in batches {
+                            assert_eq!(batch.schema(), schema);
+                            for (field, column) in schema.fields().iter().zip(batch.columns()) {
+                                if !field.is_nullable() {
+                                    assert_eq!(column.logical_null_count(), 0);
+                                }
+                                column.to_data().validate_full()?;
+                            }
                             for row in 0..batch.num_rows() {
                                 values.push(array_value_to_string(batch.column(0).as_ref(), row)?);
                             }

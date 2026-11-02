@@ -17,7 +17,7 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_inputs::register_recorded_inputs;
-use spark_results::{TestResult, encode_value, spark_schema_type};
+use spark_results::{TestResult, encode_value, spark_schema_type, validate_batch};
 
 fn records() -> TestResult<Vec<Value>> {
     Ok(
@@ -119,8 +119,10 @@ async fn compare_case_with_encoder(
     if case["expected"].get("condition").is_some() && !differences.is_empty() {
         return Err(differences.join("\n").into());
     }
+    let schema = physical.schema();
     let mut rows = Vec::new();
     for batch in collect(physical, session.task_ctx()).await? {
+        validate_batch(schema.as_ref(), &batch)?;
         for row in 0..batch.num_rows() {
             rows.push(
                 batch
@@ -261,7 +263,14 @@ async fn configured_native_sql_keeps_metadata_unchanged() -> TestResult {
         for session in [&native, &configured] {
             let frame = session.sql(sql).await?;
             let schema = frame.schema().clone();
-            results.push((schema, frame.collect().await?));
+            let task_ctx = std::sync::Arc::new(frame.task_ctx());
+            let physical = frame.create_physical_plan().await?;
+            let physical_schema = physical.schema();
+            let batches = collect(physical, task_ctx).await?;
+            for batch in &batches {
+                validate_batch(physical_schema.as_ref(), batch)?;
+            }
+            results.push((schema, batches));
         }
         assert_eq!(results[0], results[1], "{sql}");
     }
@@ -328,8 +337,10 @@ async fn generated_aliases_preserve_arrow_extension_fields() -> TestResult {
             assert_eq!(field.data_type(), &DataType::Utf8);
             assert!(field.is_nullable());
         }
+        let schema = physical.schema();
         let mut rows = Vec::new();
         for batch in collect(physical, session.task_ctx()).await? {
+            validate_batch(schema.as_ref(), &batch)?;
             for row in 0..batch.num_rows() {
                 rows.push(
                     batch
@@ -485,8 +496,10 @@ async fn metadata_annotations_evaluate_each_volatile_value_once() -> TestResult 
             );
             assert_eq!(json!(physical.schema().field(index).metadata()), expected);
         }
+        let schema = physical.schema();
         let mut rows = Vec::new();
         for batch in collect(physical, session.task_ctx()).await? {
+            validate_batch(schema.as_ref(), &batch)?;
             for row in 0..batch.num_rows() {
                 rows.push(
                     batch
@@ -583,8 +596,12 @@ async fn native_null_udf_rewrites_keep_cast_errors_and_hook_order() -> TestResul
             .await?;
         assert!(frame.schema().field(0).is_nullable());
         let data_type = frame.schema().field(0).data_type().clone();
+        let task_ctx = Arc::new(frame.task_ctx());
+        let physical = frame.create_physical_plan().await?;
+        let schema = physical.schema();
         let mut rows = Vec::new();
-        for batch in frame.collect().await? {
+        for batch in collect(physical, task_ctx).await? {
+            validate_batch(schema.as_ref(), &batch)?;
             for row in 0..batch.num_rows() {
                 rows.push(encode_value(batch.column(0).as_ref(), row)?);
             }
@@ -833,8 +850,10 @@ async fn volatile_order_values_are_materialized_once_per_expression() -> TestRes
                 counts.0 > 0 && counts.1 > 0,
                 "expected partition sort and merge"
             );
+            let schema = physical.schema();
             let mut rows = Vec::new();
             for batch in collect(physical, session.task_ctx()).await? {
+                validate_batch(schema.as_ref(), &batch)?;
                 for row in 0..batch.num_rows() {
                     rows.push(vec![encode_value(batch.column(0).as_ref(), row)?]);
                 }
@@ -867,8 +886,10 @@ async fn volatile_order_values_are_materialized_once_per_expression() -> TestRes
             assert_eq!(physical.schema().field(0).data_type(), &DataType::Int32);
             assert!(physical.schema().field(0).is_nullable());
             assert!(physical.schema().field(0).metadata().is_empty());
+            let schema = physical.schema();
             let mut rows = Vec::new();
             for batch in collect(physical, session.task_ctx()).await? {
+                validate_batch(schema.as_ref(), &batch)?;
                 for row in 0..batch.num_rows() {
                     rows.push(vec![encode_value(batch.column(0).as_ref(), row)?]);
                 }
