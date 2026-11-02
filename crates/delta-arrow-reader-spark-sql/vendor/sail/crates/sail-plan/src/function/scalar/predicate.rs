@@ -1,9 +1,14 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::functions::expr_fn;
-use datafusion_common::ScalarValue;
-use datafusion_expr::{Operator, ScalarUDF, expr, lit, not};
+use datafusion_common::{Result, ScalarValue};
+use datafusion_expr::type_coercion::binary::like_coercion;
+use datafusion_expr::{
+    ColumnarValue, ExprSchemable, Operator, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
+    ScalarUDFImpl, Signature, Volatility, expr, lit, not,
+};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::predicate::rewrite_like_pattern::RewriteLikePatternFunc;
 
@@ -30,16 +35,34 @@ fn extract_escape_char(escape_expr: expr::Expr) -> PlanResult<Option<char>> {
 }
 
 fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanResult<expr::Expr> {
-    let ScalarFunctionInput { arguments, .. } = input;
+    let ScalarFunctionInput {
+        mut arguments,
+        function_context,
+    } = input;
     let n = arguments.len();
-    match n {
+    let nullable = if case_insensitive && (2..=3).contains(&n) {
+        let schema = function_context.schema;
+        let nullable = arguments[0].nullable(schema)? || arguments[1].nullable(schema)?;
+        let source_type = arguments[0].get_type(schema)?;
+        let pattern_type = arguments[1].get_type(schema)?;
+        let data_type = like_coercion(&source_type, &pattern_type).ok_or_else(|| {
+            PlanError::invalid(format!("There isn't a common type to coerce {source_type} and {pattern_type} in ILIKE expression"))
+        })?;
+        for argument in &mut arguments[..2] {
+            *argument = expr_fn::lower(argument.clone().cast_to(&data_type, schema)?);
+        }
+        Some(nullable)
+    } else {
+        None
+    };
+    let result = match n {
         2 => {
             let (value, pattern) = arguments.two()?;
             Ok(expr::Expr::Like(expr::Like {
                 negated: false,
                 expr: Box::new(value),
                 pattern: Box::new(pattern),
-                case_insensitive,
+                case_insensitive: false,
                 escape_char: None,
             }))
         }
@@ -65,13 +88,52 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
                 negated: false,
                 expr: Box::new(value),
                 pattern: Box::new(pattern),
-                case_insensitive,
+                case_insensitive: false,
                 escape_char,
             }))
         }
         _ => Err(PlanError::invalid(format!(
             "like/ilike expects 2 or 3 arguments, got {n}"
         ))),
+    }?;
+    Ok(match nullable {
+        Some(nullable) => ScalarUDF::from(ILikeResult { nullable }).call(vec![result]),
+        None => result,
+    })
+}
+
+// Native LOWER supplies the values; ILIKE retains the original operands' fields.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct ILikeResult {
+    nullable: bool,
+}
+
+impl ScalarUDFImpl for ILikeResult {
+    fn name(&self) -> &str {
+        "spark_ilike_result"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> =
+            std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Boolean)
+    }
+
+    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> Result<FieldRef> {
+        Ok(Arc::new(Field::new(
+            self.name(),
+            DataType::Boolean,
+            self.nullable,
+        )))
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let [result] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        Ok(result)
     }
 }
 

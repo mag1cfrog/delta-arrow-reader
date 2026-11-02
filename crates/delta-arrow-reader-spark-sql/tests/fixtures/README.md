@@ -1859,3 +1859,29 @@ Kernel checks cover mixed source/pattern representations, slices, out-of-line
 view strings and NULL rows with a singular invalid pattern. Native DataFusion
 regex functions are compared before and after Spark planning. REGEXP_EXTRACT_ALL
 retains its separate implementation and existing regression.
+
+## Unicode ILIKE
+
+`ilike-spark.jsonl` retains all 90 original C06 ILIKE observations and
+`ilike-evaluation-spark.jsonl` retains all 144 ILIKE observations from the shared
+LIKE/ILIKE evaluation capture. `ilike-unicode-spark.jsonl` adds 40 independent
+Spark 4.2.0 observations for dynamic Unicode operands, function/operator forms,
+NOT ILIKE, required/nullable/empty providers and escapes whose case changes.
+These fixtures preserve their complete result records and runtime/input
+metadata. Recollect them with `recapture_string_binary_spark.py` and a fresh
+output path.
+
+`ilike.rs` compares complete public analyzed fields, physical fields and ordered
+values for 234 successful references across Utf8, LargeUtf8 and Utf8View at batch
+sizes 1 and 32, for 1,404 compatibility comparisons. Cases include final sigma,
+long s, dotted-I expansion, combining marks, supplementary characters and
+uppercase/non-ASCII escapes. Volatile source and pattern controls check that each
+operand runs once per row. Native LOWER, LIKE and ILIKE results are compared
+before and after Spark queries.
+
+The 40 retained required-error references belong to #771's escape validation and
+evaluation work. Their 240 native observations remain separate from compatibility
+counts. The observer records missing required errors with complete actual fields
+and rows; it does not invent a successful Spark expectation. References carrying
+analyzed fields compare those actual public fields, and native errors must match
+the exact escape cause. Unrelated errors and field mismatches fail the test.
