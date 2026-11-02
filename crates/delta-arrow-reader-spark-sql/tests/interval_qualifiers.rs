@@ -19,6 +19,41 @@ use spark_inputs::register_recorded_inputs;
 use spark_results::{TestResult, capture_spark_query_result};
 
 #[tokio::test]
+async fn interval_null_coercion_matches_spark() -> TestResult {
+    let records = include_str!("fixtures/interval-null-coercion-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 17);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    assert_eq!(records[0]["interval_encoding"], "cast_string");
+    assert_eq!(records[0]["timestamp_encoding"], "cast_string");
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let mut identities = BTreeSet::new();
+    let mut differences = Vec::new();
+    for case in &records[1..] {
+        assert!(identities.insert((
+            case["id"].as_str().ok_or("missing ID")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+        assert!(case["expected"]["schema"].is_object());
+        let actual = capture_spark_query_result(&session, case).await;
+        if actual.as_ref().ok() != Some(&case["expected"]) {
+            differences.push(format!(
+                "{} ANSI={}: expected {}, got {actual:?}",
+                case["id"], case["ansi"], case["expected"]
+            ));
+        }
+    }
+    assert_eq!(identities.len(), 16);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn mixed_family_interval_references_are_rejected_before_window_resolution() -> TestResult {
     let records = include_str!("fixtures/interval-qualifiers-spark.jsonl")
         .lines()
@@ -223,7 +258,7 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
                     case["id"]
                 ));
             }
-            assert_eq!(query.logical_plan.schema().field(index), field.as_ref());
+            assert_eq!(query.logical_plan.schema().field(index), field);
         }
         let id = case["id"].as_str().ok_or("missing ID")?;
         if matches!(

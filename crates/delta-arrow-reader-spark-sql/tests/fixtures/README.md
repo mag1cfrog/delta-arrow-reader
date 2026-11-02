@@ -1737,6 +1737,16 @@ its script has SHA256
 The first capture remains external review evidence only: its timestamp values
 used the Python host timezone. Commit `72fa7047` preserves that original script.
 
+`interval-null-coercion-spark.jsonl` adds 16 independent review probes in both
+ANSI modes for typed and untyped NULL multiplication, timestamp addition and
+subtraction. `interval_null_coercion_matches_spark` compares all recorded rows
+and fields with the shared result observer, including generated names and
+metadata. The supplement has SHA256
+`c8daec9462af3c26cf64daa20ea44da006122e5ffbb02b2fda626b0e6031c0ee`;
+the external review capture script has SHA256
+`a7aea053677557af5c14a016cf221405e1f685019b78948b0f7000c58475588e`.
+These probes retain the original 432 records and their gates unchanged.
+
 Regenerate with an existing Python 3.12, PySpark 4.2.0 and Java 21 environment
 from this crate, writing to a fresh path:
 
