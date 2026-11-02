@@ -16,7 +16,10 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
     Ok(match value.as_str() {
         Some("float") => DataType::Float32,
         Some("double") => DataType::Float64,
+        Some("byte") => DataType::Int8,
+        Some("short") => DataType::Int16,
         Some("integer") => DataType::Int32,
+        Some("long") => DataType::Int64,
         Some("string") => DataType::Utf8,
         None if value["type"] == "array" => DataType::List(Arc::new(Field::new(
             "item",
@@ -64,6 +67,11 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
         DataType::Int32 => {
             ScalarValue::Int32(Some(value.as_str().ok_or("missing integer")?.parse()?))
         }
+        DataType::Int8 => ScalarValue::Int8(Some(value.as_str().ok_or("missing byte")?.parse()?)),
+        DataType::Int16 => {
+            ScalarValue::Int16(Some(value.as_str().ok_or("missing short")?.parse()?))
+        }
+        DataType::Int64 => ScalarValue::Int64(Some(value.as_str().ok_or("missing long")?.parse()?)),
         DataType::List(field) => ScalarValue::List(ScalarValue::new_list(
             &value
                 .as_array()
