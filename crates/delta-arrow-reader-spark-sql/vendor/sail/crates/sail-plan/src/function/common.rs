@@ -36,12 +36,21 @@ pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Ex
     set_result_metadata(expression, vec![])
 }
 
+pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr) -> expr::Expr {
+    ScalarUDF::from(SparkResultMetadata {
+        metadata: FieldMetadata::default(),
+        analysis_only: true,
+    })
+    .call(vec![expression])
+}
+
 pub(crate) fn set_result_metadata(
     expression: expr::Expr,
     metadata: Vec<(String, String)>,
 ) -> expr::Expr {
     ScalarUDF::from(SparkResultMetadata {
         metadata: metadata.into_iter().collect::<HashMap<_, _>>().into(),
+        analysis_only: false,
     })
     .call(vec![expression])
 }
@@ -58,6 +67,9 @@ pub(crate) fn materialize_metadata_literals(
             && let Some(value) = literal_metadata_value(argument)
             && let Ok((_, field)) = argument.to_field(&DFSchema::empty())
         {
+            if annotation.analysis_only {
+                return Ok(Transformed::yes(argument.clone()));
+            }
             let field = annotation.annotate_field(&field);
             return Ok(Transformed::yes(expr::Expr::Literal(
                 value,
@@ -99,6 +111,7 @@ pub(crate) fn without_metadata_annotations(mut expression: &expr::Expr) -> &expr
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct SparkResultMetadata {
     metadata: FieldMetadata,
+    analysis_only: bool,
 }
 
 impl SparkResultMetadata {
@@ -136,6 +149,20 @@ impl ScalarUDFImpl for SparkResultMetadata {
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
         Ok(self.annotate_field(&args.arg_fields[0]))
+    }
+
+    fn simplify(
+        &self,
+        args: Vec<expr::Expr>,
+        _: &datafusion_expr::simplify::SimplifyContext,
+    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
+        use datafusion_expr::simplify::ExprSimplifyResult;
+        if self.analysis_only {
+            let [value] = datafusion_common::utils::take_function_args(self.name(), args)?;
+            Ok(ExprSimplifyResult::Simplified(value))
+        } else {
+            Ok(ExprSimplifyResult::Original(args))
+        }
     }
 
     fn invoke_with_args(
@@ -2066,6 +2093,47 @@ fn metadata_value_analysis_uses_implementation_identity() {
     )
     .call(vec![value]);
     assert_eq!(without_metadata_annotations(&user_function), &user_function);
+}
+
+#[cfg(test)]
+#[test]
+fn analysis_metadata_annotations_restore_the_original_value() -> datafusion_common::Result<()> {
+    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+    use datafusion_expr::simplify::SimplifyContext;
+
+    let source = HashMap::from([("source".into(), "provider".into())]);
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        Field::new("k", DataType::Int32, false).with_metadata(source.clone()),
+    ]))?);
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::clone(&schema))
+        .build();
+    let column = datafusion_expr::col("k");
+    for value in [
+        column.clone(),
+        expr::Expr::Literal(ScalarValue::Int32(None), Some(source.into())),
+    ] {
+        let annotated = drop_inherited_column_metadata_for_analysis(value.clone());
+        let field = annotated.to_field(schema.as_ref())?.1;
+        assert!(field.metadata().is_empty());
+        assert_eq!(field.data_type(), &value.get_type(schema.as_ref())?);
+        assert_eq!(field.is_nullable(), value.nullable(schema.as_ref())?);
+        assert_eq!(without_metadata_annotations(&annotated), &value);
+        let prepared = materialize_metadata_literals(annotated.clone())?.data;
+        if matches!(value, expr::Expr::Literal(..)) {
+            assert_eq!(prepared, value);
+        } else {
+            assert_eq!(prepared, annotated);
+        }
+        assert_eq!(ExprSimplifier::new(info.clone()).simplify(prepared)?, value);
+    }
+    let permanent = drop_inherited_column_metadata(column);
+    assert_eq!(
+        ExprSimplifier::new(info).simplify(permanent.clone())?,
+        permanent
+    );
+    Ok(())
 }
 
 #[cfg(test)]

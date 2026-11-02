@@ -16,7 +16,9 @@ use sail_function::scalar::table_input::TableInput;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
-use crate::function::common::drop_inherited_column_metadata;
+use crate::function::common::{
+    drop_inherited_column_metadata, drop_inherited_column_metadata_for_analysis,
+};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::{NamedExpr, inherits_alias_metadata, needs_projection_expansion};
 use crate::resolver::state::PlanResolverState;
@@ -31,6 +33,12 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let name = name.into_iter().map(|x| x.into()).collect::<Vec<String>>();
+        let named_source = matches!(
+            &expr,
+            spec::Expr::Alias { .. }
+                | spec::Expr::UnresolvedAttribute { .. }
+                | spec::Expr::IdentifierClause { .. }
+        );
         let mut named_expr = self.resolve_named_expression(expr, schema, state).await?;
         if !needs_projection_expansion(&named_expr.expr)
             && (metadata.is_some() || !inherits_alias_metadata(&named_expr.expr))
@@ -42,6 +50,14 @@ impl PlanResolver<'_> {
                     "ARROW:extension:name" | "ARROW:extension:metadata"
                 )
             });
+        } else if !named_source
+            && matches!(
+                named_expr.expr,
+                expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
+            )
+        {
+            // Identity-lowered expressions regain source metadata only after optimization.
+            named_expr.expr = drop_inherited_column_metadata_for_analysis(named_expr.expr);
         }
         let NamedExpr {
             name: inner_name,
