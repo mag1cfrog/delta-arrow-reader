@@ -974,6 +974,50 @@ These eight cases establish FILTER-preserving semantics, not parity with
 Spark's default buggy rewrite. Error conditions are compared with the relevant
 DAR diagnostic, without claiming identical exception text or error timing.
 
+## Nested RANGE frames
+
+`nested-range-frames-spark.jsonl` records 600 independent Spark 4.2.0 observations
+in UTC. Thirty typed providers cover integer and string scalar, array, struct,
+array-of-struct and struct-of-array keys, including duplicate values, nested
+NULLs, outer NULLs, empty containers and empty input. Both ANSI modes cover
+partitioned and global windows, all four direction/NULL-placement combinations,
+and compound peer keys. Each recorded query compares complete rows and schema.
+
+Peer and whole-partition frames cover all four sort combinations. Prefix,
+suffix and default frames cover every scalar combination and nested ASC NULLS
+FIRST / DESC NULLS LAST. The remaining nested combinations require the separate
+Spark sort-order repair in [#740](https://github.com/mag1cfrog/delta-arrow-reader/issues/740).
+The original 600-reference capture, which includes every prefix/suffix/default
+combination, is retained with that dependent integration. This focused capture
+protects the native frame prerequisite; it does not establish complete
+[#738](https://github.com/mag1cfrog/delta-arrow-reader/issues/738) acceptance.
+
+`nested_range_frames.rs` compares exact Spark schemas and row multisets at batch
+sizes 1 and 32. Native SQL controls require bounded RANGE and GROUPS plans and
+check complete peer counts across batches in every sort combination. They also
+check that struct offsets still fail native type validation and that DATE and
+TIMESTAMP interval offsets retain their expected arithmetic.
+
+`linear_window_completion.rs` calls the real stateful aggregate entry point with the same shared most-recent source row as LinearSearch, interleaved
+logical partitions and open input. Nested struct/array keys with NULL children
+cover equal-edge withholding, ahead-edge output and continued results after
+pruning in both directions and NULL placements. Numeric RANGE and nested GROUPS
+FOLLOWING controls require safety to change within one evaluation.
+
+`native_window_frame_state.rs` includes the original vendored module so ordinary
+workspace test discovery also runs its private unit tests. Dictionary keys
+containing NULL values, both directly and inside lists, assert comparator reuse,
+replacement and release on pruning without a timing threshold.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from the isolated Spark SQL
+crate:
+
+```sh
+python tests/fixtures/capture_nested_range_frames_spark.py
+cargo test --locked --workspace --test nested_range_frames \
+  --test linear_window_completion --test native_window_frame_state
+```
+
 ## Sliding window extrema
 
 `window-extrema-spark.jsonl` contains 96 Spark 4.2.0 observations in UTC, with

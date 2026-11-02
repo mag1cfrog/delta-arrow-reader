@@ -266,8 +266,8 @@ ANSI input conversion. The [COUNT_IF references](tests/fixtures/README.md#count_
 cover results, schema and error boundaries.
 
 Sliding MIN/MAX reset their cached result to a typed NULL when their moving
-collection becomes empty. The comparison and moving-window algorithms remain
-upstream implementations. The [window extrema references](tests/fixtures/README.md#sliding-window-extrema)
+collection becomes empty. MIN/MAX value comparison and retraction retain their
+native Arrow and DataFusion implementations. The [window extrema references](tests/fixtures/README.md#sliding-window-extrema)
 check values leaving and reentering frames through native DataFusion SQL and
 the Spark frontend.
 
@@ -303,6 +303,23 @@ the bound-order validator and execution kernels. A whole-partition RANGE frame
 without ordering lowers to its equivalent ROWS frame. The
 [window admission references](tests/fixtures/README.md#window-admission)
 preserve Spark's expression-sensitive offset-frame rules and valid controls.
+
+Native RANGE frames with CURRENT ROW bounds search peers with Arrow's
+lexicographical comparator, matching the arrays and sort options used by the
+physical sort. One comparator is reused while those arrays are unchanged and
+released when window state is pruned. The shared analyzer admits RANGE frames
+whose bounds are only CURRENT ROW or unbounded without coercing an arithmetic
+offset. Actual offsets retain native type validation and checked arithmetic.
+Incremental RANGE and GROUPS completion also compares batch edges through Arrow;
+CURRENT ROW and PRECEDING completion checks are reused within each evaluation.
+The [nested frame references](tests/fixtures/README.md#nested-range-frames)
+cover this shared native repair.
+
+This frame repair is a prerequisite for [#738](https://github.com/mag1cfrog/delta-arrow-reader/issues/738).
+Full Spark acceptance remains pending [#740](https://github.com/mag1cfrog/delta-arrow-reader/issues/740),
+which owns nested sort order when child NULL placement differs from outer NULL
+placement. The original complete 600-reference suite and its expected results
+remain with that dependent integration; this prerequisite does not close #738.
 
 Spark grouping and DISTINCT normalize floating zeros and NaNs inside array and
 struct keys. The same scalar comparison rule handles each floating leaf;

@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -23,14 +24,13 @@ use std::sync::Arc;
 use crate::PhysicalExpr;
 
 use arrow::array::BooleanArray;
-use arrow::array::{Array, ArrayRef, new_empty_array};
+use arrow::array::{Array, ArrayRef, make_comparator, new_empty_array};
 use arrow::compute::SortOptions;
 use arrow::compute::filter as arrow_filter;
 use arrow::compute::kernels::sort::SortColumn;
 use arrow::datatypes::FieldRef;
 use arrow::record_batch::RecordBatch;
 use datafusion_common::cast::as_boolean_array;
-use datafusion_common::utils::compare_rows;
 use datafusion_common::{
     Result, ScalarValue, arrow_datafusion_err, exec_datafusion_err, internal_err,
 };
@@ -335,23 +335,36 @@ pub trait AggregateWindowExpr: WindowExpr {
         let length = values[0].len();
         let mut row_wise_results: Vec<ScalarValue> = vec![];
         let is_causal = self.get_window_frame().is_causal();
+        let mut end_bound_safe = None;
         while idx < length {
             // Start search from the last_range. This squeezes searched range.
             let cur_range =
                 window_frame_ctx.calculate_range(&order_bys, last_range, length, idx)?;
             // Exit if the range is non-causal and extends all the way:
-            if cur_range.end == length
-                && !is_causal
-                && not_end
-                && !is_end_bound_safe(
-                    window_frame_ctx,
-                    &order_bys,
-                    most_recent_row_order_bys.as_deref(),
-                    self.order_by(),
-                    idx,
-                )?
-            {
-                break;
+            if cur_range.end == length && !is_causal && not_end {
+                let safe = match end_bound_safe {
+                    Some(safe) => safe,
+                    None => {
+                        let safe = is_end_bound_safe(
+                            window_frame_ctx,
+                            &order_bys,
+                            most_recent_row_order_bys.as_deref(),
+                            self.order_by(),
+                            idx,
+                        )?;
+                        // CURRENT ROW and PRECEDING compare the same batch edges for every row.
+                        if !matches!(
+                            self.get_window_frame().end_bound,
+                            WindowFrameBound::Following(_)
+                        ) {
+                            end_bound_safe = Some(safe);
+                        }
+                        safe
+                    }
+                };
+                if !safe {
+                    break;
+                }
             }
             let value = self.get_aggregate_result_inside_range(
                 last_range,
@@ -581,10 +594,8 @@ fn is_row_ahead(
     if old_col.is_empty() || current_col.is_empty() {
         return Ok(false);
     }
-    let last_value = ScalarValue::try_from_array(old_col, old_col.len() - 1)?;
-    let current_value = ScalarValue::try_from_array(current_col, 0)?;
-    let cmp = compare_rows(&[current_value], &[last_value], &[*sort_options])?;
-    Ok(cmp.is_gt())
+    let compare = make_comparator(current_col.as_ref(), old_col.as_ref(), *sort_options)?;
+    Ok(compare(0, old_col.len() - 1).is_gt())
 }
 
 /// Get order by expression results inside `order_by_columns`.
