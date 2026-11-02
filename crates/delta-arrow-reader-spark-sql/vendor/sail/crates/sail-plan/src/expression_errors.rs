@@ -360,7 +360,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                             // checks before pruning its unused output expressions.
                             let mut prune_exists_output = false;
                             let predicate = match &mut expr {
-                                Expr::Exists(exists) => {
+                                Expr::Exists(exists) if is_spark_query => {
                                     // Losing the correlation stops output pruning,
                                     // not local-input or arithmetic preparation.
                                     prune_exists_output = exists.subquery.outer_ref_columns.is_empty()
@@ -1735,6 +1735,20 @@ impl Prepare {
     }
 }
 
+#[cfg(test)]
+fn spark_test_frame(
+    session: &datafusion::prelude::SessionContext,
+    plan: LogicalPlan,
+) -> datafusion::dataframe::DataFrame {
+    let mut state = session.state();
+    state
+        .config_mut()
+        .options_mut()
+        .extensions
+        .insert(SparkSqlErrorSemantics::default());
+    datafusion::dataframe::DataFrame::new(state, plan)
+}
+
 #[tokio::test]
 async fn integer_divide_evaluation_order()
 -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -2513,8 +2527,7 @@ async fn scalar_subquery_arithmetic_precedes_outer_pruning()
                 )
                 .resolve_named_plan(spec)
                 .await?;
-                let result =
-                    async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
+                let result = spark_test_frame(&ctx, named.plan).collect().await;
                 if ansi_mode && fails {
                     assert!(
                         result.unwrap_err().to_string().contains("Divide by zero"),
@@ -2804,10 +2817,7 @@ async fn predicate_preparation_preserves_live_errors_and_unused_outputs()
                     .resolve_named_plan(spec)
                     .await?;
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    ctx.execute_logical_plan(named.plan)
-                        .await?
-                        .collect()
-                        .await?,
+                    spark_test_frame(&ctx, named.plan).collect().await?,
                 )
             }
             .await;
@@ -2970,10 +2980,7 @@ async fn exists_distinct_keeps_preparation_boundaries()
                     .resolve_named_plan(spec)
                     .await?;
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    ctx.execute_logical_plan(named.plan)
-                        .await?
-                        .collect()
-                        .await?,
+                    spark_test_frame(&ctx, named.plan).collect().await?,
                 )
             }
             .await;
@@ -3156,10 +3163,7 @@ async fn distinct_limit_keeps_preparation_boundaries()
                     .resolve_named_plan(spec)
                     .await?;
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    ctx.execute_logical_plan(named.plan)
-                        .await?
-                        .collect()
-                        .await?,
+                    spark_test_frame(&ctx, named.plan).collect().await?,
                 )
             }
             .await;
@@ -3378,10 +3382,7 @@ async fn projection_limit_keeps_preparation_boundaries()
                     .resolve_named_plan(spec)
                     .await?;
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    ctx.execute_logical_plan(named.plan)
-                        .await?
-                        .collect()
-                        .await?,
+                    spark_test_frame(&ctx, named.plan).collect().await?,
                 )
             }
             .await;
@@ -3611,17 +3612,8 @@ async fn foldable_grouping_keeps_empty_and_live_boundaries()
                 let named = PlanResolver::new(&ctx, Arc::new(config))
                     .resolve_named_plan(spec)
                     .await?;
-                // Match the public Spark entry point's query-local marker.
-                let mut state = ctx.state();
-                state
-                    .config_mut()
-                    .options_mut()
-                    .extensions
-                    .insert(SparkSqlErrorSemantics::default());
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    datafusion::dataframe::DataFrame::new(state, named.plan)
-                        .collect()
-                        .await?,
+                    spark_test_frame(&ctx, named.plan).collect().await?,
                 )
             }
             .await;
@@ -3904,10 +3896,7 @@ async fn group_only_limit_preserves_live_and_local_errors()
                     .resolve_named_plan(spec)
                     .await?;
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    ctx.execute_logical_plan(named.plan)
-                        .await?
-                        .collect()
-                        .await?,
+                    spark_test_frame(&ctx, named.plan).collect().await?,
                 )
             }
             .await;
@@ -3968,8 +3957,7 @@ async fn correlated_exists_prunes_unused_cast()
                     let named = PlanResolver::new(&ctx, Arc::new(config))
                         .resolve_named_plan(spec)
                         .await?;
-                    let result =
-                        async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
+                    let result = spark_test_frame(&ctx, named.plan).collect().await;
                     if ansi && fails {
                         assert!(
                             result
@@ -4058,8 +4046,7 @@ async fn correlation_free_exists_prepares_output()
                     let named = PlanResolver::new(&ctx, Arc::new(config))
                         .resolve_named_plan(spec)
                         .await?;
-                    let result =
-                        async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
+                    let result = spark_test_frame(&ctx, named.plan).collect().await;
                     if ansi && fails {
                         let error = result.unwrap_err().to_string().to_lowercase();
                         let cause = if expression.starts_with("CAST") {
@@ -4153,8 +4140,7 @@ async fn empty_local_projection_precedes_scalar_preparation()
                     let named = PlanResolver::new(&ctx, Arc::new(config))
                         .resolve_named_plan(spec)
                         .await?;
-                    let result =
-                        async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
+                    let result = spark_test_frame(&ctx, named.plan).collect().await;
                     if ansi && fails {
                         let error = result.unwrap_err().to_string().to_lowercase();
                         let cause = if expression.starts_with("CAST") {
@@ -4263,8 +4249,7 @@ async fn empty_group_preparation_preserves_grand_totals()
                     let named = PlanResolver::new(&ctx, Arc::new(config))
                         .resolve_named_plan(spec)
                         .await?;
-                    let result =
-                        async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
+                    let result = spark_test_frame(&ctx, named.plan).collect().await;
                     if ansi && fails {
                         let error = result.unwrap_err().to_string().to_lowercase();
                         let cause = if expression.starts_with("CAST") {
@@ -4308,11 +4293,7 @@ async fn empty_group_preparation_preserves_grand_totals()
             let named = PlanResolver::new(&ctx, Arc::new(config))
                 .resolve_named_plan(spec)
                 .await?;
-            let batches = ctx
-                .execute_logical_plan(named.plan)
-                .await?
-                .collect()
-                .await?;
+            let batches = spark_test_frame(&ctx, named.plan).collect().await?;
             let mut actual = Vec::new();
             for batch in batches {
                 for row in 0..batch.num_rows() {
@@ -4396,9 +4377,7 @@ async fn empty_operators_precede_scalar_children()
                         let named = PlanResolver::new(&ctx, Arc::new(config))
                             .resolve_named_plan(spec)
                             .await?;
-                        let result =
-                            async { ctx.execute_logical_plan(named.plan).await?.collect().await }
-                                .await;
+                        let result = spark_test_frame(&ctx, named.plan).collect().await;
                         if ansi && fails {
                             let error = result.unwrap_err().to_string().to_lowercase();
                             let cause = if expression.starts_with("CAST") {
@@ -4446,9 +4425,7 @@ async fn empty_operators_precede_scalar_children()
             let named = PlanResolver::new(&ctx, Arc::new(config))
                 .resolve_named_plan(spec)
                 .await?;
-            let physical = ctx
-                .execute_logical_plan(named.plan)
-                .await?
+            let physical = spark_test_frame(&ctx, named.plan)
                 .create_physical_plan()
                 .await?;
             assert!(

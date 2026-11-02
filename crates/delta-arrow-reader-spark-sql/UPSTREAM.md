@@ -157,6 +157,8 @@ constant-group elimination, including its aggregate kernels and required CAST
 errors, before and after Spark execution. The
 [native constant-group checks](tests/fixtures/README.md#native-constant-group-preservation)
 compare plans, complete schemas and original floating bits against a plain session.
+Spark EXISTS output pruning also requires this marker. Native EXISTS queries
+retain DataFusion's empty-input results and required aggregate CAST errors.
 
 CASE, IF, COALESCE, IFNULL and NVL share Spark numeric result types with Decimal
 VALUES columns. Precision reduction preserves integral digits, so DECIMAL(38,20)
