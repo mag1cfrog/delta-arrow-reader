@@ -1136,6 +1136,15 @@ async fn nested_positive_aliases_match_public_and_executed_spark_schemas() -> Te
 }
 
 #[tokio::test]
+async fn extracted_positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
+    replay_positive_alias_schema_stages(
+        include_str!("fixtures/review-710-nested-positive-alias-forms-spark.jsonl"),
+        24,
+    )
+    .await
+}
+
+#[tokio::test]
 async fn successful_queries_cannot_supply_their_expected_error() -> TestResult {
     let session = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
