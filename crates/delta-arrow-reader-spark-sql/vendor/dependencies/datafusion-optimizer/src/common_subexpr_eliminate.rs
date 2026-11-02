@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -729,6 +730,8 @@ impl CSEController for ExprCSEController<'_> {
                 | Expr::Column(..)
                 | Expr::ScalarVariable(..)
                 | Expr::Alias(..)
+                // Window functions cannot be evaluated in the scalar projection below them.
+                | Expr::WindowFunction(..)
                 | Expr::Wildcard { .. }
                 | Expr::Lambda(_)
                 | Expr::LambdaVariable(_)

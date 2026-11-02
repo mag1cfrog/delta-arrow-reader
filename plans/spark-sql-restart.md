@@ -109,17 +109,36 @@ existing independent Spark grouping/error records. Direct-plan Spark unit tests
 now attach the same query-local marker as the public entry point. The validated
 candidate passes 571 tests across 72 Linux workspace suites, with zero failures
 and two inherited ignored doctests, plus formatting and root-crate Clippy.
-Independent clean-context review has no unresolved source finding. Its dedicated
-staging PR and cleanup remain pending.
+Independent clean-context review has no unresolved finding. PR #751 merged at
+`d205a6b5`; #746 is closed and its worktree, local/remote branches and temporary
+posting files are removed.
 
-#745 has 66 independently captured Spark references, with 48 results and 18
-required admission errors. Its candidate stabilizes equivalent window identities
-and preserves ROW_NUMBER dependencies through aliases; runtime validation is
-next. #744 has 108 focused PIVOT references and 78 supplemental alias/qualifier
-probes. #747 retains 294 DATE RANGE observations, including wide-offset behavior.
-Interval qualifiers are currently lost before Arrow lowering; numeric day bounds
-and qualifier preservation will be assessed separately without waiving interval
-admission or naming differences.
+#745 keeps complete window functions out of scalar common-expression projections;
+CSE still traverses their arguments and keys. The final production diff is one
+exclusion rule plus its source notice and explanation. All 66 independent Spark
+references pass at both batch sizes: 96 complete result/schema comparisons and
+36 required planning-error checks. Native SQL and a direct CSE/filter-boundary
+control also pass. The six original unaliased statements execute successfully
+at both batch sizes with matching values, types and nullability; their 36 field
+name/metadata differences remain visible under #727. Complete original results
+are retained without rewriting expected fields. Full Linux validation passes
+574 tests across 73 suites, zero failures and two inherited ignored doctests,
+plus formatting and root-crate Clippy. The dedicated PR is being prepared.
+
+#730 passes 536 complete comparisons and eight comparisons with the already
+recorded #710 generated-alias-marker difference. New combined controls expose
+scalar floating ORDER BY (#752) and physical result schemas after statistics
+shortcuts (#753); both are assigned separate repairs. The statistics mismatch
+also reproduces without the new extrema implementation. #752 now has 228
+independently captured scalar ordering references, pending runtime validation.
+
+#744 has 108 focused PIVOT references and 78 supplemental alias/qualifier probes.
+#747 retains 398 DATE RANGE observations: 336 finite-bound references, 14 explicit
+NULL-offset references owned by #754, and 48 interval references related to #749.
+Finite-bound implementation and independent review are in progress; reversal and
+remaining admission boundaries need runtime checks. Interval qualifiers are lost
+before Arrow lowering and require a separate repair. These pending boundaries
+are not accepted as passing compatibility.
 
 ### Completed S04 nested collection result types
 

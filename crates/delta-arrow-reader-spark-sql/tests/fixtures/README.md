@@ -1228,6 +1228,29 @@ python tests/fixtures/capture_window_admission_spark.py
 cargo test --locked --workspace --test window_admission
 ```
 
+## Equivalent window offsets
+
+`equivalent-windows-spark.jsonl` contains 66 Spark 4.2.0 observations in UTC:
+11 query forms in both ANSI modes, each with mixed, all-NULL and empty input.
+The reference records 48 successful results with complete schemas and 18 required
+planning errors. `equivalent_windows.rs` compares them at batch sizes 1 and 32.
+
+The queries combine literal, folded and cast LAG/LEAD offsets, default and explicit
+frames, duplicate expressions, bounded aggregates, outer consumers and grouped
+input. Explicit aliases keep these checks separate from generated window names.
+Offset/frame mismatches and missing ORDER BY must still fail in `plan_query`.
+Separate controls compare native DataFusion results and check that common
+window arguments still share a scalar input. A native plan with equivalent
+windows and different partition keys retains predicates on window outputs and
+nonshared keys above the affected windows.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_equivalent_windows_spark.py
+cargo test --locked --workspace --test equivalent_windows
+```
+
 ## Floating grouping and DISTINCT
 
 `floating-group-keys-spark.jsonl` contains 840 Spark 4.2.0 observations, with both
