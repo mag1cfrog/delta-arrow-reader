@@ -425,6 +425,16 @@ generated labels; their executable expressions retain declared parameter names.
 The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
 record remaining STRUCT schema, alias display and metadata differences separately.
 
+Qualified column references bind before unqualified struct-field access. With a
+relation alias `p`, a scalar `id` and a struct column `p`, `p.id` selects the scalar
+column and `p.p.id` selects the struct field. Duplicate columns at the selected
+priority remain ambiguous. Nested extraction uses that binding, so an invalid
+qualified path cannot fall back to a different struct column. This shared rule
+also applies to `IDENTIFIER`, grouping, ordering and window expressions; wildcard
+qualifier matching keeps its existing rules. The
+[precedence references](tests/fixtures/README.md#qualified-column-precedence)
+cover these consumers and native SQL isolation.
+
 ### Derived window metadata
 
 Spark value-returning windows remove inherited top-level user metadata from

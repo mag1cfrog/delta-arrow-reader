@@ -1701,3 +1701,39 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 python tests/fixtures/capture_scalar_float_ordering_spark.py
 cargo test --locked --workspace --test scalar_float_ordering
 ```
+
+## Qualified column precedence
+
+`qualified-column-precedence-spark.jsonl` records 186 independent Spark 4.2.0
+observations in UTC, with case-insensitive identifier matching and both ANSI
+modes. Its populated, empty and NULL-valued providers have nullable integer
+`id,g,k,v` columns. The ordinary collision query uses the same SQL and input
+values as the existing PIVOT probe's control:
+
+```sql
+SELECT p.id AS selected_id
+FROM (SELECT id,named_struct('id',99) AS p,g,v FROM inputs) p
+```
+
+The matrix covers qualified columns competing with struct access, struct-only
+fallback, explicit `p.p.id`, genuine duplicate columns, quoted and case-varied
+identifiers, `IDENTIFIER`, and projection/filter/aggregate/group/order/window
+consumers. Invalid qualified nested paths must fail even when an unqualified
+struct path could succeed. USING joins exercise hidden qualified keys and both
+qualified and unqualified stars. The existing PIVOT records remain unchanged;
+their replay requires the separate source-alias implementation in #744.
+
+`qualified_column_precedence.rs` compares full rows and schemas at batch sizes
+1 and 32 with two provider partitions. Required resolution failures must occur
+during planning, including on empty input. Native SQL compares complete schemas
+and batches before and after Spark planning. The shared resolver's unit test
+also checks field-order independence, multipart relation suffixes, nested display
+names, fallback and qualified ambiguity.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
+
+```sh
+python tests/fixtures/capture_qualified_column_precedence_spark.py
+cargo test --locked --workspace --test qualified_column_precedence
+cargo test --locked --workspace -p sail-plan qualified_columns_win_without_hiding_ambiguity
+```

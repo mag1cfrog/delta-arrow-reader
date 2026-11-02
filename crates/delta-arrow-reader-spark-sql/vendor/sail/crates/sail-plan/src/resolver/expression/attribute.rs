@@ -126,24 +126,7 @@ impl PlanResolver<'_> {
                             && qualifier_matches(q.as_ref(), qualifier)
                             && info.name().eq_ignore_ascii_case(name.as_ref())
                         {
-                            let expr = Self::resolve_potentially_nested_field(
-                                col((qualifier, field)),
-                                field.data_type(),
-                                inner,
-                            )?;
-                            let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
-                            let named = NamedExpr::new(vec![projection_name], expr);
-                            Some(if inner.is_empty() {
-                                named
-                            } else {
-                                named.with_expression_name(
-                                    std::iter::once(*name)
-                                        .chain(inner.iter())
-                                        .map(|part| part.as_ref())
-                                        .collect::<Vec<_>>()
-                                        .join("."),
-                                )
-                            })
+                            Some((q.is_some(), qualifier, field, *name, *inner))
                         } else {
                             None
                         }
@@ -151,12 +134,38 @@ impl PlanResolver<'_> {
                     .collect()
             })
             .collect::<Vec<_>>();
+        // A qualified column binds before unqualified struct-field fallback.
+        if candidates.iter().any(|(qualified, ..)| *qualified) {
+            candidates.retain(|(qualified, ..)| *qualified);
+        }
         if candidates.len() > 1 {
             return Err(PlanError::AnalysisError(format!(
                 "ambiguous attribute: {name:?}"
             )));
         }
-        Ok(candidates.pop())
+        let Some((_, qualifier, field, name, inner)) = candidates.pop() else {
+            return Ok(None);
+        };
+        let Some(expr) = Self::resolve_potentially_nested_field(
+            col((qualifier, field)),
+            field.data_type(),
+            inner,
+        ) else {
+            return Ok(None);
+        };
+        let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
+        let named = NamedExpr::new(vec![projection_name], expr);
+        Ok(Some(if inner.is_empty() {
+            named
+        } else {
+            named.with_expression_name(
+                std::iter::once(name)
+                    .chain(inner.iter())
+                    .map(|part| part.as_ref())
+                    .collect::<Vec<_>>()
+                    .join("."),
+            )
+        }))
     }
 
     fn resolve_aggregate_field(
@@ -393,5 +402,109 @@ pub(super) fn qualifier_matches(
             table,
         }) => catalog_matches(catalog) && schema_matches(schema) && table_matches(table),
         None => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::prelude::SessionContext;
+    use datafusion_common::DFSchema;
+
+    use super::*;
+    use crate::config::PlanConfig;
+
+    #[test]
+    fn qualified_columns_win_without_hiding_ambiguity() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        for reversed in [false, true] {
+            let mut state = PlanResolverState::new();
+            let id = Arc::new(Field::new(
+                state.register_field_name("id"),
+                DataType::Int32,
+                true,
+            ));
+            let nested = Arc::new(Field::new(
+                state.register_field_name("p"),
+                DataType::Struct(vec![Arc::new(Field::new("id", DataType::Int32, true))].into()),
+                true,
+            ));
+            let qualifier = TableReference::full("catalog", "schema", "p");
+            let mut fields = vec![
+                (Some(qualifier.clone()), id.clone()),
+                (Some(qualifier.clone()), nested.clone()),
+            ];
+            if reversed {
+                fields.reverse();
+            }
+            let schema = Arc::new(DFSchema::new_with_metadata(
+                fields.clone(),
+                Default::default(),
+            )?);
+            for parts in [
+                vec!["p", "id"],
+                vec!["schema", "p", "id"],
+                vec!["catalog", "schema", "p", "id"],
+            ] {
+                assert_eq!(
+                    resolver.resolve_field_or_nested_field(&parts.into(), &schema, &mut state)?,
+                    Some(NamedExpr::new(
+                        vec!["id".into()],
+                        col((Some(&qualifier), &id)),
+                    )),
+                );
+            }
+            assert_eq!(
+                resolver.resolve_field_or_nested_field(
+                    &["p", "p", "id"].into(),
+                    &schema,
+                    &mut state,
+                )?,
+                Some(
+                    NamedExpr::new(
+                        vec!["id".into()],
+                        get_field().call(vec![col((Some(&qualifier), &nested)), lit("id")]),
+                    )
+                    .with_expression_name("p.id".into()),
+                ),
+            );
+            let struct_only = Arc::new(DFSchema::new_with_metadata(
+                vec![(Some(qualifier.clone()), nested.clone())],
+                Default::default(),
+            )?);
+            assert_eq!(
+                resolver.resolve_field_or_nested_field(
+                    &["p", "id"].into(),
+                    &struct_only,
+                    &mut state,
+                )?,
+                Some(
+                    NamedExpr::new(
+                        vec!["id".into()],
+                        get_field().call(vec![col((Some(&qualifier), &nested)), lit("id")]),
+                    )
+                    .with_expression_name("p.id".into()),
+                ),
+            );
+            fields.push((
+                Some(qualifier),
+                Arc::new(Field::new(
+                    state.register_field_name("id"),
+                    DataType::Int32,
+                    true,
+                )),
+            ));
+            let duplicate_schema =
+                Arc::new(DFSchema::new_with_metadata(fields, Default::default())?);
+            assert!(matches!(
+                resolver.resolve_field_or_nested_field(
+                    &["p", "id"].into(),
+                    &duplicate_schema,
+                    &mut state,
+                ),
+                Err(PlanError::AnalysisError(message)) if message.starts_with("ambiguous attribute")
+            ));
+        }
+        Ok(())
     }
 }
