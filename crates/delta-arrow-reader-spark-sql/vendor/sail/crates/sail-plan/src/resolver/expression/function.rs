@@ -453,7 +453,7 @@ impl PlanResolver<'_> {
         let mut names: Vec<String> = vec![];
         let mut exprs: Vec<expr::Expr> = vec![];
 
-        for expression in expressions {
+        for (argument_index, expression) in expressions.into_iter().enumerate() {
             let is_dotted_attribute = matches!(
                 &expression,
                 spec::Expr::UnresolvedAttribute { name, .. } if name.parts().len() > 1
@@ -575,7 +575,7 @@ impl PlanResolver<'_> {
                     let expr = if identifier_argument
                         && matches!(&other, Expr::Column(_) | Expr::OuterReferenceColumn(_, _))
                     {
-                        other.alias(format!("col{}", exprs.len() + 1))
+                        other.alias(format!("col{}", argument_index + 1))
                     } else if let Some(field_name) = field_name
                         && matches!(&other, Expr::ScalarFunction(ScalarFunction { func, .. })
                             if func.inner().is::<GetFieldFunc>() || func.inner().is::<ArrayStructField>())
