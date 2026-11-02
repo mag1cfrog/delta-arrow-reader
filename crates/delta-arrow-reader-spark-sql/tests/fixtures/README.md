@@ -46,16 +46,24 @@ calendar conversion in the Rust observation as well as the Spark capture.
 Separate native DataFusion controls retain calendar interval arithmetic.
 DATE RANGE window behavior has its own references.
 
-Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
+Capture fresh references with Python 3.12, PySpark 4.2.0 and Java 21 from
+this crate. Copy the scripts into a new directory so the three supplemental
+scripts can create their outputs without replacing committed fixtures.
+`PYTHONPATH` supplies their shared helpers from the fixture directory.
 
 ```sh
-python tests/fixtures/capture_date_day_arithmetic_spark.py
-python tests/fixtures/capture_date_day_admission_probes_spark.py
-python tests/fixtures/capture_date_day_correlated_spark.py
-python tests/fixtures/capture_date_day_lambda_spark.py
-python tests/fixtures/capture_date_day_closed_lambda_spark.py
+date_day_fixture_dir="$PWD/tests/fixtures"
+date_day_capture_dir="$(mktemp -d)"
+cp "$date_day_fixture_dir"/capture_date_day_*_spark.py "$date_day_capture_dir/"
+for date_day_script in "$date_day_capture_dir"/capture_date_day_*_spark.py; do
+    PYTHONPATH="$date_day_fixture_dir${PYTHONPATH:+:$PYTHONPATH}" \
+        python "$date_day_script"
+done
 cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
 ```
+
+The new JSONL files are beside the copied scripts in `$date_day_capture_dir`.
+The Rust test continues to replay the committed fixtures.
 
 ## Parallel errors
 
