@@ -8,9 +8,9 @@ use std::sync::{
 
 use arrow::array::Array;
 use arrow::datatypes::DataType;
-use datafusion::common::tree_node::TreeNodeRecursion;
+use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion::execution::SessionStateBuilder;
-use datafusion::logical_expr::{ColumnarValue, LogicalPlan, Volatility, create_udf};
+use datafusion::logical_expr::{ColumnarValue, Expr, LogicalPlan, Volatility, create_udf};
 use datafusion::optimizer::AnalyzerRule;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -207,6 +207,66 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
             checked += 1;
         }
         assert_eq!(checked, 24);
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn single_row_case_results_drop_metadata_after_simplification() -> TestResult {
+    let records = include_str!("fixtures/single-row-correlated-case-metadata-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len(), 13);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        let mut checked = 0;
+        for case in &records[1..] {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: "UTC".into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let mut scalar_fields = 0;
+            query.logical_plan.apply_with_subqueries(|node| {
+                node.apply_expressions(|expr| {
+                    expr.apply(|expr| {
+                        if let Expr::ScalarSubquery(subquery) = expr {
+                            // An initial-metadata guard would omit this scalar's boundary.
+                            assert!(subquery.subquery.schema().field(0).metadata().is_empty());
+                            scalar_fields += 1;
+                        }
+                        Ok(TreeNodeRecursion::Continue)
+                    })
+                })?;
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            assert_eq!(scalar_fields, 1, "{}", case["id"]);
+            let actual = spark_results::capture_spark_query_result(&session, case).await;
+            let expected = &case["expected"];
+            assert_eq!(expected["status"], "ok");
+            let matches = actual.as_ref().is_ok_and(|actual| {
+                actual["rows"] == expected["rows"] && actual["schema"] == expected["schema"]
+            });
+            if !matches {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: expected {expected}, got {actual:?}",
+                    case["id"], case["ansi"]
+                ));
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, 12);
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())

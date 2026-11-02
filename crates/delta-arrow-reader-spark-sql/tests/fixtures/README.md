@@ -1005,6 +1005,13 @@ metadata-removal adapter, which preserves Arrow extension metadata, data types,
 NULLs and values. Scalar extension/native controls and the existing window
 metadata tests protect both consumers.
 
+`single-row-correlated-case-metadata-spark.jsonl` adds 12 references where an
+inner CASE initially has no metadata and later simplifies to a source column.
+The replay first verifies that empty inner metadata, then compares complete
+results at both batch sizes, including direct source metadata and empty scalar
+metadata. Bare and incidental-CAST cases require the same boundary. Checking
+only metadata present during scalar construction would miss these cases.
+
 `single-row-correlated-nonnullable-spark.jsonl` adds eight references with
 nonnullable source fields. Rust compares the complete public resolved schema
 with Spark and checks exact rows at both batch sizes. Internal analysis includes
@@ -1040,6 +1047,7 @@ fresh output path to preserve the committed evidence:
 single_row_capture=$(mktemp -d)
 python tests/fixtures/capture_single_row_correlated_spark.py "$single_row_capture/single-row-correlated-spark.jsonl"
 python tests/fixtures/capture_single_row_correlated_metadata_spark.py "$single_row_capture/single-row-correlated-metadata-spark.jsonl"
+python tests/fixtures/capture_single_row_correlated_case_metadata_spark.py "$single_row_capture/single-row-correlated-case-metadata-spark.jsonl"
 python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$single_row_capture/single-row-correlated-nonnullable-spark.jsonl"
 cargo test --workspace --test single_row_correlated
 cargo test --workspace --test window_metadata
