@@ -999,50 +999,14 @@ impl ScalarUDFImpl for NormalizeFloatArrayForSparkComparison {
         &self,
         args: datafusion_expr::ScalarFunctionArgs,
     ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
-        use arrow::array::{Array, ArrayRef, AsArray, LargeListArray, ListArray};
-        use datafusion_common::utils::{adjust_offsets_for_slice, list_values};
-        use datafusion_expr::ColumnarValue;
-        let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
-        self.return_type(&[value.data_type()])?;
-        let scalar = matches!(value, ColumnarValue::Scalar(_));
-        let array = value.to_array(1)?;
-        let values = list_values(array.as_ref())?;
-        let rows = values.len();
-        let field = Arc::new(arrow::datatypes::Field::new(
-            "value",
-            values.data_type().clone(),
-            true,
-        ));
-        let normalized = SparkComparisonFloat { widen: false }
-            .invoke_with_args(datafusion_expr::ScalarFunctionArgs {
-                args: vec![ColumnarValue::Array(values)],
-                arg_fields: vec![field.clone()],
-                number_rows: rows,
-                return_field: field,
-                config_options: args.config_options,
-            })?
-            .into_array(rows)?;
-        // The array signature coerces view and fixed-size inputs before execution.
-        let normalized: ArrayRef = match array.data_type() {
-            DataType::List(field) => Arc::new(ListArray::try_new(
-                field.clone(),
-                adjust_offsets_for_slice(array.as_list::<i32>()),
-                normalized,
-                array.nulls().cloned(),
-            )?),
-            DataType::LargeList(field) => Arc::new(LargeListArray::try_new(
-                field.clone(),
-                adjust_offsets_for_slice(array.as_list::<i64>()),
-                normalized,
-                array.nulls().cloned(),
-            )?),
-            _ => return datafusion_common::exec_err!("expected a coerced floating list"),
-        };
-        Ok(if scalar {
-            ColumnarValue::Scalar(ScalarValue::try_from_array(&normalized, 0)?)
-        } else {
-            ColumnarValue::Array(normalized)
-        })
+        self.return_type(
+            &args
+                .args
+                .iter()
+                .map(|value| value.data_type())
+                .collect::<Vec<_>>(),
+        )?;
+        crate::function::float_keys::NormalizeNestedFloatKeys.invoke_with_args(args)
     }
 }
 

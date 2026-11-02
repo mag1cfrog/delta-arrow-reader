@@ -1183,3 +1183,40 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 python tests/fixtures/capture_window_admission_spark.py
 cargo test --locked --workspace --test window_admission
 ```
+
+## Floating grouping and DISTINCT
+
+`floating-group-keys-spark.jsonl` contains 840 Spark 4.2.0 observations, with both
+ANSI modes and 44 recorded input tables. FLOAT and DOUBLE inputs retain their
+original bits, including positive/negative zero and distinct signed NaN payloads.
+`floating_group_keys.rs` compares complete schemas and row multisets at batch
+sizes 1 and 32, with two input partitions. NaN payloads have one output marker;
+zero signs remain visible. Collection contents are explicitly sorted in SQL.
+
+Provider keys include scalars, arrays, structs, arrays of structs and structs
+containing arrays. Cases distinguish NULL containers, NULL children and empty
+collections. They cover COUNT/SUM/AVG DISTINCT, multiple DISTINCT arguments,
+filters, grouping/HAVING, nonempty ROLLUP and scalar/array COLLECT_SET, including
+moving windows. Ordinary COUNT and collected original values check that key
+normalization preserves duplicate input rows and aggregate payloads. Negative
+zero-only MIN/MAX controls preserve values after redundant DISTINCT is removed.
+Of the references, 838 contain full successful results and two require
+CAST_INVALID_INPUT. Computed-key tests distinguish an operand's original zero
+sign before producing a numeric key. Set-operation inputs check that proven
+constant grouping outputs retain their original zero sign. Direct checks cover
+sliced/list-view storage, metadata and NULL masks; registered UDFs check required
+single evaluation and the existing grouped-aggregate volatility rejection.
+
+These references do not establish complex collection result construction
+([#729](https://github.com/mag1cfrog/delta-arrow-reader/issues/729)), general
+floating MIN/MAX ordering ([#730](https://github.com/mag1cfrog/delta-arrow-reader/issues/730)),
+constant grouping schemas ([#731](https://github.com/mag1cfrog/delta-arrow-reader/issues/731))
+or the empty ROLLUP contract retained under
+[#142](https://github.com/mag1cfrog/delta-arrow-reader/issues/142).
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_floating_group_keys_spark.py
+cargo test --locked --workspace --test floating_group_keys
+```

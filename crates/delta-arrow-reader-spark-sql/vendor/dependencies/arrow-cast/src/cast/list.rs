@@ -462,7 +462,8 @@ where
     let list_view_offsets = list_view.offsets();
     let sizes = list_view.sizes();
 
-    let mut take_indices: Vec<O::Native> = Vec::with_capacity(list_view.values().len());
+    // A small view can retain a large backing array; reserve only as indices are needed.
+    let mut take_indices: Vec<O::Native> = Vec::new();
     let mut offsets: Vec<O::Native> = Vec::with_capacity(list_view.len() + 1);
     use num_traits::Zero;
     offsets.push(O::Native::zero());

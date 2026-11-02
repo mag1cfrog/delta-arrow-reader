@@ -7,33 +7,58 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-### S04 window admission
+### S04 floating DISTINCT and nested grouping
 
-#142's new aggregate/window inventory has 192 independent Spark observations.
-It exposed floating DISTINCT/nested grouping (#725), floating window partitions
-and peers (#726), full window names (#727), and missing window validation (#724).
-All four are assigned native children of the open S04 parent. Alias metadata
-remains #710; struct-constructor nullability remains part of #156.
+#724 completed in PR #728 at staging `a707aa71`. Its window-order/frame
+validation, 572 Spark references and final 528-test Linux workspace passed
+clean-context Sol/high review. #690 remains completed within its recorded scope.
 
-#724 is the current repair. It checks ordering and function-specific frames,
-rejects DISTINCT windows, and validates frame bounds before empty-input pruning.
-Valid whole-partition RANGE frames without ORDER BY use the equivalent native
-ROWS representation. Signed ROWS offsets retain their direction, and zero
-offsets become CURRENT ROW after function-specific expression validation.
-Independent Spark references contain 572 observations across both ANSI modes and
-empty/nonempty inputs. The focused Rust test checks 1,144 comparisons, including
-planning-time rejection causes, complete successful schemas and values. Native
-SQL and volatile-UDF controls are separate checks. The final Linux workspace
-passes 528 tests with no failures and two inherited ignored doctests; the unchanged
-25,180-observation historical replay, fmt and all-target Clippy also pass.
-Clean-context Sol/high review identified a signed-frame test gap. Added SUM
-controls now assert actual membership for negative FOLLOWING and PRECEDING;
-all prior reference expectations remain unchanged. The reviewer verified the
-repair and found no remaining actionable issue in the scoped change.
+#725 now reuses scalar zero/NaN normalization recursively for array/struct keys,
+retained DISTINCT aggregates and COLLECT_SET. Normalization stays outside
+computed key operands and unrelated aggregate inputs. MIN/MAX discard redundant
+DISTINCT before this step. Native SQL keeps its existing behavior.
 
-The #142 coverage candidate is preserved separately while this repair is reviewed.
-Afterward, restore it and continue the remaining native siblings and grouping
-boundary decisions. Do not count captured differences as accepted compatibility.
+The first expanded capture has 800 independent Spark observations, compared at
+batch sizes 1 and 32. The candidate corrects 544 outcomes and leaves 1,056
+unchanged. Of those unchanged outcomes, 384 still differ from Spark: 312 complex
+collection result-type failures (#729), 16 MIN/MAX ordering/representative
+observations (#730), 16 constant grouping field mismatches (#731), and 40 empty
+ROLLUP totals already retained under #142. The three new runtime issues are
+assigned native children of the open S04 parent. Their original captures and
+before/after outcomes remain in external review evidence.
+
+The focused floating-key reference contains 840 Spark observations, including
+provider array/struct keys, nested arrays of structs, structs containing arrays,
+NULL containers/elements, zero signs, signed NaN payloads, infinities, duplicate
+rows, filters and empty/all-NULL aggregates. Separate negative-zero-only MIN/MAX
+controls check that discarded DISTINCT does not change aggregate payloads.
+Independent review found and repaired constant-set payload restoration and an
+oversized list-view index reserve. The added 128-reference diagnostic now matches
+all row values; 160 of its 256 comparisons still expose previously known schema
+contracts, retained separately. The permanent constant-set cases verify values
+through grouped summaries. Two CAST_INVALID_INPUT references preserve required
+errors, and UDF controls check grouped rejection and once-per-row evaluation.
+ATAN2 signed-zero behavior (#732) and global volatile-aggregate admission (#733)
+were independently reproduced and assigned separate native owners. Their failures
+remain open; the current slice uses an isolated CAST/CASE sign test and the
+existing explicit-GROUP-BY admission route.
+The full Linux workspace passes 532 tests with no failures and two inherited
+ignored doctests. All 25,180 historical observations remain accepted without
+changing the matcher or corrections. The 840 new references produce 1,676 full
+successful comparisons and four required CAST failures at two batch sizes. The
+stricter error assertion passed a final focused rerun; fmt and all-target Clippy
+also pass. Clean-context Sol/high Bulletproof Review has no remaining actionable
+findings in this slice and verified the final code, fixture and documentation
+hashes. #725 remains open until the staging merge. Afterward, repair #729's
+collection output construction, then continue the
+remaining S04 work, including floating windows (#726), window names (#727),
+MIN/MAX (#730) and constant grouping schemas (#731).
+
+The #142 inventory remains separate: 192 Spark observations at two batch sizes
+on `a707aa71` give 228 full successful matches, 28 required-error matches,
+112 row differences and 16 schema-only differences. The retained 38 grouping
+queries still include empty-input, capacity and projected-IN decisions. Their
+pending contracts are not waived by a passing bounded repair.
 
 ### Completed shared nullability prerequisites for S04
 
@@ -74,11 +99,11 @@ intact and these observations do not count as compatibility matches.
 
 ### S04 grouping NULL predicates
 
-The 38 retained grouping observations have been rerun on Spark 4.2.0 and staging
-`2685c653`. Both batch settings reproduce the same differences: 20 result
-differences, 11 unnecessary candidate failures and seven missing required errors.
-These are retained observations, not 38 independent defects. Empty grouping-set
-totals and optimizer-dependent evaluation need separate compatibility decisions.
+The original staging `2685c653` reproduced 20 result differences, 11 unnecessary
+candidate failures and seven missing required errors across the 38 retained
+observations. The current reclassification is recorded above. Empty grouping-set
+totals and optimizer-dependent evaluation still need separate compatibility
+decisions.
 
 #713 corrects the shared STRING-to-FLOAT/DOUBLE nullable result declaration.
 The old declaration allowed NULL predicates to remove required invalid-input

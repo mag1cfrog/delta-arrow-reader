@@ -52,6 +52,7 @@ use crate::function::common::{
     get_null_treatment, hll_args_with_default_lg, hll_union_args_with_default_allow_different_lg,
     theta_args_with_default_lg,
 };
+use crate::function::float_keys::normalize_spark_float_key;
 use crate::function::transform_count_star_wildcard_expr;
 
 lazy_static! {
@@ -448,7 +449,7 @@ fn collect_set(input: WinFunctionInput) -> PlanResult<expr::Expr> {
         filter,
         function_context,
     } = input;
-    let arg = arguments.one()?;
+    let arg = normalize_spark_float_key(arguments.one()?, function_context.schema)?;
     let element_type = arg.get_type(function_context.schema)?;
     let null_filter = arg.clone().is_not_null();
     let filter = Some(Box::new(match filter {

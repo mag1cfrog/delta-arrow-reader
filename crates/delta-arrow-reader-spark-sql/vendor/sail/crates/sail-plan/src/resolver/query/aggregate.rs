@@ -14,7 +14,7 @@ use datafusion_expr::logical_plan::{FetchType, SkipType};
 use datafusion_expr::utils::{enumerate_grouping_sets, find_aggregate_exprs, powerset};
 use datafusion_expr::{
     Aggregate, AggregateUDF, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder,
-    Projection, ScalarUDF, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
+    Projection, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
     bitwise_shift_right, cast, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
@@ -28,6 +28,7 @@ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::SparkComparisonFloat;
+use crate::function::float_keys::{NormalizeNestedFloatKeys, normalize_spark_float_key};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::{AggregateState, PlanResolverState};
@@ -232,25 +233,36 @@ impl PlanResolver<'_> {
         let aggregate_exprs = find_aggregate_exprs(&aggregate_candidates);
         // Normalize only each complete grouping key. Aggregate arguments and
         // operands inside a computed key must continue to see the original values.
-        let group_exprs = group_exprs.into_iter().map(|expr| {
-            expr.transform_down(|expr| {
-                if matches!(expr, Expr::GroupingSet(_)) {
-                    return Ok(Transformed::no(expr));
-                }
-                let normalize = matches!(expr.get_type(input.schema())?, DataType::Float32 | DataType::Float64)
-                    // Ordinary constant grouping expressions also serve as output
-                    // constants; Spark preserves their original zero sign. Grouping
-                    // sets materialize those keys and must still normalize them.
-                    && (has_grouping_set || expr.any_column_refs() || expr.contains_outer()
-                        || expr.contains_scalar_subquery() || expr.is_volatile());
-                let expr = if normalize {
-                    let (qualifier, name) = expr.qualified_name();
-                    ScalarUDF::from(SparkComparisonFloat { widen: false })
-                        .call(vec![expr.unalias()]).alias_qualified(qualifier, name)
-                } else { expr };
-                Ok(Transformed::new(expr, normalize, TreeNodeRecursion::Jump))
-            }).data()
-        }).collect::<DataFusionResult<Vec<_>>>()?;
+        let group_exprs = group_exprs
+            .into_iter()
+            .map(|expr| {
+                expr.transform_down(|expr| {
+                    if matches!(expr, Expr::GroupingSet(_)) {
+                        return Ok(Transformed::no(expr));
+                    }
+                    // Ordinary constants remain output literals; grouping sets materialize keys.
+                    let materialized = has_grouping_set
+                        || expr.any_column_refs()
+                        || expr.contains_outer()
+                        || expr.contains_scalar_subquery()
+                        || expr.is_volatile();
+                    let normalized = if materialized {
+                        normalize_spark_float_key(expr.clone().unalias(), input.schema())?
+                    } else {
+                        expr.clone().unalias()
+                    };
+                    let normalize = normalized != expr.clone().unalias();
+                    let expr = if normalize {
+                        let (qualifier, name) = expr.qualified_name();
+                        normalized.alias_qualified(qualifier, name)
+                    } else {
+                        expr
+                    };
+                    Ok(Transformed::new(expr, normalize, TreeNodeRecursion::Jump))
+                })
+                .data()
+            })
+            .collect::<DataFusionResult<Vec<_>>>()?;
         let mut plan = LogicalPlanBuilder::from(input)
             .aggregate(group_exprs, aggregate_exprs.clone())?
             .build()?;
@@ -886,11 +898,12 @@ impl PlanResolver<'_> {
                 // still refer to the original expression before normalization.
                 if let Expr::Alias(alias) = expr
                     && let Expr::ScalarFunction(function) = alias.expr.as_ref()
-                    && function
+                    && (function
                         .func
                         .inner()
                         .downcast_ref::<SparkComparisonFloat>()
                         .is_some_and(|normalizer| !normalizer.widen)
+                        || function.func.inner().is::<NormalizeNestedFloatKeys>())
                     && let [arg] = function.args.as_slice()
                 {
                     arg
