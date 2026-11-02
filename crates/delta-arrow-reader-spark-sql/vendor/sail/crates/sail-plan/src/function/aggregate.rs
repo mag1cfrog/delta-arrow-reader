@@ -6,8 +6,7 @@ use arrow::datatypes::{DataType, Field};
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
     approx_distinct, approx_percentile_cont, array_agg, average, bit_and_or_xor, bool_and_or,
-    correlation, count, covariance, first_last, grouping, min_max, percentile_cont, stddev, sum,
-    variance,
+    correlation, count, covariance, first_last, grouping, percentile_cont, stddev, sum, variance,
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
@@ -605,19 +604,21 @@ fn is_non_null_literal(expression: &expr::Expr) -> bool {
 }
 
 fn min_value(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    duplicate_agnostic_extreme(input, min_max::min_udaf)
+    duplicate_agnostic_extreme(input, false)
 }
 
 fn max_value(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    duplicate_agnostic_extreme(input, min_max::max_udaf)
+    duplicate_agnostic_extreme(input, true)
 }
 
-fn duplicate_agnostic_extreme(
-    input: AggFunctionInput,
-    function: fn() -> Arc<AggregateUDF>,
-) -> PlanResult<expr::Expr> {
+fn duplicate_agnostic_extreme(input: AggFunctionInput, is_max: bool) -> PlanResult<expr::Expr> {
+    let function = crate::function::float_extrema::extrema_udaf(
+        &input.arguments,
+        input.function_context.schema,
+        is_max,
+    )?;
     Ok(expr::Expr::AggregateFunction(AggregateFunction {
-        func: function(),
+        func: function,
         params: AggregateFunctionParams {
             args: input.arguments,
             // Duplicate elimination cannot change an extremum, and retaining DISTINCT creates

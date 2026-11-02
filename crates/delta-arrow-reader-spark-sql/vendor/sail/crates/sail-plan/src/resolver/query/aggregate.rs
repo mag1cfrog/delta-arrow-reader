@@ -501,6 +501,9 @@ impl PlanResolver<'_> {
     ) -> PlanResult<bool> {
         if udf == min_max::min_udaf().as_ref()
             || udf == min_max::max_udaf().as_ref()
+            || udf
+                .inner()
+                .is::<crate::function::float_extrema::SparkFloatExtrema>()
             || udf == count::count_udaf().as_ref()
             || udf == bit_and_or_xor::bit_and_udaf().as_ref()
             || udf == bit_and_or_xor::bit_or_udaf().as_ref()

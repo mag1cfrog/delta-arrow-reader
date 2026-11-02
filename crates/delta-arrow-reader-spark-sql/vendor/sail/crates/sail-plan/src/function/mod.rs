@@ -16,6 +16,7 @@ mod aggregate;
 mod collection_result;
 pub(crate) mod common;
 mod comparison;
+pub(crate) mod float_extrema;
 pub(crate) mod float_keys;
 mod generator;
 pub(crate) mod numeric_coercion;

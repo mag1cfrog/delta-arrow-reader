@@ -828,6 +828,22 @@ pub(crate) struct SparkComparisonFloat {
     pub(crate) widen: bool,
 }
 
+pub(crate) fn normalize_spark_float32(value: f32) -> f32 {
+    if value.is_nan() {
+        f32::NAN
+    } else {
+        value + 0.0
+    }
+}
+
+pub(crate) fn normalize_spark_float64(value: f64) -> f64 {
+    if value.is_nan() {
+        f64::NAN
+    } else {
+        value + 0.0
+    }
+}
+
 impl ScalarUDFImpl for SparkComparisonFloat {
     fn name(&self) -> &str {
         "spark_comparison_float"
@@ -907,14 +923,10 @@ impl ScalarUDFImpl for SparkComparisonFloat {
         use datafusion_expr::ColumnarValue;
         // Fuse FLOAT widening with normalization; evaluate the operand once.
         // Adding positive zero clears the sign of -0; NaNs still need explicit canonicalization.
-        let normalize = |v: f64| {
-            if v.is_nan() { f64::NAN } else { v + 0.0 }
-        };
+        let normalize = normalize_spark_float64;
         let [value] = datafusion_common::utils::take_function_args(self.name(), input.args)?;
         if !self.widen && value.data_type() == DataType::Float32 {
-            let normalize = |v: f32| {
-                if v.is_nan() { f32::NAN } else { v + 0.0 }
-            };
+            let normalize = normalize_spark_float32;
             return Ok(match value {
                 ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
                     ColumnarValue::Scalar(ScalarValue::Float32(v.map(normalize)))
