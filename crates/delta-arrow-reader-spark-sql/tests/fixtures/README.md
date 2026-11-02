@@ -1239,9 +1239,10 @@ The queries combine literal, folded and cast LAG/LEAD offsets, default and expli
 frames, duplicate expressions, bounded aggregates, outer consumers and grouped
 input. Explicit aliases keep these checks separate from generated window names.
 Offset/frame mismatches and missing ORDER BY must still fail in `plan_query`.
-Separate controls compare native DataFusion results and verify that window
-aliases preserve ROW_NUMBER's global uniqueness dependency without assigning one
-to partitioned ROW_NUMBER.
+Separate controls compare native DataFusion results and check that common
+window arguments still share a scalar input. A native plan with equivalent
+windows and different partition keys retains predicates on window outputs and
+nonshared keys above the affected windows.
 
 Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 

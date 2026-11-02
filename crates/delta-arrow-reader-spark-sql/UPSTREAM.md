@@ -40,11 +40,11 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
-The DataFusion expression fork also recognizes aliases when deriving
-ROW_NUMBER's functional dependencies in `Window::try_new`. Spark materializes
-windows under opaque field aliases so equivalent offsets retain separate
-outputs through simplification. The existing dependency rule still applies only
-to ROW_NUMBER without PARTITION BY.
+The DataFusion optimizer keeps complete window functions out of scalar
+common-expression projections. Equivalent windows retain their execution nodes;
+their scalar arguments and keys can still share a computed input. The
+[window references](tests/fixtures/README.md#equivalent-window-offsets) check
+folded offsets and predicates above partitioned windows.
 
 Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
 to their pinned registry packages. They use those packages directly; the inventory

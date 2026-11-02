@@ -3,17 +3,20 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use arrow::array::{Array, AsArray};
+use arrow::datatypes::Int64Type;
 use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
-use datafusion::common::{Dependency, FunctionalDependence, FunctionalDependencies};
 use datafusion::execution::SessionStateBuilder;
-use datafusion::functions_window::row_number::row_number_udwf;
+use datafusion::functions_window::lead_lag::lead_udwf;
 use datafusion::logical_expr::expr::WindowFunction;
-use datafusion::logical_expr::logical_plan::Window;
-use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, col, lit};
+use datafusion::logical_expr::{Expr, ExprFunctionExt, LogicalPlan, LogicalPlanBuilder, col, lit};
+use datafusion::optimizer::common_subexpr_eliminate::CommonSubexprEliminate;
+use datafusion::optimizer::optimizer::{Optimizer, OptimizerContext};
+use datafusion::optimizer::push_down_filter::PushDownFilter;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
@@ -130,47 +133,92 @@ async fn equivalent_windows_keep_native_sql_unchanged() -> TestResult {
 }
 
 #[tokio::test]
-async fn window_aliases_preserve_row_number_dependencies() -> TestResult {
-    let input = Arc::new(LogicalPlanBuilder::values(vec![vec![lit(1)], vec![lit(2)]])?.build()?);
-    let session = SessionContext::new_with_state(
-        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
-    );
-    for partitioned in [false, true] {
-        let expected = if partitioned {
-            FunctionalDependencies::empty()
-        } else {
-            FunctionalDependencies::new(vec![
-                FunctionalDependence::new(vec![1], vec![0, 1], false).with_mode(Dependency::Single),
-            ])
-        };
-        let mut function = WindowFunction::new(row_number_udwf(), vec![]);
-        if partitioned {
-            function.params.partition_by = vec![col("column1")];
-        }
-        let expression = Expr::WindowFunction(Box::new(function));
-        for expression in [
-            expression.clone(),
-            expression.clone().alias("number"),
-            expression.alias("inner").alias("outer"),
-        ] {
-            let window = Window::try_new(vec![expression], input.clone())?;
-            assert_eq!(window.schema.functional_dependencies(), &expected);
-        }
-        let partition = if partitioned { "PARTITION BY id" } else { "" };
-        let sql = format!(
-            "SELECT id,ROW_NUMBER() OVER ({partition} ORDER BY id) AS number \
-             FROM VALUES(1),(2) inputs(id)"
-        );
-        let query = plan_query(&session, &sql, &SparkSqlOptions::default()).await?;
-        let mut windows = 0;
-        query.logical_plan.apply(|plan| {
-            if let LogicalPlan::Window(window) = plan {
-                assert_eq!(window.schema.functional_dependencies(), &expected, "{sql}");
-                windows += 1;
+async fn native_window_cse_preserves_scalar_inputs_and_filter_boundaries() -> TestResult {
+    let session = SessionContext::new();
+    let input = session
+        .sql(
+            "SELECT * FROM VALUES(1,0,1,10),(2,0,2,20),(3,0,1,30),\
+             (4,1,1,40),(5,1,2,50) inputs(id,g,k,v)",
+        )
+        .await?
+        .into_unoptimized_plan();
+    let expression = Expr::from(WindowFunction::new(
+        lead_udwf(),
+        vec![col("v") + lit(1_i64), lit(1_i64)],
+    ));
+    let window = expression
+        .clone()
+        .partition_by(vec![col("g")])
+        .order_by(vec![col("id").sort(true, true)])
+        .build()?;
+    let other = expression
+        .partition_by(vec![col("g"), col("k")])
+        .order_by(vec![col("id").sort(true, true)])
+        .build()?;
+    let plan = LogicalPlanBuilder::window_plan(
+        input,
+        vec![
+            window.clone().alias("first"),
+            window.alias("duplicate"),
+            other.alias("other"),
+        ],
+    )?;
+    let plan = LogicalPlanBuilder::from(plan)
+        .filter(
+            col("g")
+                .eq(lit(0_i64))
+                .and(col("k").eq(lit(1_i64)))
+                .and(col("first").lt(lit(25_i64))),
+        )?
+        .project(vec![
+            col("id"),
+            col("first"),
+            col("duplicate"),
+            col("other"),
+        ])?
+        .sort(vec![col("id").sort(true, true)])?
+        .build()?;
+    let optimized = Optimizer::with_rules(vec![
+        Arc::new(CommonSubexprEliminate::new()),
+        Arc::new(PushDownFilter::new()),
+    ])
+    .optimize(plan, &OptimizerContext::new(), |_, _| {})?;
+    let mut scalar_inputs = 0;
+    optimized.apply(|plan| {
+        if let LogicalPlan::Projection(projection) = plan {
+            for expression in &projection.expr {
+                assert!(!expression.exists(|expr| Ok(matches!(expr, Expr::WindowFunction(_))))?);
+                if expression.exists(|expr| Ok(matches!(expr, Expr::BinaryExpr(_))))? {
+                    scalar_inputs += 1;
+                }
             }
-            Ok(TreeNodeRecursion::Continue)
-        })?;
-        assert_eq!(windows, 1, "{sql}");
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    assert!(
+        scalar_inputs > 0,
+        "window arguments should still share a scalar input"
+    );
+    let physical = session
+        .execute_logical_plan(optimized)
+        .await?
+        .create_physical_plan()
+        .await?;
+    let mut rows = Vec::new();
+    for batch in collect(physical, session.task_ctx()).await? {
+        for row in 0..batch.num_rows() {
+            rows.push(
+                batch
+                    .columns()
+                    .iter()
+                    .map(|column| {
+                        let column = column.as_primitive::<Int64Type>();
+                        column.is_valid(row).then(|| column.value(row))
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        }
     }
+    assert_eq!(json!(rows), json!([[1, 21, 21, 31]]));
     Ok(())
 }

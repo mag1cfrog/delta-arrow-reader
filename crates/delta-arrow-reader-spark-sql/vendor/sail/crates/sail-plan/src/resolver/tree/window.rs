@@ -166,14 +166,10 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
                 if let Some(replacement) = self.seen.get(&name) {
                     return Ok(Transformed::yes(replacement.clone()));
                 }
-                // Keep materialized columns distinct when window expressions simplify alike.
-                let alias = self.state.register_field_name(&name);
                 let plan = mem::replace(&mut self.plan, empty_logical_plan());
-                self.plan = LogicalPlan::Window(Window::try_new(
-                    vec![node.alias(alias.clone())],
-                    Arc::new(plan),
-                )?);
-                let replacement = ident(alias);
+                self.plan = LogicalPlan::Window(Window::try_new(vec![node], Arc::new(plan))?);
+                let alias = self.state.register_field_name(&name);
+                let replacement = ident(name.clone()).alias(alias);
                 self.seen.insert(name, replacement.clone());
                 Ok(Transformed::yes(replacement))
             }

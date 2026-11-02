@@ -1,4 +1,3 @@
-// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -2748,10 +2747,6 @@ impl Window {
             .iter()
             .enumerate()
             .filter_map(|(idx, expr)| {
-                let mut expr = expr;
-                while let Expr::Alias(alias) = expr {
-                    expr = alias.expr.as_ref();
-                }
                 let Expr::WindowFunction(window_fun) = expr else {
                     return None;
                 };
