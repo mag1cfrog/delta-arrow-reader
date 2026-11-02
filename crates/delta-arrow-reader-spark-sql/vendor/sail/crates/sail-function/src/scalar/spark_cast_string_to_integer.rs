@@ -318,7 +318,16 @@ mod tests {
                     assert!(output.is_null(1));
                     let invalid = invoke(ColumnarValue::Array(array.slice(3, 2)), 2);
                     if mode == StringIntegerCastMode::Ansi {
-                        assert!(invalid.is_err());
+                        let error = invalid.expect_err("ANSI CAST must reject malformed input");
+                        assert!(
+                            error.to_string().contains("[CAST_INVALID_INPUT]"),
+                            "{error}"
+                        );
+                        assert!(
+                            matches!(error.find_root(), datafusion_common::DataFusionError::ArrowError(cause, _)
+                            if matches!(cause.as_ref(), datafusion::arrow::error::ArrowError::CastError(_))),
+                            "{error:?}"
+                        );
                     } else {
                         let output = invalid?.into_array(2)?;
                         let expected = if mode == StringIntegerCastMode::Legacy {
