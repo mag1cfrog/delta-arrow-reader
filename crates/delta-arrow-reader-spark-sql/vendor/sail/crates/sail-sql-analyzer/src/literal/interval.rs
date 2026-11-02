@@ -182,8 +182,8 @@ fn parse_interval_year_month_string(
     let error = || SqlError::invalid(format!("interval: {s}"));
     let captures = interval_regex.captures(s).ok_or_else(error)?;
     let negated = negated ^ (captures.name("sign").map(|s| s.as_str()) == Some("-"));
-    let years: i32 = extract_match(&captures, "year", error)?.unwrap_or(0);
-    let months: i32 = extract_match(&captures, "month", error)?.unwrap_or(0);
+    let years: i64 = extract_match(&captures, "year", error)?.unwrap_or(0);
+    let months: i64 = extract_match(&captures, "month", error)?.unwrap_or(0);
     let n = years
         .checked_mul(12)
         .ok_or_else(error)?
@@ -194,7 +194,9 @@ fn parse_interval_year_month_string(
     } else {
         n
     };
-    Ok(IntervalValue::YearMonth { months: n })
+    Ok(IntervalValue::YearMonth {
+        months: i32::try_from(n).map_err(|_| error())?,
+    })
 }
 
 fn parse_interval_day_time_string(
@@ -501,11 +503,33 @@ mod tests {
         assert!(parse("'178956970-7' year to month", false).is_ok());
         assert!(parse("'178956970-7' year to month", true).is_ok());
         assert!(parse("'178956970-8' year to month", false).is_err());
-        assert!(parse("'178956970-8' year to month", true).is_err());
-        assert!(parse("-'178956970-8' year to month", false).is_err());
+        assert!(matches!(
+            parse("'178956970-8' year to month", true)?,
+            IntervalValue::YearMonth {
+                months: i32::MIN,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse("-'178956970-8' year to month", false)?,
+            IntervalValue::YearMonth {
+                months: i32::MIN,
+                ..
+            }
+        ));
         assert!(parse("-'178956970-8' year to month", true).is_err());
         assert!(parse("-'178956970-9' year to month", false).is_err());
         assert!(parse("-'178956970-9' year to month", true).is_err());
+        assert!(matches!(
+            parse("'-2147483648' month", false)?,
+            IntervalValue::YearMonth {
+                months: i32::MIN,
+                ..
+            }
+        ));
+        assert!(parse("'2147483648' month", false).is_err());
+        assert!(parse("'-2147483648' month", true).is_err());
+        assert!(parse("'-2147483649' month", false).is_err());
 
         assert_eq!(
             parse("'-2-1' year to month", false)?,
