@@ -1976,3 +1976,34 @@ precise native admission causes. They are reported separately from full Spark
 matches; they do not claim identical Spark diagnostics and do not accept #795's
 distinct zero-TRIM formatter failure. These tests add durable original coverage;
 they do not close #151 or #174, or the named dependencies.
+
+## Named struct declarations
+
+`named-struct-fields-spark.jsonl` retains the complete independent Spark 4.2.0
+capture: 110 observations in UTC and both ANSI modes, with SHA256
+`dbc50803ef3706c9d7438e1d43dbe39b32d91d5dbfd377d924c2c33db595cd0a`.
+`named-struct-declarations-spark.jsonl` copies its header and 104 complete record
+lines unchanged for #810. A partition test checks unique `(id,input,ansi)`
+identities, exact original lines and complete coverage together with the six
+`generated_label` records. Those six records remain in the original capture,
+owned by #766/#710; this target does not establish their runtime parity.
+
+`named_struct_declarations.rs` compares complete public analyzed fields and rows
+for all 96 successful `AS result` observations at batch sizes 1 and 32. The shared
+observer also validates physical and batch declarations. Nonempty, all-NULL and
+empty providers cover required and nullable children, typed and untyped NULLs,
+nested constructors and providers, user and Arrow extension metadata, unusual
+and duplicate names, empty names and constructors, extracted fields and three
+`TRANSFORM` lambdas. All eight invalid-name and arity records must fail during
+planning for their specific cause at both batch sizes. These checks do not claim
+identical Spark error identifiers. Seven native controls compare logical and
+physical schemas, plans and complete batches before and after Spark planning.
+
+The unchanged capture script requires Python 3.12, PySpark 4.2.0 and Java 21 and
+refuses to overwrite its output. From this crate, capture to a fresh path before
+reviewing any reference update:
+
+```sh
+python tests/fixtures/capture_named_struct_fields_spark.py /tmp/named-struct-fields-spark.jsonl
+cargo test --locked --workspace --test named_struct_declarations
+```

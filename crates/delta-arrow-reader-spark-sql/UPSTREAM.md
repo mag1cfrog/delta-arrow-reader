@@ -525,3 +525,14 @@ original operands without changing native LOWER or native SQL matching. The
 [Unicode ILIKE references](tests/fixtures/README.md#unicode-ilike) compare complete
 fields and values; escape validation and its evaluation boundaries remain under
 #771.
+
+### Named struct declarations
+
+Spark NAMED_STRUCT validates alternating constant string names and values, then
+uses the existing Spark StructFunction. The constructed struct is nonnullable;
+each child retains its type, nullability, user metadata and Arrow extension
+declaration. Empty constructors and empty or duplicate names remain valid.
+The [declaration references](tests/fixtures/README.md#named-struct-declarations)
+check explicitly named results, planning errors and native SQL preservation.
+Generated SELECT labels remain under #766/#710. Parent #766 also retains its
+wider qualification and wildcard controls.
