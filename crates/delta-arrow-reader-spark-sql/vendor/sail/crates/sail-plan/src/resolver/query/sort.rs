@@ -195,24 +195,9 @@ impl PlanResolver<'_> {
             asc,
             nulls_first,
         } = sort;
-        let find = |target: &Expr| -> Option<Expr> {
-            projection.iter().find_map(|expr| {
-                if let Expr::Alias(Alias {
-                    expr,
-                    relation,
-                    name,
-                    ..
-                }) = expr
-                    && expr.as_ref() == target
-                {
-                    return Some(Expr::Column(Column::new(relation.clone(), name.clone())));
-                }
-                None
-            })
-        };
         let expr = expr
             .transform_down(|e| {
-                if let Some(expr) = find(&e) {
+                if let Some(expr) = Self::projection_output(&e, projection) {
                     return Ok(Transformed::yes(expr));
                 }
                 Ok(Transformed::no(e))
@@ -223,6 +208,58 @@ impl PlanResolver<'_> {
             asc,
             nulls_first,
         })
+    }
+
+    fn projection_output(target: &Expr, projection: &[Expr]) -> Option<Expr> {
+        projection.iter().find_map(|expr| {
+            if let Expr::Alias(Alias {
+                expr,
+                relation,
+                name,
+                ..
+            }) = expr
+                && expr.as_ref() == target
+            {
+                return Some(Expr::Column(Column::new(relation.clone(), name.clone())));
+            }
+            None
+        })
+    }
+
+    fn retain_sort_outer_reference_names(
+        expr: &Expr,
+        projection: &[Expr],
+        names: Vec<String>,
+    ) -> PlanResult<Vec<String>> {
+        if names.is_empty() {
+            return Ok(names);
+        }
+        let mut keep = Vec::new();
+        expr.apply(|expr| {
+            if Self::projection_output(expr, projection).is_some() {
+                expr.apply(|expr| {
+                    if matches!(expr, Expr::OuterReferenceColumn(_, _)) {
+                        keep.push(false);
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })?;
+                return Ok(TreeNodeRecursion::Jump);
+            }
+            if matches!(expr, Expr::OuterReferenceColumn(_, _)) {
+                keep.push(true);
+            }
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        if keep.len() != names.len() {
+            return Err(PlanError::internal(
+                "sort outer-reference display names do not match resolved references",
+            ));
+        }
+        Ok(names
+            .into_iter()
+            .zip(keep)
+            .filter_map(|(name, keep)| keep.then_some(name))
+            .collect())
     }
 
     fn rebase_sort(sort: Sort, base: &[Expr], plan: &LogicalPlan) -> PlanResult<Sort> {
@@ -248,9 +285,17 @@ impl PlanResolver<'_> {
     ) -> PlanResult<Vec<Sort>> {
         let mut results: Vec<Sort> = Vec::with_capacity(sorts.len());
         for sort in sorts {
+            let name_start = state.outer_reference_display_names.len();
             let expr = self
                 .resolve_query_sort_order_by_plan(plan, sort, state)
                 .await?;
+            if let LogicalPlan::Projection(projection) = plan {
+                // Commit only occurrences that survive rebinding to projected outputs.
+                let names = state.outer_reference_display_names.split_off(name_start);
+                let names =
+                    Self::retain_sort_outer_reference_names(&expr.expr, &projection.expr, names)?;
+                state.outer_reference_display_names.extend(names);
+            }
             results.push(expr);
         }
         Ok(results)
@@ -267,12 +312,14 @@ impl PlanResolver<'_> {
         sort: &spec::SortOrder,
         state: &mut PlanResolverState,
     ) -> PlanResult<Sort> {
+        let name_start = state.outer_reference_display_names.len();
         let sort_expr = self
             .resolve_sort_order(sort.clone(), true, plan.schema(), state)
             .await;
         match sort_expr {
             Ok(sort_expr) => Ok(sort_expr),
             Err(_) => {
+                state.outer_reference_display_names.truncate(name_start);
                 let mut sorts = Vec::with_capacity(plan.inputs().len());
                 for input_plan in plan.inputs() {
                     let sort_expr = self
@@ -287,5 +334,49 @@ impl PlanResolver<'_> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Rebinding removes only the display occurrences replaced by projection outputs.
+
+    use std::sync::Arc;
+
+    use arrow::datatypes::{DataType, Field};
+    use datafusion_common::Column;
+    use datafusion_expr::Expr;
+
+    use crate::error::PlanResult;
+    use crate::resolver::PlanResolver;
+
+    #[test]
+    fn sort_display_names_keep_surviving_occurrences_and_spelling() -> PlanResult<()> {
+        let reference = |name: &str| {
+            Expr::OuterReferenceColumn(
+                Arc::new(Field::new(name, DataType::Int32, true)),
+                Column::new_unqualified(name),
+            )
+        };
+        let a = reference("a");
+        let b = reference("b");
+        let projected_sum = a.clone() + b.clone();
+        assert_eq!(
+            PlanResolver::retain_sort_outer_reference_names(
+                &(projected_sum.clone() + a.clone()),
+                &[projected_sum.alias("key")],
+                ["A", "B", "a"].map(str::to_owned).to_vec(),
+            )?,
+            ["a"]
+        );
+        assert_eq!(
+            PlanResolver::retain_sort_outer_reference_names(
+                &(b.clone() + a.clone() + b),
+                &[a.alias("key")],
+                ["B", "a", "b"].map(str::to_owned).to_vec(),
+            )?,
+            ["B", "b"]
+        );
+        Ok(())
     }
 }
