@@ -13,6 +13,9 @@ use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
 
+// Generated labels hide declared lambda parameter names.
+pub(super) const LAMBDA_VARIABLE_EXPRESSION_NAME: &str = "namedlambdavariable()";
+
 pub(super) fn is_spec_lambda_argument(argument: &spec::Expr) -> bool {
     match argument {
         spec::Expr::LambdaFunction { .. } => true,
@@ -168,7 +171,11 @@ impl PlanResolver<'_> {
         let name = format!(
             "lambdafunction({}, {})",
             body.expression_name()?,
-            params.join(", ")
+            params
+                .iter()
+                .map(|_| LAMBDA_VARIABLE_EXPRESSION_NAME)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
         Ok(NamedExpr::new(
             vec![name],
@@ -199,6 +206,7 @@ impl PlanResolver<'_> {
         Ok(NamedExpr::new(
             vec![declared.clone()],
             expr::Expr::LambdaVariable(LambdaVariable::new(declared, field)),
-        ))
+        )
+        .with_expression_name(LAMBDA_VARIABLE_EXPRESSION_NAME.to_string()))
     }
 }

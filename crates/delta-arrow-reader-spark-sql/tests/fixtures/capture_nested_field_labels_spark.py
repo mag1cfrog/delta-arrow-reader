@@ -103,6 +103,25 @@ def main():
             "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records))
         print(json.dumps({"observations": len(records)-1,
                           "errors": sum("condition" in record["expected"] for record in records[1:])}))
+        lambda_records = [records[0]]
+        for ansi in [True, False]:
+            spark.conf.set("spark.sql.ansi.enabled", str(ansi).lower())
+            for table in ["inputs", "empty_inputs"]:
+                for name, expression in [
+                    ("nested_lambda", "TRANSFORM(items, x -> x.item)"),
+                    ("nested_lambda_abs", "TRANSFORM(items, x -> ABS(x.item))"),
+                    ("nested_lambda_alias", "TRANSFORM(items, x -> ABS(x.item)) AS chosen"),
+                ]:
+                    sql = f"SELECT {expression} FROM {table} q"
+                    lambda_records.append({"id": name, "input": table, "ansi": ansi, "sql": sql,
+                                           "expected": capture_query(spark, sql)})
+        assert len(lambda_records) == 13
+        assert len({(record["id"], record["input"], record["ansi"])
+                    for record in lambda_records[1:]}) == 12
+        Path(__file__).with_name("nested-field-lambda-spark.jsonl").write_text(
+            "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in lambda_records))
+        print(json.dumps({"lambda_observations": len(lambda_records)-1,
+                          "errors": sum("condition" in record["expected"] for record in lambda_records[1:])}))
     finally:
         spark.stop()
 
