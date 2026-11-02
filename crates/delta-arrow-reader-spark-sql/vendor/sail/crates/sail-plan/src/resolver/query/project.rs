@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::tree_node::{TreeNode, TreeNodeRewriter};
-use datafusion_common::{DFSchemaRef, TableReference};
+use datafusion_common::{Column, DFSchemaRef, TableReference};
 use datafusion_expr::expr::{FieldMetadata, ScalarFunction};
 use datafusion_expr::expr_rewriter::normalize_col;
 use datafusion_expr::utils::{columnize_expr, expand_qualified_wildcard, expand_wildcard};
