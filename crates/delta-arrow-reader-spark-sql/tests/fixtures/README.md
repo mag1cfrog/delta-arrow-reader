@@ -101,6 +101,33 @@ S07, not a new supported Spark behavior. Fixing that gap must replace these
 alternatives with strict Spark expectations. Neither scheduler retries nor
 disabling parallelism is a fix.
 
+## Integral cast conditions
+
+`integral-cast-conditions-spark.jsonl` records 192 Spark 4.2.0 observations for
+string-to-TINYINT/SMALLINT/INT/BIGINT conversion. CAST and TRY_CAST cover both
+ANSI modes, valid/NULL/malformed literals and providers, local VALUES, empty
+inputs and LIMIT 0. Regenerate it with `capture_integral_cast_conditions_spark.py`.
+The Rust tests compare complete rows and fields at batch sizes 1 and 32, and
+check error timing, the original Arrow cause, all three Arrow string layouts
+and unchanged native DataFusion errors.
+
+`reviewed-integral-cast-conditions.json` names 817 exact historical replay IDs
+and their batch sizes. For those ANSI execution errors, the expected outcome
+requires one added CAST_INVALID_INPUT context before the original integral
+Arrow cast error. The original cause, surrounding error text, status and other
+fields still compare exactly. Unlisted observations and the frozen archive
+remain unchanged.
+
+`integral-cast-dead-schema-spark.jsonl` records two exact historical CASE queries
+with unreachable malformed casts. Spark declares their `r` field nullable at
+the public, analyzed, optimized and executed stages; the executed schema is
+captured after collection. `reviewed-corrections.json` changes only those two
+physical `r` flags from nonnullable to nullable. Rows, names, types and logical
+fields stay unchanged, including the second query's nonnullable `k`. This
+intentionally retains a conservative physical field within the public nullable
+declaration. Regenerate these two records with
+`capture_integral_cast_dead_schema_spark.py`, which writes JSONL to stdout.
+
 ## String-to-floating cast nullability
 
 `floating-cast-nullability-spark.jsonl` contains 172 Spark 4.2.0 observations.

@@ -91,6 +91,36 @@ async fn integral_cast_results_and_conditions_match_spark() -> TestResult {
 }
 
 #[tokio::test]
+async fn dead_integral_cast_branches_keep_sparks_conservative_fields() -> TestResult {
+    let records = include_str!("fixtures/integral-cast-dead-schema-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 2);
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        for case in &records {
+            assert_eq!(case["spark_version"], "4.2.0");
+            let actual = spark_results::capture_spark_query_result(&session, case).await?;
+            assert_eq!(actual["rows"], case["rows"], "{}", case["id"]);
+            for stage in [
+                "public_schema",
+                "analyzed_schema",
+                "optimized_schema",
+                "executed_schema",
+            ] {
+                assert_eq!(
+                    actual["schema"], case[stage],
+                    "{} {stage} batch={batch_size}",
+                    case["id"]
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn required_integral_casts_keep_error_phase_and_arrow_cause() -> TestResult {
     for batch_size in [1, 32] {
         let session = session(batch_size);
