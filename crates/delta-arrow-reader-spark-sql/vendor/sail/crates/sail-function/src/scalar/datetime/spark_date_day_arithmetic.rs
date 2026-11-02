@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use datafusion::arrow::compute::kernels::numeric::{add_wrapping, sub_wrapping};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
-use datafusion::arrow::error::ArrowError;
 use datafusion::physical_expr_common::datum::apply;
-use datafusion_common::{DataFusionError, Result, ScalarValue, internal_err};
+use datafusion_common::{Result, ScalarValue, internal_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
     ColumnarValue, Expr, Operator, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
@@ -108,14 +107,6 @@ impl ScalarUDFImpl for SparkDateDayArithmetic {
                     number_rows: args.number_rows,
                     return_field: Arc::new(Field::new("days", DataType::Int32, true)),
                     config_options: args.config_options,
-                })
-                .map_err(|error| match error {
-                    DataFusionError::ArrowError(ref arrow, _)
-                        if matches!(arrow.as_ref(), ArrowError::CastError(_)) =>
-                    {
-                        DataFusionError::Execution(format!("[CAST_INVALID_INPUT] {error}"))
-                    }
-                    other => other,
                 })?
         } else {
             days.clone()

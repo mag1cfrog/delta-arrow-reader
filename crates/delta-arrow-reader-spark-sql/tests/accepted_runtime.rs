@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct RecordedQuery {
     id: String,
     sql: String,
@@ -111,6 +111,38 @@ async fn observe(query: &RecordedQuery) -> TestResult<Value> {
     }))
 }
 
+fn apply_reviewed_integral_cast_condition(
+    query: &mut RecordedQuery,
+    conditions: &mut BTreeMap<String, usize>,
+    parallel_errors: &BTreeMap<String, Value>,
+) -> TestResult {
+    let Some(batch_size) = conditions.remove(&query.id) else {
+        return Ok(());
+    };
+    if !query.ansi
+        || query.batch_size != batch_size
+        || query.expected["status"] != "execution_error"
+        || parallel_errors.contains_key(&query.id)
+    {
+        return Err(format!("invalid integral-cast correction settings for {}", query.id).into());
+    }
+    let error = query.expected["error"]
+        .as_str()
+        .ok_or("missing cast error")?;
+    let root = "Arrow error: Cast error: Cannot cast string ";
+    if error.matches(root).count() != 1
+        || error.contains("CAST_INVALID_INPUT")
+        || ![8, 16, 32, 64]
+            .iter()
+            .any(|width| error.ends_with(&format!(" to value of Int{width} type")))
+    {
+        return Err(format!("invalid integral-cast correction cause for {}", query.id).into());
+    }
+    query.expected["error"] =
+        json!(error.replacen(root, &format!("[CAST_INVALID_INPUT]\ncaused by\n{root}"), 1));
+    Ok(())
+}
+
 fn matches_recorded_outcome(
     query: &RecordedQuery,
     actual: &Value,
@@ -147,6 +179,10 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
         serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
     let mut corrections: BTreeMap<String, Value> =
         serde_json::from_str(include_str!("fixtures/reviewed-corrections.json"))?;
+    let mut cast_conditions: BTreeMap<String, usize> = serde_json::from_str(include_str!(
+        "fixtures/reviewed-integral-cast-conditions.json"
+    ))?;
+    assert_eq!(cast_conditions.len(), 817);
     let mut checked = 0;
     let mut failures = Vec::new();
     for line in reader.lines() {
@@ -154,6 +190,7 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
         if let Some(corrected) = corrections.remove(&query.id) {
             query.expected = corrected;
         }
+        apply_reviewed_integral_cast_condition(&mut query, &mut cast_conditions, &parallel_errors)?;
         if let Some(rows) = query.expected.get_mut("rows").and_then(Value::as_array_mut) {
             rows.sort_by_cached_key(Value::to_string);
         }
@@ -184,6 +221,10 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
         corrections.is_empty(),
         "corrections must refer to replayed observations"
     );
+    assert!(
+        cast_conditions.is_empty(),
+        "cast corrections must refer to replayed observations"
+    );
     assert_eq!(
         checked,
         manifest["unique_observations"]
@@ -192,6 +233,123 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
         "the complete deduplicated corpus must run"
     );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[test]
+fn integral_cast_corrections_require_the_condition_and_original_contract() -> TestResult {
+    let mut conditions: BTreeMap<String, usize> = serde_json::from_str(include_str!(
+        "fixtures/reviewed-integral-cast-conditions.json"
+    ))?;
+    assert_eq!(conditions.len(), 817);
+    let mut corrections: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/reviewed-corrections.json"))?;
+    let parallel_errors: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    let reader = std::io::BufReader::new(GzDecoder::new(
+        &include_bytes!("fixtures/accepted-runtime.jsonl.gz")[..],
+    ));
+    let mut exemplar = None;
+    let mut checked = 0;
+    for line in reader.lines() {
+        let mut query: RecordedQuery = serde_json::from_str(&line?)?;
+        if let Some(corrected) = corrections.remove(&query.id) {
+            query.expected = corrected;
+        }
+        if !conditions.contains_key(&query.id) {
+            continue;
+        }
+        let original = query.clone();
+        apply_reviewed_integral_cast_condition(&mut query, &mut conditions, &parallel_errors)?;
+        assert!(matches_recorded_outcome(
+            &query,
+            &query.expected,
+            &parallel_errors
+        ));
+        assert!(!matches_recorded_outcome(
+            &query,
+            &original.expected,
+            &parallel_errors
+        ));
+        exemplar.get_or_insert((original, query));
+        checked += 1;
+    }
+    assert_eq!(checked, 817);
+    assert!(conditions.is_empty());
+    let (original, corrected) = exemplar.ok_or("missing integral-cast correction")?;
+    let error = corrected.expected["error"]
+        .as_str()
+        .ok_or("missing error")?;
+    for (field, value) in [
+        ("error", original.expected["error"].clone()),
+        (
+            "error",
+            json!(format!("[CAST_INVALID_INPUT]\ncaused by\n{error}")),
+        ),
+        ("error", json!(format!("{error} (different input)"))),
+        ("status", json!("planning_error")),
+        ("status", json!("ok")),
+        ("output_names", json!(["wrong_name"])),
+    ] {
+        let mut wrong = corrected.expected.clone();
+        wrong[field] = value;
+        assert!(!matches_recorded_outcome(
+            &corrected,
+            &wrong,
+            &parallel_errors
+        ));
+    }
+    for (ansi, batch_size) in [
+        (false, original.batch_size),
+        (true, original.batch_size + 1),
+    ] {
+        let mut wrong = original.clone();
+        wrong.ansi = ansi;
+        wrong.batch_size = batch_size;
+        let mut conditions = BTreeMap::from([(original.id.clone(), original.batch_size)]);
+        assert!(
+            apply_reviewed_integral_cast_condition(&mut wrong, &mut conditions, &parallel_errors)
+                .is_err()
+        );
+    }
+    for (field, value) in [
+        ("status", json!("planning_error")),
+        ("error", json!("unrelated error")),
+        (
+            "error",
+            json!("Arrow error: Cast error: Cannot cast string 'bad' to value of Float64 type"),
+        ),
+        ("error", corrected.expected["error"].clone()),
+    ] {
+        let mut wrong = original.clone();
+        wrong.expected[field] = value;
+        let mut conditions = BTreeMap::from([(original.id.clone(), original.batch_size)]);
+        assert!(
+            apply_reviewed_integral_cast_condition(&mut wrong, &mut conditions, &parallel_errors)
+                .is_err()
+        );
+    }
+    let mut with_alternative = original.clone();
+    let mut conditions = BTreeMap::from([(original.id.clone(), original.batch_size)]);
+    let alternative = BTreeMap::from([(original.id.clone(), original.expected.clone())]);
+    assert!(
+        apply_reviewed_integral_cast_condition(
+            &mut with_alternative,
+            &mut conditions,
+            &alternative,
+        )
+        .is_err()
+    );
+    let mut unlisted = original.clone();
+    unlisted.id.push_str("/unlisted");
+    let mut conditions = BTreeMap::from([(original.id, original.batch_size)]);
+    apply_reviewed_integral_cast_condition(&mut unlisted, &mut conditions, &parallel_errors)?;
+    assert_eq!(conditions.len(), 1);
+    assert!(!matches_recorded_outcome(
+        &unlisted,
+        &corrected.expected,
+        &parallel_errors
+    ));
     Ok(())
 }
 
