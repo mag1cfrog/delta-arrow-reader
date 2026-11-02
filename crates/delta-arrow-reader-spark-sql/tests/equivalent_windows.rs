@@ -155,15 +155,12 @@ async fn native_window_cse_preserves_scalar_inputs_and_filter_boundaries() -> Te
         .partition_by(vec![col("g"), col("k")])
         .order_by(vec![col("id").sort(true, true)])
         .build()?;
-    let plan = LogicalPlanBuilder::window_plan(
-        input,
-        vec![
+    let plan = LogicalPlanBuilder::from(input)
+        .window(vec![other.alias("other")])?
+        .window(vec![
             window.clone().alias("first"),
             window.alias("duplicate"),
-            other.alias("other"),
-        ],
-    )?;
-    let plan = LogicalPlanBuilder::from(plan)
+        ])?
         .filter(
             col("g")
                 .eq(lit(0_i64))
