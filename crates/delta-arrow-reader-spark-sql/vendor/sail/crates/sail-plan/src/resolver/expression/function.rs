@@ -458,6 +458,7 @@ impl PlanResolver<'_> {
                 &expression,
                 spec::Expr::UnresolvedAttribute { name, .. } if name.parts().len() > 1
             );
+            let identifier_argument = matches!(&expression, spec::Expr::IdentifierClause { .. });
             let field_name = match &expression {
                 spec::Expr::UnresolvedAttribute { name, .. } => {
                     name.parts().last().map(|name| name.as_ref().to_string())
@@ -571,7 +572,11 @@ impl PlanResolver<'_> {
                             .or(expression_name)
                             .unwrap_or_else(|| projection_name.clone()),
                     );
-                    let expr = if let Some(field_name) = field_name
+                    let expr = if identifier_argument
+                        && matches!(&other, Expr::Column(_) | Expr::OuterReferenceColumn(_, _))
+                    {
+                        other.alias(format!("col{}", exprs.len() + 1))
+                    } else if let Some(field_name) = field_name
                         && matches!(&other, Expr::ScalarFunction(ScalarFunction { func, .. })
                             if func.inner().is::<GetFieldFunc>() || func.inner().is::<ArrayStructField>())
                     {
