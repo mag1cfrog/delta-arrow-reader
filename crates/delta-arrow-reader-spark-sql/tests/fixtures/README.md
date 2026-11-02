@@ -1768,3 +1768,29 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 python tests/fixtures/capture_scalar_float_ordering_spark.py
 cargo test --locked --workspace --test scalar_float_ordering
 ```
+
+## String and binary substring
+
+`substring-spark.jsonl` retains 304 independent Spark 4.2.0 observations for
+Unicode codepoint and binary byte boundaries, NULLs, empty values and column
+arguments in both ANSI modes. `substring-boundaries-spark.jsonl` adds 194
+observations for signed-32-bit range arithmetic and omitted lengths. Each capture
+records the exact Spark/JVM build, loaded JAR hashes, inputs and settings, with
+analyzed, optimized and executed schemas collected separately.
+
+`substring.rs` compares all 498 observations at batch sizes 1 and 32 with three
+string/binary representations. It checks complete fields and ordered values,
+plus FixedSizeBinary slices, empty providers and unchanged native DataFusion SQL.
+Argument-type conversion is covered separately by #778; these captures use INT
+position and length arguments.
+
+Recollect a fixture in the Spark 4.2.0 environment with a fresh output path:
+
+```sh
+python tests/fixtures/recapture_string_binary_spark.py \
+  --input tests/fixtures/substring-spark.jsonl \
+  --output /tmp/substring-spark-fresh.jsonl
+```
+
+The replayer uses recorded input schemas, rows, SQL and settings. It ignores
+expected result fields and collects fresh observations directly from Spark.
