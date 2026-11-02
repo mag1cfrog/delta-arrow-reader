@@ -86,7 +86,7 @@ impl PlanResolver<'_> {
         let mut names: Vec<String> = Vec::with_capacity(slots.len());
         let mut exprs: Vec<expr::Expr> = Vec::with_capacity(slots.len());
         for slot in slots {
-            let NamedExpr { name, expr, .. } = match slot {
+            let named = match slot {
                 Slot::Resolved(named) => named,
                 Slot::Lambda(function, arguments) => {
                     let param_fields = lambda_params.next().ok_or_else(|| {
@@ -104,8 +104,8 @@ impl PlanResolver<'_> {
                     .await?
                 }
             };
-            names.push(name.one()?);
-            exprs.push(expr);
+            names.push(named.expression_name()?);
+            exprs.push(named.expr);
         }
         Ok((names, exprs))
     }
@@ -167,7 +167,7 @@ impl PlanResolver<'_> {
         };
         let name = format!(
             "lambdafunction({}, {})",
-            body.name.clone().one()?,
+            body.expression_name()?,
             params.join(", ")
         );
         Ok(NamedExpr::new(

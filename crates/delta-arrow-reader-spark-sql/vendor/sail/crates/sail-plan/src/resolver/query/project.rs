@@ -132,13 +132,8 @@ impl PlanResolver<'_> {
         let schema = input.schema();
         let mut projected = vec![];
         for e in expr {
-            let NamedExpr {
-                name,
-                expr,
-                metadata,
-            } = e;
             // FIXME: wildcard options do not take into account opaque field IDs
-            match expr {
+            match e.expr {
                 #[expect(deprecated)]
                 Expr::Wildcard {
                     qualifier: None,
@@ -173,10 +168,9 @@ impl PlanResolver<'_> {
                         _ => true,
                     });
                 }
-                _ => projected.push(NamedExpr {
-                    name,
+                expr => projected.push(NamedExpr {
                     expr: columnize_expr(normalize_col(expr, &input)?, &input)?,
-                    metadata,
+                    ..e
                 }),
             }
         }
@@ -196,15 +190,9 @@ impl PlanResolver<'_> {
         let expr = expr
             .into_iter()
             .map(|e| {
-                let NamedExpr {
-                    name,
-                    expr,
-                    metadata,
-                } = e;
                 Ok(NamedExpr {
-                    name,
-                    expr: expr.rewrite(&mut rewriter)?.data,
-                    metadata,
+                    expr: e.expr.rewrite(&mut rewriter)?.data,
+                    ..e
                 })
             })
             .collect::<PlanResult<Vec<_>>>()?;
@@ -218,6 +206,7 @@ impl PlanResolver<'_> {
                 name,
                 expr,
                 metadata,
+                expression_name,
             } = e;
             match expr {
                 Expr::ScalarFunction(ScalarFunction { func, args }) => {
@@ -237,6 +226,7 @@ impl PlanResolver<'_> {
                             name,
                             expr: func.call(args),
                             metadata,
+                            expression_name,
                         });
                     }
                 }
@@ -245,6 +235,7 @@ impl PlanResolver<'_> {
                         name,
                         expr,
                         metadata,
+                        expression_name,
                     });
                 }
             };
@@ -266,6 +257,7 @@ impl PlanResolver<'_> {
                     name,
                     expr,
                     metadata,
+                    ..
                 } = e;
                 let name = if name.len() == 1 {
                     name.one()?

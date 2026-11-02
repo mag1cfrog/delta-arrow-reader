@@ -186,6 +186,7 @@ impl PlanResolver<'_> {
                 };
                 projections.push(NamedExpr {
                     name: vec![name],
+                    expression_name: None,
                     expr,
                     metadata: vec![],
                 });
@@ -255,6 +256,7 @@ impl PlanResolver<'_> {
             .filter(|(column, _)| !referenced.contains(column))
             .map(|(column, name)| NamedExpr {
                 name: vec![name],
+                expression_name: None,
                 expr: expr::Expr::Column(column),
                 metadata: vec![],
             })
@@ -397,6 +399,7 @@ impl PlanResolver<'_> {
             .chain(std::iter::once((inline_expr, inline_name)))
             .map(|(expr, name)| NamedExpr {
                 name: vec![name.to_string()],
+                expression_name: None,
                 expr: expr.clone(),
                 metadata: vec![],
             })

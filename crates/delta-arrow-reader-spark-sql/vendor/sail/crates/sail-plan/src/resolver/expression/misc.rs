@@ -36,11 +36,15 @@ impl PlanResolver<'_> {
             name: inner_name,
             expr,
             metadata: inner_metadata,
+            expression_name,
         } = named_expr;
         if name.is_empty() {
-            return Ok(
-                NamedExpr::new(inner_name, expr).with_metadata(metadata.unwrap_or(inner_metadata))
-            );
+            return Ok(NamedExpr {
+                name: inner_name,
+                expression_name,
+                expr,
+                metadata: metadata.unwrap_or(inner_metadata),
+            });
         }
         let metadata = metadata.unwrap_or(inner_metadata);
         let expr = if let [n] = name.as_slice() {
@@ -149,23 +153,19 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
-        let NamedExpr { name, expr, .. } =
-            self.resolve_named_expression(child, schema, state).await?;
+        let named = self.resolve_named_expression(child, schema, state).await?;
+        let name = named.expression_name()?;
+        let expr = named.expr;
         let data_type = expr.get_type(schema)?;
 
         // For Maps, we support non-literal expressions as keys
         if matches!(data_type, DataType::Map(_, _)) {
-            let NamedExpr {
-                name: extraction_name,
-                expr: extraction_expr,
-                ..
-            } = self
+            let extraction = self
                 .resolve_named_expression(extraction, schema, state)
                 .await?;
-
-            let result_name = format!("{}[{}]", name.one()?, extraction_name.one()?);
+            let result_name = format!("{}[{}]", name, extraction.expression_name()?);
             // Use map_extract which supports dynamic keys, then extract first element
-            let result_expr = array_element(map_extract(expr, extraction_expr), lit(1));
+            let result_expr = array_element(map_extract(expr, extraction.expr), lit(1));
             return Ok(NamedExpr::new(vec![result_name], result_expr));
         }
 
@@ -188,10 +188,10 @@ impl PlanResolver<'_> {
             SparkPlanFormatter.literal_to_string(&extraction, &self.config.session_timezone)?;
         let name = match data_type {
             DataType::Struct(_) => {
-                format!("{}.{}", name.one()?, extraction_name)
+                format!("{}.{}", name, extraction_name)
             }
             _ => {
-                format!("{}[{}]", name.one()?, extraction_name)
+                format!("{}[{}]", name, extraction_name)
             }
         };
         let expr = match data_type {

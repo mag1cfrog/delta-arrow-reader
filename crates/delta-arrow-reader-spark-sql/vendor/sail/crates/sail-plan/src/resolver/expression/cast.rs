@@ -53,15 +53,18 @@ impl PlanResolver<'_> {
         // CAST(expr AS VARIANT) → rewrite to SparkCastToVariant UDF
         // Must intercept before resolve_data_type converts Variant to Struct.
         if matches!(cast_to_type, spec::DataType::Variant) {
-            let NamedExpr { expr, name, .. } =
-                self.resolve_named_expression(expr, schema, state).await?;
-            let name = if include_cast_in_name || need_rename_cast(&expr) {
+            let named = self.resolve_named_expression(expr, schema, state).await?;
+            let name = if include_cast_in_name || need_rename_cast(&named.expr) {
                 let prefix = if is_try { "TRY_" } else { "" };
-                vec![format!("{}CAST({} AS VARIANT)", prefix, name.one()?)]
+                vec![format!(
+                    "{}CAST({} AS VARIANT)",
+                    prefix,
+                    named.expression_name()?
+                )]
             } else {
-                name
+                named.name
             };
-            let expr = ScalarUDF::new_from_impl(SparkCastToVariant::new()).call(vec![expr]);
+            let expr = ScalarUDF::new_from_impl(SparkCastToVariant::new()).call(vec![named.expr]);
             return Ok(NamedExpr::new(name, expr));
         }
 
@@ -79,22 +82,22 @@ impl PlanResolver<'_> {
             _ => None,
         };
         let cast_to_type = self.resolve_data_type(&cast_to_type, state)?;
-        let NamedExpr { expr, name, .. } =
-            self.resolve_named_expression(expr, schema, state).await?;
-        let expr_field = expr.to_field(schema)?.1;
+        let named = self.resolve_named_expression(expr, schema, state).await?;
+        let expr_field = named.expr.to_field(schema)?.1;
         let expr_type = expr_field.data_type().clone();
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
-        let name = if include_cast_in_name || need_rename_cast(&expr) {
+        let name = if include_cast_in_name || need_rename_cast(&named.expr) {
             let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
             vec![format!(
                 "{}CAST({} AS {})",
                 if is_try { "TRY_" } else { "" },
-                name.one()?,
+                named.expression_name()?,
                 data_type_string.to_ascii_uppercase()
             )]
         } else {
-            name
+            named.name
         };
+        let expr = named.expr;
         let override_string_cast = matches!(
             expr_type,
             DataType::Float32
