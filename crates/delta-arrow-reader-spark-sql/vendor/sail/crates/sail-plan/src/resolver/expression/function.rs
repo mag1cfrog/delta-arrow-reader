@@ -3,7 +3,7 @@ use datafusion_common::DFSchemaRef;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
-use datafusion_expr::{EmptyRelation, Expr, LogicalPlan, expr};
+use datafusion_expr::{EmptyRelation, Expr, ExprSchemable, LogicalPlan, expr};
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
@@ -84,6 +84,15 @@ impl PlanResolver<'_> {
         };
 
         let has_lambda_argument = arguments.iter().any(|x| matches!(x, expr::Expr::Lambda(_)));
+        let argument_types = if matches!(canonical_function_name.as_str(), "+" | "-" | "*") {
+            arguments
+                .iter()
+                .map(|arg| arg.get_type(schema))
+                .collect::<datafusion_common::Result<Vec<_>>>()
+                .unwrap_or_default()
+        } else {
+            vec![]
+        };
 
         // The native registry also contains DataFusion builtins. Keep Spark's
         // implementations (and explicit unsupported entries) authoritative.
@@ -208,10 +217,11 @@ impl PlanResolver<'_> {
                 argument_display_names
             };
 
-        let name = SparkPlanFormatter.function_to_string(
+        let name = SparkPlanFormatter.resolved_function_to_string(
             &canonical_function_name,
             argument_display_names.iter().map(|x| x.as_str()).collect(),
             is_distinct,
+            &argument_types,
         )?;
 
         // Extract metadata from UDF if it implements return_field_from_args

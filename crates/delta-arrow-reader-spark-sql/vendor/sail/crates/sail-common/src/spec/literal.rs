@@ -87,12 +87,16 @@ pub enum Literal {
     },
     DurationMicrosecond {
         microseconds: Option<i64>,
+        start_field: Option<spec::IntervalFieldType>,
+        end_field: Option<spec::IntervalFieldType>,
     },
     DurationNanosecond {
         nanoseconds: Option<i64>,
     },
     IntervalYearMonth {
         months: Option<i32>,
+        start_field: Option<spec::IntervalFieldType>,
+        end_field: Option<spec::IntervalFieldType>,
     },
     IntervalDayTime {
         value: Option<IntervalDayTime>,

@@ -94,6 +94,17 @@ impl PlanResolver<'_> {
             } => end_field.or(*start_field),
             _ => None,
         };
+        let interval_type_name = match &cast_to_type {
+            spec::DataType::Interval {
+                start_field: Some(start),
+                end_field,
+                ..
+            } => Some(format!(
+                "INTERVAL {}",
+                SparkPlanFormatter.interval_fields_to_string(*start, end_field.unwrap_or(*start)),
+            )),
+            _ => None,
+        };
         let cast_to_type = self.resolve_data_type(&cast_to_type, state)?;
         let named = self.resolve_named_expression(expr, schema, state).await?;
         let expr_field = named.expr.to_field(schema)?.1;
@@ -105,7 +116,10 @@ impl PlanResolver<'_> {
                 expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
             );
         let name = if include_cast_in_name || !named_input {
-            let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
+            let data_type_string = match interval_type_name {
+                Some(name) => name,
+                None => SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?,
+            };
             vec![format!(
                 "{}CAST({} AS {})",
                 if is_try { "TRY_" } else { "" },

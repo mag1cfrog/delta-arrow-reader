@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::iter::once;
 use std::str::FromStr;
 
@@ -61,9 +62,13 @@ lazy_static! {
 pub enum IntervalValue {
     YearMonth {
         months: i32,
+        start_field: spec::IntervalFieldType,
+        end_field: spec::IntervalFieldType,
     },
     Microsecond {
         microseconds: i64,
+        start_field: spec::IntervalFieldType,
+        end_field: spec::IntervalFieldType,
     },
     MonthDayNanosecond {
         months: i32,
@@ -75,11 +80,23 @@ pub enum IntervalValue {
 impl From<IntervalValue> for spec::Literal {
     fn from(value: IntervalValue) -> Self {
         match value {
-            IntervalValue::YearMonth { months } => spec::Literal::IntervalYearMonth {
+            IntervalValue::YearMonth {
+                months,
+                start_field,
+                end_field,
+            } => spec::Literal::IntervalYearMonth {
                 months: Some(months),
+                start_field: Some(start_field),
+                end_field: Some(end_field),
             },
-            IntervalValue::Microsecond { microseconds } => spec::Literal::DurationMicrosecond {
+            IntervalValue::Microsecond {
+                microseconds,
+                start_field,
+                end_field,
+            } => spec::Literal::DurationMicrosecond {
                 microseconds: Some(microseconds),
+                start_field: Some(start_field),
+                end_field: Some(end_field),
             },
             IntervalValue::MonthDayNanosecond {
                 months,
@@ -178,6 +195,8 @@ fn parse_interval_year_month_string(
     s: &str,
     negated: bool,
     interval_regex: &Regex,
+    start_field: spec::IntervalFieldType,
+    end_field: spec::IntervalFieldType,
 ) -> SqlResult<IntervalValue> {
     let error = || SqlError::invalid(format!("interval: {s}"));
     let captures = interval_regex.captures(s).ok_or_else(error)?;
@@ -194,13 +213,19 @@ fn parse_interval_year_month_string(
     } else {
         n
     };
-    Ok(IntervalValue::YearMonth { months: n })
+    Ok(IntervalValue::YearMonth {
+        months: n,
+        start_field,
+        end_field,
+    })
 }
 
 fn parse_interval_day_time_string(
     s: &str,
     negated: bool,
     interval_regex: &Regex,
+    start_field: spec::IntervalFieldType,
+    end_field: spec::IntervalFieldType,
 ) -> SqlResult<IntervalValue> {
     let error = || SqlError::invalid(format!("interval: {s}"));
     let captures = interval_regex.captures(s).ok_or_else(error)?;
@@ -226,7 +251,11 @@ fn parse_interval_day_time_string(
     } else {
         microseconds
     };
-    Ok(IntervalValue::Microsecond { microseconds: n })
+    Ok(IntervalValue::Microsecond {
+        microseconds: n,
+        start_field,
+        end_field,
+    })
 }
 
 enum StandardIntervalKind {
@@ -305,46 +334,26 @@ fn from_ast_standard_interval(
     let signed: Signed<String> = parse_signed_value(value)?;
     let negated = signed.is_negative() ^ negated;
     let value = signed.into_inner();
-    match kind {
-        StandardIntervalKind::Year => {
-            parse_interval_year_month_string(&value, negated, &INTERVAL_YEAR_REGEX)
-        }
-        StandardIntervalKind::YearToMonth => {
-            parse_interval_year_month_string(&value, negated, &INTERVAL_YEAR_TO_MONTH_REGEX)
-        }
-        StandardIntervalKind::Month => {
-            parse_interval_year_month_string(&value, negated, &INTERVAL_MONTH_REGEX)
-        }
-        StandardIntervalKind::Day => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_DAY_REGEX)
-        }
-        StandardIntervalKind::DayToHour => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_DAY_TO_HOUR_REGEX)
-        }
-        StandardIntervalKind::DayToMinute => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_DAY_TO_MINUTE_REGEX)
-        }
-        StandardIntervalKind::DayToSecond => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_DAY_TO_SECOND_REGEX)
-        }
-        StandardIntervalKind::Hour => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_HOUR_REGEX)
-        }
-        StandardIntervalKind::HourToMinute => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_HOUR_TO_MINUTE_REGEX)
-        }
-        StandardIntervalKind::HourToSecond => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_HOUR_TO_SECOND_REGEX)
-        }
-        StandardIntervalKind::Minute => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_MINUTE_REGEX)
-        }
-        StandardIntervalKind::MinuteToSecond => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_MINUTE_TO_SECOND_REGEX)
-        }
-        StandardIntervalKind::Second => {
-            parse_interval_day_time_string(&value, negated, &INTERVAL_SECOND_REGEX)
-        }
+    use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
+    let (regex, start_field, end_field): (&Regex, _, _) = match kind {
+        StandardIntervalKind::Year => (&INTERVAL_YEAR_REGEX, Year, Year),
+        StandardIntervalKind::YearToMonth => (&INTERVAL_YEAR_TO_MONTH_REGEX, Year, Month),
+        StandardIntervalKind::Month => (&INTERVAL_MONTH_REGEX, Month, Month),
+        StandardIntervalKind::Day => (&INTERVAL_DAY_REGEX, Day, Day),
+        StandardIntervalKind::DayToHour => (&INTERVAL_DAY_TO_HOUR_REGEX, Day, Hour),
+        StandardIntervalKind::DayToMinute => (&INTERVAL_DAY_TO_MINUTE_REGEX, Day, Minute),
+        StandardIntervalKind::DayToSecond => (&INTERVAL_DAY_TO_SECOND_REGEX, Day, Second),
+        StandardIntervalKind::Hour => (&INTERVAL_HOUR_REGEX, Hour, Hour),
+        StandardIntervalKind::HourToMinute => (&INTERVAL_HOUR_TO_MINUTE_REGEX, Hour, Minute),
+        StandardIntervalKind::HourToSecond => (&INTERVAL_HOUR_TO_SECOND_REGEX, Hour, Second),
+        StandardIntervalKind::Minute => (&INTERVAL_MINUTE_REGEX, Minute, Minute),
+        StandardIntervalKind::MinuteToSecond => (&INTERVAL_MINUTE_TO_SECOND_REGEX, Minute, Second),
+        StandardIntervalKind::Second => (&INTERVAL_SECOND_REGEX, Second, Second),
+    };
+    if start_field <= Month {
+        parse_interval_year_month_string(&value, negated, regex, start_field, end_field)
+    } else {
+        parse_interval_day_time_string(&value, negated, regex, start_field, end_field)
     }
 }
 
@@ -352,11 +361,28 @@ fn from_ast_multi_unit_interval(
     values: Vec<IntervalValueWithUnit>,
     negated: bool,
 ) -> SqlResult<IntervalValue> {
+    use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
     let error = || SqlError::invalid("multi-unit interval");
     let mut months = 0i32;
     let mut delta = TimeDelta::zero();
+    let mut start_field = Second;
+    let mut end_field = Year;
     for value in values {
         let IntervalValueWithUnit { value, unit } = value;
+        let field = match &unit {
+            IntervalUnit::Year(_) | IntervalUnit::Years(_) => Year,
+            IntervalUnit::Month(_) | IntervalUnit::Months(_) => Month,
+            IntervalUnit::Week(_)
+            | IntervalUnit::Weeks(_)
+            | IntervalUnit::Day(_)
+            | IntervalUnit::Days(_) => Day,
+            IntervalUnit::Hour(_) | IntervalUnit::Hours(_) => Hour,
+            IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => Minute,
+            _ => Second,
+        };
+        start_field = start_field.min(field);
+        end_field = end_field.max(field);
+
         match unit {
             IntervalUnit::Year(_) | IntervalUnit::Years(_) => {
                 let value: i32 = parse_signed_value(value)?;
@@ -413,14 +439,19 @@ fn from_ast_multi_unit_interval(
             }
         }
     }
-    match (months != 0, delta != TimeDelta::zero()) {
+    // Unit presence preserves the family even when values are zero or cancel.
+    match (start_field <= Month, end_field >= Day) {
         (true, false) => {
             let n = if negated {
                 months.checked_mul(-1).ok_or_else(error)?
             } else {
                 months
             };
-            Ok(IntervalValue::YearMonth { months: n })
+            Ok(IntervalValue::YearMonth {
+                months: n,
+                start_field,
+                end_field,
+            })
         }
         (true, true) => {
             let days = delta.num_days();
@@ -460,7 +491,11 @@ fn from_ast_multi_unit_interval(
             } else {
                 microseconds
             };
-            Ok(IntervalValue::Microsecond { microseconds: n })
+            Ok(IntervalValue::Microsecond {
+                microseconds: n,
+                start_field,
+                end_field,
+            })
         }
     }
 }
@@ -484,6 +519,88 @@ pub(crate) fn parse_unqualified_interval_string(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sql_literals_reject_mixed_families_without_changing_calendar_string_casts() -> SqlResult<()>
+    {
+        for sql in [
+            "1 MONTH 1 DAY",
+            "0 MONTHS 0 DAYS",
+            "1 YEAR -12 MONTHS 0 HOURS",
+        ] {
+            assert!(matches!(
+                parse_unqualified_interval_string(sql, false)?,
+                IntervalValue::MonthDayNanosecond { .. }
+            ));
+            let statement = crate::parser::parse_one_statement(&format!("SELECT INTERVAL {sql}"))?;
+            let result = crate::statement::from_ast_statement(statement);
+            assert!(
+                result.is_err_and(|error| error.to_string().contains("_LEGACY_ERROR_TEMP_0029")),
+                "{sql}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn interval_literals_preserve_fields_when_zero_or_cancelled() -> SqlResult<()> {
+        use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
+        for (sql, expected_start, expected_end) in [
+            ("'0' YEAR", Year, Year),
+            ("'0-0' YEAR TO MONTH", Year, Month),
+            ("'0' MONTH", Month, Month),
+            ("'0' DAY", Day, Day),
+            ("'0 00' DAY TO HOUR", Day, Hour),
+            ("'0 00:00' DAY TO MINUTE", Day, Minute),
+            ("'0 00:00:00' DAY TO SECOND", Day, Second),
+            ("'0' HOUR", Hour, Hour),
+            ("'0:00' HOUR TO MINUTE", Hour, Minute),
+            ("'0:00:00' HOUR TO SECOND", Hour, Second),
+            ("'0' MINUTE", Minute, Minute),
+            ("'0:00' MINUTE TO SECOND", Minute, Second),
+            ("'0' SECOND", Second, Second),
+            ("0 YEARS 0 MONTHS", Year, Month),
+            ("1 YEAR -12 MONTHS", Year, Month),
+            ("0 DAYS 0 HOURS", Day, Hour),
+            ("1 DAY -24 HOURS", Day, Hour),
+            ("0 HOURS 0 MINUTES", Hour, Minute),
+            ("0 WEEKS", Day, Day),
+            ("0 MILLISECONDS", Second, Second),
+            ("0 MICROSECONDS", Second, Second),
+        ] {
+            let literal: spec::Literal = parse_unqualified_interval_string(sql, false)?.into();
+            match literal {
+                spec::Literal::IntervalYearMonth {
+                    months,
+                    start_field,
+                    end_field,
+                } => {
+                    assert_eq!(months, Some(0), "{sql}");
+                    assert!(expected_start <= Month, "{sql}");
+                    assert_eq!(
+                        (start_field, end_field),
+                        (Some(expected_start), Some(expected_end)),
+                        "{sql}"
+                    );
+                }
+                spec::Literal::DurationMicrosecond {
+                    microseconds,
+                    start_field,
+                    end_field,
+                } => {
+                    assert_eq!(microseconds, Some(0), "{sql}");
+                    assert!(expected_start >= Day, "{sql}");
+                    assert_eq!(
+                        (start_field, end_field),
+                        (Some(expected_start), Some(expected_end)),
+                        "{sql}"
+                    );
+                }
+                other => return Err(SqlError::invalid(format!("unexpected {sql}: {other:?}"))),
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_parse_interval() -> SqlResult<()> {

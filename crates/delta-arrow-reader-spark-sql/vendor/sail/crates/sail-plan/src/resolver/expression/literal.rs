@@ -22,9 +22,29 @@ impl PlanResolver<'_> {
         literal: spec::Literal,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
+        let interval_fields = match &literal {
+            spec::Literal::IntervalYearMonth {
+                start_field,
+                end_field,
+                ..
+            }
+            | spec::Literal::DurationMicrosecond {
+                start_field,
+                end_field,
+                ..
+            } => start_field.map(|start| (start, end_field.unwrap_or(start))),
+            _ => None,
+        };
         let literal = self.resolve_literal(literal, state)?;
 
-        let name = SparkPlanFormatter.literal_to_string(&literal, &self.config.session_timezone)?;
+        let name = match interval_fields {
+            Some((start, end)) => {
+                SparkPlanFormatter.interval_literal_to_string(&literal, start, end)?
+            }
+            None => {
+                SparkPlanFormatter.literal_to_string(&literal, &self.config.session_timezone)?
+            }
+        };
         Ok(NamedExpr::new(
             vec![name],
             expr::Expr::Literal(literal, None),
