@@ -15,20 +15,23 @@ use spark_inputs::register_recorded_inputs;
 use spark_results::{TestResult, capture_spark_query_result};
 
 fn records() -> TestResult<Vec<Value>> {
-    Ok(include_str!("fixtures/struct-expression-names-spark.jsonl")
+    let records = include_str!("fixtures/struct-expression-names-spark.jsonl")
         .lines()
         .map(serde_json::from_str)
-        .collect::<Result<Vec<_>, _>>()?)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 150);
+    Ok(records)
 }
 
-async fn compare_spark_cases(generated: bool) -> TestResult {
-    let records = records()?;
+async fn compare_spark_cases(records: &[Value], generated: Option<bool>) -> TestResult {
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 150);
     let mut identities = BTreeSet::new();
     for case in &records[1..] {
-        assert!(case["expected"].get("schema").is_some());
+        assert!(
+            case["expected"].get("schema").is_some()
+                || case["expected"]["condition"] == "FIELD_NOT_FOUND"
+        );
         assert!(identities.insert((
             case["id"].as_str().ok_or("missing ID")?,
             case["input"].as_str().ok_or("missing input")?,
@@ -52,18 +55,24 @@ async fn compare_spark_cases(generated: bool) -> TestResult {
         register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             let id = case["id"].as_str().ok_or("missing ID")?;
-            if id.contains("generated") != generated {
+            if generated.is_some_and(|generated| id.contains("generated") != generated) {
                 continue;
             }
-            let difference = match capture_spark_query_result(&session, case).await {
-                Ok(actual) if actual == case["expected"] => None,
-                Ok(actual) => Some(format!("expected {}, got {actual}", case["expected"])),
-                Err(error) => Some(error.to_string()),
+            let actual = match capture_spark_query_result(&session, case).await {
+                Ok(actual) => actual,
+                Err(error) => {
+                    let error = error.to_string();
+                    if error.contains("[FIELD_NOT_FOUND]") {
+                        json!({"condition":"FIELD_NOT_FOUND"})
+                    } else {
+                        json!({"error":error})
+                    }
+                }
             };
-            if let Some(difference) = difference {
+            if actual != case["expected"] {
                 differences.push(format!(
-                    "{id} input={} ANSI={} batch={batch_size}: {difference}",
-                    case["input"], case["ansi"]
+                    "{id} input={} ANSI={} batch={batch_size}: expected {}, got {actual}",
+                    case["input"], case["ansi"], case["expected"]
                 ));
             }
         }
@@ -74,12 +83,30 @@ async fn compare_spark_cases(generated: bool) -> TestResult {
 
 #[tokio::test]
 async fn struct_child_names_values_and_metadata_match_spark() -> TestResult {
-    compare_spark_cases(false).await
+    compare_spark_cases(&records()?, Some(false)).await
 }
 
 #[tokio::test]
 async fn struct_generated_labels_and_metadata_match_spark() -> TestResult {
-    compare_spark_cases(true).await
+    compare_spark_cases(&records()?, Some(true)).await
+}
+
+#[tokio::test]
+async fn struct_identifier_names_values_and_metadata_match_spark() -> TestResult {
+    let identifier_records = include_str!("fixtures/struct-identifier-names-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(identifier_records[0], records()?[0]);
+    assert_eq!(identifier_records.len() - 1, 48);
+    assert_eq!(
+        identifier_records[1..]
+            .iter()
+            .filter(|case| case["expected"]["condition"] == "FIELD_NOT_FOUND")
+            .count(),
+        6
+    );
+    compare_spark_cases(&identifier_records, None).await
 }
 
 #[tokio::test]
