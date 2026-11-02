@@ -7,8 +7,10 @@ use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
 use datafusion_expr::{EmptyRelation, Expr, ExprSchemable, LogicalPlan, expr};
 use datafusion_functions_nested::concat::ArrayConcat;
+use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::array_struct_field::ArrayStructField;
 use sail_function::scalar::multi_expr::MultiExpr;
 use sail_sql_analyzer::expression::{
     DATETIME_UNIT_FUNCTIONS_WITH_ROUTINE, DATETIME_UNIT_FUNCTIONS_WITHOUT_ROUTINE,
@@ -456,6 +458,25 @@ impl PlanResolver<'_> {
                 &expression,
                 spec::Expr::UnresolvedAttribute { name, .. } if name.parts().len() > 1
             );
+            let field_name = match &expression {
+                spec::Expr::UnresolvedAttribute { name, .. } => {
+                    name.parts().last().map(|name| name.as_ref().to_string())
+                }
+                spec::Expr::UnresolvedExtractValue { extraction, .. } => {
+                    match extraction.as_ref() {
+                        spec::Expr::UnresolvedAttribute { name, .. } => {
+                            name.parts().last().map(|name| name.as_ref().to_string())
+                        }
+                        spec::Expr::Literal(spec::Literal::Utf8 { value }) => value.clone(),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let wildcard_target = match &expression {
+                spec::Expr::UnresolvedStar { target, .. } => target.clone(),
+                _ => None,
+            };
             let (named, alias_display_name) = match expression {
                 spec::Expr::Alias {
                     expr,
@@ -519,14 +540,20 @@ impl PlanResolver<'_> {
                     if func.inner().is::<MultiExpr>() =>
                 {
                     if name.len() == args.len() {
+                        let source_name = wildcard_target
+                            .map(|target| {
+                                self.resolve_expression_attribute(target, false, schema, state)?
+                                    .expression_name()
+                            })
+                            .transpose()?;
                         for (n, arg) in name.into_iter().zip(args) {
-                            let field_name = n;
-                            names.push(field_name.clone());
-                            exprs.push(Expr::Alias(expr::Alias::new(
-                                arg,
-                                None::<datafusion_common::TableReference>,
-                                field_name,
-                            )));
+                            names.push(match &source_name {
+                                Some(source) => {
+                                    struct_alias_display_name(&format!("{source}.{n}"), &n)
+                                }
+                                None => n.clone(),
+                            });
+                            exprs.push(arg.alias(n));
                         }
                     } else {
                         return Err(PlanError::internal(format!(
@@ -544,7 +571,12 @@ impl PlanResolver<'_> {
                             .or(expression_name)
                             .unwrap_or_else(|| projection_name.clone()),
                     );
-                    let expr = if is_dotted_attribute
+                    let expr = if let Some(field_name) = field_name
+                        && matches!(&other, Expr::ScalarFunction(ScalarFunction { func, .. })
+                            if func.inner().is::<GetFieldFunc>() || func.inner().is::<ArrayStructField>())
+                    {
+                        other.alias(field_name)
+                    } else if is_dotted_attribute
                         && !matches!(other, Expr::OuterReferenceColumn(..))
                         && other.contains_outer()
                     {
