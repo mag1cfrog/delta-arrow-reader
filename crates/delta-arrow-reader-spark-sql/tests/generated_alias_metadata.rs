@@ -1022,15 +1022,14 @@ async fn reviewed_if_declarations_match_exact_spark_stages() -> TestResult {
     Ok(())
 }
 
-#[tokio::test]
-async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    let records = include_str!("fixtures/review-710-positive-alias-spark.jsonl")
+async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestResult {
+    let records = raw
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 24);
+    assert_eq!(records.len() - 1, count);
     let mut identities = BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -1116,6 +1115,24 @@ async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResul
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
+}
+
+#[tokio::test]
+async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
+    replay_positive_alias_schema_stages(
+        include_str!("fixtures/review-710-positive-alias-spark.jsonl"),
+        24,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn nested_positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
+    replay_positive_alias_schema_stages(
+        include_str!("fixtures/review-710-nested-positive-alias-spark.jsonl"),
+        12,
+    )
+    .await
 }
 
 #[tokio::test]
