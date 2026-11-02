@@ -1746,6 +1746,9 @@ metadata. The supplement has SHA256
 the external review capture script has SHA256
 `a7aea053677557af5c14a016cf221405e1f685019b78948b0f7000c58475588e`.
 These probes retain the original 432 records and their gates unchanged.
+Generated-alias marker parity remains required under
+[#710](https://github.com/mag1cfrog/delta-arrow-reader/issues/710); the replays
+retain every recorded marker expectation.
 
 Regenerate with an existing Python 3.12, PySpark 4.2.0 and Java 21 environment
 from this crate, writing to a fresh path:

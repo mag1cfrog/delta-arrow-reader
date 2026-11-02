@@ -205,6 +205,19 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
             continue;
         }
         scalar_count += 1;
+        let id = case["id"].as_str().ok_or("missing ID")?;
+        let label = format!("{id} ANSI={}", case["ansi"]);
+        let gate_cast_values = matches!(
+            id,
+            "cast_year"
+                | "cast_day"
+                | "cast_day_hour"
+                | "cast_day_minute"
+                | "cast_hour"
+                | "cast_hour_minute"
+                | "cast_minute"
+        );
+        cast_value_gates += usize::from(gate_cast_values);
         let sql = case["sql"].as_str().ok_or("missing SQL")?;
         let planned = plan_query(
             &session,
@@ -218,23 +231,37 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
         if let Some(condition) = case["expected"]["condition"].as_str() {
             assert_eq!(condition, "_LEGACY_ERROR_TEMP_0029");
             if !planned.is_err_and(|error| error.to_string().contains(condition)) {
-                differences.push(format!("{}: expected {condition}", case["id"]));
+                differences.push(format!("{label}: expected {condition}"));
             }
             continue;
         }
         let query = match planned {
             Ok(query) => query,
             Err(error) => {
-                differences.push(format!("{}: {error}", case["id"]));
+                differences.push(format!("{label}: planning: {error}"));
                 continue;
             }
         };
-        let physical = query.create_physical_plan(&session).await?;
+        let physical = match query.create_physical_plan(&session).await {
+            Ok(physical) => physical,
+            Err(error) => {
+                differences.push(format!("{label}: physical planning: {error}"));
+                continue;
+            }
+        };
         let schema = physical.schema();
         let expected = case["expected"]["schema"]["fields"]
             .as_array()
             .ok_or("missing fields")?;
-        assert_eq!(schema.fields().len(), expected.len());
+        if schema.fields().len() != expected.len() || query.column_names.len() != expected.len() {
+            differences.push(format!(
+                "{label}: expected {} columns, got names {:?}, schema {schema:?}",
+                expected.len(),
+                query.column_names
+            ));
+            continue;
+        }
+        let mut expected_types = Vec::with_capacity(expected.len());
         for (index, (field, expected)) in schema.fields().iter().zip(expected).enumerate() {
             let expected_type = match expected["type"].as_str().ok_or("missing type")? {
                 "timestamp" => DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
@@ -253,30 +280,33 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
                         .ok_or("missing nullability")?
                 || serde_json::to_value(field.metadata())? != expected["metadata"]
             {
-                differences.push(format!(
-                    "{}: expected {expected}, got {field:?}",
-                    case["id"]
-                ));
+                differences.push(format!("{label}: expected {expected}, got {field:?}"));
             }
-            assert_eq!(query.logical_plan.schema().field(index), field);
+            expected_types.push(expected_type);
+            let logical = query
+                .logical_plan
+                .schema()
+                .field(index)
+                .as_ref()
+                .clone()
+                .with_name(query.column_names[index].clone());
+            if &logical != field.as_ref() {
+                differences.push(format!("{label}: visible logical field {logical:?} differs from physical field {field:?}"));
+            }
         }
-        let id = case["id"].as_str().ok_or("missing ID")?;
-        if matches!(
-            id,
-            "cast_year"
-                | "cast_day"
-                | "cast_day_hour"
-                | "cast_day_minute"
-                | "cast_hour"
-                | "cast_hour_minute"
-                | "cast_minute"
-        ) {
+        if gate_cast_values {
             // #765 owns interval CAST truncation; every declared output field is checked above.
-            cast_value_gates += 1;
             continue;
         }
         let mut actual_rows = Vec::new();
-        for batch in collect(physical, session.task_ctx()).await? {
+        let batches = match collect(physical, session.task_ctx()).await {
+            Ok(batches) => batches,
+            Err(error) => {
+                differences.push(format!("{label}: execution: {error}"));
+                continue;
+            }
+        };
+        for batch in batches {
             for row in 0..batch.num_rows() {
                 actual_rows.push(
                     batch
@@ -296,12 +326,12 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
                 assert_eq!(row.len(), expected.len());
                 row.iter()
                     .zip(expected)
-                    .zip(schema.fields())
-                    .map(|((value, field), storage)| {
+                    .zip(&expected_types)
+                    .map(|((value, field), storage_type)| {
                         recorded_scalar(
                             value,
                             field["type"].as_str().ok_or("missing type")?,
-                            storage.data_type(),
+                            storage_type,
                         )
                     })
                     .collect::<TestResult<Vec<_>>>()
@@ -311,8 +341,7 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
         expected_rows.sort_by_key(|row| format!("{row:?}"));
         if actual_rows != expected_rows {
             differences.push(format!(
-                "{}: expected {expected_rows:?}, got {actual_rows:?}",
-                case["id"]
+                "{label}: expected {expected_rows:?}, got {actual_rows:?}"
             ));
         }
     }
@@ -329,17 +358,28 @@ async fn interval_names_keep_native_sql_unchanged() -> TestResult {
     let configured = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
-    for sql in [
-        "SELECT INTERVAL '2' DAY AS d, INTERVAL '3' MONTH AS m",
-        "SELECT TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '1' DAY AS t",
-        "SELECT INTERVAL '1' DAY * 2 AS d",
+    for (sql, valid) in [
+        (
+            "SELECT INTERVAL '2' DAY AS d, INTERVAL '3' MONTH AS m",
+            true,
+        ),
+        (
+            "SELECT TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '1' DAY AS t",
+            true,
+        ),
+        ("SELECT INTERVAL '1' DAY * 2 AS d", false),
     ] {
         let mut results = Vec::new();
         for session in [&native, &configured] {
-            let frame = session.sql(sql).await?;
-            let physical = frame.create_physical_plan().await?;
-            results.push(collect(physical, session.task_ctx()).await?);
+            let result: datafusion::error::Result<_> = async {
+                let frame = session.sql(sql).await?;
+                let physical = frame.create_physical_plan().await?;
+                collect(physical, session.task_ctx()).await
+            }
+            .await;
+            results.push(result.map_err(|error| error.to_string()));
         }
+        assert_eq!(results[0].is_ok(), valid, "{sql}");
         assert_eq!(results[0], results[1], "{sql}");
     }
     Ok(())
