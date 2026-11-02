@@ -303,6 +303,11 @@ impl PlanResolver<'_> {
         } else {
             projections
         };
+        // Capture identity before rebasing can turn explicit aliases into column references.
+        let input_sources = projections
+            .iter()
+            .map(|x| state.projection_source(&x.expr))
+            .collect::<Vec<_>>();
         let projections = projections
             .into_iter()
             .map(|x| {
@@ -331,7 +336,8 @@ impl PlanResolver<'_> {
         let mut projected_sources = HashMap::new();
         let projections = projections
             .into_iter()
-            .map(|x| {
+            .zip(input_sources)
+            .map(|(x, source)| {
                 let NamedExpr {
                     name,
                     expr,
@@ -339,7 +345,7 @@ impl PlanResolver<'_> {
                     ..
                 } = x;
                 let field_id =
-                    state.register_projected_field(name.one()?, &expr, &mut projected_sources);
+                    state.register_projected_field(name.one()?, source, &mut projected_sources);
                 Ok(expr.alias(field_id))
             })
             .collect::<PlanResult<Vec<_>>>()?;

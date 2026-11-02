@@ -271,7 +271,8 @@ impl PlanResolver<'_> {
                 if let Expr::Column(column) | Expr::OuterReferenceColumn(_, column) = &expr {
                     state.get_field_info(column.name())?;
                 }
-                let field_id = state.register_projected_field(name, &expr, &mut projected_sources);
+                let source = state.projection_source(&expr);
+                let field_id = state.register_projected_field(name, source, &mut projected_sources);
                 if !metadata.is_empty() {
                     let metadata_map: HashMap<String, String> = metadata.into_iter().collect();
                     let field_metadata = Some(FieldMetadata::from(metadata_map));

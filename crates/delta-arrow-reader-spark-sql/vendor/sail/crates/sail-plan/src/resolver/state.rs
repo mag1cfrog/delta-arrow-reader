@@ -120,22 +120,23 @@ impl PlanResolverState {
         self.register_field_info(name, false)
     }
 
+    /// Returns a direct input reference's identity before projection rewrites.
+    pub fn projection_source(&self, expr: &Expr) -> Option<Column> {
+        match expr {
+            Expr::Column(column) | Expr::OuterReferenceColumn(_, column) => {
+                Some(self.field_source(column))
+            }
+            _ => None,
+        }
+    }
+
     /// Registers a unique output field, sharing identity for repeated direct input references.
     pub fn register_projected_field(
         &mut self,
         name: impl Into<String>,
-        expr: &Expr,
+        source: Option<Column>,
         projected_sources: &mut HashMap<Column, String>,
     ) -> String {
-        let source = match expr {
-            Expr::Column(column) | Expr::OuterReferenceColumn(_, column)
-                if self.fields.contains_key(column.name()) =>
-            {
-                Some(self.field_source(column))
-            }
-            // Computed aggregate outputs have synthetic, unregistered column names.
-            _ => None,
-        };
         let field_id = self.register_field_name(name);
         if let Some(source) = source {
             // Reset ancestry so separate relation aliases stay distinct after projection.
