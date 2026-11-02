@@ -7,7 +7,35 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-### Shared nullability prerequisites for S04
+### S04 window admission
+
+#142's new aggregate/window inventory has 192 independent Spark observations.
+It exposed floating DISTINCT/nested grouping (#725), floating window partitions
+and peers (#726), full window names (#727), and missing window validation (#724).
+All four are assigned native children of the open S04 parent. Alias metadata
+remains #710; struct-constructor nullability remains part of #156.
+
+#724 is the current repair. It checks ordering and function-specific frames,
+rejects DISTINCT windows, and validates frame bounds before empty-input pruning.
+Valid whole-partition RANGE frames without ORDER BY use the equivalent native
+ROWS representation. Signed ROWS offsets retain their direction, and zero
+offsets become CURRENT ROW after function-specific expression validation.
+Independent Spark references contain 572 observations across both ANSI modes and
+empty/nonempty inputs. The focused Rust test checks 1,144 comparisons, including
+planning-time rejection causes, complete successful schemas and values. Native
+SQL and volatile-UDF controls are separate checks. The final Linux workspace
+passes 528 tests with no failures and two inherited ignored doctests; the unchanged
+25,180-observation historical replay, fmt and all-target Clippy also pass.
+Clean-context Sol/high review identified a signed-frame test gap. Added SUM
+controls now assert actual membership for negative FOLLOWING and PRECEDING;
+all prior reference expectations remain unchanged. The reviewer verified the
+repair and found no remaining actionable issue in the scoped change.
+
+The #142 coverage candidate is preserved separately while this repair is reviewed.
+Afterward, restore it and continue the remaining native siblings and grouping
+boundary decisions. Do not count captured differences as accepted compatibility.
+
+### Completed shared nullability prerequisites for S04
 
 The shared repair combines #714, #718, #719 and #720. Correct VALUES input
 inference exposes the nullable-result contracts of integer DIV, numeric Decimal

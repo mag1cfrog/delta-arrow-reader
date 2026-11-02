@@ -1150,3 +1150,36 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 python tests/fixtures/capture_pivot_names_spark.py
 cargo test --locked --workspace --test pivot_names --test pivot_float_keys
 ```
+
+## Window admission
+
+`window-admission-spark.jsonl` contains 572 Spark 4.2.0 observations: 143 query
+forms in both ANSI modes, each with empty and nonempty input. The reference
+includes 248 successful results with complete schemas and 324 errors with Spark
+conditions. `window_admission.rs` compares them at batch sizes 1 and 32.
+Invalid definitions must fail in `plan_query`, even when empty input would remove
+the window. Matching an execution error is insufficient.
+
+The cases cover ranking functions, LAG/LEAD, NTH_VALUE, named windows, required
+and configurable frames, DISTINCT with/without FILTER, absent ordering, reversed
+bounds, signed offsets and zero bounds. Aggregate controls retain legal unordered
+and bounded windows. Separate tests check native DataFusion SQL and ensure an
+invalid volatile offset is not evaluated during frame validation.
+
+Spark validates some frames by expression identity before constant folding.
+For example, `LAG(v,1)` rejects `1 PRECEDING` but accepts `-1 FOLLOWING` as both
+frame bounds. Equal numeric offsets are not enough to establish equivalent
+admission. The reference preserves these outcomes rather than rewriting its SQL.
+See Spark's [window resolution](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/WindowResolution.scala)
+and [offset definitions](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/windowExpressions.scala).
+
+Generated window names and floating partition/peer equivalence remain separate
+work. These tests use explicit result aliases and integer inputs; they do not
+establish those contracts.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_window_admission_spark.py
+cargo test --locked --workspace --test window_admission
+```
