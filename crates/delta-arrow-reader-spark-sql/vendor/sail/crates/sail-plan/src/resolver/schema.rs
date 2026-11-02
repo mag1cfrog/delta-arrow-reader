@@ -47,7 +47,7 @@ impl PlanResolver<'_> {
                     !info.is_hidden()
                         && info.name().eq_ignore_ascii_case(name)
                         && sources.insert(
-                            state.join_key_source(&Column::new(qualifier.cloned(), field.name())),
+                            state.field_source(&Column::new(qualifier.cloned(), field.name())),
                         )
                 })
             })

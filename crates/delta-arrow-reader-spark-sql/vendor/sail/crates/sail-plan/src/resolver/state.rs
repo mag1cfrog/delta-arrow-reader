@@ -58,8 +58,8 @@ pub(super) struct PlanResolverState {
     next_id: usize,
     /// A map from the generated opaque field ID to field information.
     fields: HashMap<String, FieldInfo>,
-    /// USING key aliases keep their source identity despite unique projection IDs.
-    join_key_sources: HashMap<String, String>,
+    /// Equivalent fields share source identity while retaining unique projection IDs.
+    field_sources: HashMap<String, String>,
     /// The outer query schema for the current subquery.
     outer_query_schema: Option<DFSchemaRef>,
     /// The aggregate state for the current query.
@@ -87,7 +87,7 @@ impl PlanResolverState {
         Self {
             next_id: 0,
             fields: HashMap::new(),
-            join_key_sources: HashMap::new(),
+            field_sources: HashMap::new(),
             outer_query_schema: None,
             aggregate_state: AggregateState::default(),
             ctes: HashMap::new(),
@@ -126,21 +126,26 @@ impl PlanResolverState {
         self.register_field_info(name, true)
     }
 
-    pub fn join_key_source(&self, column: &Column) -> Column {
+    pub fn field_source(&self, column: &Column) -> Column {
         // A reused CTE field still belongs to its current table alias.
         Column::new(
             column.relation.clone(),
-            self.join_key_sources
+            self.field_sources
                 .get(column.name())
                 .unwrap_or(&column.name),
         )
     }
 
+    pub fn set_field_source(&mut self, field_id: &str, source_id: &str) {
+        self.field_sources
+            .insert(field_id.to_owned(), source_id.to_owned());
+    }
+
     pub fn register_join_key_alias(&mut self, column: &Column, hidden: bool) -> PlanResult<String> {
         let name = self.get_field_info(column.name())?.name().to_owned();
-        let source = self.join_key_source(column).name;
+        let source = self.field_source(column).name;
         let alias = self.register_field_info(name, hidden);
-        self.join_key_sources.insert(alias.clone(), source);
+        self.set_field_source(&alias, &source);
         Ok(alias)
     }
 

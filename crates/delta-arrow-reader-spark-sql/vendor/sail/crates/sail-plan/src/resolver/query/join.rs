@@ -187,11 +187,11 @@ impl PlanResolver<'_> {
         };
         let left_key_sources = left_columns
             .iter()
-            .map(|key| state.join_key_source(key))
+            .map(|key| state.field_source(key))
             .collect::<Vec<_>>();
         let right_key_sources = right_columns
             .iter()
-            .map(|key| state.join_key_source(key))
+            .map(|key| state.field_source(key))
             .collect::<Vec<_>>();
         let preserved_keys = match join_type {
             JoinType::Inner
@@ -212,7 +212,7 @@ impl PlanResolver<'_> {
             .zip(&right_columns)
             .flat_map(|(left, right)| [left, right])
         {
-            if preserved_keys.contains(&state.join_key_source(col)) || !columns.contains(col) {
+            if preserved_keys.contains(&state.field_source(col)) || !columns.contains(col) {
                 continue;
             }
             let name = state.get_field_info(col.name())?.name().to_owned();
@@ -230,7 +230,7 @@ impl PlanResolver<'_> {
             columns
                 .into_iter()
                 .filter(|col| {
-                    let source = state.join_key_source(col);
+                    let source = state.field_source(col);
                     !left_key_sources.contains(&source) && !right_key_sources.contains(&source)
                 })
                 .map(Expr::Column),

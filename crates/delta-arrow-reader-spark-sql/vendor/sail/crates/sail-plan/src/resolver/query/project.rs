@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::tree_node::{TreeNode, TreeNodeRewriter};
-use datafusion_common::{Column, DFSchemaRef, TableReference};
+use datafusion_common::{DFSchemaRef, TableReference};
 use datafusion_expr::expr::{FieldMetadata, ScalarFunction};
 use datafusion_expr::expr_rewriter::normalize_col;
 use datafusion_expr::utils::{columnize_expr, expand_qualified_wildcard, expand_wildcard};
@@ -251,6 +251,7 @@ impl PlanResolver<'_> {
         expr: Vec<NamedExpr>,
         state: &mut PlanResolverState,
     ) -> PlanResult<Vec<Expr>> {
+        let mut projected_sources = HashMap::new();
         expr.into_iter()
             .map(|e| {
                 let NamedExpr {
@@ -267,10 +268,18 @@ impl PlanResolver<'_> {
                         "one name expected for expression, got: {names}"
                     )));
                 };
-                if let Expr::Column(Column { name: field_id, .. }) = &expr {
-                    state.get_field_info(field_id)?;
-                }
+                let source = if let Expr::Column(column) = &expr {
+                    state.get_field_info(column.name())?;
+                    Some(state.field_source(column))
+                } else {
+                    None
+                };
                 let field_id = state.register_field_name(name);
+                if let Some(source) = source {
+                    // Reset ancestry here so separate relation aliases stay distinct after projection.
+                    let source_id = projected_sources.entry(source).or_insert(field_id.clone());
+                    state.set_field_source(&field_id, source_id);
+                }
                 if !metadata.is_empty() {
                     let metadata_map: HashMap<String, String> = metadata.into_iter().collect();
                     let field_metadata = Some(FieldMetadata::from(metadata_map));

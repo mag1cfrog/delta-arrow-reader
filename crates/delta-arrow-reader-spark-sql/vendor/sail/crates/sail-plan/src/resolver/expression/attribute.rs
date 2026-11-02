@@ -136,10 +136,7 @@ impl PlanResolver<'_> {
                             let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
                             let named = NamedExpr::new(vec![projection_name], expr);
                             if !sources.insert((
-                                state.join_key_source(&Column::new(
-                                    qualifier.cloned(),
-                                    field.name(),
-                                )),
+                                state.field_source(&Column::new(qualifier.cloned(), field.name())),
                                 inner.to_vec(),
                             )) {
                                 return None;
@@ -260,10 +257,7 @@ impl PlanResolver<'_> {
                             && qualifier_matches(q.as_ref(), qualifier)
                             && info.name().eq_ignore_ascii_case(name.as_ref())
                             && sources.insert((
-                                state.join_key_source(&Column::new(
-                                    qualifier.cloned(),
-                                    field.name(),
-                                )),
+                                state.field_source(&Column::new(qualifier.cloned(), field.name())),
                                 name.as_ref().to_string(),
                             ))
                     })
