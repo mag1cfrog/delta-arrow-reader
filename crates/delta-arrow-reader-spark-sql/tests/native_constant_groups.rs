@@ -4,9 +4,11 @@ use std::sync::Arc;
 
 use arrow::array::{ArrayRef, AsArray, Float32Array, Float64Array, Int32Array};
 use arrow::datatypes::{DataType, Field, Float32Type, Float64Type, Schema, SchemaRef};
+use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::datasource::MemTable;
+use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::{collect, displayable};
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -206,15 +208,34 @@ async fn spark_group_preparation_keeps_recorded_empty_groups_and_cast_errors() -
         ) {
             continue;
         }
-        let actual = capture_spark_query_result(&session, &case).await;
         if case["expected"]["condition"] == "CAST_INVALID_INPUT" {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: "UTC".into(),
+                    ..Default::default()
+                },
+            )
+            .await?;
+            let actual = async {
+                let physical = query.create_physical_plan(&session).await?;
+                collect(physical, session.task_ctx()).await
+            }
+            .await;
             assert!(
-                actual
-                    .as_ref()
-                    .is_err_and(|error| error.to_string().contains("[CAST_INVALID_INPUT]")),
+                actual.as_ref().is_err_and(|error| {
+                    let DataFusionError::ArrowError(error, _) = error.find_root() else {
+                        return false;
+                    };
+                    matches!(error.as_ref(), ArrowError::CastError(message)
+                        if message == "Cannot cast string 'bad' to value of Int32 type")
+                }),
                 "{case}: {actual:?}"
             );
         } else {
+            let actual = capture_spark_query_result(&session, &case).await;
             let mut expected = case["expected"].clone();
             expected
                 .as_object_mut()
