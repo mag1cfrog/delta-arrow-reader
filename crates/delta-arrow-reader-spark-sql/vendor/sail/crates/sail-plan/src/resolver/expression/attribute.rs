@@ -121,7 +121,7 @@ impl PlanResolver<'_> {
                                 named
                             } else {
                                 named.with_expression_name(
-                                    std::iter::once(name)
+                                    std::iter::once(*name)
                                         .chain(inner.iter())
                                         .map(|part| part.as_ref())
                                         .collect::<Vec<_>>()
