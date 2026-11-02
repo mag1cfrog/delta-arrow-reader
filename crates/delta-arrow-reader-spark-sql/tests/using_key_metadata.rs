@@ -43,6 +43,14 @@ async fn using_key_metadata_matches_spark() -> TestResult {
             include_str!("fixtures/using-key-identity-review-spark.jsonl"),
             30,
         ),
+        (
+            include_str!("fixtures/using-key-distinct-sources-spark.jsonl"),
+            4,
+        ),
+        (
+            include_str!("fixtures/repeated-projection-boundaries-spark.jsonl"),
+            36,
+        ),
     ] {
         let followup = fixture
             .lines()
@@ -122,6 +130,41 @@ async fn using_key_metadata_matches_spark() -> TestResult {
 }
 
 #[tokio::test]
+async fn repeated_projections_keep_unique_internal_names() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let metadata: Value = serde_json::from_str(
+        include_str!("fixtures/using-key-metadata-spark.jsonl")
+            .lines()
+            .next()
+            .ok_or("missing metadata")?,
+    )?;
+    register_recorded_inputs(&session, &metadata, 32)?;
+    for sql in [
+        "SELECT id,id FROM left_mixed",
+        "SELECT l.id,l.id FROM (SELECT id,id FROM left_mixed) l \
+         LEFT JOIN right_mixed r USING(id)",
+    ] {
+        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+        assert_eq!(query.column_names, ["id", "id"], "{sql}");
+        let names = query
+            .logical_plan
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            names.len(),
+            2,
+            "{sql}: repeated outputs need distinct internal names"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
     async fn capture_native(
         session: &SessionContext,
@@ -152,6 +195,7 @@ async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
     }
     let mut differences = Vec::new();
     let mut snapshots = Vec::new();
+    let mut native_queries = Vec::new();
     for shape in ["mixed", "nulls", "empty"] {
         for join in ["INNER", "LEFT", "RIGHT", "FULL", "LEFT SEMI", "LEFT ANTI"] {
             let sql = format!(
@@ -159,42 +203,59 @@ async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
                  FROM left_{shape} l {join} JOIN right_{shape} r USING(id) \
                  ORDER BY result_id,result_value"
             );
-            let expected = capture_native(&native, &sql).await;
-            let before = capture_native(&configured, &sql).await;
-            if expected.is_err() || before.as_ref().ok() != expected.as_ref().ok() {
-                differences.push(format!(
-                    "{sql} before Spark: expected {expected:?}, got {before:?}"
-                ));
-            }
-            snapshots.push((sql, expected, before));
+            native_queries.push((sql, true));
         }
     }
-    let spark_result: TestResult = async {
-        let query = plan_query(
-            &configured,
-            "SELECT l.*,r.* FROM left_mixed l FULL JOIN right_mixed r USING(id)",
-            &SparkSqlOptions::default(),
-        )
-        .await?;
-        collect(
-            query.create_physical_plan(&configured).await?,
-            configured.task_ctx(),
-        )
-        .await?;
-        Ok(())
+    native_queries.extend([
+        "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+        "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+        "SELECT l.id FROM (SELECT id,k AS id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+        "WITH shared AS (SELECT id,lv FROM left_mixed) SELECT q.id FROM \
+         (SELECT a.id,b.id FROM shared a JOIN shared b ON a.lv=b.lv) q",
+    ].map(|sql| (sql.to_owned(), false)));
+    for (sql, must_succeed) in native_queries {
+        let expected = capture_native(&native, &sql)
+            .await
+            .map_err(|error| error.to_string());
+        let before = capture_native(&configured, &sql)
+            .await
+            .map_err(|error| error.to_string());
+        if (must_succeed && expected.is_err()) || before != expected {
+            differences.push(format!(
+                "{sql} before Spark: expected {expected:?}, got {before:?}"
+            ));
+        }
+        snapshots.push((sql, expected, before));
     }
-    .await;
-    if let Err(error) = spark_result {
-        differences.push(format!("Spark USING exercise failed: {error}"));
+    for sql in [
+        "SELECT l.*,r.* FROM left_mixed l FULL JOIN right_mixed r USING(id)",
+        "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r USING(id)",
+        "SELECT l.id FROM (SELECT id,id FROM left_mixed) l LEFT JOIN right_mixed r ON l.id=r.id",
+    ] {
+        let spark_result: TestResult = async {
+            let query = plan_query(&configured, sql, &SparkSqlOptions::default()).await?;
+            collect(
+                query.create_physical_plan(&configured).await?,
+                configured.task_ctx(),
+            )
+            .await?;
+            Ok(())
+        }
+        .await;
+        if let Err(error) = spark_result {
+            differences.push(format!("Spark exercise {sql} failed: {error}"));
+        }
     }
     for (sql, expected, before) in snapshots {
-        let after = capture_native(&configured, &sql).await;
-        if after.is_err() || after.as_ref().ok() != expected.as_ref().ok() {
+        let after = capture_native(&configured, &sql)
+            .await
+            .map_err(|error| error.to_string());
+        if after != expected {
             differences.push(format!(
                 "{sql} after Spark: expected native {expected:?}, got {after:?}"
             ));
         }
-        if after.as_ref().ok() != before.as_ref().ok() {
+        if after != before {
             differences.push(format!(
                 "{sql} after Spark: expected configured baseline {before:?}, got {after:?}"
             ));
