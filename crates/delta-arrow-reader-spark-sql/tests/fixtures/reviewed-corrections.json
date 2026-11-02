@@ -64,6 +64,8 @@
   "replay/cast-classification-cases/62/nullif_zero_false": {"status":"ok","types":["Float64"],"rows":[[null],[null],["2.0"]],"output_names":["r"],"logical_nullable":[true],"physical_nullable":[true]},
   "replay/cast-classification-cases/62/nullif_zero_true": {"status":"ok","types":["Float64"],"rows":[[null],[null],["2.0"]],"output_names":["r"],"logical_nullable":[true],"physical_nullable":[true]},
   "replay/cast-dead-cases/144/focused_range_zero_limit0_true": {"status":"ok","types":["Int64"],"rows":[],"output_names":["r"],"logical_nullable":[true],"physical_nullable":[true]},
+  "replay/cast-dead-cases/150/focused_bad_column_dead_false": {"status":"planning_error","error":"analysis error: attribute ObjectName([Identifier(\"missing\")]) is missing from the schema: cannot resolve attribute [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION]"},
+  "replay/cast-dead-cases/150/focused_bad_column_dead_true": {"status":"planning_error","error":"analysis error: attribute ObjectName([Identifier(\"missing\")]) is missing from the schema: cannot resolve attribute [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION]"},
   "replay/cast-dead-cases/155/focused_range_case_dead_true": {"status":"ok","types":["Float64"],"rows":[["7.0"],["7.0"],["7.0"]],"output_names":["r"],"logical_nullable":[true],"physical_nullable":[true]},
   "replay/cast-dead-cases/158/guard_and_bad_right_true": {"status":"ok","types":["Boolean"],"rows":[["false"]],"output_names":["r"],"logical_nullable":[true],"physical_nullable":[false]},
   "replay/cast-dead-cases/160/guard_or_bad_right_true": {"status":"ok","types":["Boolean"],"rows":[["true"]],"output_names":["r"],"logical_nullable":[true],"physical_nullable":[false]},

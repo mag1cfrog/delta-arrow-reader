@@ -32,6 +32,10 @@ observations for closed higher-order STRING expressions. Legacy mode rejects
 these expressions even when all their inputs are constant; ANSI mode evaluates
 them with a nullable DATE declaration.
 
+`reviewed-corrections.json` adds the independently captured
+`UNRESOLVED_COLUMN.WITHOUT_SUGGESTION` condition to the two historical CASE
+missing-column errors, keeping their planning stage and original message prefix.
+
 `date_day_arithmetic.rs` compares complete rows, field names, types, nullability
 and metadata for all 432 observations at batch sizes 1 and 32, giving 864
 comparisons. DATE results use the resolved declaration
