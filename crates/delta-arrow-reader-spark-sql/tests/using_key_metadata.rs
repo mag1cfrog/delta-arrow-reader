@@ -39,6 +39,10 @@ async fn using_key_metadata_matches_spark() -> TestResult {
             include_str!("fixtures/using-key-metadata-boundaries-spark.jsonl"),
             48,
         ),
+        (
+            include_str!("fixtures/using-key-identity-review-spark.jsonl"),
+            30,
+        ),
     ] {
         let followup = fixture
             .lines()
@@ -76,10 +80,11 @@ async fn using_key_metadata_matches_spark() -> TestResult {
         for case in &records[1..] {
             let expected = &case["expected"];
             if let Some(condition) = expected["condition"].as_str() {
-                let expected_cause = match condition {
-                    "UNRESOLVED_COLUMN.WITH_SUGGESTION" => "missing from the schema",
-                    "CANNOT_RESOLVE_STAR_EXPAND" => "cannot resolve wildcard",
-                    "UNRESOLVED_USING_COLUMN_FOR_JOIN" => "[UNRESOLVED_COLUMN]",
+                let expected_causes: &[&str] = match condition {
+                    "UNRESOLVED_COLUMN.WITH_SUGGESTION" => &["missing from the schema"],
+                    "CANNOT_RESOLVE_STAR_EXPAND" => &["cannot resolve wildcard"],
+                    "UNRESOLVED_USING_COLUMN_FOR_JOIN" => &["[UNRESOLVED_COLUMN]"],
+                    "AMBIGUOUS_REFERENCE" => &["ambiguous attribute", "[AMBIGUOUS_REFERENCE]"],
                     _ => return Err(format!("unclassified reference error: {condition}").into()),
                 };
                 let actual = plan_query(
@@ -92,7 +97,10 @@ async fn using_key_metadata_matches_spark() -> TestResult {
                 )
                 .await;
                 match actual {
-                    Err(error) if error.to_string().contains(expected_cause) => {}
+                    Err(error)
+                        if expected_causes
+                            .iter()
+                            .any(|cause| error.to_string().contains(cause)) => {}
                     other => differences.push(format!(
                         "{} ANSI={} batch={batch_size}: expected {condition} during planning, got {other:?}",
                         case["id"], case["ansi"]
@@ -110,43 +118,6 @@ async fn using_key_metadata_matches_spark() -> TestResult {
         }
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
-    Ok(())
-}
-
-#[tokio::test]
-async fn using_key_aliases_do_not_merge_distinct_source_fields() -> TestResult {
-    let metadata: Value = serde_json::from_str(
-        include_str!("fixtures/using-key-metadata-spark.jsonl")
-            .lines()
-            .next()
-            .ok_or("missing metadata")?,
-    )?;
-    let session = SessionContext::new_with_state(
-        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
-    );
-    register_recorded_inputs(&session, &metadata, 32)?;
-    for (criteria, cause) in [
-        ("USING(id)", "[AMBIGUOUS_REFERENCE]"),
-        ("ON l.id=r.id", "ambiguous attribute"),
-    ] {
-        let sql = format!(
-            "SELECT l.id FROM (SELECT id,id FROM left_mixed) l \
-             LEFT JOIN right_mixed r {criteria}"
-        );
-        let result = plan_query(&session, &sql, &SparkSqlOptions::default()).await;
-        assert!(
-            result.is_err_and(|error| error.to_string().contains(cause)),
-            "{sql} must reject distinct source fields"
-        );
-    }
-    let result = plan_query(
-        &session,
-        "WITH shared AS (SELECT id FROM left_mixed) \
-         SELECT id FROM shared l JOIN shared r ON l.id=r.id",
-        &SparkSqlOptions::default(),
-    )
-    .await;
-    assert!(result.is_err_and(|error| error.to_string().contains("ambiguous attribute")));
     Ok(())
 }
 
