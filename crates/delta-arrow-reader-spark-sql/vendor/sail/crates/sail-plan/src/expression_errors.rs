@@ -3611,9 +3611,15 @@ async fn foldable_grouping_keeps_empty_and_live_boundaries()
                 let named = PlanResolver::new(&ctx, Arc::new(config))
                     .resolve_named_plan(spec)
                     .await?;
+                // Match the public Spark entry point's query-local marker.
+                let mut state = ctx.state();
+                state
+                    .config_mut()
+                    .options_mut()
+                    .extensions
+                    .insert(SparkSqlErrorSemantics::default());
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                    ctx.execute_logical_plan(named.plan)
-                        .await?
+                    datafusion::dataframe::DataFrame::new(state, named.plan)
                         .collect()
                         .await?,
                 )
