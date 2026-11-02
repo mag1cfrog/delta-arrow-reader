@@ -483,3 +483,12 @@ queries retain the default literal schemas. Exact statistics still eliminate the
 aggregate and its scan. The [statistics references](tests/fixtures/README.md#exact-statistics-aggregate-results)
 cover result schemas, values and shortcut eligibility. Metadata preservation
 starts at the physical aggregate schema available to this optimizer.
+
+### String and binary substring
+
+SUBSTR and SUBSTRING reuse DataFusion Spark's Unicode substring kernel. Binary
+ranges retain Spark's Java INT arithmetic and zero padding through a small
+native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
+length is INT_MAX for both strings and binary values.
+The [substring references](tests/fixtures/README.md#string-and-binary-substring)
+cover analyzed fields, executed values and native SQL preservation.

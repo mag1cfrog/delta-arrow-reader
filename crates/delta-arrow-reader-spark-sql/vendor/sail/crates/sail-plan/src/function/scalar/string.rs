@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::datatypes::DataType;
 use datafusion::functions::expr_fn;
 use datafusion::functions::regex::expr_fn as regex_fn;
@@ -30,6 +31,7 @@ use sail_function::scalar::string::spark_regexp_extract_all::{
 };
 use sail_function::scalar::string::spark_sentences::SparkSentences;
 use sail_function::scalar::string::spark_split::SparkSplit;
+use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::string::spark_to_binary::{SparkToBinary, SparkTryToBinary};
 use sail_function::scalar::string::spark_to_char::SparkToChar;
 use sail_function::scalar::string::spark_to_number::SparkToNumber;
@@ -89,39 +91,21 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         function_context,
     } = input;
     let length_opt = (arguments.len() == 3).then(|| arguments.pop()).flatten();
-    let (string, position) = arguments
+    let (value, position) = arguments
         .two()
         .map_err(|_| PlanError::invalid("substr requires 2 or 3 arguments"))?;
-    let string = cast_to_logical_string_or_try(string, function_context.schema, false)?;
-    // Spark uses 1-based indexing, but treats pos=0 the same as pos=1 (start of string).
-    // For negative positions, Spark counts from the end of the string.
-    // DataFusion follows the SQL standard where pos=0 reduces the effective length by 1,
-    // and pos<0 reduces even more. We convert Spark's semantics to DataFusion's:
-    // - pos > 0: use as-is (1-based from start)
-    // - pos = 0: use 1 (same behavior as pos=1 in Spark)
-    // - pos < 0: use greatest(char_length(str) + pos + 1, 1) (absolute position from end)
-    // For literal positive positions (the common case), we skip the CASE WHEN to keep plans clean.
-    let position = match &position {
-        expr::Expr::Literal(ScalarValue::Int64(Some(n)), _) if *n > 0 => position,
-        expr::Expr::Literal(ScalarValue::Int32(Some(n)), _) if *n > 0 => position,
-        expr::Expr::Literal(ScalarValue::Int64(Some(0)), _)
-        | expr::Expr::Literal(ScalarValue::Int32(Some(0)), _) => lit(1i64),
-        _ => when(position.clone().gt(lit(0i64)), position.clone())
-            .when(position.clone().eq(lit(0i64)), lit(1i64))
-            .otherwise(expr_fn::greatest(vec![
-                cast(expr_fn::char_length(string.clone()), DataType::Int64)
-                    + position.clone()
-                    + lit(1i64),
-                lit(1i64),
-            ]))?,
+    let value = match value.get_type(function_context.schema)? {
+        DataType::Utf8
+        | DataType::LargeUtf8
+        | DataType::Utf8View
+        | DataType::Binary
+        | DataType::LargeBinary
+        | DataType::BinaryView => value,
+        DataType::FixedSizeBinary(_) => cast(value, DataType::Binary),
+        _ => cast_to_logical_string_or_try(value, function_context.schema, false)?,
     };
-    let substr_res = match length_opt {
-        Some(length) => expr_fn::substring(string, position, length),
-        None => expr_fn::substr(string, position),
-    };
-    // TODO: Spark client throws "UNEXPECTED EXCEPTION: ArrowInvalid('Unrecognized type: 24')"
-    //  when the return type is Utf8View.
-    Ok(cast(substr_res, DataType::Utf8))
+    let length = length_opt.unwrap_or_else(|| lit(i32::MAX));
+    Ok(ScalarUDF::from(SparkSubstring::new()).call(vec![value, position, length]))
 }
 
 fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
