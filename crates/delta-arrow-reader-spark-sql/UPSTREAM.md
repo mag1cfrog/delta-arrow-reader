@@ -156,7 +156,8 @@ preparation call sites. Native SQL in a Spark-configured session retains DataFus
 constant-group elimination, including its aggregate kernels and required CAST
 errors, before and after Spark execution. The
 [native constant-group checks](tests/fixtures/README.md#native-constant-group-preservation)
-compare plans, complete schemas and original floating bits against a plain session.
+reject Spark grouping keys in native plans and compare complete schemas and
+original floating bits against a plain session.
 Spark EXISTS output pruning also requires this marker. Native EXISTS queries
 retain DataFusion's empty-input results and required aggregate CAST errors.
 
