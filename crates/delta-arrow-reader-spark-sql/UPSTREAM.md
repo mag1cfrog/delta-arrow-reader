@@ -516,3 +516,12 @@ cover supported patterns, Spark INT indices and evaluation boundaries.
 BIGINT-to-INT index narrowing remains separate argument-coercion work.
 Java-only pattern syntax, including lookbehind, remains a separate engine
 limitation under #779.
+
+Spark ILIKE lowers its original, jointly coerced source and pattern with the
+native LOWER value kernel, then uses ordinary case-sensitive Arrow LIKE. The
+original escape character is preserved and pattern lowering precedes custom
+escape rewriting. A private result adapter retains Boolean nullability from the
+original operands without changing native LOWER or native SQL matching. The
+[Unicode ILIKE references](tests/fixtures/README.md#unicode-ilike) compare complete
+fields and values; escape validation and its evaluation boundaries remain under
+#771.
