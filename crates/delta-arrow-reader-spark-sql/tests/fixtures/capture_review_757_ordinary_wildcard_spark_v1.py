@@ -11,7 +11,7 @@ from pyspark.sql import SparkSession, types
 
 from capture_floating_group_keys_spark import capture_query
 
-REFERENCE = Path("/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/struct-expression-names-spark-v1-raw.jsonl")
+REFERENCE = Path(__file__).with_name("struct-expression-names-spark.jsonl")
 
 
 def main():
