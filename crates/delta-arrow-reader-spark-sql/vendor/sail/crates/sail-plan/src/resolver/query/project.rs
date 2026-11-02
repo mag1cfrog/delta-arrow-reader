@@ -190,10 +190,19 @@ impl PlanResolver<'_> {
         let expr = expr
             .into_iter()
             .map(|e| {
-                Ok(NamedExpr {
-                    expr: e.expr.rewrite(&mut rewriter)?.data,
-                    ..e
-                })
+                let direct_input = matches!(
+                    &e.expr,
+                    Expr::Column(_) | Expr::OuterReferenceColumn(_, _)
+                );
+                let expr = e.expr.rewrite(&mut rewriter)?.data;
+                // Materializing a computation does not make it a direct input reference.
+                let expr = if !direct_input && let Expr::Column(column) = &expr {
+                    let name = column.name.clone();
+                    expr.alias(name)
+                } else {
+                    expr
+                };
+                Ok(NamedExpr { expr, ..e })
             })
             .collect::<PlanResult<Vec<_>>>()?;
         Ok((rewriter.into_plan(), expr))
