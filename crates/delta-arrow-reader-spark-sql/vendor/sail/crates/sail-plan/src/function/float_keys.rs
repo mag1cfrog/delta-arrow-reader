@@ -36,6 +36,7 @@ fn contains_float(data_type: &DataType) -> bool {
         | DataType::ListView(field)
         | DataType::LargeListView(field) => contains_float(field.data_type()),
         DataType::Struct(fields) => fields.iter().any(|field| contains_float(field.data_type())),
+        DataType::Dictionary(_, value) => contains_float(value),
         _ => false,
     }
 }
@@ -110,6 +111,13 @@ fn normalize_nested_float_keys(
                 .collect::<Result<_>>()?,
             array.nulls().cloned(),
         )?),
+        DataType::Dictionary(_, _) => {
+            let dictionary = array.as_any_dictionary();
+            dictionary.with_values(normalize_nested_float_keys(
+                dictionary.values().clone(),
+                config_options,
+            )?)
+        }
         DataType::List(field) => Arc::new(ListArray::try_new(
             field.clone(),
             adjust_offsets_for_slice(array.as_list::<i32>()),
@@ -323,5 +331,38 @@ mod tests {
             | DataType::LargeListView(field) => Ok(field.clone()),
             _ => datafusion_common::internal_err!("expected list"),
         }
+    }
+
+    #[test]
+    fn nested_dictionary_float_keys_keep_keys_and_normalize_values() -> Result<()> {
+        use arrow::array::{DictionaryArray, Int8Array};
+        use arrow::datatypes::Int8Type;
+
+        let dictionary: ArrayRef = Arc::new(DictionaryArray::<Int8Type>::try_new(
+            Int8Array::from(vec![Some(0), Some(1), None, Some(2)]),
+            Arc::new(Float64Array::from(vec![
+                Some(-0.0),
+                Some(f64::from_bits(0xfff8000000004321)),
+                None,
+            ])),
+        )?);
+        let structure: ArrayRef = Arc::new(StructArray::try_new(
+            vec![Field::new("value", dictionary.data_type().clone(), true)].into(),
+            vec![dictionary.clone()],
+            None,
+        )?);
+        let normalized = normalize_nested_float_keys(structure, &Arc::default())?;
+        let normalized = normalized.as_struct().column(0).as_dictionary::<Int8Type>();
+        assert_eq!(
+            normalized.keys(),
+            dictionary.as_dictionary::<Int8Type>().keys()
+        );
+        let values = normalized
+            .values()
+            .as_primitive::<arrow::datatypes::Float64Type>();
+        assert_eq!(values.value(0).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(values.value(1).to_bits(), f64::NAN.to_bits());
+        assert!(values.is_null(2));
+        Ok(())
     }
 }

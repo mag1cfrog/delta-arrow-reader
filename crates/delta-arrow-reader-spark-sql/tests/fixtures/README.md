@@ -1259,3 +1259,35 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 python tests/fixtures/capture_nested_collections_spark.py
 cargo test --locked --workspace --test nested_collections
 ```
+
+## Nested ordering and window frames
+
+`nested-ordering-spark.jsonl` retains all 64 independent Spark 4.2.0 ROW_NUMBER
+observations from the nested ordering reproduction. Its eight integer/string
+providers cover arrays, structs, arrays of structs and structs containing arrays.
+Each has NULL containers, NULL children and duplicate keys; array providers also
+have empty arrays. Both ANSI modes and all four ASC/DESC and outer NULL placement
+choices remain in the fixture. These queries contain no RANGE frames.
+
+`nested_ordering.rs` compares complete ROW_NUMBER rows and schemas at batch sizes
+1 and 32. It checks ordinary ORDER BY and ordered subqueries against those
+positions, retaining original projected keys and metadata. RANK and DENSE_RANK
+expectations use equal-key groups from the same independently recorded positions.
+Separate controls retain native SQL ordering, evaluate every computed key child,
+and reject numeric RANGE offsets on nested keys.
+
+`nested-window-frames-spark.jsonl` retains the complete original 600-reference
+capture without changing its expected rows or fields. Its 30 integer/string
+providers add scalar, all-NULL and empty controls. Global and partitioned RANGE
+frames cover peers, prefixes, suffixes, whole partitions and default frames, plus
+multiple sort keys. `nested_window_frames.rs` compares every reference at both
+batch sizes, for 1,200 comparisons. This integration suite requires the native
+nested RANGE repair as well as the Spark ordering adapter.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
+
+```sh
+python tests/fixtures/capture_nested_ordering_spark.py
+python tests/fixtures/capture_nested_window_frames_spark.py
+cargo test --locked --workspace --test nested_ordering --test nested_window_frames
+```

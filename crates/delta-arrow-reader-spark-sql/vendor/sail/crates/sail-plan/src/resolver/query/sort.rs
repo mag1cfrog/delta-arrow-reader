@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use async_recursion::async_recursion;
@@ -12,6 +13,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_logical_plan::sort::SortWithinPartitionsNode;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -256,7 +258,10 @@ impl PlanResolver<'_> {
             .resolve_sort_order(sort.clone(), true, plan.schema(), state)
             .await;
         match sort_expr {
-            Ok(sort_expr) => Ok(sort_expr),
+            Ok(mut sort_expr) => {
+                sort_expr.expr = spark_sort_key(sort_expr.expr, plan.schema())?;
+                Ok(sort_expr)
+            }
             Err(_) => {
                 let mut sorts = Vec::with_capacity(plan.inputs().len());
                 for input_plan in plan.inputs() {
