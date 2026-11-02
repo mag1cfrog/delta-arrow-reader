@@ -47,6 +47,7 @@ use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolea
 use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::collection_result::RequireNonNullCollectionElements;
 use crate::function::common::{
     AggFunction, AggFunctionInput, FunctionContextInput, count_min_sketch_args,
     get_arguments_and_null_treatment, get_null_treatment, hll_args_with_default_lg,
@@ -830,12 +831,14 @@ pub(super) fn coalesce_to_empty_array(
     ignore_nulls: bool,
 ) -> expr::Expr {
     let empty = ScalarValue::List(ScalarValue::new_list_nullable(&[], element_type));
+    // Constant folding can tighten nested fields; retain their analyzed type.
+    let agg = cast(agg, DataType::new_list(element_type.clone(), true));
     let result = coalesce(vec![agg, lit(empty)]);
-    // Native array_agg retains nullable elements even when it discards every NULL.
-    cast(
-        result,
-        DataType::new_list(element_type.clone(), !ignore_nulls),
-    )
+    if ignore_nulls {
+        ScalarUDF::from(RequireNonNullCollectionElements).call(vec![result])
+    } else {
+        result
+    }
 }
 
 fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {

@@ -68,6 +68,7 @@ pub(crate) async fn capture_spark_query_result(
 
 fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
     Ok(match data_type {
+        DataType::Null => json!("void"),
         DataType::Int8 => json!("byte"),
         DataType::Int32 => json!("integer"),
         DataType::Int64 => json!("long"),

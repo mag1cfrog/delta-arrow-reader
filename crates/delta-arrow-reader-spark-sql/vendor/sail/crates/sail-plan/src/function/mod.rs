@@ -13,6 +13,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::ScalarFunction;
 
 mod aggregate;
+mod collection_result;
 pub(crate) mod common;
 mod comparison;
 pub(crate) mod float_keys;
