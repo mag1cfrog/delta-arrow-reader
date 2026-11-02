@@ -403,3 +403,13 @@ selected-value decoding but retain numeric keys for arithmetic RANGE bounds.
 Ordinary scalar query sorting and native DataFusion SQL keep their existing
 paths. The [floating window references](tests/fixtures/README.md#floating-window-comparison-keys)
 cover partitions, peers, frame members and payload preservation.
+
+### Exact statistics aggregate results
+
+The physical aggregate-statistics optimizer preserves the replaced aggregate's
+field declarations and schema metadata for Spark queries. A query-local marker
+enables existing field-aware casts around statistics literals; native DataFusion
+queries retain the default literal schemas. Exact statistics still eliminate the
+aggregate and its scan. The [statistics references](tests/fixtures/README.md#exact-statistics-aggregate-results)
+cover result schemas, values and shortcut eligibility. Metadata preservation
+starts at the physical aggregate schema available to this optimizer.
