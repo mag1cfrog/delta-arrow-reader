@@ -65,16 +65,52 @@ async fn scalar_subquery_sort_names_fields_and_values_match_spark() -> TestResul
 }
 
 #[tokio::test]
+async fn scalar_subquery_sort_lowering_fields_values_and_restrictions_match_spark() -> TestResult {
+    replay_fixture(
+        include_str!("fixtures/scalar-subquery-sort-lowering-spark.jsonl"),
+        13,
+    )
+    .await
+}
+
+#[tokio::test]
 async fn scalar_subquery_sort_planned_names_match_spark() -> TestResult {
-    let records = include_str!("fixtures/scalar-subquery-sort-names-spark.jsonl")
+    for (fixture, record_count, accepted_count) in [
+        (
+            include_str!("fixtures/scalar-subquery-sort-names-spark.jsonl"),
+            7,
+            6,
+        ),
+        (
+            include_str!("fixtures/scalar-subquery-sort-lowering-spark.jsonl"),
+            13,
+            8,
+        ),
+    ] {
+        replay_planned_sort_names(fixture, record_count, accepted_count).await?;
+    }
+    Ok(())
+}
+
+async fn replay_planned_sort_names(
+    fixture: &str,
+    record_count: usize,
+    accepted_count: usize,
+) -> TestResult {
+    let records = fixture
         .lines()
         .map(serde_json::from_str)
         .collect::<Result<Vec<Value>, _>>()?;
-    assert_eq!(records.len(), 7);
+    assert_eq!(records.len(), record_count);
+    let accepted = records[1..]
+        .iter()
+        .filter(|case| case["expected"]["status"] == "ok")
+        .collect::<Vec<_>>();
+    assert_eq!(accepted.len(), accepted_count);
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size);
-        for case in &records[1..] {
+        for case in &accepted {
             let query = plan_query(
                 &session,
                 case["sql"].as_str().ok_or("missing SQL")?,
@@ -134,6 +170,11 @@ async fn replay_fixture(fixture: &str, record_count: usize) -> TestResult {
                             .contains("Scalar subquery must return exactly one column, found 2"),
                         Some("CAST_INVALID_INPUT") => {
                             error.contains("Cannot cast string 'bad' to value of Int32 type")
+                        }
+                        Some("UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE") => {
+                            error.contains(
+                                "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+                            )
                         }
                         _ => false,
                     }
