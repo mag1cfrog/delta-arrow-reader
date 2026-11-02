@@ -272,20 +272,32 @@ async fn native_field_names_and_metadata_are_unchanged() -> TestResult {
     for session in [&native, &configured] {
         register_recorded_inputs(session, &records[0], 2)?;
     }
-    capture_spark_query_result(
-        &configured,
-        &json!({"ansi":true,
-        "sql":"SELECT ABS(nested.item) FROM inputs"}),
-    )
-    .await?;
+    let mut expected = Vec::new();
     for sql in [
-        "SELECT nested.item,ABS(nested.item),CAST(nested.item AS BIGINT) FROM inputs",
-        "SELECT nested.item AS chosen,CAST(nested.item AS BIGINT) FROM empty_inputs",
+        "SELECT nested.item AS chosen,ABS(nested.item),CAST(nested.item AS BIGINT) AS cast_item FROM inputs",
+        "SELECT nested.item AS chosen,CAST(nested.item AS BIGINT) AS cast_item FROM empty_inputs",
     ] {
-        let expected = native.sql(sql).await?;
-        let actual = configured.sql(sql).await?;
-        assert_eq!(actual.schema(), expected.schema(), "{sql}");
-        assert_eq!(actual.collect().await?, expected.collect().await?, "{sql}");
+        let frame = native.sql(sql).await?;
+        expected.push((sql, frame.schema().clone(), frame.collect().await?));
+    }
+    for after_spark in [false, true] {
+        if after_spark {
+            capture_spark_query_result(
+                &configured,
+                &json!({"ansi":true,
+                "sql":"SELECT ABS(nested.item) FROM inputs"}),
+            )
+            .await?;
+        }
+        for (sql, schema, batches) in &expected {
+            let actual = configured.sql(sql).await?;
+            assert_eq!(actual.schema(), schema, "{sql}, after_spark={after_spark}");
+            assert_eq!(
+                &actual.collect().await?,
+                batches,
+                "{sql}, after_spark={after_spark}"
+            );
+        }
     }
     Ok(())
 }
