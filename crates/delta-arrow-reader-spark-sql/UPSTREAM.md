@@ -371,3 +371,19 @@ metadata intact. Projected input fields and native DataFusion SQL retain their
 metadata. The [metadata references](tests/fixtures/README.md#derived-window-metadata)
 cover both ANSI modes, aliases, subqueries, NULL handling and empty input.
 Generated-alias marker parity remains tracked separately by #710.
+
+### Floating window comparison keys
+
+Spark window partition and order keys share the scalar floating comparison rule
+with grouping: both zero signs compare equal, and all NaNs compare equal above
+other numbers. Keys are prepared after grouping placeholders are rebased, and
+only the complete key result is normalized. Projected fields keep their metadata;
+projected values, window arguments and aggregate payloads retain their original
+floating bits.
+
+Nested keys reuse the sort adapter's visible-value compaction before floating
+normalization and Binary encoding. Scalar dictionary floats use the same
+selected-value decoding but retain numeric keys for arithmetic RANGE bounds.
+Ordinary scalar query sorting and native DataFusion SQL keep their existing
+paths. The [floating window references](tests/fixtures/README.md#floating-window-comparison-keys)
+cover partitions, peers, frame members and payload preservation.

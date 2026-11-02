@@ -9,8 +9,8 @@ has been reviewed. Publish the final support contract separately.
 
 ### Parallel execution and review
 
-The current batch separates native nested window frames (#738), derived-window
-metadata (#739), and nested NULL ordering (#740). Sol/xhigh implementers own
+The current batch separates floating window keys (#726), window output names
+(#727), and floating MIN/MAX (#730). Sol/xhigh implementers own
 isolated worktrees. Available agent slots take independent implementation,
 analysis or review tasks; a task need not occupy an entire issue. The coordinator
 schedules all Rust builds and Spark captures serially, reconciles integration,
@@ -60,11 +60,43 @@ findings added permanent cache-lifetime and interleaved completion checks,
 visible-only storage preparation, floating composition references and the
 post-grouping sort regression.
 
-Next resume #726's floating partition/scalar-order candidate against these
-prerequisites, preserving its original 848-reference capture. Window labels
-(#727) and floating MIN/MAX (#730) have read-only preparation notes and still
-require implementation, independent captures and review. The next three-platform
-checkpoint covers this completed batch before further staging integration.
+The three-platform checkpoint at `b13ec50d` passed on Linux, macOS and Windows.
+Each platform ran 70 suites with 562 passing tests, zero failures and two
+inherited ignored doctests, plus formatting and Clippy. Workflow run
+`41416355015` completed successfully before further staging integration.
+
+### In progress: floating windows, output names and extrema
+
+The floating window repair passes all 1,696 comparisons against the unchanged
+848-reference capture. The baseline matched 1,376 and retained 320 row differences.
+Comparison keys now follow Spark zero/NaN equality without changing projected
+payloads. Dictionary FLOAT/DOUBLE RANGE bounds use the decoded numeric type;
+other dictionary types retain their existing behavior. Forty dictionary pairs
+(80 query executions) check ordinary, BIGINT and fractional DECIMAL offsets,
+with separate invalid-bound guards.
+
+The independent review found the initial dictionary-bound mismatch and confirmed
+its repair. JVM raw-bit checks match all 34 providers, including nested arrays
+and structs. The exact product revision `4ee057fd` passes 569 workspace tests
+across 71 suites, with no failures and two inherited ignored doctests. Historical
+references, native SQL, bounded state and post-grouping typing controls pass
+without matcher changes. Formatting and Clippy pass. These checks cover the
+floating-window repair; the other current slices remain in progress.
+
+The new output-name capture has 276 successful Spark references. Baseline testing
+retains the original schema and planning differences. Source aliases before PIVOT
+(#744) and equivalent LEAD expressions left unlowered (#745) have separate runtime
+owners. Keep those original queries and references when using focused naming
+controls. Nested-field and interval-expression labels still need classification.
+
+The floating extrema probe preserves original JVM bits and complete schemas.
+Baseline results match 24 of 48 comparisons; the other 24 differ in values.
+The implementation is isolated while full independent captures and bounded cost
+controls run. Native optimization shortcuts require a Spark-compatible ordering
+contract and sufficient statistics; their correctness and cost remain under
+review. MIN/MAX and output names remain under validation. Native constant-group
+preparation now has its own repair owner (#746). Keep the original native
+comparison failure until that prerequisite is verified.
 
 ### Completed S04 nested collection result types
 

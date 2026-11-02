@@ -1,4 +1,4 @@
-//! Spark nested NULL children sort below values independently of container placement.
+//! Temporary comparison keys preserve Spark floating equality and nested NULL order.
 
 use std::sync::Arc;
 
@@ -14,13 +14,36 @@ use datafusion_expr::{
     ScalarUDFImpl, Signature, Volatility,
 };
 
-use crate::function::float_keys::normalize_nested_float_keys;
+use crate::function::float_keys::{normalize_nested_float_keys, normalize_spark_float_key};
 
+/// Prepare partition and order keys while keeping scalar RANGE keys numeric.
+pub(crate) fn spark_window_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
+    let data_type = expression.get_type(schema)?;
+    if matches!(data_type, DataType::Float32 | DataType::Float64) {
+        normalize_spark_float_key(expression, schema)
+    } else if matches!(
+        decoded_key_type(&data_type),
+        DataType::Float32 | DataType::Float64
+    ) {
+        Ok(ScalarUDF::from(SparkComparisonKey).call(vec![expression]))
+    } else {
+        spark_sort_key(expression, schema)
+    }
+}
+
+/// Prepare nested query-sort keys; scalar query sorts retain their input expression.
 pub(crate) fn spark_sort_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
     if is_nested_key(&expression.get_type(schema)?) {
-        Ok(ScalarUDF::from(SparkNestedSortKey).call(vec![expression]))
+        Ok(ScalarUDF::from(SparkComparisonKey).call(vec![expression]))
     } else {
         Ok(expression)
+    }
+}
+
+fn decoded_key_type(data_type: &DataType) -> &DataType {
+    match data_type {
+        DataType::Dictionary(_, value) => decoded_key_type(value),
+        _ => data_type,
     }
 }
 
@@ -37,7 +60,7 @@ fn is_nested_key(data_type: &DataType) -> bool {
     }
 }
 
-fn take_sort_values(array: &ArrayRef, indices: &UInt64Array) -> Result<ArrayRef> {
+fn take_comparison_values(array: &ArrayRef, indices: &UInt64Array) -> Result<ArrayRef> {
     let indices = UInt64Array::from_iter(
         indices
             .iter()
@@ -48,14 +71,14 @@ fn take_sort_values(array: &ArrayRef, indices: &UInt64Array) -> Result<ArrayRef>
             let dictionary = array.as_any_dictionary();
             let keys = arrow::compute::take(dictionary.keys(), &indices, None)?;
             let keys = arrow::compute::cast(keys.as_ref(), &DataType::UInt64)?;
-            take_sort_values(dictionary.values(), keys.as_primitive())
+            take_comparison_values(dictionary.values(), keys.as_primitive())
         }
         DataType::Struct(fields) => {
             let columns = array
                 .as_struct()
                 .columns()
                 .iter()
-                .map(|column| take_sort_values(column, &indices))
+                .map(|column| take_comparison_values(column, &indices))
                 .collect::<Result<Vec<_>>>()?;
             let fields = fields
                 .iter()
@@ -79,33 +102,33 @@ fn take_sort_values(array: &ArrayRef, indices: &UInt64Array) -> Result<ArrayRef>
         }
         DataType::List(field) => {
             let list = array.as_list::<i32>();
-            take_sort_list(field, list.values(), &indices, |index| {
+            take_comparison_list(field, list.values(), &indices, |index| {
                 list.value_offsets()[index] as usize..list.value_offsets()[index + 1] as usize
             })
         }
         DataType::LargeList(field) => {
             let list = array.as_list::<i64>();
-            take_sort_list(field, list.values(), &indices, |index| {
+            take_comparison_list(field, list.values(), &indices, |index| {
                 list.value_offsets()[index] as usize..list.value_offsets()[index + 1] as usize
             })
         }
         DataType::ListView(field) => {
             let list = array.as_list_view::<i32>();
-            take_sort_list(field, list.values(), &indices, |index| {
+            take_comparison_list(field, list.values(), &indices, |index| {
                 let start = list.value_offsets()[index] as usize;
                 start..start + list.value_sizes()[index] as usize
             })
         }
         DataType::LargeListView(field) => {
             let list = array.as_list_view::<i64>();
-            take_sort_list(field, list.values(), &indices, |index| {
+            take_comparison_list(field, list.values(), &indices, |index| {
                 let start = list.value_offsets()[index] as usize;
                 start..start + list.value_sizes()[index] as usize
             })
         }
         DataType::FixedSizeList(field, size) => {
             let list = array.as_fixed_size_list();
-            take_sort_list(field, list.values(), &indices, |index| {
+            take_comparison_list(field, list.values(), &indices, |index| {
                 let start = index * *size as usize;
                 start..start + *size as usize
             })
@@ -114,7 +137,7 @@ fn take_sort_values(array: &ArrayRef, indices: &UInt64Array) -> Result<ArrayRef>
     }
 }
 
-fn take_sort_list(
+fn take_comparison_list(
     field: &FieldRef,
     values: &ArrayRef,
     indices: &UInt64Array,
@@ -128,10 +151,12 @@ fn take_sort_list(
             children.extend(range(index as usize).map(|index| index as u64));
         }
         offsets.push(i64::try_from(children.len()).map_err(|_| {
-            datafusion_common::DataFusionError::Execution("nested sort key offset overflow".into())
+            datafusion_common::DataFusionError::Execution(
+                "nested comparison key offset overflow".into(),
+            )
         })?);
     }
-    let values = take_sort_values(values, &UInt64Array::from_iter_values(children))?;
+    let values = take_comparison_values(values, &UInt64Array::from_iter_values(children))?;
     let field = Arc::new(
         field
             .as_ref()
@@ -148,11 +173,11 @@ fn take_sort_list(
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkNestedSortKey;
+struct SparkComparisonKey;
 
-impl ScalarUDFImpl for SparkNestedSortKey {
+impl ScalarUDFImpl for SparkComparisonKey {
     fn name(&self) -> &str {
-        "spark_nested_sort_key"
+        "spark_comparison_key"
     }
 
     fn signature(&self) -> &Signature {
@@ -161,14 +186,20 @@ impl ScalarUDFImpl for SparkNestedSortKey {
         &SIGNATURE
     }
 
-    fn return_type(&self, _args: &[DataType]) -> Result<DataType> {
-        Ok(DataType::Binary)
+    fn return_type(&self, args: &[DataType]) -> Result<DataType> {
+        let [data_type] = args else {
+            return datafusion_common::plan_err!("expected one comparison key");
+        };
+        Ok(match decoded_key_type(data_type) {
+            DataType::Float32 | DataType::Float64 => decoded_key_type(data_type).clone(),
+            _ => DataType::Binary,
+        })
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
         Ok(Arc::new(Field::new(
             self.name(),
-            DataType::Binary,
+            self.return_type(&[args.arg_fields[0].data_type().clone()])?,
             args.arg_fields[0].is_nullable(),
         )))
     }
@@ -178,21 +209,26 @@ impl ScalarUDFImpl for SparkNestedSortKey {
         let scalar = matches!(value, ColumnarValue::Scalar(_));
         let array = value.to_array(1)?;
         // Visit only selected rows and live children before any recursive float work.
-        let array = take_sort_values(
+        let array = take_comparison_values(
             &array,
             &UInt64Array::from_iter_values(0..array.len() as u64),
         )?;
         let array = normalize_nested_float_keys(array, &args.config_options)?;
-        let converter = RowConverter::new(vec![SortField::new(array.data_type().clone())])?;
-        // Encode ascending with NULL children first; the consumer applies direction
-        // and container NULL placement to this temporary key independently.
-        let rows = converter.convert_columns(std::slice::from_ref(&array))?;
-        let (offsets, values, _) = rows.try_into_binary()?.into_parts();
-        let key = Arc::new(BinaryArray::try_new(
-            offsets,
-            values,
-            array.logical_nulls(),
-        )?);
+        let key: ArrayRef = if matches!(array.data_type(), DataType::Float32 | DataType::Float64) {
+            // Dictionary floats retain numeric keys for arithmetic RANGE bounds.
+            array
+        } else {
+            let converter = RowConverter::new(vec![SortField::new(array.data_type().clone())])?;
+            // Encode ascending with NULL children first; the consumer applies direction
+            // and container NULL placement to this temporary key independently.
+            let rows = converter.convert_columns(std::slice::from_ref(&array))?;
+            let (offsets, values, _) = rows.try_into_binary()?.into_parts();
+            Arc::new(BinaryArray::try_new(
+                offsets,
+                values,
+                array.logical_nulls(),
+            )?)
+        };
         Ok(if scalar {
             ColumnarValue::Scalar(ScalarValue::try_from_array(key.as_ref(), 0)?)
         } else {
@@ -211,13 +247,40 @@ mod tests {
     use arrow::compute::{SortColumn, SortOptions, lexsort_to_indices};
     use arrow::datatypes::{Int8Type, Int32Type};
 
+    #[test]
+    fn window_comparison_keys_keep_scalar_ranges_numeric() -> Result<()> {
+        use datafusion_expr::col;
+
+        for data_type in [DataType::Float32, DataType::Float64] {
+            for input_type in [
+                data_type.clone(),
+                DataType::Dictionary(Box::new(DataType::Int32), Box::new(data_type.clone())),
+            ] {
+                let schema = DFSchema::try_from(arrow::datatypes::Schema::new(vec![Field::new(
+                    "k", input_type, true,
+                )]))?;
+                assert_eq!(
+                    spark_window_key(col("k"), &schema)?.get_type(&schema)?,
+                    data_type
+                );
+                // Window key semantics do not broaden ordinary scalar query sorting.
+                assert_eq!(spark_sort_key(col("k"), &schema)?, col("k"));
+            }
+        }
+        Ok(())
+    }
+
     fn encode(value: ColumnarValue) -> Result<ColumnarValue> {
         let field = Arc::new(Field::new("key", value.data_type(), true));
-        SparkNestedSortKey.invoke_with_args(ScalarFunctionArgs {
+        SparkComparisonKey.invoke_with_args(ScalarFunctionArgs {
             args: vec![value],
-            arg_fields: vec![field],
+            arg_fields: vec![field.clone()],
             number_rows: 1,
-            return_field: Arc::new(Field::new("key", DataType::Binary, true)),
+            return_field: Arc::new(Field::new(
+                "key",
+                SparkComparisonKey.return_type(&[field.data_type().clone()])?,
+                true,
+            )),
             config_options: Arc::default(),
         })
     }
@@ -382,8 +445,10 @@ mod tests {
                     (fixed.slice(1, 2), 1),
                 ] {
                     let rows = input.len();
-                    let packed =
-                        take_sort_values(&input, &UInt64Array::from_iter_values(0..rows as u64))?;
+                    let packed = take_comparison_values(
+                        &input,
+                        &UInt64Array::from_iter_values(0..rows as u64),
+                    )?;
                     assert!(packed.get_array_memory_size() < 4096, "{packed:?}");
                     let mut leaf = &packed;
                     loop {
@@ -449,7 +514,7 @@ mod tests {
             structures,
         )?);
         let dictionary = dictionary.slice(1, 3);
-        let packed = take_sort_values(&dictionary, &UInt64Array::from_iter_values(0..3))?;
+        let packed = take_comparison_values(&dictionary, &UInt64Array::from_iter_values(0..3))?;
         assert!(packed.get_array_memory_size() < 4096);
         let lists = packed.as_struct().column(0).as_list::<i64>();
         assert_eq!(
@@ -491,6 +556,97 @@ mod tests {
         let values = values.as_primitive::<Float64Type>();
         assert_eq!(values.value(0).to_bits(), (-0.0_f64).to_bits());
         assert_eq!(values.value(2).to_bits(), 0xfff8000000004321);
+        Ok(())
+    }
+
+    #[test]
+    fn floating_window_keys_skip_hidden_dictionary_and_view_values() -> Result<()> {
+        use arrow::array::{Float32Array, Float64Array};
+        use arrow::datatypes::Float64Type;
+
+        const BACKING_ROWS: usize = 65_536;
+        let mut values = vec![1.25; BACKING_ROWS];
+        values[0] = -0.0;
+        values[1] = 0.0;
+        values[BACKING_ROWS - 2] = f64::from_bits(0xfff8000000004321);
+        values[BACKING_ROWS - 1] = f64::from_bits(0x7ff8000000001234);
+        for values in [
+            Arc::new(Float32Array::from_iter_values(
+                values.iter().map(|value| *value as f32),
+            )) as ArrayRef,
+            Arc::new(Float64Array::from(values)) as ArrayRef,
+        ] {
+            let dictionary: ArrayRef = Arc::new(DictionaryArray::<Int32Type>::try_new(
+                Int32Array::from(vec![
+                    Some(17),
+                    Some(0),
+                    Some(1),
+                    Some(BACKING_ROWS as i32 - 2),
+                    Some(BACKING_ROWS as i32 - 1),
+                    None,
+                ]),
+                values.clone(),
+            )?);
+            let dictionary = dictionary.slice(1, 5);
+            let selected =
+                take_comparison_values(&dictionary, &UInt64Array::from_iter_values(0..5))?;
+            assert!(selected.get_array_memory_size() < 4096);
+            assert_eq!(selected.len(), 5);
+            let key = encode(ColumnarValue::Array(dictionary.clone()))?.into_array(5)?;
+            assert_eq!(key.data_type(), values.data_type());
+            assert!(key.get_array_memory_size() < 4096);
+            let widened = arrow::compute::cast(&key, &DataType::Float64)?;
+            let floats = widened.as_primitive::<Float64Type>();
+            assert_eq!(floats.value(0).to_bits(), 0);
+            assert_eq!(floats.value(1).to_bits(), 0);
+            assert!(floats.value(2).is_nan());
+            assert_eq!(floats.value(2).to_bits(), floats.value(3).to_bits());
+            assert!(floats.is_null(4));
+            let empty = encode(ColumnarValue::Array(dictionary.slice(0, 0)))?.into_array(0)?;
+            assert_eq!(empty.data_type(), values.data_type());
+            assert!(empty.is_empty());
+            let scalar = ScalarValue::try_from_array(&dictionary, 2)?;
+            assert_eq!(
+                encode(ColumnarValue::Scalar(scalar))?
+                    .into_array(1)?
+                    .to_data(),
+                key.slice(2, 1).to_data()
+            );
+
+            let field = Arc::new(Field::new("item", values.data_type().clone(), true));
+            let views: ArrayRef = Arc::new(LargeListViewArray::try_new(
+                field,
+                vec![0, 0, BACKING_ROWS as i64 - 2].into(),
+                vec![2, BACKING_ROWS as i64, 2].into(),
+                values.clone(),
+                None,
+            )?);
+            let structure: ArrayRef = Arc::new(StructArray::try_new(
+                vec![Field::new("view", views.data_type().clone(), true)].into(),
+                vec![views],
+                Some(vec![true, false, true].into()),
+            )?);
+            let selected =
+                take_comparison_values(&structure, &UInt64Array::from_iter_values(0..3))?;
+            assert!(selected.get_array_memory_size() < 4096);
+            assert_eq!(
+                selected
+                    .as_struct()
+                    .column(0)
+                    .as_list::<i64>()
+                    .values()
+                    .len(),
+                4
+            );
+            let key = encode(ColumnarValue::Array(structure))?.into_array(3)?;
+            assert!(key.as_binary::<i32>().value_data().len() < 4096);
+            assert!(key.is_null(1));
+            let original = arrow::compute::cast(&values, &DataType::Float64)?;
+            assert_eq!(
+                original.as_primitive::<Float64Type>().value(0).to_bits(),
+                (-0.0_f64).to_bits()
+            );
+        }
         Ok(())
     }
 }
