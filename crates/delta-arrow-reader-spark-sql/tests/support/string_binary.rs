@@ -140,8 +140,13 @@ fn capture_schema(fields: &[Arc<Field>], names: Option<&[String]>) -> TestResult
     )
 }
 
-pub(crate) async fn capture_result(session: &SessionContext, case: &Value) -> TestResult<Value> {
-    let query = plan_query(
+// Retain fields from each completed planning stage when a later stage fails.
+// Existing callers keep capture_result's Result-based interface below.
+pub(crate) async fn capture_observation(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<Value> {
+    let query = match plan_query(
         session,
         case["sql"].as_str().ok_or("missing SQL")?,
         &SparkSqlOptions {
@@ -151,22 +156,50 @@ pub(crate) async fn capture_result(session: &SessionContext, case: &Value) -> Te
         },
     )
     .await
-    .map_err(|e| format!("resolve: {e}"))?;
+    {
+        Ok(query) => query,
+        Err(error) => {
+            return Ok(json!({
+                "error":format!("resolve: {error}"),
+                "error_stage":"resolve",
+                "analyzed_schema":null,
+                "physical_schema":null,
+                "analyzed_arrow_schema":null,
+                "physical_arrow_schema":null,
+            }));
+        }
+    };
     let analyzed_schema = capture_schema(
         query.logical_plan.schema().fields(),
         Some(&query.column_names),
     )?;
-    let physical = query
-        .create_physical_plan(session)
-        .await
-        .map_err(|e| format!("physical: {e}"))?;
+    let mut observation = json!({
+        "analyzed_schema":analyzed_schema,
+        "analyzed_arrow_schema":format!("{:?}",query.logical_plan.schema()),
+        "physical_schema":null,
+        "physical_arrow_schema":null,
+    });
+    let physical = match query.create_physical_plan(session).await {
+        Ok(physical) => physical,
+        Err(error) => {
+            observation["error"] = json!(format!("physical: {error}"));
+            observation["error_stage"] = json!("physical");
+            return Ok(observation);
+        }
+    };
     let schema = physical.schema();
-    let physical_schema = capture_schema(schema.fields(), None)?;
+    observation["physical_schema"] = capture_schema(schema.fields(), None)?;
+    observation["physical_arrow_schema"] = json!(format!("{schema:?}"));
+    let batches = match collect(physical, session.task_ctx()).await {
+        Ok(batches) => batches,
+        Err(error) => {
+            observation["error"] = json!(format!("execute: {error}"));
+            observation["error_stage"] = json!("execute");
+            return Ok(observation);
+        }
+    };
     let mut rows = Vec::new();
-    for batch in collect(physical, session.task_ctx())
-        .await
-        .map_err(|e| format!("execute: {e}"))?
-    {
+    for batch in batches {
         assert_eq!(batch.schema(), schema);
         for row in 0..batch.num_rows() {
             let mut values = Vec::new();
@@ -203,9 +236,14 @@ pub(crate) async fn capture_result(session: &SessionContext, case: &Value) -> Te
             rows.push(values);
         }
     }
-    Ok(
-        json!({"analyzed_schema":analyzed_schema, "physical_schema":physical_schema, "rows":rows,
-        "analyzed_arrow_schema":format!("{:?}",query.logical_plan.schema()),
-        "physical_arrow_schema":format!("{schema:?}")}),
-    )
+    observation["rows"] = json!(rows);
+    Ok(observation)
+}
+
+pub(crate) async fn capture_result(session: &SessionContext, case: &Value) -> TestResult<Value> {
+    let observation = capture_observation(session, case).await?;
+    if let Some(error) = observation["error"].as_str() {
+        return Err(error.to_owned().into());
+    }
+    Ok(observation)
 }
