@@ -9,9 +9,9 @@ has been reviewed. Publish the final support contract separately.
 
 ### Parallel execution and review
 
-The current batch separates floating window keys (#726), window output names
-(#727), and floating MIN/MAX (#730). Sol/xhigh implementers own
-isolated worktrees. Available agent slots take independent implementation,
+The current batch completes window output names (#727) and floating MIN/MAX
+(#730), with the remaining dependencies recorded below. Sol/xhigh implementers
+own isolated worktrees. Available agent slots take independent implementation,
 analysis or review tasks; a task need not occupy an entire issue. The coordinator
 schedules all Rust builds and Spark captures serially, reconciles integration,
 and owns this plan. New clean-context Sol/xhigh agents independently review each
@@ -123,22 +123,50 @@ at both batch sizes with matching values, types and nullability; their 36 field
 name/metadata differences remain visible under #727. Complete original results
 are retained without rewriting expected fields. Full Linux validation passes
 574 tests across 73 suites, zero failures and two inherited ignored doctests,
-plus formatting and root-crate Clippy. The dedicated PR is being prepared.
+plus formatting and root-crate Clippy. PR #755 merged at `4fafe1fe`; its issue
+is closed and its worktree, local/remote branches and posting files are removed.
+
+#753 preserves the original aggregate fields only where exact statistics replace
+an aggregate with literal values. The query-local opt-in keeps native DataFusion
+behavior and host rules unchanged. Existing field-aware casts retain nullability
+and metadata through later physical optimization and child rebuilding. The
+abandoned global result-schema override is removed; the five regressions it
+introduced are covered by unchanged existing tests.
+
+The 262 independent Spark observations pass at both batch sizes. Additional
+controls verify safe and inexact statistics, physical metadata before and after
+replacement, signed zero/NaN payloads, native defaults and host-session isolation.
+Full Linux validation at `671536e5` passes 578 tests across 74 suites, zero failures
+and two inherited ignored doctests, plus formatting and root-crate Clippy. The
+25,180 historical observations retain their original expectations. Logical alias
+metadata already missing before physical optimizer rules remains tracked under
+#710; this repair does not claim to restore it.
 
 #730 passes 536 complete comparisons and eight comparisons with the already
-recorded #710 generated-alias-marker difference. New combined controls expose
-scalar floating ORDER BY (#752) and physical result schemas after statistics
-shortcuts (#753); both are assigned separate repairs. The statistics mismatch
-also reproduces without the new extrema implementation. #752 now has 228
-independently captured scalar ordering references, pending runtime validation.
+recorded #710 generated-alias-marker difference. Scalar floating ORDER BY (#752)
+and the statistics repair (#753) remain its integration prerequisites. #752's
+independent ordering checks pass 408 comparisons. Its 204 references and the 24
+grouped-extrema references are a byte-preserved split of the original 228-record
+capture. The grouped cases will join the same mandatory replay with #730, along
+with the original MAX/DESC/LIMIT and native heap eligibility controls. No case is
+discarded; grouped acceptance stays pending until the combined runtime passes.
 
-#744 has 108 focused PIVOT references and 78 supplemental alias/qualifier probes.
-#747 retains 398 DATE RANGE observations: 336 finite-bound references, 14 explicit
-NULL-offset references owned by #754, and 48 interval references related to #749.
-Finite-bound implementation and independent review are in progress; reversal and
-remaining admission boundaries need runtime checks. Interval qualifiers are lost
-before Arrow lowering and require a separate repair. These pending boundaries
-are not accepted as passing compatibility.
+#744 has 108 focused PIVOT references and 78 supplemental alias/qualifier probes;
+its complete source review has no new finding, with execution still pending.
+#747 now retains 542 DATE RANGE observations: 480 finite-bound cases (81 required
+errors), 14 explicit NULL-offset cases owned by #754, and 48 interval cases owned
+by #749. Review added provider-order reversal, signed admission, constant-key
+empty input and unbounded-suffix controls. #756 separately owns integer-day DATE
+arithmetic that rejected large Date32 keys before the window could execute.
+Its two independent captures contain 364 cases; candidate execution is pending.
+
+#748 separates projection leaf names from enclosing-expression paths, including
+lambda parameters. Its original 172 references and 12 new lambda references are
+unchanged. Runtime follows the small compile correction found during independent
+review. Existing STRUCT child and construction labels have owner #757; generated
+metadata and complete OVER names remain #710 and #727. These named gaps are not
+accepted as complete schema parity. Interval qualifiers remain #749's separate
+repair before the full window-name integration can complete.
 
 ### Completed S04 nested collection result types
 

@@ -28,6 +28,7 @@ use datafusion::dataframe::DataFrame;
 use datafusion::error::{DataFusionError, Result};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::LogicalPlan;
+use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
@@ -74,11 +75,9 @@ impl SparkSqlQuery {
         session: &SessionContext,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let mut state = session.state();
-        state
-            .config_mut()
-            .options_mut()
-            .extensions
-            .insert(SparkSqlErrorSemantics::default());
+        let extensions = &mut state.config_mut().options_mut().extensions;
+        extensions.insert(SparkSqlErrorSemantics::default());
+        extensions.insert(PreserveAggregateStatisticsSchema::default());
         let frame = DataFrame::new(state, self.logical_plan.clone());
         let physical = frame.create_physical_plan().await?;
         rename_physical_plan(physical, &self.column_names)

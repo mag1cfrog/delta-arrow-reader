@@ -1455,3 +1455,26 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 python tests/fixtures/capture_floating_windows_spark.py
 cargo test --locked --workspace --test floating_windows
 ```
+
+## Exact statistics aggregate results
+
+`statistics-result-schema-spark.jsonl` contains 262 independent Spark 4.2.0
+observations in UTC and both ANSI modes. Constant views over empty, one-row and
+three-row providers supply exact statistics for numeric, NULL, signed-zero and
+NaN values. Nullable provider inputs, unknown bounds and inexact row counts
+supply controls where a shortcut may be unavailable.
+
+The queries cover MIN, MAX, COUNT, combined aggregates, arithmetic, NULL
+consumers, scalar subqueries and filtered aggregate outputs. Projection controls
+retain provider field metadata. `statistics_result_schema.rs` compares complete
+rows and analyzed/physical fields at batch sizes 1 and 32, for 524 comparisons.
+Separate checks retain native optimizer behavior, require eligible shortcuts,
+reject ineligible shortcuts, and preserve known physical aggregate metadata and
+raw floating bits through optimization and child rebuilding.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
+
+```sh
+python tests/fixtures/capture_statistics_result_schema_spark.py
+cargo test --locked --workspace --test statistics_result_schema
+```

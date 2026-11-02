@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -17,7 +18,7 @@
 
 //! Utilizing exact statistics from sources to avoid scanning data
 use datafusion_common::Result;
-use datafusion_common::config::ConfigOptions;
+use datafusion_common::config::{ConfigExtension, ConfigOptions};
 use datafusion_common::scalar::ScalarValue;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_physical_plan::aggregates::{
@@ -30,6 +31,15 @@ use datafusion_physical_plan::{ExecutionPlan, expressions};
 use std::sync::Arc;
 
 use crate::PhysicalOptimizerRule;
+
+datafusion_common::extensions_options! {
+    /// Query-local opt-in to retain aggregate fields when exact statistics replace them.
+    pub struct PreserveAggregateStatisticsSchema {}
+}
+
+impl ConfigExtension for PreserveAggregateStatisticsSchema {
+    const PREFIX: &'static str = "dar_aggregate_statistics_schema";
+}
 
 /// Optimizer that uses available statistics for aggregate functions
 #[derive(Default, Debug)]
@@ -57,7 +67,7 @@ impl PhysicalOptimizerRule for AggregateStatistics {
                 .expect("take_optimizable() ensures that this is a AggregateExec");
             let stats = partial_agg_exec.input().partition_statistics(None)?;
             let mut projections = vec![];
-            for expr in partial_agg_exec.aggr_expr() {
+            for (index, expr) in partial_agg_exec.aggr_expr().iter().enumerate() {
                 let field = expr.field();
                 let args = expr.expressions();
                 let statistics_args = StatisticsArgs {
@@ -69,8 +79,21 @@ impl PhysicalOptimizerRule for AggregateStatistics {
                 if let Some((optimizable_statistic, name)) =
                     take_optimizable_value_from_statistics(&statistics_args, expr)
                 {
+                    let mut literal = expressions::lit(optimizable_statistic);
+                    if config
+                        .extensions
+                        .get::<PreserveAggregateStatisticsSchema>()
+                        .is_some()
+                    {
+                        // A statistics literal must retain the aggregate's field declaration.
+                        literal = Arc::new(expressions::CastExpr::new_with_target_field(
+                            literal,
+                            Arc::clone(&plan.schema().fields()[index]),
+                            None,
+                        ));
+                    }
                     projections.push(ProjectionExpr {
-                        expr: expressions::lit(optimizable_statistic),
+                        expr: literal,
                         alias: name.to_owned(),
                     });
                 } else {
