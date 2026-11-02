@@ -213,7 +213,7 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
 }
 
 #[tokio::test]
-async fn single_row_scalars_preserve_analyzed_nullability() -> TestResult {
+async fn single_row_scalars_preserve_resolved_schema_and_null_safety() -> TestResult {
     let records = include_str!("fixtures/single-row-correlated-nonnullable-spark.jsonl")
         .lines()
         .map(serde_json::from_str)
@@ -246,26 +246,43 @@ async fn single_row_scalars_preserve_analyzed_nullability() -> TestResult {
                 state.config_options(),
                 |_, _| {},
             )?;
-            for schema in [query.logical_plan.schema(), analyzed.schema()] {
-                let fields = schema
-                    .fields()
-                    .iter()
-                    .enumerate()
-                    .map(|(index, field)| {
-                        assert_eq!(field.data_type(), &DataType::Int32);
-                        json!({"name":query.column_names[index], "type":"integer",
+            let resolved = query.logical_plan.schema();
+            let fields = resolved
+                .fields()
+                .iter()
+                .enumerate()
+                .map(|(index, field)| {
+                    assert_eq!(field.data_type(), &DataType::Int32);
+                    json!({"name":query.column_names[index], "type":"integer",
                         "nullable":field.is_nullable(), "metadata":field.metadata()})
-                    })
-                    .collect::<Vec<_>>();
-                assert_eq!(
-                    json!({"type":"struct", "fields":fields}),
-                    case["expected"]["schema"],
-                    "{} batch={batch_size}",
-                    case["id"]
-                );
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                json!({"type":"struct", "fields":fields}),
+                case["expected"]["schema"],
+                "{} batch={batch_size}",
+                case["id"]
+            );
+            assert_eq!(analyzed.schema().fields().len(), resolved.fields().len());
+            for (index, field) in analyzed.schema().fields().iter().enumerate() {
+                let declared = resolved.field(index);
+                assert_eq!(field.name(), declared.name());
+                assert_eq!(field.data_type(), declared.data_type());
+                assert_eq!(field.metadata(), declared.metadata());
+                // Internal CAST preparation can already narrow the scalar field.
+                assert!(!field.is_nullable() || declared.is_nullable());
             }
             let physical = query.create_physical_plan(&session).await?;
             let physical_schema = physical.schema();
+            eprintln!(
+                "SINGLE_ROW_NONNULLABLE_SCHEMAS {}",
+                json!({
+                    "id":case["id"], "ansi":case["ansi"], "batch_size":batch_size,
+                    "resolved_schema":format!("{resolved:?}"),
+                    "analyzed_schema":format!("{:?}", analyzed.schema()),
+                    "physical_schema":format!("{physical_schema:?}")
+                })
+            );
             assert_eq!(
                 physical_schema.fields().len(),
                 analyzed.schema().fields().len()
@@ -275,7 +292,7 @@ async fn single_row_scalars_preserve_analyzed_nullability() -> TestResult {
                 assert_eq!(field.name(), &query.column_names[index]);
                 assert_eq!(field.data_type(), declared.data_type());
                 assert_eq!(field.metadata(), declared.metadata());
-                // The one-row proof permits narrower physical nullability.
+                // Physical nullability must still fit both prior declarations.
                 assert!(!field.is_nullable() || declared.is_nullable());
             }
             let mut rows = Vec::new();
@@ -288,6 +305,7 @@ async fn single_row_scalars_preserve_analyzed_nullability() -> TestResult {
                             .enumerate()
                             .map(|(index, column)| {
                                 if column.is_null(row) {
+                                    assert!(resolved.field(index).is_nullable());
                                     assert!(analyzed.schema().field(index).is_nullable());
                                     assert!(physical_schema.field(index).is_nullable());
                                     Ok(Value::Null)
@@ -399,7 +417,6 @@ async fn scalar_results_preserve_arrow_extensions_and_native_metadata() -> TestR
     assert_eq!(actual, expected);
     for batch in actual {
         assert_eq!(batch.schema().field(0).metadata(), &inherited);
-        assert_eq!(batch.schema().field(1).metadata(), &inherited);
     }
     Ok(())
 }

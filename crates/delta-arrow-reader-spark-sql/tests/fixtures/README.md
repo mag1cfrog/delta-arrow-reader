@@ -1006,11 +1006,13 @@ NULLs and values. Scalar extension/native controls and the existing window
 metadata tests protect both consumers.
 
 `single-row-correlated-nonnullable-spark.jsonl` adds eight references with
-nonnullable source fields. Rust compares complete resolved and analyzed schemas
-with Spark and checks exact rows at both batch sizes. Optimized and physical
-scalar fields may narrow their nullability after the single-row proof. Their
-types, metadata and returned NULLs must still fit the analyzed declaration; the
-test does not replace their fields with expected schemas.
+nonnullable source fields. Rust compares the complete public resolved schema
+with Spark and checks exact rows at both batch sizes. Internal analysis includes
+expression rewrites; its CAST lane can already narrow a scalar field after the
+single-row proof. Internal and physical fields must retain compatible names,
+types and metadata, and may safely narrow nullability. Returned NULLs must fit
+every declaration. The test logs the actual stage schemas and does not replace
+fields with expected schemas.
 
 The other references record explicit boundaries. Eighteen correlated queries
 over real inner relations and 24 queries with a volatile scalar result retain
