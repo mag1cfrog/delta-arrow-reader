@@ -1795,6 +1795,29 @@ python tests/fixtures/recapture_string_binary_spark.py \
 The replayer uses recorded input schemas, rows, SQL and settings. It ignores
 expected result fields and collects fresh observations directly from Spark.
 
+## String and binary lengths
+
+`length-spark.jsonl` preserves 126 complete records from the original C06 Spark
+4.2.0 capture: 122 successful LENGTH, CHAR_LENGTH and OCTET_LENGTH observations,
+and four LENGTH arity errors. The original runtime/input header and selected
+records are unchanged. `length-binary-spark.jsonl` adds 28 independently captured
+observations for binary CHAR_LENGTH literals and CHAR_LENGTH/OCTET_LENGTH over
+required, nullable and empty binary providers in both ANSI modes. Both fixtures
+record the Spark build, loaded JAR hashes, input schemas, rows and settings.
+Recollect either with `recapture_string_binary_spark.py` and a fresh output path.
+
+`string_length.rs` checks 900 complete analyzed-field, physical-field and ordered
+row comparisons across Utf8/LargeUtf8/Utf8View and Binary/LargeBinary/BinaryView at
+batch sizes 1 and 32. References cover Unicode codepoints, combining marks,
+emoji sequences, NULs, trailing spaces, invalid UTF-8 binary bytes and NULLs.
+The 24 admission-error comparisons require the exact native one-value cause for
+zero or two arguments and resolution-stage failure. Spark and native schemas
+are unavailable for these admission errors. They are counted separately from
+exact results; Spark's structured error formatting is retained in the fixture.
+Native DataFusion controls run before and after Spark planning. Numeric casts,
+other length aliases, BIT_LENGTH and unaliased field labels are outside these
+references. This coverage adds no runtime change.
+
 ## UNHEX string representations
 
 `unhex-spark.jsonl` preserves 28 independent Spark 4.2.0 observations for literals
