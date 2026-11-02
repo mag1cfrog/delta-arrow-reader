@@ -272,6 +272,8 @@ async fn dictionary_float_window_keys_match_decoded_values() -> TestResult {
                     "PARTITION BY k ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW",
                     "ORDER BY k RANGE BETWEEN CURRENT ROW AND CURRENT ROW",
                     "ORDER BY k RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING",
+                    "ORDER BY k RANGE BETWEEN CAST(1 AS BIGINT) PRECEDING AND CAST(1 AS BIGINT) FOLLOWING",
+                    "ORDER BY k RANGE BETWEEN CAST(0.5 AS DECIMAL(4,1)) PRECEDING AND CAST(0.5 AS DECIMAL(4,1)) FOLLOWING",
                 ] {
                     let select = format!(
                         "SELECT id,COUNT(*) OVER ({frame}) AS members,SORT_ARRAY(COLLECT_LIST(id) OVER ({frame})) AS member_ids FROM"
@@ -287,9 +289,53 @@ async fn dictionary_float_window_keys_match_decoded_values() -> TestResult {
                     )
                     .await;
                     if decoded.is_err() || encoded.as_ref().ok() != decoded.as_ref().ok() {
-                        differences.push(format!(
-                            "{kind} {frame} ANSI={ansi_mode} batch={batch_size}: encoded {encoded:?}, decoded {decoded:?}"
-                        ));
+                        let detail = match (encoded, decoded) {
+                            (Ok(encoded), Ok(decoded)) => {
+                                let actual =
+                                    encoded["rows"].as_array().ok_or("missing encoded rows")?;
+                                let expected =
+                                    decoded["rows"].as_array().ok_or("missing decoded rows")?;
+                                let first = (0..actual.len().max(expected.len()))
+                                    .find(|&row| actual.get(row) != expected.get(row));
+                                json!({
+                                    "schema_matches":encoded["schema"] == decoded["schema"],
+                                    "encoded_row_count":actual.len(), "decoded_row_count":expected.len(),
+                                    "first_difference":first.map(|row| json!({"index":row,
+                                        "encoded":actual.get(row), "decoded":expected.get(row)}))
+                                })
+                            }
+                            (encoded, decoded) => json!({
+                                "encoded_error":encoded.err().map(|error| error.to_string()),
+                                "decoded_error":decoded.err().map(|error| error.to_string())
+                            }),
+                        };
+                        differences.push(
+                            json!({"kind":kind,"frame":frame,"ansi":ansi_mode,
+                            "batch":batch_size,"difference":detail})
+                            .to_string(),
+                        );
+                    }
+                }
+                if ansi_mode {
+                    for input in [format!("{kind}_scalar_mixed"), table.clone()] {
+                        let sql = format!(
+                            "SELECT COUNT(*) OVER (ORDER BY k RANGE BETWEEN CAST('bad' AS DOUBLE) PRECEDING AND CURRENT ROW) AS members FROM {input}"
+                        );
+                        let planned = plan_query(
+                            &session,
+                            &sql,
+                            &SparkSqlOptions {
+                                ansi_mode,
+                                ..Default::default()
+                            },
+                        )
+                        .await;
+                        assert!(
+                            planned.as_ref().is_err_and(|error| error
+                                .to_string()
+                                .contains("[CAST_INVALID_INPUT]")),
+                            "{sql}: {planned:?}"
+                        );
                     }
                 }
                 let query = plan_query(

@@ -405,7 +405,16 @@ impl PlanResolver<'_> {
                     "range window frame requires exactly one order by expression",
                 ));
             };
-            Ok(order_by.expr.to_field(schema)?.1.data_type().clone())
+            let field = order_by.expr.to_field(schema)?.1;
+            let mut data_type = field.data_type();
+            while let DataType::Dictionary(_, value_type) = data_type {
+                data_type = value_type;
+            }
+            // The late window rewrite decodes scalar dictionary floats to numeric keys.
+            if matches!(data_type, DataType::Float32 | DataType::Float64) {
+                return Ok(data_type.clone());
+            }
+            Ok(field.data_type().clone())
         };
 
         match value {
