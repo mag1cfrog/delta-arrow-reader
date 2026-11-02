@@ -297,6 +297,13 @@ be quadratic for wide moving frames. Native retraction remains the optimization
 path for those aggregates. The [bounded window checks](tests/fixtures/README.md#bounded-aggregate-windows)
 cover results, errors, incremental work bounds and repeatable timing cases.
 
+Spark window resolution validates required ordering, function-specific frames
+and DISTINCT before planning can prune empty input. Native DataFusion supplies
+the bound-order validator and execution kernels. A whole-partition RANGE frame
+without ordering lowers to its equivalent ROWS frame. The
+[window admission references](tests/fixtures/README.md#window-admission)
+preserve Spark's expression-sensitive offset-frame rules and valid controls.
+
 Empty windows retain explicit aggregate defaults. A non-null aggregate with a
 generic NULL default instead evaluates its initialized empty accumulator, so
 query arguments such as HLL sketch precision survive. Both cumulative and sliding

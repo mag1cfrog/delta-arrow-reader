@@ -55,17 +55,6 @@ impl PlanResolver<'_> {
         let sorts = self
             .resolve_sort_orders(order_by, false, schema, state)
             .await?;
-        let window_frame = if let Some(frame) = frame {
-            self.resolve_window_frame(frame, &sorts, schema, state)
-                .await?
-        } else {
-            WindowFrame::new(if sorts.is_empty() {
-                None
-            } else {
-                // TODO: should we use strict ordering or not?
-                Some(false)
-            })
-        };
         let (window, function_name, argument_display_names, is_distinct) = match window_function {
             spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
                 function_name,
@@ -86,9 +75,9 @@ impl PlanResolver<'_> {
                 if !named_arguments.is_empty() {
                     return Err(PlanError::todo("named window function arguments"));
                 }
-                if is_distinct && filter.is_some() {
+                if is_distinct {
                     return Err(PlanError::unsupported(
-                        "DISTINCT window functions are unsupported",
+                        "[DISTINCT_WINDOW_FUNCTION_UNSUPPORTED] DISTINCT window functions are unsupported",
                     ));
                 }
                 let canonical_function_name = function_name.to_ascii_lowercase();
@@ -96,6 +85,60 @@ impl PlanResolver<'_> {
                     .resolve_expression_arguments(arguments, schema, state)
                     .await?;
                 let function = get_built_in_window_function(&canonical_function_name)?;
+                let required_units = match canonical_function_name.as_str() {
+                    "row_number" | "rank" | "dense_rank" | "percent_rank" | "ntile" => {
+                        Some(WindowFrameUnits::Rows)
+                    }
+                    "cume_dist" => Some(WindowFrameUnits::Range),
+                    _ => None,
+                };
+                if let (Some(units), Some(frame)) = (required_units, frame.as_ref()) {
+                    let expected_type = if units == WindowFrameUnits::Rows {
+                        spec::WindowFrameType::Row
+                    } else {
+                        spec::WindowFrameType::Range
+                    };
+                    if frame.frame_type != expected_type
+                        || frame.lower != spec::WindowFrameBoundary::UnboundedPreceding
+                        || frame.upper != spec::WindowFrameBoundary::CurrentRow
+                    {
+                        return Err(PlanError::invalid(format!(
+                            "[WINDOW_FRAME_MISMATCH] {function_name} requires {units} BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+                        )));
+                    }
+                }
+                let offset_function = matches!(canonical_function_name.as_str(), "lag" | "lead");
+                if offset_function && let Some(frame) = frame.as_ref() {
+                    self.validate_offset_window_frame(
+                        &canonical_function_name,
+                        &arguments,
+                        frame,
+                        schema,
+                        state,
+                    )
+                    .await?;
+                }
+                if sorts.is_empty()
+                    && (required_units.is_some()
+                        || offset_function
+                        || canonical_function_name == "nth_value")
+                {
+                    return Err(PlanError::invalid(format!(
+                        "[WINDOW_FUNCTION_FRAME_NOT_ORDERED] {function_name} requires ORDER BY in the window definition"
+                    )));
+                }
+                let window_frame = if let Some(frame) = frame {
+                    self.resolve_window_frame(frame, &sorts, schema, state)
+                        .await?
+                } else if let Some(units) = required_units {
+                    WindowFrame::new_bounds(
+                        units,
+                        WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+                        WindowFrameBound::CurrentRow,
+                    )
+                } else {
+                    WindowFrame::new((!sorts.is_empty()).then_some(false))
+                };
                 let filter = match filter {
                     Some(filter) => {
                         let filter = self.resolve_expression(*filter, schema, state).await?;
@@ -149,6 +192,65 @@ impl PlanResolver<'_> {
         Ok(NamedExpr::new(vec![name], window))
     }
 
+    async fn validate_offset_window_frame(
+        &self,
+        function_name: &str,
+        arguments: &[expr::Expr],
+        frame: &spec::WindowFrame,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<()> {
+        let mismatch = || {
+            PlanError::invalid(format!(
+                "[WINDOW_OFFSET_FRAME_MISMATCH] {function_name} frame must match its offset expression"
+            ))
+        };
+        if frame.frame_type != spec::WindowFrameType::Row {
+            return Err(mismatch());
+        }
+        let offset = arguments
+            .get(1)
+            .cloned()
+            .unwrap_or_else(|| datafusion_expr::lit(1_i32));
+        if offset.is_volatile()
+            || !offset.column_refs().is_empty()
+            || offset.contains_outer()
+            || offset.contains_scalar_subquery()
+        {
+            return Err(mismatch());
+        }
+        // Spark folds LAG's negated offset but compares frame expressions before
+        // folding them. Numerically equal frame expressions can still be invalid.
+        let required = if function_name == "lag" {
+            let context = SimplifyContextBuilder::default()
+                .with_schema(schema.clone())
+                .build();
+            let coerced = ExprSimplifier::new(context)
+                .coerce(expr::Expr::Negative(Box::new(offset)), schema)?;
+            expr::Expr::Literal(LiteralEvaluator::new().evaluate(&coerced)?, None)
+        } else {
+            offset
+        };
+        for boundary in [&frame.lower, &frame.upper] {
+            let actual = match boundary {
+                spec::WindowFrameBoundary::Preceding(value) => expr::Expr::Negative(Box::new(
+                    self.resolve_expression(*value.clone(), schema, state)
+                        .await?,
+                )),
+                spec::WindowFrameBoundary::Following(value)
+                | spec::WindowFrameBoundary::Value(value) => {
+                    self.resolve_expression(*value.clone(), schema, state)
+                        .await?
+                }
+                _ => return Err(mismatch()),
+            };
+            if actual != required {
+                return Err(mismatch());
+            }
+        }
+        Ok(())
+    }
+
     async fn resolve_window_frame(
         &self,
         frame: spec::WindowFrame,
@@ -168,6 +270,18 @@ impl PlanResolver<'_> {
             WindowFrameType::Row => WindowFrameUnits::Rows,
             WindowFrameType::Range => WindowFrameUnits::Range,
         };
+        if units == WindowFrameUnits::Range && order_by.is_empty() {
+            if lower != spec::WindowFrameBoundary::UnboundedPreceding
+                || upper != spec::WindowFrameBoundary::UnboundedFollowing
+            {
+                return Err(PlanError::invalid(
+                    "[DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER] a bounded RANGE frame requires ORDER BY",
+                ));
+            }
+            // Native RANGE coercion requires an order key; the whole partition
+            // has identical membership under ROWS when no key exists.
+            return Ok(WindowFrame::new(None));
+        }
         let (start, end) = match units {
             WindowFrameUnits::Rows | WindowFrameUnits::Groups => (
                 self.resolve_window_boundary_offset(lower, schema, state)
@@ -182,7 +296,14 @@ impl PlanResolver<'_> {
                     .await?,
             ),
         };
-        Ok(WindowFrame::new_bounds(units, start, end))
+        let frame = WindowFrame::new_bounds(units, start, end);
+        if !datafusion::physical_planner::is_window_frame_bound_valid(&frame) {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON] start bound ({}) cannot be larger than end bound ({})",
+                frame.start_bound, frame.end_bound,
+            )));
+        }
+        Ok(frame)
     }
 
     async fn resolve_window_boundary(
@@ -223,6 +344,7 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<WindowFrameBound> {
+        let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
         match value {
             spec::WindowFrameBoundary::CurrentRow => Ok(WindowFrameBound::CurrentRow),
             spec::WindowFrameBoundary::UnboundedPreceding => {
@@ -231,17 +353,23 @@ impl PlanResolver<'_> {
             spec::WindowFrameBoundary::UnboundedFollowing => {
                 Ok(WindowFrameBound::Following(ScalarValue::UInt64(None)))
             }
-            spec::WindowFrameBoundary::Preceding(expr) => {
+            spec::WindowFrameBoundary::Preceding(expr)
+            | spec::WindowFrameBoundary::Following(expr) => {
                 let value = self.resolve_window_boundary(*expr, schema, state).await?;
-                Ok(WindowFrameBound::Preceding(
-                    value.cast_to(&DataType::UInt64)?,
-                ))
-            }
-            spec::WindowFrameBoundary::Following(expr) => {
-                let value = self.resolve_window_boundary(*expr, schema, state).await?;
-                Ok(WindowFrameBound::Following(
-                    value.cast_to(&DataType::UInt64)?,
-                ))
+                let ScalarValue::Int64(Some(offset)) = value.cast_to(&DataType::Int64)? else {
+                    return Err(PlanError::invalid("invalid window boundary offset"));
+                };
+                if offset == 0 {
+                    Ok(WindowFrameBound::CurrentRow)
+                } else if preceding == (offset > 0) {
+                    Ok(WindowFrameBound::Preceding(ScalarValue::UInt64(Some(
+                        offset.unsigned_abs(),
+                    ))))
+                } else {
+                    Ok(WindowFrameBound::Following(ScalarValue::UInt64(Some(
+                        offset.unsigned_abs(),
+                    ))))
+                }
             }
             spec::WindowFrameBoundary::Value(expr) => {
                 let value = self.resolve_window_boundary(*expr, schema, state).await?;
