@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use arrow::datatypes::{DataType, Fields};
+use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
@@ -40,7 +41,7 @@ fn recorded_schema(fields: &Fields, names: Option<&[String]>) -> TestResult<Valu
         }).collect::<TestResult<Vec<_>>>()?}))
 }
 
-fn compare_scoped_fields(actual: &Value, expected: &Value) -> TestResult {
+fn compare_names_types_and_nullability(actual: &Value, expected: &Value) -> TestResult {
     let actual_fields = actual["fields"].as_array().ok_or("missing actual fields")?;
     let expected_fields = expected["fields"]
         .as_array()
@@ -81,7 +82,7 @@ async fn compare_case(session: &SessionContext, case: &Value, batch_size: usize)
         json!({"id":case["id"],"input":case["input"],"ansi":case["ansi"],
             "batch_size":batch_size,"public_schema":public_schema})
     );
-    compare_scoped_fields(&public_schema, &case["schema_stages"]["public"])?;
+    compare_names_types_and_nullability(&public_schema, &case["schema_stages"]["public"])?;
     let physical = query.create_physical_plan(session).await?;
     let schema = physical.schema();
     validate_physical_schema(
@@ -96,7 +97,7 @@ async fn compare_case(session: &SessionContext, case: &Value, batch_size: usize)
             "batch_size":batch_size,"physical_schema":physical_schema})
     );
     if let Some(expected) = case["schema_stages"].get("executed") {
-        compare_scoped_fields(&physical_schema, expected)?;
+        compare_names_types_and_nullability(&physical_schema, expected)?;
     }
     let mut rows = Vec::new();
     for batch in collect(physical, session.task_ctx()).await? {
@@ -194,7 +195,7 @@ async fn integer_div_names_values_declarations_and_errors_match_spark() -> TestR
 async fn native_snapshot(
     session: &SessionContext,
     sql: &str,
-) -> TestResult<(String, Vec<RecordBatch>)> {
+) -> datafusion::error::Result<(String, Vec<RecordBatch>)> {
     let frame = session.sql(sql).await?;
     let analyzed = frame.schema().clone();
     let physical = frame.create_physical_plan().await?;
@@ -205,7 +206,7 @@ async fn native_snapshot(
     );
     let batches = collect(physical, session.task_ctx()).await?;
     for batch in &batches {
-        validate_batch(schema.as_ref(), batch)?;
+        validate_batch(schema.as_ref(), batch).map_err(DataFusionError::External)?;
     }
     Ok((declaration, batches))
 }
@@ -220,21 +221,63 @@ async fn spark_div_naming_keeps_native_datafusion_sql_unchanged() -> TestResult 
     for session in [&native, &configured] {
         register_recorded_inputs(session, &records[0], 32)?;
     }
-    for sql in [
-        "SELECT 7 / 2, (7 / 2) / 2, 7 / 2 AS quotient",
-        "SELECT a / b, ABS(a / b), a / b AS quotient FROM inputs",
-        "SELECT a / b FROM null_inputs",
-        "SELECT a / b FROM empty_inputs",
-        "SELECT 7 / 0",
-        "SELECT CAST(-9223372036854775808 AS BIGINT) / -1",
+    for (sql, condition) in [
+        ("SELECT 7 / 2, (7 / 2) / 2, 7 / 2 AS quotient", None),
+        (
+            "SELECT a / b, ABS(a / b), a / b AS quotient FROM inputs",
+            None,
+        ),
+        ("SELECT a / b FROM null_inputs", None),
+        ("SELECT a / b FROM empty_inputs", None),
+        ("SELECT 7 / 0", Some("DIVIDE_BY_ZERO")),
+        (
+            "SELECT CAST(-9223372036854775808 AS BIGINT) / -1",
+            Some("ARITHMETIC_OVERFLOW"),
+        ),
     ] {
-        let expected = native_snapshot(&native, sql)
-            .await
-            .map_err(|error| error.to_string());
-        let before = native_snapshot(&configured, sql)
-            .await
-            .map_err(|error| error.to_string());
-        assert_eq!(before, expected, "{sql}");
+        let expected = native_snapshot(&native, sql).await;
+        let before = native_snapshot(&configured, sql).await;
+        if let Some(condition) = condition {
+            let plain_error = expected
+                .as_ref()
+                .err()
+                .ok_or("native arithmetic succeeded")?;
+            let configured_error = before
+                .as_ref()
+                .err()
+                .ok_or("configured native arithmetic succeeded")?;
+            for error in [plain_error, configured_error] {
+                assert!(
+                    matches!(error.find_root(), DataFusionError::ArrowError(cause, _)
+                        if matches!((condition, cause.as_ref()),
+                            ("DIVIDE_BY_ZERO", ArrowError::DivideByZero)
+                            | ("ARITHMETIC_OVERFLOW", ArrowError::ArithmeticOverflow(_)))),
+                    "{sql}: {error}"
+                );
+            }
+            // DataFusion adds the analyzer rule name as context to its errors.
+            assert_eq!(
+                configured_error.find_root().to_string(),
+                plain_error.find_root().to_string(),
+                "{sql}"
+            );
+            eprintln!(
+                "integer_div_native_errors: {}",
+                json!({"sql":sql,"ordinary_error":plain_error.to_string(),
+                    "configured_error":configured_error.to_string(),
+                    "ordinary_root":format!("{:?}",plain_error.find_root()),
+                    "configured_root":format!("{:?}",configured_error.find_root())})
+            );
+        } else {
+            assert_eq!(
+                before.as_ref().map_err(ToString::to_string),
+                expected.as_ref().map_err(ToString::to_string),
+                "{sql}"
+            );
+            assert!(before.is_ok(), "native success control failed: {sql}");
+        }
+        let before =
+            before.map_err(|error| (error.to_string(), format!("{:?}", error.find_root())));
         for ansi_mode in [true, false] {
             capture_spark_query_result(
                 &configured,
@@ -244,7 +287,7 @@ async fn spark_div_naming_keeps_native_datafusion_sql_unchanged() -> TestResult 
             .await?;
             let after = native_snapshot(&configured, sql)
                 .await
-                .map_err(|error| error.to_string());
+                .map_err(|error| (error.to_string(), format!("{:?}", error.find_root())));
             assert_eq!(after, before, "{sql}, ANSI={ansi_mode}");
         }
     }
