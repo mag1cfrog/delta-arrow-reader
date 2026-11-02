@@ -400,9 +400,17 @@ floating bits.
 Nested keys reuse the sort adapter's visible-value compaction before floating
 normalization and Binary encoding. Scalar dictionary floats use the same
 selected-value decoding but retain numeric keys for arithmetic RANGE bounds.
-Ordinary scalar query sorting and native DataFusion SQL keep their existing
-paths. The [floating window references](tests/fixtures/README.md#floating-window-comparison-keys)
+The same key preparation serves ordinary scalar query sorting. Native DataFusion
+SQL retains its existing path. The [floating window references](tests/fixtures/README.md#floating-window-comparison-keys)
 cover partitions, peers, frame members and payload preservation.
+
+Scalar FLOAT/DOUBLE query sorts normalize only the comparison key, so NaNs of
+either sign compare equal above numbers and both zero signs compare equal.
+Projected values and aggregate results retain their original bits. Direction,
+outer NULL placement and LIMIT remain the sort operator's responsibility.
+The [scalar ordering references](tests/fixtures/README.md#scalar-floating-query-order)
+cover ordinary and grouped sorting, projected and hidden keys, subqueries,
+dictionary decoding and native SQL before and after Spark planning.
 
 ### Exact statistics aggregate results
 

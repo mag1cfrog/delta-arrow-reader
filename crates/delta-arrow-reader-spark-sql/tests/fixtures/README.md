@@ -1478,3 +1478,34 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 python tests/fixtures/capture_statistics_result_schema_spark.py
 cargo test --locked --workspace --test statistics_result_schema
 ```
+
+## Scalar floating query order
+
+`scalar-float-ordering-spark.jsonl` contains 228 scalar FLOAT/DOUBLE query-order
+observations from Spark 4.2.0 in UTC and both ANSI modes. The capture reuses the
+floating-key provider definitions and verifies their raw bits through JVM methods
+after repartitioning each provider into three Spark partitions. Mixed inputs
+include both zero signs, signed NaN payloads, infinities, finite duplicates and
+NULLs. All-NULL and empty providers remain in the capture.
+
+The records contain complete rows and schemas plus ordered IDs. An ID tie
+breaker makes the result deterministic while checking that zero signs and NaN
+payloads share a comparison key. Six direction/NULL choices cover defaults and
+explicit placement. LIMIT 1 and 8, singleton grouped MAX outputs, query ordering
+after windows, hidden keys, ordinal keys and ordered subqueries exercise the
+query sort adapter. The grouped control gives each ID one input, isolating
+sorting from the separately maintained floating extrema implementation.
+
+`scalar_float_ordering.rs` compares every reference at batch sizes 1 and 32 with
+two provider partitions. It compares full fields and canonical rows, then checks
+the collected row order and original raw projected bits separately. Dictionary
+controls include both NULL keys and keys referencing NULL values. Native SQL is
+compared before and after Spark planning. The existing nested/window corpora
+cover those consumers of the shared comparison-key adapter.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
+
+```sh
+python tests/fixtures/capture_scalar_float_ordering_spark.py
+cargo test --locked --workspace --test scalar_float_ordering
+```
