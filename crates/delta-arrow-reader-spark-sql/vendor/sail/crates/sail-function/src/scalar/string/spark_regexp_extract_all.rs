@@ -1,14 +1,15 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
     Array, ArrayRef, GenericStringArray, Int64Array, ListArray, ListBuilder, OffsetSizeTrait,
-    StringBuilder,
+    StringBuilder, StringViewArray,
 };
-use datafusion::arrow::datatypes::{DataType, Field};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::utils::take_function_args;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::function::Hint;
-use datafusion_expr::{ScalarFunctionArgs, ScalarUDFImpl};
+use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, Volatility};
 use regex::Regex;
@@ -49,6 +50,11 @@ impl ScalarUDFImpl for SparkRegexpExtract {
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(DataType::Utf8)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let nullable = args.arg_fields.iter().any(|field| field.is_nullable());
+        Ok(Arc::new(Field::new(Self::NAME, DataType::Utf8, nullable)))
     }
 
     fn coerce_types(&self, arg_types: &[DataType]) -> Result<Vec<DataType>> {
@@ -121,59 +127,31 @@ impl ScalarUDFImpl for SparkRegexpExtractAll {
 }
 
 fn regexp_extract_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
-    match args[0].data_type() {
-        DataType::LargeUtf8 => regexp_extract_downcast::<i64>(args),
-        _ => regexp_extract_downcast::<i32>(args),
-    }
-}
-
-fn regexp_extract_downcast<O: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<ArrayRef> {
     let [values_arr, pattern_arr, idx_arr] = take_function_args(SparkRegexpExtract::NAME, args)?;
-    let values = values_arr.as_any().downcast_ref::<GenericStringArray<O>>();
+    let values = string_array_like(values_arr);
     let pattern = string_array_like(pattern_arr);
     let idx = opt_downcast_arg!(idx_arr, Int64Array);
 
-    match (values, pattern.as_deref(), idx.as_ref()) {
+    match (values.as_deref(), pattern.as_deref(), idx.as_ref()) {
         (Some(values), Some(pattern), Some(idx)) => {
-            let pattern_len = pattern.len_();
-            let idx_len = idx.len();
-
-            let pattern_scalar_opt = (pattern_len == 1 && pattern.is_valid_(0))
-                .then(|| parse_regex(SparkRegexpExtract::NAME, pattern.value_(0)))
-                .transpose()?;
-            let idx_scalar_opt = (idx_len == 1 && idx.is_valid(0)).then(|| idx.value(0));
-            let is_pattern_null = pattern_len == 1 && pattern.is_null_(0);
-            let is_idx_null = idx_len == 1 && idx.is_null(0);
-
             let mut builder = StringBuilder::new();
-            // Compile each distinct column pattern once per batch, not per row.
             let mut regex_memo = StrMemo::new();
-            for i in 0..args[0].len() {
-                let pattern_is_null = if pattern_len == 1 {
-                    is_pattern_null
-                } else {
-                    pattern.is_null_(i)
-                };
-                let idx_is_null = if idx_len == 1 {
-                    is_idx_null
-                } else {
-                    idx.is_null(i)
-                };
-
-                if pattern_is_null || idx_is_null || values.is_null(i) {
+            for i in 0..values.len_() {
+                let pattern_index = if pattern.len_() == 1 { 0 } else { i };
+                let idx_index = if idx.len() == 1 { 0 } else { i };
+                if values.is_null_(i) || pattern.is_null_(pattern_index) || idx.is_null(idx_index) {
                     builder.append_null();
                 } else {
-                    let re = regex_memo.resolve(
-                        pattern_scalar_opt.as_ref(),
-                        || pattern.value_(i),
-                        |p| parse_regex(SparkRegexpExtract::NAME, p),
-                    )?;
-                    let group_idx = idx_scalar_opt.unwrap_or_else(|| idx.value(i));
+                    // A singular pattern can still belong to a NULL row or empty batch.
+                    let re = regex_memo
+                        .get_or_try_insert_ref(pattern.value_(pattern_index), |p| {
+                            parse_regex(SparkRegexpExtract::NAME, p)
+                        })?;
                     builder.append_value(extract_first_match(
                         SparkRegexpExtract::NAME,
-                        values.value(i),
+                        values.value_(i),
                         re,
-                        group_idx,
+                        idx.value(idx_index),
                     )?);
                 }
             }
@@ -316,13 +294,30 @@ impl<O: OffsetSizeTrait> StringArrayLike for GenericStringArray<O> {
     }
 }
 
+impl StringArrayLike for StringViewArray {
+    fn len_(&self) -> usize {
+        self.len()
+    }
+    fn is_valid_(&self, i: usize) -> bool {
+        self.is_valid(i)
+    }
+    fn is_null_(&self, i: usize) -> bool {
+        self.is_null(i)
+    }
+    fn value_(&self, i: usize) -> &str {
+        self.value(i)
+    }
+}
+
 fn string_array_like(array: &ArrayRef) -> Option<Box<dyn StringArrayLike + '_>> {
     if let Some(array) = array.as_any().downcast_ref::<GenericStringArray<i32>>() {
+        Some(Box::new(array))
+    } else if let Some(array) = array.as_any().downcast_ref::<GenericStringArray<i64>>() {
         Some(Box::new(array))
     } else {
         array
             .as_any()
-            .downcast_ref::<GenericStringArray<i64>>()
+            .downcast_ref::<StringViewArray>()
             .map(|array| Box::new(array) as Box<dyn StringArrayLike>)
     }
 }
@@ -343,7 +338,9 @@ impl<T: StringArrayLike + ?Sized> StringArrayLike for &T {
 }
 
 fn parse_regex(function_name: &str, pattern: &str) -> Result<Regex> {
-    Regex::new(pattern).map_err(|_| generic_exec_err(function_name, "Invalid regex pattern"))
+    Regex::new(pattern).map_err(|error| {
+        generic_exec_err(function_name, &format!("Invalid regex pattern: {error}"))
+    })
 }
 
 fn validate_group_idx(function_name: &str, group_idx: i64) -> Result<usize> {
@@ -361,16 +358,15 @@ fn extract_capture(
     caps: &regex::Captures<'_>,
     group_idx: i64,
 ) -> Result<String> {
-    let group_idx = validate_group_idx(function_name, group_idx)?;
     let max_group_idx = caps.len().saturating_sub(1);
-    if group_idx > max_group_idx {
+    if group_idx < 0 || group_idx as u64 > max_group_idx as u64 {
         return Err(generic_exec_err(
             function_name,
             &format!("Expects group index between 0 and {max_group_idx}, but got {group_idx}"),
         ));
     }
     Ok(caps
-        .get(group_idx)
+        .get(group_idx as usize)
         .map(|m| m.as_str())
         .unwrap_or("")
         .to_string())
@@ -382,7 +378,6 @@ fn extract_first_match(
     re: &Regex,
     group_idx: i64,
 ) -> Result<String> {
-    validate_group_idx(function_name, group_idx)?;
     match re.captures(value) {
         Some(caps) => extract_capture(function_name, &caps, group_idx),
         None => Ok(String::new()),
@@ -406,12 +401,163 @@ fn extract_all_matches(
 #[cfg(test)]
 #[expect(clippy::expect_used)]
 mod tests {
-    use datafusion::arrow::array::{Int64Array, ListArray, StringArray};
+    use datafusion::arrow::array::{AsArray, Int64Array, LargeStringArray, ListArray, StringArray};
 
     use super::*;
 
     fn strings(values: Vec<Option<&str>>) -> ArrayRef {
         Arc::new(StringArray::from(values))
+    }
+
+    #[test]
+    fn extract_preserves_views_slices_and_null_evaluation() -> Result<()> {
+        let source = vec![
+            Some("padding"),
+            Some("prefix-a11b-suffix"),
+            Some("abc"),
+            Some("b"),
+            None,
+            Some("a33b"),
+            Some("abc"),
+            Some("prefix-a22b-suffix"),
+            Some("padding"),
+        ];
+        let pattern = vec![
+            Some("padding"),
+            Some("a([0-9]+)b(?:)"),
+            Some("(z)"),
+            Some("(a)?b"),
+            Some("["),
+            None,
+            Some("["),
+            Some("a([0-9]+)b(?:)"),
+            Some("padding"),
+        ];
+        let sources: [ArrayRef; 3] = [
+            Arc::new(StringArray::from(source.clone())),
+            Arc::new(LargeStringArray::from(source.clone())),
+            Arc::new(StringViewArray::from(source)),
+        ];
+        let patterns: [ArrayRef; 3] = [
+            Arc::new(StringArray::from(pattern.clone())),
+            Arc::new(LargeStringArray::from(pattern.clone())),
+            Arc::new(StringViewArray::from(pattern)),
+        ];
+        let indices: ArrayRef = Arc::new(Int64Array::from(vec![
+            Some(0),
+            Some(1),
+            Some(-1),
+            Some(1),
+            Some(1),
+            Some(1),
+            None,
+            Some(1),
+            Some(0),
+        ]));
+        let expected = StringArray::from(vec![
+            Some("11"),
+            Some(""),
+            Some(""),
+            None,
+            None,
+            None,
+            Some("22"),
+        ]);
+        for source in &sources {
+            for pattern in &patterns {
+                for batch_size in [1, 32] {
+                    for offset in (0..7).step_by(batch_size) {
+                        let len = batch_size.min(7 - offset);
+                        let args = [
+                            source.slice(1 + offset, len),
+                            pattern.slice(1 + offset, len),
+                            indices.slice(1 + offset, len),
+                        ];
+                        let output = regexp_extract_inner(&args)?;
+                        assert_eq!(output.as_string::<i32>(), &expected.slice(offset, len));
+                    }
+                }
+                let empty = regexp_extract_inner(&[
+                    source.slice(0, 0),
+                    strings(vec![Some("[")]),
+                    Arc::new(Int64Array::from(vec![1])),
+                ])?;
+                assert!(empty.is_empty());
+            }
+        }
+        for index in [Some(1), None] {
+            let output = regexp_extract_inner(&[
+                strings(vec![None]),
+                strings(vec![Some("[")]),
+                Arc::new(Int64Array::from(vec![index])),
+            ])?;
+            assert!(output.is_null(0));
+        }
+        let scalar_pattern = regexp_extract_inner(&[
+            strings(vec![Some("a11b"), Some("a22b")]),
+            strings(vec![Some("a([0-9]+)b")]),
+            Arc::new(Int64Array::from(vec![1])),
+        ])?;
+        assert_eq!(
+            scalar_pattern.as_string::<i32>(),
+            &StringArray::from(vec!["11", "22"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn extract_fields_follow_argument_nullability() -> Result<()> {
+        let udf = SparkRegexpExtract::new();
+        for arity in [2, 3] {
+            for nullable_index in 0..=arity {
+                let arg_fields = [DataType::Utf8, DataType::Utf8, DataType::Int64]
+                    .into_iter()
+                    .take(arity)
+                    .enumerate()
+                    .map(|(index, data_type)| {
+                        Arc::new(Field::new("v", data_type, index == nullable_index))
+                    })
+                    .collect::<Vec<_>>();
+                let output = udf.return_field_from_args(ReturnFieldArgs {
+                    arg_fields: &arg_fields,
+                    scalar_arguments: &vec![None; arity],
+                })?;
+                assert_eq!(output.data_type(), &DataType::Utf8);
+                assert_eq!(output.is_nullable(), nullable_index < arity);
+                assert!(output.metadata().is_empty());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn extract_validates_group_range_only_after_a_match() -> Result<()> {
+        let re = parse_regex(SparkRegexpExtract::NAME, "(a)")?;
+        for index in [-1, 2, i64::from(i32::MAX)] {
+            assert_eq!(
+                extract_first_match(SparkRegexpExtract::NAME, "b", &re, index)?,
+                ""
+            );
+            let error = extract_first_match(SparkRegexpExtract::NAME, "a", &re, index)
+                .expect_err("matched invalid index must fail")
+                .to_string();
+            assert!(
+                error.contains(&format!("between 0 and 1, but got {index}")),
+                "{error}"
+            );
+        }
+        assert_eq!(
+            extract_first_match(SparkRegexpExtract::NAME, "a", &re, 0)?,
+            "a"
+        );
+        let error = parse_regex(SparkRegexpExtract::NAME, "[")
+            .expect_err("invalid pattern must fail")
+            .to_string();
+        assert!(
+            error.contains("Invalid regex pattern") && error.contains("unclosed character class"),
+            "{error}"
+        );
+        Ok(())
     }
 
     /// A pattern supplied as a column selects the regex per row; null patterns

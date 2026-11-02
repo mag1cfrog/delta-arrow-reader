@@ -1832,3 +1832,30 @@ run before and after Spark use. A planner unit test checks that numeric and
 other non-byte arguments retain the original native HEX expression; these
 references do not expand numeric HEX compatibility or cover binary
 TO_CHAR/TO_VARCHAR and hashing.
+
+## Regular expression extraction
+
+`regexp-extract-spark.jsonl` preserves all 82 extraction observations selected
+from the original C06 Spark 4.2.0 capture. `regexp-extract-evaluation-spark.jsonl`
+adds 140 fresh observations for NULL and invalid patterns, empty providers,
+filters, LIMIT 0, CASE and COALESCE. Both files retain the complete Spark result
+records and runtime/input metadata. Recollect either file with
+`recapture_string_binary_spark.py` and a fresh output path.
+
+`regexp_extract.rs` checks 220 supported-pattern and required-error references
+across Utf8, LargeUtf8 and Utf8View at batch sizes 1 and 32, for 1,320 comparisons.
+Successful results compare complete analyzed and physical fields and ordered
+values. All 30 required-error references compare actual public analyzed fields
+before physical planning or execution fails, for 180 field/error comparisons.
+Pattern errors must contain their specific parser cause. Group-index errors must
+report the complete supplied index and allowed range. The two original
+Spark-valid lookbehind observations remain in the fixture and are checked
+separately as 12 native engine failures under #779; they are excluded from
+compatibility counts. The
+index references here use Spark INT values. BIGINT-to-INT argument narrowing is
+separate coercion work and is excluded from these compatibility counts.
+
+Kernel checks cover mixed source/pattern representations, slices, out-of-line
+view strings and NULL rows with a singular invalid pattern. Native DataFusion
+regex functions are compared before and after Spark planning. REGEXP_EXTRACT_ALL
+retains its separate implementation and existing regression.
