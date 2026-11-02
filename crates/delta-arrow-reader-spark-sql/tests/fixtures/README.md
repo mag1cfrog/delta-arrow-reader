@@ -996,17 +996,26 @@ protects the native frame prerequisite; it does not establish complete
 sizes 1 and 32. Native SQL controls require bounded RANGE and GROUPS plans and
 check complete peer counts across batches in every sort combination. They also
 check that struct offsets still fail native type validation and that DATE and
-TIMESTAMP interval offsets retain their expected arithmetic. A private native
-frame-state unit test uses dictionary keys containing NULL values, both directly
-and inside lists, to assert comparator reuse, replacement and release on pruning
-without a timing threshold.
+TIMESTAMP interval offsets retain their expected arithmetic.
+
+`linear_window_completion.rs` calls the real stateful aggregate entry point with the same shared most-recent source row as LinearSearch, interleaved
+logical partitions and open input. Nested struct/array keys with NULL children
+cover equal-edge withholding, ahead-edge output and continued results after
+pruning in both directions and NULL placements. Numeric RANGE and nested GROUPS
+FOLLOWING controls require safety to change within one evaluation.
+
+`native_window_frame_state.rs` includes the original vendored module so ordinary
+workspace test discovery also runs its private unit tests. Dictionary keys
+containing NULL values, both directly and inside lists, assert comparator reuse,
+replacement and release on pruning without a timing threshold.
 
 Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from the isolated Spark SQL
 crate:
 
 ```sh
 python tests/fixtures/capture_nested_range_frames_spark.py
-cargo test --locked --workspace --test nested_range_frames
+cargo test --locked --workspace --test nested_range_frames \
+  --test linear_window_completion --test native_window_frame_state
 ```
 
 ## Sliding window extrema
