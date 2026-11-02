@@ -73,14 +73,11 @@ async fn nested_field_names_match_spark_with_recorded_open_gaps() -> TestResult 
                 continue;
             }
             let actual = capture_spark_query_result(&session, case).await;
-            if id == "outer_generated_window" && actual.is_err() {
+            if id == "outer_generated_window"
+                && let Err(error) = &actual
+            {
                 // #727 owns the missing OVER clause and its outer consumer.
-                assert!(
-                    actual
-                        .unwrap_err()
-                        .to_string()
-                        .contains("cannot resolve attribute")
-                );
+                assert!(error.to_string().contains("cannot resolve attribute"));
                 continue;
             }
             let comparison = match actual {
