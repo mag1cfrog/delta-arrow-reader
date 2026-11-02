@@ -763,7 +763,7 @@ mod tests {
                 let range = state.calculate_range(
                     &frame,
                     &last_range,
-                    &[column.clone()],
+                    std::slice::from_ref(&column),
                     column.len(),
                     idx,
                 )?;
