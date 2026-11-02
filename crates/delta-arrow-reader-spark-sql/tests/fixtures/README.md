@@ -5,6 +5,70 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Integer-day DATE arithmetic
+
+`date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
+observations in UTC and both ANSI modes. The capture keeps the original DATE
+schema and collects its values through `unix_date`, so Python's calendar range
+does not limit the reference. Seven day values, including both signed 32-bit
+limits, form a 49-pair input matrix. Required, nullable and empty providers,
+literal expressions and subquery aliases cover DATE_ADD, DATEADD and DATE_SUB.
+
+The cases include wrapping overflow, small integer widths, string coercion,
+invalid types and arities, plus month/year interval and timestamp controls.
+`date-day-admission-probes-spark.jsonl` adds 68 observations for constant string
+days, NULL/error ordering, typed NULL strings, live string providers and arity
+checks with valid arguments. ANSI conversion skips NULL start rows;
+legacy coercion accepts constant string expressions and converts a constant
+NULL string day to zero. `date-day-correlated-spark.jsonl` adds 24 observations
+for outer integer and STRING day operands. Legacy mode rejects outer STRING
+operands, while ANSI mode converts selected values and skips NULL start rows.
+`date-day-lambda-spark.jsonl` adds 32 observations for STRING/integer lambda
+operands and missing columns inside CASE. Legacy mode rejects STRING lambda
+day operands, including typed NULLs; integer operands work in both modes.
+The capture retains the original array of DATE schema and observes each stored
+day through `unix_date`. `date-day-closed-lambda-spark.jsonl` adds 12
+observations for closed higher-order STRING expressions. Legacy mode rejects
+these expressions even when all their inputs are constant; ANSI mode evaluates
+them with a nullable DATE declaration.
+
+`reviewed-corrections.json` adds the independently captured
+`UNRESOLVED_COLUMN.WITHOUT_SUGGESTION` condition to the two historical CASE
+missing-column errors, keeping their planning stage and original message prefix.
+
+`date_day_arithmetic.rs` compares complete rows, field names, types, nullability
+and metadata for all 432 observations at batch sizes 1 and 32, giving 864
+comparisons. DATE results use the resolved declaration
+for comparison with Spark's analyzed schema. Physical fields may become
+nonnullable after folding; every returned NULL must fit both declarations.
+The seven unchanged calendar/timestamp controls retain conservative resolved
+fields and compare their physical fields with the reference. This does not
+establish analyzed nullability parity for those controls. With `--nocapture`,
+the test logs every raw resolved and physical schema, the comparison stage,
+and all result rows or the required error. Stored Date32 day values avoid
+calendar conversion in the Rust observation as well as the Spark capture.
+Separate native DataFusion controls retain calendar interval arithmetic.
+DATE RANGE window behavior has its own references.
+
+Capture fresh references with Python 3.12, PySpark 4.2.0 and Java 21 from
+this crate. Copy the scripts into a new directory so the three supplemental
+scripts can create their outputs without replacing committed fixtures.
+`PYTHONPATH` supplies their shared helpers from the fixture directory.
+
+```sh
+date_day_fixture_dir="$PWD/tests/fixtures"
+date_day_capture_dir="$(mktemp -d)"
+cp "$date_day_fixture_dir"/capture_date_day_*_spark.py "$date_day_capture_dir/"
+for date_day_script in "$date_day_capture_dir"/capture_date_day_*_spark.py; do
+    PYTHONPATH="$date_day_fixture_dir${PYTHONPATH:+:$PYTHONPATH}" \
+        python "$date_day_script"
+done
+cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
+```
+
+The new JSONL files are beside the copied scripts in `$date_day_capture_dir`.
+The Rust test continues to replay the committed fixtures.
+
 ## Parallel errors
 
 A single capture cannot specify which unordered partition finishes first.
