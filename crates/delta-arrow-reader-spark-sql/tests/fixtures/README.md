@@ -1908,3 +1908,44 @@ counts. The observer records missing required errors with complete actual fields
 and rows; it does not invent a successful Spark expectation. References carrying
 analyzed fields compare those actual public fields, and native errors must match
 the exact escape cause. Unrelated errors and field mismatches fail the test.
+
+## Original STRING/BINARY cast and cross-family contracts
+
+`binary-casts-spark.jsonl` preserves 62 original Spark records for 31 STRING/BINARY
+CAST queries. `string-binary-contracts-spark.jsonl` preserves another 66 records
+for 33 original controls: SUBSTR and FROM/FOR spellings, frozen Unicode/binary
+and CONCAT_WS queries, direct source metadata, derived fields, invalid-byte
+round trips, mixed binary/string CONCAT, seven argument-count cases and eight
+SUBSTRING argument-conversion cases. Both files retain their original complete
+header and record bytes, including schemas, rows, settings, runtime identity and
+structured errors. They contain both ANSI modes and explicit primitive input
+schemas. Recollect them with `recapture_string_binary_spark.py` and a fresh output
+path.
+
+`binary_casts.rs` and `string_binary_contracts.rs` retain all 768 configurations
+across Utf8/LargeUtf8/Utf8View and Binary/LargeBinary/BinaryView at batches 1 and
+32. Complete Spark field/value matches are checked first. Every observation
+retains actual analyzed and physical fields from completed stages, their raw
+Arrow schemas and ordered rows or the specific failure stage/cause. Direct
+source projections must retain their original metadata. Derived result fields
+are compared separately, including names, types, nullability and metadata.
+
+Known differences remain explicit observations without compatibility credit:
+#710 inherited/generated-alias metadata, #780 invalid UTF8 STRING and byte
+round trips, and #778 SUBSTRING INT coercion. Their bounded profiles pin every
+available field, value and exact native error cause from the post-#774 capture
+at `06b6752ceaabb7e011909570d54638d902994ed3`. No reference fields are rewritten or
+used to construct actual schemas. Invalid-byte casts retain their available
+analyzed and physical fields; failed physical planning leaves physical fields
+unavailable. The wider-integer SUBSTRING profiles preserve the missing ANSI
+errors and wrong legacy lengths. A new field, value, stage or cause difference
+fails the tests. Negative controls reject unrelated causes and changed fields
+or values, including the reviewed synthetic overflow counterexample. Unobserved
+SUBSTRING errors require a fresh native capture and review before adding an
+acceptance profile. An absent Spark physical-schema reference remains unavailable.
+
+The seven arity controls check the original Spark function/count parameters and
+precise native admission causes. They are reported separately from full Spark
+matches; they do not claim identical Spark diagnostics and do not accept #795's
+distinct zero-TRIM formatter failure. These tests add durable original coverage;
+they do not close #151 or #174, or the named dependencies.
