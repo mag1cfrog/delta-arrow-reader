@@ -276,6 +276,12 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
             right.get_type(function_context.schema),
         );
         Ok(match (left_type, right_type) {
+            (Ok(DataType::Timestamp(..)), Ok(DataType::Null)) => {
+                left + cast(right, DataType::Duration(TimeUnit::Microsecond))
+            }
+            (Ok(DataType::Null), Ok(DataType::Timestamp(..))) => {
+                cast(left, DataType::Duration(TimeUnit::Microsecond)) + right
+            }
             (
                 Ok(string_type @ (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View)),
                 Ok(DataType::Duration(TimeUnit::Microsecond)),

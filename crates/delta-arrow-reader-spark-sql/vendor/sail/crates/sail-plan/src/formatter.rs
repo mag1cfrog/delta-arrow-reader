@@ -115,17 +115,22 @@ impl SparkPlanFormatter {
             matches!(data_type, DataType::Interval(_) | DataType::Duration(_))
         };
         if let [left_type, right_type] = argument_types {
-            if name == "*" && left_type.is_numeric() && is_interval(right_type) {
+            if name == "*"
+                && (left_type.is_numeric() || *left_type == DataType::Null)
+                && is_interval(right_type)
+            {
                 let (left, right) = arguments.two()?;
                 return self.function_to_string(name, vec![right, left], is_distinct);
             }
             if matches!(name, "+" | "-") {
-                if matches!(left_type, DataType::Timestamp(..)) && is_interval(right_type) {
+                if matches!(left_type, DataType::Timestamp(..))
+                    && (is_interval(right_type) || (name == "+" && *right_type == DataType::Null))
+                {
                     let (left, right) = arguments.two()?;
                     return Ok(format!("{left} {name} {right}"));
                 }
                 if name == "+"
-                    && is_interval(left_type)
+                    && (is_interval(left_type) || *left_type == DataType::Null)
                     && matches!(right_type, DataType::Timestamp(..))
                 {
                     let (left, right) = arguments.two()?;
@@ -908,6 +913,45 @@ mod tests {
 
     use super::*;
     use crate::error::PlanResult;
+
+    #[test]
+    fn null_arithmetic_names_follow_resolved_interval_and_timestamp_rules() -> PlanResult<()> {
+        let timestamp = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
+        let duration = DataType::Duration(TimeUnit::Microsecond);
+        for (operation, arguments, types, expected) in [
+            (
+                "*",
+                vec!["NULL", "INTERVAL '1' DAY"],
+                vec![DataType::Null, duration],
+                "(INTERVAL '1' DAY * NULL)",
+            ),
+            (
+                "+",
+                vec!["TIMESTAMP '2020-01-01 00:00:00'", "NULL"],
+                vec![timestamp.clone(), DataType::Null],
+                "TIMESTAMP '2020-01-01 00:00:00' + NULL",
+            ),
+            (
+                "+",
+                vec!["NULL", "TIMESTAMP '2020-01-01 00:00:00'"],
+                vec![DataType::Null, timestamp.clone()],
+                "TIMESTAMP '2020-01-01 00:00:00' + NULL",
+            ),
+            (
+                "-",
+                vec!["TIMESTAMP '2020-01-01 00:00:00'", "NULL"],
+                vec![timestamp, DataType::Null],
+                "(TIMESTAMP '2020-01-01 00:00:00' - NULL)",
+            ),
+        ] {
+            assert_eq!(
+                SparkPlanFormatter
+                    .resolved_function_to_string(operation, arguments, false, &types)?,
+                expected
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn interval_names_keep_field_ranges_and_microseconds() -> PlanResult<()> {
