@@ -21,7 +21,6 @@ def queries(table):
         yield direction, "limit", f"SELECT id,k FROM {table} {order} LIMIT 1"
         if table.endswith("_mixed"):
             yield direction, "limit_ties", f"SELECT id,k FROM {table} {order} LIMIT 8"
-            yield direction, "group", f"SELECT id,MAX(k) AS k FROM {table} GROUP BY id {order}"
             yield direction, "window", (f"SELECT id,k,RANK() OVER (ORDER BY k {direction}) AS rank,"
                                         f"ROW_NUMBER() OVER ({order}) AS position FROM {table} {order}")
     if table.endswith("_mixed"):
@@ -85,6 +84,7 @@ def main():
                                 "direction": direction, "label": label, "ansi": ansi,
                                 "sql": sql, "expected": expected, "ordered_ids": ordered_ids})
         assert len({(row["id"], row["ansi"]) for row in records[1:]}) == len(records) - 1
+        assert len(records) - 1 == 204
         args.output.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n"
                                        for row in records))
         print(json.dumps({"observations": len(records) - 1, "inputs": len(metadata["inputs"])}))

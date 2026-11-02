@@ -69,7 +69,7 @@ async fn scalar_float_order_matches_spark_without_changing_payloads() -> TestRes
     let records = reference_cases()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 228);
+    assert_eq!(records.len() - 1, 204);
     assert_eq!(
         records[0]["inputs"]
             .as_array()

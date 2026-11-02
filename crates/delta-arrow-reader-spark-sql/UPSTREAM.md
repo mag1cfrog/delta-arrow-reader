@@ -409,8 +409,11 @@ either sign compare equal above numbers and both zero signs compare equal.
 Projected values and aggregate results retain their original bits. Direction,
 outer NULL placement and LIMIT remain the sort operator's responsibility.
 The [scalar ordering references](tests/fixtures/README.md#scalar-floating-query-order)
-cover ordinary and grouped sorting, projected and hidden keys, subqueries,
-dictionary decoding and native SQL before and after Spark planning.
+cover ordinary sorting, projected and hidden keys, subqueries, dictionary
+decoding and native SQL before and after Spark planning. This is the independent
+ORDER BY prerequisite in #752; its grouped MAX acceptance remains pending until
+the floating extrema slice in #730 integrates the preserved grouped references
+and original MAX DESC LIMIT control.
 
 ### Exact statistics aggregate results
 
