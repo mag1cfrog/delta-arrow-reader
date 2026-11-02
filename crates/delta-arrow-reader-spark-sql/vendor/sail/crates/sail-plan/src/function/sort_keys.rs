@@ -16,24 +16,17 @@ use datafusion_expr::{
 
 use crate::function::float_keys::{normalize_nested_float_keys, normalize_spark_float_key};
 
-/// Prepare partition and order keys while keeping scalar RANGE keys numeric.
-pub(crate) fn spark_window_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
+/// Prepare query and window comparison keys while keeping scalar RANGE keys numeric.
+pub(crate) fn spark_sort_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
     let data_type = expression.get_type(schema)?;
     if matches!(data_type, DataType::Float32 | DataType::Float64) {
         normalize_spark_float_key(expression, schema)
-    } else if matches!(
-        decoded_key_type(&data_type),
-        DataType::Float32 | DataType::Float64
-    ) {
-        Ok(ScalarUDF::from(SparkComparisonKey).call(vec![expression]))
-    } else {
-        spark_sort_key(expression, schema)
-    }
-}
-
-/// Prepare nested query-sort keys; scalar query sorts retain their input expression.
-pub(crate) fn spark_sort_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
-    if is_nested_key(&expression.get_type(schema)?) {
+    } else if is_nested_key(&data_type)
+        || matches!(
+            decoded_key_type(&data_type),
+            DataType::Float32 | DataType::Float64
+        )
+    {
         Ok(ScalarUDF::from(SparkComparisonKey).call(vec![expression]))
     } else {
         Ok(expression)
@@ -248,7 +241,7 @@ mod tests {
     use arrow::datatypes::{Int8Type, Int32Type};
 
     #[test]
-    fn window_comparison_keys_keep_scalar_ranges_numeric() -> Result<()> {
+    fn scalar_sort_keys_normalize_floats_and_keep_ranges_numeric() -> Result<()> {
         use datafusion_expr::col;
 
         for data_type in [DataType::Float32, DataType::Float64] {
@@ -260,11 +253,10 @@ mod tests {
                     "k", input_type, true,
                 )]))?;
                 assert_eq!(
-                    spark_window_key(col("k"), &schema)?.get_type(&schema)?,
+                    spark_sort_key(col("k"), &schema)?.get_type(&schema)?,
                     data_type
                 );
-                // Window key semantics do not broaden ordinary scalar query sorting.
-                assert_eq!(spark_sort_key(col("k"), &schema)?, col("k"));
+                assert_ne!(spark_sort_key(col("k"), &schema)?, col("k"));
             }
         }
         Ok(())
