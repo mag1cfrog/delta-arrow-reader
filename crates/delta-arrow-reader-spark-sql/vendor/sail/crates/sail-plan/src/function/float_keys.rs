@@ -79,7 +79,7 @@ impl ScalarUDFImpl for NormalizeNestedFloatKeys {
     }
 }
 
-fn normalize_nested_float_keys(
+pub(crate) fn normalize_nested_float_keys(
     array: ArrayRef,
     config_options: &Arc<ConfigOptions>,
 ) -> Result<ArrayRef> {

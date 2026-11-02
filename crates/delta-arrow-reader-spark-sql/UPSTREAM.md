@@ -86,6 +86,17 @@ checked parallel-error alternatives because their frozen execution plans do not
 guarantee which partition completes first. The [fixture notes](tests/fixtures/README.md)
 describe those alternatives and the inherited Spark difference they retain.
 
+Spark ORDER BY uses temporary Arrow row keys for nested values. Children are
+encoded in ascending order with NULLs first; the sort consumer then applies its
+direction and container NULL placement. The original projected fields and their
+metadata remain available to downstream expressions. Floating key normalization
+runs after temporary sort data is compacted and before encoding. Preparation
+visits only selected dictionary values and live nested children, including sparse
+list views and children hidden by NULL parents. Grouping normalization retains
+its existing type and storage rules. Native DataFusion SQL
+continues to use its own ordering. The [ordering and frame references](tests/fixtures/README.md#nested-ordering-and-window-frames)
+cover the separate query and window consumers.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no
