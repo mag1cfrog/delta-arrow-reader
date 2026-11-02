@@ -172,12 +172,49 @@ constant folding may narrow physical nullability. Native DataFusion division
 retains its schema and checked arithmetic through the configured session.
 
 The initial 224-observation capture also recorded six pre-existing differences.
-Two unaliased DIV observations have a generated-name gap tracked in #717 and the
-shared generated-alias metadata gap in #710. Four legacy IN/NOT IN observations
+Two unaliased DIV observations recorded generated-name (#717) and generated-alias
+metadata (#710) differences. The output-name reference below checks #717
+separately. Four legacy IN/NOT IN observations
 retain SQL three-valued NULL results that differ from Spark's optimized result;
 these remain with #142's compatibility decisions. They are not counted among the
 218 Spark matches. Their original references remain in the review evidence, and
 the historical replay continues to protect the unchanged behavior.
+
+## Integer DIV output names
+
+`integer-div-names-spark.jsonl` records 166 independent Spark 4.2.0 observations
+in UTC and both ANSI modes. Operator and function syntax cover literals, range
+inputs, populated, NULL-only and empty providers, all 16 signed integer width
+pairs, nested expressions, aggregates, predicates, explicit aliases and an outer
+consumer of a generated name. Division by zero, BIGINT overflow and both operand
+orders of NULL with a malformed INT cast retain the required arithmetic behavior.
+The eight NULL/cast observations match the earlier #710 semantics reference.
+
+`integer_div_names.rs` compares complete rows and exact output names, types and
+nullability at batch sizes 1 and 32. Public fields use the Spark analyzed
+declaration; physical fields use its captured executed declaration. Every
+returned batch must match the physical schema and contain valid Arrow arrays.
+Required errors must come from the engine and identify division by zero or
+overflow. Native DataFusion controls compare schemas, plans, values and errors
+before and after Spark planning in the same configured session.
+
+The reference retains complete schemas at each reachable Spark stage. With
+`--nocapture`, Rust logs its complete public and physical schemas, including raw
+metadata, before collecting rows. Metadata parity belongs to #710 and is outside
+these direct name/type/nullability assertions; this is not complete schema parity.
+The historical captures and correction map remain unchanged.
+
+Regenerate in a fresh directory with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+integer_div_capture_dir="$(mktemp -d)"
+cp tests/fixtures/capture_integer_div_names_spark.py "$integer_div_capture_dir/"
+python "$integer_div_capture_dir/capture_integer_div_names_spark.py"
+cargo test --locked --workspace --test integer_div_names -- --nocapture
+```
+
+The script refuses an existing output file. The new JSONL remains beside the
+copied script; the test replays the committed reference.
 
 ## Numeric Decimal and arithmetic nullability
 

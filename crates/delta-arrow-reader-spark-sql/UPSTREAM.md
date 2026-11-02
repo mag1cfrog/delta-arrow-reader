@@ -163,6 +163,11 @@ same overflow rule, including implicit integer-literal conversions. Legacy
 Decimal arithmetic retains nullable results even when its declared bounds fit.
 The expression-error analyzer recognizes these adapters so NULL propagation
 and local-input pruning preserve required conversion and arithmetic errors.
+Integer DIV uses Spark's `(left div right)` generated name for operator and
+function syntax, including nested expressions. Explicit aliases retain their
+chosen names. The [output-name references](tests/fixtures/README.md#integer-div-output-names)
+check names, values, types, nullability and arithmetic errors separately from
+the generated-alias metadata work in #710.
 
 For Spark queries, deterministic correlated scalar projections and aliases over
 a guaranteed one-row relation reuse the existing expression substitution even

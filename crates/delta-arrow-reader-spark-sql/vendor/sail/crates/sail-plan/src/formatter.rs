@@ -460,7 +460,8 @@ impl SparkPlanFormatter {
                 let (left, right) = arguments.two()?;
                 Ok(format!("({left} = {right})"))
             }
-            "&" | "^" | "|" | "*" | "/" | "%" | "!=" | "<" | "<=" | "<=>" | "=" | ">" | ">=" => {
+            "&" | "^" | "|" | "*" | "/" | "%" | "div" | "!=" | "<" | "<=" | "<=>" | "=" | ">"
+            | ">=" => {
                 let (left, right) = arguments.two()?;
                 Ok(format!("({left} {name} {right})"))
             }
