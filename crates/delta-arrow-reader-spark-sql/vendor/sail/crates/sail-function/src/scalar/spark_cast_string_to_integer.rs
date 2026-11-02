@@ -7,14 +7,17 @@ use datafusion::arrow::compute::CastOptions;
 use datafusion::arrow::datatypes::{
     ArrowPrimitiveType, DataType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
 };
+use datafusion::arrow::error::ArrowError;
 use datafusion::functions::expr_fn::btrim;
 use datafusion::functions::string::btrim::BTrimFunc;
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
-use datafusion_common::{Result, ScalarValue, plan_err, utils::take_function_args};
+use datafusion_common::{
+    DataFusionError, Result, ScalarValue, plan_err, utils::take_function_args,
+};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
     ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
-    Volatility, cast, lit, try_cast,
+    Volatility, lit, try_cast,
 };
 use num::{PrimInt, Signed};
 
@@ -54,14 +57,15 @@ impl SparkCastStringToInteger {
         })
     }
 
+    pub fn mode(&self) -> StringIntegerCastMode {
+        self.mode
+    }
+
     pub fn into_expr(self, input: Expr) -> Expr {
-        // Native CAST nodes retain the analyzer's guarded-arithmetic and error rules.
         match self.mode {
-            StringIntegerCastMode::Legacy => ScalarUDF::from(self).call(vec![input]),
-            StringIntegerCastMode::Ansi => cast(
-                btrim(vec![input, lit(integer_trim_characters())]),
-                self.data_type,
-            ),
+            StringIntegerCastMode::Legacy | StringIntegerCastMode::Ansi => {
+                ScalarUDF::from(self).call(vec![input])
+            }
             StringIntegerCastMode::Try => try_cast(
                 btrim(vec![input, lit(integer_trim_characters())]),
                 self.data_type,
@@ -135,13 +139,24 @@ impl ScalarUDFImpl for SparkCastStringToInteger {
             ))));
             args.arg_fields
                 .push(Arc::new(Field::new("trim", DataType::Utf8, false)));
-            return BTrimFunc::new().invoke_with_args(args)?.cast_to(
-                &self.data_type,
-                Some(&CastOptions {
-                    safe: self.mode == StringIntegerCastMode::Try,
-                    ..Default::default()
-                }),
-            );
+            return BTrimFunc::new()
+                .invoke_with_args(args)?
+                .cast_to(
+                    &self.data_type,
+                    Some(&CastOptions {
+                        safe: self.mode == StringIntegerCastMode::Try,
+                        ..Default::default()
+                    }),
+                )
+                .map_err(|error| match &error {
+                    DataFusionError::ArrowError(cause, _)
+                        if self.mode == StringIntegerCastMode::Ansi
+                            && matches!(cause.as_ref(), ArrowError::CastError(_)) =>
+                    {
+                        error.context("[CAST_INVALID_INPUT]")
+                    }
+                    _ => error,
+                });
         }
         let data_type = self.data_type.clone();
         make_scalar_function(

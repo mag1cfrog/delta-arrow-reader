@@ -1457,6 +1457,10 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
 // the added check to strict string/numeric-column casts, including integer widening.
 // Non-ANSI DIV lowers its divisor through NULLIF and does not match this shape.
 pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
+    use sail_function::scalar::spark_cast_string_to_integer::{
+        SparkCastStringToInteger, StringIntegerCastMode,
+    };
+
     match expr {
         Expr::Cast(cast) if cast.field.data_type().is_numeric() => {
             // Preserve the same local-column boundary after the CAST resolver
@@ -1486,7 +1490,9 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
         }
         Expr::ScalarFunction(f)
             if f.func.inner().downcast_ref::<SparkCastNumericToDecimal>()
-                .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi) =>
+                .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi)
+                || f.func.inner().downcast_ref::<SparkCastStringToInteger>()
+                    .is_some_and(|cast| cast.mode() == StringIntegerCastMode::Ansi) =>
         {
             matches!(f.args.as_slice(), [expr] if matches!(expr, Expr::Column(_)) || column_cast(expr, schema))
         }
