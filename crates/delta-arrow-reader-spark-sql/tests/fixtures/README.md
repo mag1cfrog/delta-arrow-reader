@@ -27,10 +27,14 @@ operands, while ANSI mode converts selected values and skips NULL start rows.
 operands and missing columns inside CASE. Legacy mode rejects STRING lambda
 day operands, including typed NULLs; integer operands work in both modes.
 The capture retains the original array of DATE schema and observes each stored
-day through `unix_date`.
+day through `unix_date`. `date-day-closed-lambda-spark.jsonl` adds 12
+observations for closed higher-order STRING expressions. Legacy mode rejects
+these expressions even when all their inputs are constant; ANSI mode evaluates
+them with a nullable DATE declaration.
 
 `date_day_arithmetic.rs` compares complete rows, field names, types, nullability
-and metadata at batch sizes 1 and 32. DATE results use the resolved declaration
+and metadata for all 432 observations at batch sizes 1 and 32, giving 864
+comparisons. DATE results use the resolved declaration
 for comparison with Spark's analyzed schema. Physical fields may become
 nonnullable after folding; every returned NULL must fit both declarations.
 The seven unchanged calendar/timestamp controls retain conservative resolved
@@ -49,6 +53,7 @@ python tests/fixtures/capture_date_day_arithmetic_spark.py
 python tests/fixtures/capture_date_day_admission_probes_spark.py
 python tests/fixtures/capture_date_day_correlated_spark.py
 python tests/fixtures/capture_date_day_lambda_spark.py
+python tests/fixtures/capture_date_day_closed_lambda_spark.py
 cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
 ```
 

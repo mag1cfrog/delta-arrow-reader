@@ -259,7 +259,8 @@ including wrapping overflow in both ANSI modes. They retain their DATE result
 and Spark nullability without converting integer days into calendar intervals.
 Their lazy argument evaluation skips ANSI day-string conversion on NULL start
 rows, and legacy mode coerces constant day strings during planning while
-rejecting outer and lambda STRING references. DATE_ADD/DATEADD convert an
+rejecting outer STRING references and higher-order STRING expressions,
+including closed lambdas with constant inputs. DATE_ADD/DATEADD convert an
 unquoted date unit only for their three-argument timestamp form. Missing
 attributes in empty local and outer scopes retain the unresolved-column
 condition without suggestions; scopes with possible suggestions keep their

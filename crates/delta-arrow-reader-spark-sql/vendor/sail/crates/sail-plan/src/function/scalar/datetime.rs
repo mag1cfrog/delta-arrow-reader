@@ -7,6 +7,7 @@ use datafusion::arrow::datatypes::{
 };
 use datafusion::functions::expr_fn;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
 use datafusion_expr::simplify::SimplifyContextBuilder;
@@ -205,7 +206,12 @@ fn date_offset_by_days(
                 && days.column_refs().is_empty()
                 && !days.contains_outer()
                 && !days.contains_scalar_subquery()
-                && days.clone().resolve_lambda_variables(schema).is_ok() =>
+                && !days.exists(|expr| {
+                    Ok(matches!(
+                        expr,
+                        Expr::LambdaVariable(_) | Expr::HigherOrderFunction(_)
+                    ))
+                })? =>
         {
             let context = SimplifyContextBuilder::default()
                 .with_schema(schema.clone())

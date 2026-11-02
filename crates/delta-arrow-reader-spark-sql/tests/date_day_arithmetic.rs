@@ -158,6 +158,11 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
             32,
             "unix_date_array",
         ),
+        (
+            include_str!("fixtures/date-day-closed-lambda-spark.jsonl"),
+            12,
+            "unix_date",
+        ),
     ] {
         let records = capture
             .lines()
@@ -180,10 +185,8 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
                 )
                 .build(),
             );
-            if encoding == "unix_date" {
+            if records[0].get("inputs").is_some() {
                 register_recorded_inputs(&session, &records[0], batch_size)?;
-            } else {
-                assert!(records[0].get("inputs").is_none());
             }
             for case in &records[1..] {
                 let actual = capture_date_result(&session, case).await;
