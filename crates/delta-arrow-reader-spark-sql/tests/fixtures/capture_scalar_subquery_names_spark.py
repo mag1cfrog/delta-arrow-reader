@@ -41,6 +41,13 @@ def queries():
         yield name, f"SELECT (SELECT {expression}) FROM VALUES (1,2) p(a,B)"
     yield "outer_duplicate_names", (
         "SELECT (SELECT l.id + r.id) FROM scalar_inputs l CROSS JOIN scalar_inputs r")
+    yield "outer_nested_local", (
+        "SELECT (SELECT p.A + (SELECT q.a FROM VALUES (3) q(a))) FROM VALUES (1) p(a)")
+    yield "outer_nested_shadowed", (
+        "SELECT (SELECT (SELECT p.a) FROM VALUES (3) p(a)) FROM VALUES (1) p(a)")
+    yield "outer_projection_and_filter", (
+        "SELECT (SELECT p.a FROM VALUES (1) q(x) WHERE q.x=p.b) "
+        "FROM VALUES (1,1) p(a,b)")
     yield "multiple_rows", "SELECT (SELECT id FROM scalar_inputs)"
     yield "multiple_columns", "SELECT (SELECT 1,2)"
     yield "fallible_scalar", "SELECT (SELECT CAST('bad' AS INT))"
@@ -75,8 +82,8 @@ def main():
             for name, sql in queries():
                 records.append({"id": name, "ansi": ansi, "sql": sql,
                                 "expected": capture(spark, sql)})
-        assert len(records) == 65
-        assert len({(r["id"], r["ansi"]) for r in records[1:]}) == 64
+        assert len(records) == 71
+        assert len({(r["id"], r["ansi"]) for r in records[1:]}) == 70
         with args.output.open("x") as output:
             output.write("".join(json.dumps(record, separators=(",", ":")) + "\n"
                                  for record in records))
