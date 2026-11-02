@@ -55,9 +55,10 @@ fn recorded_scalar(
     spark_type: &str,
     storage_type: &DataType,
 ) -> TestResult<ScalarValue> {
-    let Some(text) = value.as_str() else {
+    if value.is_null() {
         return Ok(ScalarValue::try_from(storage_type)?);
-    };
+    }
+    let text = value.as_str().ok_or("expected a recorded string value")?;
     if spark_type == "timestamp" {
         let array = arrow::compute::cast(&StringArray::from(vec![text]), storage_type)?;
         return Ok(ScalarValue::try_from_array(array.as_ref(), 0)?);
@@ -256,9 +257,9 @@ async fn interval_expression_names_and_scoped_values_match_spark() -> TestResult
             .ok_or("missing rows")?
             .iter()
             .map(|row| {
-                row.as_array()
-                    .ok_or("missing row")?
-                    .iter()
+                let row = row.as_array().ok_or("missing row")?;
+                assert_eq!(row.len(), expected.len());
+                row.iter()
                     .zip(expected)
                     .zip(schema.fields())
                     .map(|((value, field), storage)| {
