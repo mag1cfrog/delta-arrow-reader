@@ -1220,3 +1220,42 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 python tests/fixtures/capture_floating_group_keys_spark.py
 cargo test --locked --workspace --test floating_group_keys
 ```
+
+## Nested collection results
+
+`nested-collections-spark.jsonl` contains 722 independent Spark 4.2.0 observations
+in both ANSI modes. Its 48 providers include FLOAT/DOUBLE scalar, array, struct,
+array-of-struct and struct-containing-array values, plus integer/string controls
+with nested metadata. Mixed, all-NULL and empty inputs distinguish NULL containers
+from NULL children and preserve duplicate values.
+
+`nested_collections.rs` compares complete rows and logical/physical schemas at
+batch sizes 1 and 32. It covers COLLECT_SET, COLLECT_LIST, ARRAY_AGG, DISTINCT,
+FILTER, grouped/global results, RESPECT NULLS aggregates and moving/full windows.
+Global and grouped COLLECT_LIST/ARRAY_AGG order is unspecified: each reference
+names those output fields in `unordered_fields`, and the test compares only their
+outer elements as multisets. Nested array order and duplicate counts remain
+intact. Window COLLECT_LIST uses a unique input ID for ordering and compares the
+full sequence, including empty frames. Provider COLLECT_SET results are sorted
+in SQL; constant sets are empty or contain one element.
+Constant array/struct arguments also check that optimizer folding retains their
+analyzed nested types in IGNORE/RESPECT NULLS aggregates and ordered windows.
+Nested array-of-struct and struct-containing-array constants use explicit type
+CASTs; their original constructor nullability differences remain in
+[#736](https://github.com/mag1cfrog/delta-arrow-reader/issues/736).
+
+Direct adapter tests preserve fields, metadata, scalar/array shapes, NULL masks
+and shared value buffers, and reject actual NULL elements. Native SQL controls
+also retain the general nullable-to-required nested CAST rejection.
+
+An earlier diagnostic sorted every collection in SQL. It exposed the separate
+[negative-NaN array ordering defect](https://github.com/mag1cfrog/delta-arrow-reader/issues/735),
+which also reproduces without aggregation. Those raw failing captures are
+retained outside the fixture; this test does not accept their sorted order.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
+
+```sh
+python tests/fixtures/capture_nested_collections_spark.py
+cargo test --locked --workspace --test nested_collections
+```

@@ -7,6 +7,58 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### S04 nested collection result types
+
+#725 completed through PR #734 at staging `6e94e3d8`; its merged tree matches
+the reviewed commit. #729 now refines the NULL-free collection element field
+through checked Arrow list construction, retaining the existing aggregate,
+NULL filters and empty-array default. The native general CAST validator stays
+unchanged. The adapter is shared by global/grouped and window collections.
+
+The initial independent capture contains 674 observations from 48 providers. The
+candidate matched all 1,348 comparisons at batch sizes 1 and 32, including
+complete schemas, nested metadata, NULL containers/children, duplicate values,
+RESPECT NULLS aggregates and ordered windows. Native SQL and invalid nested CAST
+controls pass. Direct unit tests preserve buffers and reject unexpected NULLs.
+Final Linux workspace validation passes 536 tests with no failures and two
+inherited ignored doctests, including all 25,180 historical observations without
+changing their matcher or corrections. Clippy and formatting pass. Clean-context
+Sol/high Bulletproof Review found no remaining actionable findings and verified
+all 12 changed files and their connected callers. #729 remains open until its
+staging PR is merged.
+
+The first full workspace run preserved the historical replay but caught eight
+prior constant-array comparisons: removing the final CAST allowed folding to
+tighten nested fields after analysis. A widening CAST now retains the analyzed
+element type before coalescing with the empty default and checking outer element
+nullability. This also repairs a constant-window empty-frame type conflict,
+reproduced with the original aggregate result implementation. The expanded
+reference adds 48 independent constant array/struct observations, including
+RESPECT NULLS and window consumers. All 1,444 comparisons pass, along with the
+prior 840-reference floating-key suite; both are included in the final workspace
+run.
+
+Raw untyped nested constructors exposed separate schema differences. Sixteen
+aggregation-free comparisons reproduce the analyzed/physical mismatch; #736 is
+the assigned native runtime follow-up under Nested values. The permanent
+collection controls use independently captured explicit typed CASTs, preserving
+their constant-folding stress without accepting the original constructor gap.
+The original references and failures remain in external evidence.
+
+The initial sorted diagnostic had 864 construction errors and 88 result
+differences across 1,348 comparisons. The candidate removes every construction
+error, fully matches 1,188 observations, and exposes 160 array-order differences.
+All remaining collections have identical members, counts and schemas. An isolated
+SORT_ARRAY query reproduces negative NaN ordering without any aggregate in all
+16 width/mode/batch comparisons; #735 owns that S10 defect. The focused collection
+fixture records raw COLLECT_LIST/ARRAY_AGG and compares their unspecified order
+as a multiset. Ordered windows remain sequence comparisons, and the original
+sorted failures remain in external evidence.
+
+After this slice, continue floating windows and window labels, then the retained
+S04 ordering, schema, volatility and grouping-boundary work. The #142 coverage
+stash remains preserved while these runtime prerequisites are repaired.
+
 ### S04 floating DISTINCT and nested grouping
 
 #724 completed in PR #728 at staging `a707aa71`. Its window-order/frame
@@ -49,8 +101,8 @@ successful comparisons and four required CAST failures at two batch sizes. The
 stricter error assertion passed a final focused rerun; fmt and all-target Clippy
 also pass. Clean-context Sol/high Bulletproof Review has no remaining actionable
 findings in this slice and verified the final code, fixture and documentation
-hashes. #725 remains open until the staging merge. Afterward, repair #729's
-collection output construction, then continue the
+hashes. PR #734 completed #725 on staging; #729's collection output construction
+is now in progress. Then continue the
 remaining S04 work, including floating windows (#726), window names (#727),
 MIN/MAX (#730) and constant grouping schemas (#731).
 

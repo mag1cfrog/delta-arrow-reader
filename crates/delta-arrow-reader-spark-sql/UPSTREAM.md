@@ -316,6 +316,16 @@ values and tracing NULL rejection. List-view packing grows its temporary index
 buffer with selected elements, avoiding a reserve based on unrelated backing
 storage.
 
+Spark collection results use Arrow's checked list construction to refine the
+element nullability after NULL filtering. This preserves nested struct fields
+without routing the result through a general nullable-to-required CAST. Actual
+NULL elements still fail validation, and RESPECT NULLS retains nullable elements.
+A widening CAST before coalesce preserves the analyzed nested type when constant
+folding tightens a constructor's fields, including empty window defaults.
+The same result adapter serves aggregate and window collections. The
+[collection references](tests/fixtures/README.md#nested-collection-results)
+compare unordered aggregates as multisets and ordered windows as sequences.
+
 Empty windows retain explicit aggregate defaults. A non-null aggregate with a
 generic NULL default instead evaluates its initialized empty accumulator, so
 query arguments such as HLL sketch precision survive. Both cumulative and sliding
