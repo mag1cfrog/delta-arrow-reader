@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use datafusion_common::arrow::datatypes::{Field, FieldRef};
 use datafusion_common::{Column, DFSchemaRef, TableReference};
-use datafusion_expr::LogicalPlan;
+use datafusion_expr::{Expr, LogicalPlan};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
@@ -118,6 +118,31 @@ impl PlanResolverState {
     /// No assumption should be made about the format of the field ID.
     pub fn register_field_name(&mut self, name: impl Into<String>) -> String {
         self.register_field_info(name, false)
+    }
+
+    /// Registers a unique output field, sharing identity for repeated direct input references.
+    pub fn register_projected_field(
+        &mut self,
+        name: impl Into<String>,
+        expr: &Expr,
+        projected_sources: &mut HashMap<Column, String>,
+    ) -> String {
+        let source = match expr {
+            Expr::Column(column) | Expr::OuterReferenceColumn(_, column)
+                if self.fields.contains_key(column.name()) =>
+            {
+                Some(self.field_source(column))
+            }
+            // Computed aggregate outputs have synthetic, unregistered column names.
+            _ => None,
+        };
+        let field_id = self.register_field_name(name);
+        if let Some(source) = source {
+            // Reset ancestry so separate relation aliases stay distinct after projection.
+            let source_id = projected_sources.entry(source).or_insert(field_id.clone());
+            self.set_field_source(&field_id, source_id);
+        }
+        field_id
     }
 
     /// Registers a hidden field and returns a generated opaque string ID for the field.

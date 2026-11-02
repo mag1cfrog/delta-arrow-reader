@@ -268,18 +268,10 @@ impl PlanResolver<'_> {
                         "one name expected for expression, got: {names}"
                     )));
                 };
-                let source = if let Expr::Column(column) = &expr {
+                if let Expr::Column(column) | Expr::OuterReferenceColumn(_, column) = &expr {
                     state.get_field_info(column.name())?;
-                    Some(state.field_source(column))
-                } else {
-                    None
-                };
-                let field_id = state.register_field_name(name);
-                if let Some(source) = source {
-                    // Reset ancestry here so separate relation aliases stay distinct after projection.
-                    let source_id = projected_sources.entry(source).or_insert(field_id.clone());
-                    state.set_field_source(&field_id, source_id);
                 }
+                let field_id = state.register_projected_field(name, &expr, &mut projected_sources);
                 if !metadata.is_empty() {
                     let metadata_map: HashMap<String, String> = metadata.into_iter().collect();
                     let field_metadata = Some(FieldMetadata::from(metadata_map));

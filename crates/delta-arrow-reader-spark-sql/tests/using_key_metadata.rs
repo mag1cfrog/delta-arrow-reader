@@ -51,6 +51,10 @@ async fn using_key_metadata_matches_spark() -> TestResult {
             include_str!("fixtures/repeated-projection-boundaries-spark.jsonl"),
             36,
         ),
+        (
+            include_str!("fixtures/projection-identity-review-v2-spark.jsonl"),
+            28,
+        ),
     ] {
         let followup = fixture
             .lines()
@@ -143,6 +147,7 @@ async fn repeated_projections_keep_unique_internal_names() -> TestResult {
     register_recorded_inputs(&session, &metadata, 32)?;
     for sql in [
         "SELECT id,id FROM left_mixed",
+        "SELECT id,id FROM left_mixed GROUP BY id",
         "SELECT l.id,l.id FROM (SELECT id,id FROM left_mixed) l \
          LEFT JOIN right_mixed r USING(id)",
     ] {

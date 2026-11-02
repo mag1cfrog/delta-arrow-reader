@@ -1,5 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use datafusion::functions_aggregate::{average, bit_and_or_xor, bool_and_or, count, min_max, sum};
@@ -328,6 +328,7 @@ impl PlanResolver<'_> {
             self.rewrite_projection::<ExplodeRewriter>(plan, projections, state)?;
         let (plan, projections) =
             self.rewrite_projection::<WindowRewriter>(plan, projections, state)?;
+        let mut projected_sources = HashMap::new();
         let projections = projections
             .into_iter()
             .map(|x| {
@@ -337,7 +338,9 @@ impl PlanResolver<'_> {
                     metadata: _,
                     ..
                 } = x;
-                Ok(expr.alias(state.register_field_name(name.one()?)))
+                let field_id =
+                    state.register_projected_field(name.one()?, &expr, &mut projected_sources);
+                Ok(expr.alias(field_id))
             })
             .collect::<PlanResult<Vec<_>>>()?;
         Ok(LogicalPlanBuilder::from(plan)
