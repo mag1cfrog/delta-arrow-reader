@@ -103,7 +103,7 @@ pending candidate execution; cost evidence is separate from correctness.
 
 #746 restricts constant-group and EXISTS preparation to Spark queries. Native
 queries retain DataFusion's floating extrema bits, empty aggregate EXISTS results
-and required CAST errors. The regression compares 240 native executions across
+and required CAST errors. The regression performs 240 native comparisons across
 FLOAT/DOUBLE, batch sizes, ANSI settings and before/after Spark use, plus 12
 existing independent Spark grouping/error records. Direct-plan Spark unit tests
 now attach the same query-local marker as the public entry point. The validated
