@@ -59,6 +59,10 @@ async fn using_key_metadata_matches_spark() -> TestResult {
             include_str!("fixtures/grouped-alias-identity-collision-spark.jsonl"),
             6,
         ),
+        (
+            include_str!("fixtures/materialized-projection-identity-spark-v1.jsonl"),
+            10,
+        ),
     ] {
         let followup = fixture
             .lines()
