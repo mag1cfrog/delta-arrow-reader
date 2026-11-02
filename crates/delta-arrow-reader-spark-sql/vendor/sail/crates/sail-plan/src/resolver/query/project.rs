@@ -92,7 +92,7 @@ impl PlanResolver<'_> {
         fn expand_outer_wildcard(
             qualifier_filter: Option<&TableReference>,
             input_schema: &DFSchemaRef,
-            state: &PlanResolverState,
+            state: &mut PlanResolverState,
             projected: &mut Vec<NamedExpr>,
         ) -> PlanResult<()> {
             if qualifier_filter.is_none() && !input_schema.fields().is_empty() {
@@ -108,7 +108,7 @@ impl PlanResolver<'_> {
                 }
             }
 
-            if let Some(outer_schema) = state.get_outer_query_schema() {
+            if let Some(outer_schema) = state.get_outer_query_schema().cloned() {
                 for (qualifier, field) in outer_schema.iter() {
                     if let Some(expected) = qualifier_filter
                         && qualifier.is_none_or(|q| expected != q)
@@ -119,11 +119,13 @@ impl PlanResolver<'_> {
                     if info.is_hidden() && qualifier_filter.is_none() {
                         continue;
                     }
+                    let name = info.name().to_string();
+                    state.outer_reference_display_names.push(name.clone());
                     let outer_col = Expr::OuterReferenceColumn(
                         field.clone(),
                         Column::new(qualifier.cloned(), field.name()),
                     );
-                    projected.push(NamedExpr::new(vec![info.name().to_string()], outer_col));
+                    projected.push(NamedExpr::new(vec![name], outer_col));
                 }
             }
             Ok(())

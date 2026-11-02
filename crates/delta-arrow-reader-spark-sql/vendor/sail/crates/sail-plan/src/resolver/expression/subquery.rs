@@ -8,6 +8,7 @@ use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, expr_fn};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{drop_inherited_column_metadata, spark_in_list};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -80,9 +81,11 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
-        let subquery = {
+        let (subquery, outer_reference_names) = {
             let mut scope = state.enter_query_scope(Arc::clone(schema));
-            self.resolve_query_plan(subquery, scope.state()).await?
+            let subquery = self.resolve_query_plan(subquery, scope.state()).await?;
+            let names = std::mem::take(&mut scope.state().outer_reference_display_names);
+            (subquery, names)
         };
         let columns = subquery.schema().fields().len();
         if columns != 1 {
@@ -90,9 +93,14 @@ impl PlanResolver<'_> {
                 "Scalar subquery must return exactly one column, found {columns}"
             )));
         }
+        let name = SparkPlanFormatter.function_to_string(
+            "scalarsubquery",
+            outer_reference_names.iter().map(String::as_str).collect(),
+            false,
+        )?;
         // Keep the metadata boundary even when simplification returns a source column.
         Ok(NamedExpr::new(
-            vec!["subquery".to_string()],
+            vec![name],
             drop_inherited_column_metadata(expr_fn::scalar_subquery(Arc::new(subquery))),
         ))
     }

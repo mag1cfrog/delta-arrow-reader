@@ -341,11 +341,21 @@ impl PlanResolver<'_> {
         let mut scope = state.enter_config_scope();
         let state = scope.state();
         state.config_mut().include_cast_in_expression_name = false;
+        let outer_reference_count = state.outer_reference_display_names.len();
         let mut results: Vec<NamedExpr> = Vec::with_capacity(expressions.len());
         for expression in expressions {
-            let named_expr = self
+            let named_expr = match self
                 .resolve_named_expression(expression, schema, state)
-                .await?;
+                .await
+            {
+                Ok(named) => named,
+                Err(error) => {
+                    state
+                        .outer_reference_display_names
+                        .truncate(outer_reference_count);
+                    return Err(error);
+                }
+            };
             results.push(named_expr);
         }
         Ok(results)
@@ -405,6 +415,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
+    use arrow::datatypes::{DataType, Field, Schema};
     use datafusion::execution::SessionStateBuilder;
     use datafusion::prelude::SessionContext;
     use datafusion_common::{DFSchema, ScalarValue};
@@ -422,6 +433,59 @@ mod tests {
     fn create_session() -> PlanResult<SessionContext> {
         let state = SessionStateBuilder::new().build();
         Ok(SessionContext::new_with_state(state))
+    }
+
+    #[tokio::test]
+    async fn outer_reference_names_rollback_and_stay_in_query_scope() -> PlanResult<()> {
+        let ctx = create_session()?;
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
+        let mut state = PlanResolverState::new();
+        let field_id = state.register_field_name("a");
+        let outer_schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+            field_id,
+            DataType::Int32,
+            true,
+        )]))?);
+        let empty_schema = Arc::new(DFSchema::empty());
+        let attribute = |name: &str| spec::Expr::UnresolvedAttribute {
+            name: spec::ObjectName::bare(name),
+            plan_id: None,
+            is_metadata_column: false,
+        };
+        state.outer_reference_display_names.push("parent".into());
+        state.outer_reference_input_ends.push(1);
+        {
+            let mut scope = state.enter_query_scope(outer_schema);
+            assert!(scope.state().outer_reference_input_ends.is_empty());
+            let failed = resolver
+                .resolve_named_output_expressions(
+                    vec![attribute("a"), attribute("missing")],
+                    &empty_schema,
+                    scope.state(),
+                )
+                .await;
+            assert!(failed.is_err());
+            assert!(scope.state().outer_reference_display_names.is_empty());
+            resolver
+                .resolve_named_output_expressions(
+                    vec![attribute("A"), attribute("a")],
+                    &empty_schema,
+                    scope.state(),
+                )
+                .await?;
+            {
+                let mut inner = scope.state().enter_query_scope(empty_schema);
+                assert!(inner.state().outer_reference_display_names.is_empty());
+                inner
+                    .state()
+                    .outer_reference_display_names
+                    .push("child".into());
+            }
+            assert_eq!(scope.state().outer_reference_display_names, ["A", "a"]);
+        }
+        assert_eq!(state.outer_reference_display_names, ["parent"]);
+        assert_eq!(state.outer_reference_input_ends, [1]);
+        Ok(())
     }
 
     #[tokio::test]

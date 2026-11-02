@@ -51,6 +51,31 @@ impl PlanResolver<'_> {
         plan: spec::QueryPlan,
         state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
+        let start = state.outer_reference_display_names.len();
+        state.outer_reference_input_ends.push(start);
+        let result = self.resolve_query_plan_node(plan, state).await;
+        let input_end = state
+            .outer_reference_input_ends
+            .pop()
+            .ok_or_else(|| PlanError::internal("missing outer-reference display scope"))?;
+        if result.is_ok() {
+            // Spark displays this node's references before its inputs, which resolve first.
+            state.outer_reference_display_names[start..].rotate_left(input_end - start);
+            let end = state.outer_reference_display_names.len();
+            if let Some(input_end) = state.outer_reference_input_ends.last_mut() {
+                *input_end = end;
+            }
+        } else {
+            state.outer_reference_display_names.truncate(start);
+        }
+        result
+    }
+
+    async fn resolve_query_plan_node(
+        &self,
+        plan: spec::QueryPlan,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<LogicalPlan> {
         use spec::QueryNode;
 
         if plan.plan_id.is_some() {

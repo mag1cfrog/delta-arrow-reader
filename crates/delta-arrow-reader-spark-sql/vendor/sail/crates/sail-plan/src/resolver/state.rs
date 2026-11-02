@@ -60,6 +60,10 @@ pub(super) struct PlanResolverState {
     fields: HashMap<String, FieldInfo>,
     /// The outer query schema for the current subquery.
     outer_query_schema: Option<DFSchemaRef>,
+    /// SQL spellings of outer references in this query, including repeated occurrences.
+    pub(super) outer_reference_display_names: Vec<String>,
+    /// End of input names for each active plan node, before that node's own names.
+    pub(super) outer_reference_input_ends: Vec<usize>,
     /// The aggregate state for the current query.
     aggregate_state: AggregateState,
     /// The CTEs for the current query.
@@ -86,6 +90,8 @@ impl PlanResolverState {
             next_id: 0,
             fields: HashMap::new(),
             outer_query_schema: None,
+            outer_reference_display_names: vec![],
+            outer_reference_input_ends: vec![],
             aggregate_state: AggregateState::default(),
             ctes: HashMap::new(),
             config: PlanResolverStateConfig::default(),
@@ -249,14 +255,22 @@ impl PlanResolverState {
 pub(crate) struct QueryScope<'a> {
     state: &'a mut PlanResolverState,
     previous_outer_query_schema: Option<DFSchemaRef>,
+    previous_outer_reference_display_names: Vec<String>,
+    previous_outer_reference_input_ends: Vec<usize>,
 }
 
 impl<'a> QueryScope<'a> {
     fn new(state: &'a mut PlanResolverState, schema: DFSchemaRef) -> Self {
         let previous_outer_query_schema = state.outer_query_schema.replace(schema);
+        let previous_outer_reference_display_names =
+            std::mem::take(&mut state.outer_reference_display_names);
+        let previous_outer_reference_input_ends =
+            std::mem::take(&mut state.outer_reference_input_ends);
         Self {
             state,
             previous_outer_query_schema,
+            previous_outer_reference_display_names,
+            previous_outer_reference_input_ends,
         }
     }
 
@@ -268,6 +282,10 @@ impl<'a> QueryScope<'a> {
 impl Drop for QueryScope<'_> {
     fn drop(&mut self) {
         self.state.outer_query_schema = self.previous_outer_query_schema.take();
+        self.state.outer_reference_display_names =
+            std::mem::take(&mut self.previous_outer_reference_display_names);
+        self.state.outer_reference_input_ends =
+            std::mem::take(&mut self.previous_outer_reference_input_ends);
     }
 }
 
