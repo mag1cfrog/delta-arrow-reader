@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::{Column, JoinType, NullEquality};
@@ -183,8 +184,18 @@ impl PlanResolver<'_> {
                 None,
             )?
         };
-        // Re-register join key columns as hidden fields so that subsequent
-        // attribute resolution can still find them.
+        let preserved_keys = match join_type {
+            JoinType::Inner
+            | JoinType::Left
+            | JoinType::LeftSemi
+            | JoinType::LeftAnti
+            | JoinType::LeftMark => left_columns.as_slice(),
+            JoinType::Right | JoinType::RightSemi | JoinType::RightAnti | JoinType::RightMark => {
+                right_columns.as_slice()
+            }
+            JoinType::Full => &[],
+        };
+        // Keep the visible key's qualifier so a later USING join can hide that same key.
         let mut columns = builder.schema().columns();
         // Qualified wildcards expose USING keys before the remaining columns,
         // in USING-list order, including keys retained from earlier joins.
@@ -197,6 +208,7 @@ impl PlanResolver<'_> {
         });
         let hidden_columns = columns
             .into_iter()
+            .filter(|col| !preserved_keys.contains(col))
             .map(|col| {
                 if left_columns.iter().any(|x| x.name == col.name)
                     || right_columns.iter().any(|x| x.name == col.name)
@@ -204,7 +216,13 @@ impl PlanResolver<'_> {
                     let info = state.get_field_info(col.name())?.clone();
                     let field_id = state.register_hidden_field_name(info.name());
                     let qualifier = col.relation.clone();
-                    Ok(Expr::Column(col).alias_qualified(qualifier, field_id))
+                    let metadata =
+                        HashMap::from([("__metadata_col".to_string(), info.name().to_string())]);
+                    Ok(Expr::Column(col).alias_qualified_with_metadata(
+                        qualifier,
+                        field_id,
+                        Some(metadata.into()),
+                    ))
                 } else {
                     Ok(Expr::Column(col))
                 }
@@ -217,7 +235,9 @@ impl PlanResolver<'_> {
                     .into_iter()
                     .map(|(name, (left, right))| {
                         let column = if uses_right { right } else { left };
-                        Expr::Column(column).alias(state.register_field_name(name))
+                        let qualifier = column.relation.clone();
+                        Expr::Column(column)
+                            .alias_qualified(qualifier, state.register_field_name(name))
                     })
                     .chain(hidden_columns);
                 builder.project(projections)?
@@ -256,7 +276,9 @@ impl PlanResolver<'_> {
                     .into_iter()
                     .map(|(name, (left, right))| {
                         let col = if uses_right { right } else { left };
-                        Expr::Column(col).alias(state.register_field_name(name))
+                        let qualifier = col.relation.clone();
+                        Expr::Column(col)
+                            .alias_qualified(qualifier, state.register_field_name(name))
                     })
                     .chain(hidden_columns);
                 builder.project(projections)?
