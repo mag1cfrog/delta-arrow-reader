@@ -537,8 +537,10 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         Ok(plan
             .transform_down_with_subqueries(|node| {
                 let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
                 node.map_expressions(|expr| {
-                    expr.transform_down(|expr| {
+                    let name = names.save(&expr);
+                    let rewritten = expr.transform_down(|expr| {
                         // Inlining can remove the last scalar subquery while
                         // its NULL parent still needs the same propagation rule.
                         if !null_discarded(&expr) {
@@ -564,7 +566,8 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                         Ok(Transformed::yes(lit(ScalarValue::try_new_null(
                             &data_type,
                         )?)))
-                    })
+                    })?;
+                    Ok(rewritten.update_data(|expr| name.restore(expr)))
                 })
             })?
             .data)
