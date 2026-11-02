@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
-use arrow::array::{Array, BinaryArray};
+use arrow::array::{
+    Array, ArrayRef, AsArray, BinaryArray, LargeListArray, StructArray, UInt64Array,
+};
+use arrow::buffer::OffsetBuffer;
 use arrow::datatypes::{DataType, Field, FieldRef};
 use arrow::row::{RowConverter, SortField};
 use datafusion_common::{DFSchema, Result, ScalarValue};
@@ -11,11 +14,10 @@ use datafusion_expr::{
     ScalarUDFImpl, Signature, Volatility,
 };
 
-use crate::function::float_keys::normalize_spark_float_key;
+use crate::function::float_keys::normalize_nested_float_keys;
 
 pub(crate) fn spark_sort_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
     if is_nested_key(&expression.get_type(schema)?) {
-        let expression = normalize_spark_float_key(expression, schema)?;
         Ok(ScalarUDF::from(SparkNestedSortKey).call(vec![expression]))
     } else {
         Ok(expression)
@@ -33,6 +35,116 @@ fn is_nested_key(data_type: &DataType) -> bool {
         DataType::Dictionary(_, value) => is_nested_key(value),
         _ => false,
     }
+}
+
+fn take_sort_values(array: &ArrayRef, indices: &UInt64Array) -> Result<ArrayRef> {
+    let indices = UInt64Array::from_iter(
+        indices
+            .iter()
+            .map(|index| index.filter(|index| array.is_valid(*index as usize))),
+    );
+    match array.data_type() {
+        DataType::Dictionary(_, _) => {
+            let dictionary = array.as_any_dictionary();
+            let keys = arrow::compute::take(dictionary.keys(), &indices, None)?;
+            let keys = arrow::compute::cast(keys.as_ref(), &DataType::UInt64)?;
+            take_sort_values(dictionary.values(), keys.as_primitive())
+        }
+        DataType::Struct(fields) => {
+            let columns = array
+                .as_struct()
+                .columns()
+                .iter()
+                .map(|column| take_sort_values(column, &indices))
+                .collect::<Result<Vec<_>>>()?;
+            let fields = fields
+                .iter()
+                .zip(&columns)
+                .map(|(field, column)| {
+                    Arc::new(
+                        field
+                            .as_ref()
+                            .clone()
+                            .with_data_type(column.data_type().clone())
+                            .with_nullable(true),
+                    )
+                })
+                .collect();
+            Ok(Arc::new(StructArray::try_new_with_length(
+                fields,
+                columns,
+                indices.nulls().cloned(),
+                indices.len(),
+            )?))
+        }
+        DataType::List(field) => {
+            let list = array.as_list::<i32>();
+            take_sort_list(field, list.values(), &indices, |index| {
+                list.value_offsets()[index] as usize..list.value_offsets()[index + 1] as usize
+            })
+        }
+        DataType::LargeList(field) => {
+            let list = array.as_list::<i64>();
+            take_sort_list(field, list.values(), &indices, |index| {
+                list.value_offsets()[index] as usize..list.value_offsets()[index + 1] as usize
+            })
+        }
+        DataType::ListView(field) => {
+            let list = array.as_list_view::<i32>();
+            take_sort_list(field, list.values(), &indices, |index| {
+                let start = list.value_offsets()[index] as usize;
+                start..start + list.value_sizes()[index] as usize
+            })
+        }
+        DataType::LargeListView(field) => {
+            let list = array.as_list_view::<i64>();
+            take_sort_list(field, list.values(), &indices, |index| {
+                let start = list.value_offsets()[index] as usize;
+                start..start + list.value_sizes()[index] as usize
+            })
+        }
+        DataType::FixedSizeList(field, size) => {
+            let list = array.as_fixed_size_list();
+            take_sort_list(field, list.values(), &indices, |index| {
+                let start = index * *size as usize;
+                start..start + *size as usize
+            })
+        }
+        _ => Ok(arrow::compute::take(array.as_ref(), &indices, None)?),
+    }
+}
+
+fn take_sort_list(
+    field: &FieldRef,
+    values: &ArrayRef,
+    indices: &UInt64Array,
+    range: impl Fn(usize) -> std::ops::Range<usize>,
+) -> Result<ArrayRef> {
+    let mut children = Vec::new();
+    let mut offsets = Vec::with_capacity(indices.len() + 1);
+    offsets.push(0_i64);
+    for index in indices.iter() {
+        if let Some(index) = index {
+            children.extend(range(index as usize).map(|index| index as u64));
+        }
+        offsets.push(i64::try_from(children.len()).map_err(|_| {
+            datafusion_common::DataFusionError::Execution("nested sort key offset overflow".into())
+        })?);
+    }
+    let values = take_sort_values(values, &UInt64Array::from_iter_values(children))?;
+    let field = Arc::new(
+        field
+            .as_ref()
+            .clone()
+            .with_data_type(values.data_type().clone())
+            .with_nullable(true),
+    );
+    Ok(Arc::new(LargeListArray::try_new(
+        field,
+        OffsetBuffer::new(offsets.into()),
+        values,
+        indices.nulls().cloned(),
+    )?))
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -65,6 +177,12 @@ impl ScalarUDFImpl for SparkNestedSortKey {
         let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
         let scalar = matches!(value, ColumnarValue::Scalar(_));
         let array = value.to_array(1)?;
+        // Visit only selected rows and live children before any recursive float work.
+        let array = take_sort_values(
+            &array,
+            &UInt64Array::from_iter_values(0..array.len() as u64),
+        )?;
+        let array = normalize_nested_float_keys(array, &args.config_options)?;
         let converter = RowConverter::new(vec![SortField::new(array.data_type().clone())])?;
         // Encode ascending with NULL children first; the consumer applies direction
         // and container NULL placement to this temporary key independently.
@@ -87,7 +205,8 @@ impl ScalarUDFImpl for SparkNestedSortKey {
 mod tests {
     use super::*;
     use arrow::array::{
-        ArrayRef, AsArray, DictionaryArray, Int8Array, Int32Array, ListArray, StructArray,
+        ArrayRef, AsArray, DictionaryArray, FixedSizeListArray, Int8Array, Int32Array,
+        LargeListViewArray, ListArray, ListViewArray, StringArray, StructArray,
     };
     use arrow::compute::{SortColumn, SortOptions, lexsort_to_indices};
     use arrow::datatypes::{Int8Type, Int32Type};
@@ -190,6 +309,188 @@ mod tests {
                 assert_eq!(sliced.to_data(), key.slice(index, 1).to_data());
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn sparse_views_pack_only_live_children_including_nested_nulls() -> Result<()> {
+        const BACKING_ROWS: usize = 1_000_000;
+        let integers: ArrayRef = Arc::new(Int32Array::from_iter_values(0..BACKING_ROWS as i32));
+        let strings: ArrayRef = Arc::new(StringArray::from_iter_values((0..BACKING_ROWS).map(
+            |index| {
+                if index == BACKING_ROWS - 1 {
+                    "last"
+                } else {
+                    "first"
+                }
+            },
+        )));
+        for values in [integers, strings] {
+            let field = Arc::new(Field::new("item", values.data_type().clone(), true));
+            let views: Vec<ArrayRef> = vec![
+                Arc::new(ListViewArray::try_new(
+                    field.clone(),
+                    vec![0, 0, BACKING_ROWS as i32 - 1].into(),
+                    vec![1, BACKING_ROWS as i32, 1].into(),
+                    values.clone(),
+                    None,
+                )?),
+                Arc::new(LargeListViewArray::try_new(
+                    field,
+                    vec![0, 0, BACKING_ROWS as i64 - 1].into(),
+                    vec![1, BACKING_ROWS as i64, 1].into(),
+                    values,
+                    None,
+                )?),
+            ];
+            for view in views {
+                let nulls = Some(vec![true, false, true].into());
+                let nullable_view = arrow::array::make_array(
+                    view.to_data().into_builder().nulls(nulls.clone()).build()?,
+                );
+                let structure: ArrayRef = Arc::new(StructArray::try_new(
+                    vec![Field::new("view", view.data_type().clone(), true)].into(),
+                    vec![view],
+                    nulls,
+                )?);
+                let list: ArrayRef = Arc::new(ListArray::try_new(
+                    Arc::new(Field::new("item", structure.data_type().clone(), true)),
+                    OffsetBuffer::from_repeated_length(1, 3),
+                    structure.clone(),
+                    None,
+                )?);
+                let fixed: ArrayRef = Arc::new(FixedSizeListArray::try_new_with_length(
+                    Arc::new(Field::new("item", structure.data_type().clone(), true)),
+                    1,
+                    structure.clone(),
+                    None,
+                    3,
+                )?);
+                let large_list = arrow::compute::cast(
+                    list.as_ref(),
+                    &DataType::LargeList(Arc::new(Field::new(
+                        "item",
+                        structure.data_type().clone(),
+                        true,
+                    ))),
+                )?;
+                for (input, live_children) in [
+                    (nullable_view, 2),
+                    (structure, 2),
+                    (list, 2),
+                    (large_list, 2),
+                    (fixed.slice(1, 2), 1),
+                ] {
+                    let rows = input.len();
+                    let packed =
+                        take_sort_values(&input, &UInt64Array::from_iter_values(0..rows as u64))?;
+                    assert!(packed.get_array_memory_size() < 4096, "{packed:?}");
+                    let mut leaf = &packed;
+                    loop {
+                        match leaf.data_type() {
+                            DataType::Struct(_) => leaf = leaf.as_struct().column(0),
+                            DataType::LargeList(_) => leaf = leaf.as_list::<i64>().values(),
+                            _ => break,
+                        }
+                    }
+                    assert_eq!(leaf.len(), live_children);
+                    let encoded = encode(ColumnarValue::Array(input))?.into_array(rows)?;
+                    assert!(encoded.as_binary::<i32>().value_data().len() < 4096);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn sliced_nested_dictionaries_visit_only_selected_values() -> Result<()> {
+        use arrow::datatypes::Int32Type;
+
+        const BACKING_ROWS: usize = 1_000_000;
+        let values: ArrayRef = Arc::new(Int32Array::from_iter_values(0..BACKING_ROWS as i32));
+        let views: ArrayRef = Arc::new(LargeListViewArray::try_new(
+            Arc::new(Field::new("item", DataType::Int32, true)),
+            (0..BACKING_ROWS as i64).collect::<Vec<_>>().into(),
+            (0..BACKING_ROWS)
+                .map(|index| {
+                    if index == 1 {
+                        BACKING_ROWS as i64 - 1
+                    } else {
+                        1
+                    }
+                })
+                .collect::<Vec<_>>()
+                .into(),
+            values,
+            None,
+        )?);
+        let dictionary: ArrayRef = Arc::new(DictionaryArray::<Int32Type>::try_new(
+            Int32Array::from_iter_values(0..BACKING_ROWS as i32),
+            views,
+        )?);
+        let structures: ArrayRef = Arc::new(StructArray::try_new(
+            vec![Field::new(
+                "dictionary",
+                dictionary.data_type().clone(),
+                true,
+            )]
+            .into(),
+            vec![dictionary],
+            None,
+        )?);
+        let dictionary: ArrayRef = Arc::new(DictionaryArray::<Int32Type>::try_new(
+            Int32Array::from(vec![
+                Some(1),
+                Some(0),
+                Some(BACKING_ROWS as i32 - 1),
+                None,
+                Some(1),
+            ]),
+            structures,
+        )?);
+        let dictionary = dictionary.slice(1, 3);
+        let packed = take_sort_values(&dictionary, &UInt64Array::from_iter_values(0..3))?;
+        assert!(packed.get_array_memory_size() < 4096);
+        let lists = packed.as_struct().column(0).as_list::<i64>();
+        assert_eq!(
+            lists.values().as_primitive::<Int32Type>().values().as_ref(),
+            &[0, BACKING_ROWS as i32 - 1]
+        );
+        assert_eq!(lists.value_offsets(), &[0, 1, 2, 2]);
+        assert!(packed.is_null(2));
+        let encoded = encode(ColumnarValue::Array(dictionary))?.into_array(3)?;
+        assert!(encoded.as_binary::<i32>().value_data().len() < 4096);
+        assert!(encoded.is_null(2));
+        Ok(())
+    }
+
+    #[test]
+    fn floating_dictionary_keys_normalize_after_selection() -> Result<()> {
+        use arrow::array::Float64Array;
+        use arrow::datatypes::Float64Type;
+
+        let values: ArrayRef = Arc::new(Float64Array::from(vec![
+            -0.0,
+            0.0,
+            f64::from_bits(0xfff8000000004321),
+            f64::from_bits(0x7ff8000000001234),
+        ]));
+        let dictionary: ArrayRef = Arc::new(DictionaryArray::<Int8Type>::try_new(
+            Int8Array::from(vec![0, 1, 2, 3]),
+            values.clone(),
+        )?);
+        let structure: ArrayRef = Arc::new(StructArray::try_new(
+            vec![Field::new("value", dictionary.data_type().clone(), true)].into(),
+            vec![dictionary],
+            None,
+        )?);
+        let encoded = encode(ColumnarValue::Array(structure))?.into_array(4)?;
+        let encoded = encoded.as_binary::<i32>();
+        assert_eq!(encoded.value(0), encoded.value(1));
+        assert_eq!(encoded.value(2), encoded.value(3));
+        let values = values.as_primitive::<Float64Type>();
+        assert_eq!(values.value(0).to_bits(), (-0.0_f64).to_bits());
+        assert_eq!(values.value(2).to_bits(), 0xfff8000000004321);
         Ok(())
     }
 }

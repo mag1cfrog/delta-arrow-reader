@@ -1276,6 +1276,22 @@ expectations use equal-key groups from the same independently recorded positions
 Separate controls retain native SQL ordering, evaluate every computed key child,
 and reject numeric RANGE offsets on nested keys.
 
+`nested-float-ordering-spark.jsonl` adds 64 independent observations over eight
+FLOAT/DOUBLE providers with the same four nested shapes. They contain signed
+zeros, multiple signed NaN payloads, infinities and NULL containers/children.
+`nested_float_ordering.rs` compares full ROW_NUMBER, RANK, DENSE_RANK and RANGE
+peer results in both ANSI modes at batch sizes 1 and 32. Ordinary ORDER BY uses
+the recorded positions; both query and window projections retain every original
+floating bit pattern, checked against the recorded input payloads.
+
+Sort-key unit tests check packing before normalization and row conversion. Two
+tiny visible rows select distant values in million-element ListView and
+LargeListView backing arrays. NULL view ranges and NULL parents suppress hidden
+children. Nested dictionaries select only the values referenced by a tiny slice.
+The assertions bound packed storage, live leaf counts and final key bytes rather
+than relying on timing or process memory measurements. Dictionary floating keys
+also verify normalization after selection without changing grouping rules.
+
 `nested-window-frames-spark.jsonl` retains the complete original 600-reference
 capture without changing its expected rows or fields. Its 30 integer/string
 providers add scalar, all-NULL and empty controls. Global and partitioned RANGE
@@ -1288,6 +1304,7 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 
 ```sh
 python tests/fixtures/capture_nested_ordering_spark.py
+python tests/fixtures/capture_nested_float_ordering_spark.py
 python tests/fixtures/capture_nested_window_frames_spark.py
-cargo test --locked --workspace --test nested_ordering --test nested_window_frames
+cargo test --locked --workspace --test nested_ordering --test nested_float_ordering --test nested_window_frames
 ```
