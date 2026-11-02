@@ -2,10 +2,11 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use arrow::datatypes::{DataType, Schema};
+use arrow::array::AsArray;
+use arrow::datatypes::{DataType, Int32Type, Int64Type, Schema};
 use datafusion::common::ScalarValue;
 use datafusion::execution::SessionStateBuilder;
-use datafusion::physical_plan::collect;
+use datafusion::physical_plan::{collect, collect_partitioned};
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
@@ -272,5 +273,176 @@ async fn ordinary_order_preserves_metadata_and_native_ordering() -> TestResult {
             .iter()
             .all(|batch| batch.column(0).data_type() == expected[0].column(0).data_type())
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn nested_sort_keys_are_typed_after_grouping_and_hidden_column_rebasing() -> TestResult {
+    let records = reference_cases()?;
+    let session = session(1);
+    register_recorded_inputs(&session, &records[0], 1)?;
+    let expected = vec![
+        (None, 0, 1),
+        (Some(vec![]), 0, 1),
+        (Some(vec![None]), 0, 1),
+        (Some(vec![None, None]), 0, 2),
+        (Some(vec![Some(-3), None]), 0, 1),
+        (Some(vec![Some(0), None]), 0, 2),
+        (Some(vec![Some(2), None]), 0, 2),
+        (None, 1, 10),
+    ];
+    for ansi_mode in [true, false] {
+        for order in [
+            "grouping_id(),k ASC NULLS FIRST",
+            "NAMED_STRUCT('gid',grouping_id(),'value',k) ASC NULLS LAST",
+        ] {
+            let sql = format!(
+                "SELECT k,grouping_id() AS gid,COUNT(*) AS n,ROW_NUMBER() OVER (ORDER BY {order}) AS position FROM integer_array_mixed GROUP BY ROLLUP(k) HAVING COUNT(*)>0 ORDER BY position"
+            );
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let batches = collect(
+                query.create_physical_plan(&session).await?,
+                session.task_ctx(),
+            )
+            .await?;
+            let mut actual = Vec::new();
+            for batch in batches {
+                for row in 0..batch.num_rows() {
+                    let key = if batch.column(0).is_null(row) {
+                        None
+                    } else {
+                        Some(
+                            batch
+                                .column(0)
+                                .as_list::<i32>()
+                                .value(row)
+                                .as_primitive::<Int32Type>()
+                                .iter()
+                                .collect::<Vec<_>>(),
+                        )
+                    };
+                    actual.push((
+                        key,
+                        batch.column(1).as_primitive::<Int64Type>().value(row),
+                        batch.column(2).as_primitive::<Int64Type>().value(row),
+                    ));
+                    assert_eq!(
+                        batch.column(3).as_primitive::<Int32Type>().value(row) as usize,
+                        actual.len(),
+                        "{sql}"
+                    );
+                }
+            }
+            assert_eq!(actual, expected, "{sql}");
+        }
+        for clause in ["ORDER BY", "SORT BY"] {
+            for order in [
+                "grouping_id(),k ASC NULLS FIRST,n",
+                "NAMED_STRUCT('gid',grouping_id(),'value',k) ASC NULLS LAST,n",
+            ] {
+                let sql = format!(
+                    "SELECT k,grouping_id() AS gid,COUNT(*) AS n FROM integer_array_mixed GROUP BY ROLLUP(k) HAVING COUNT(*)>0 {clause} {order}"
+                );
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
+                let physical = query.create_physical_plan(&session).await?;
+                let mut positions = Vec::new();
+                for partition in collect_partitioned(physical, session.task_ctx()).await? {
+                    let mut prior = None;
+                    for batch in partition {
+                        for row in 0..batch.num_rows() {
+                            let key = if batch.column(0).is_null(row) {
+                                None
+                            } else {
+                                Some(
+                                    batch
+                                        .column(0)
+                                        .as_list::<i32>()
+                                        .value(row)
+                                        .as_primitive::<Int32Type>()
+                                        .iter()
+                                        .collect::<Vec<_>>(),
+                                )
+                            };
+                            let actual = (
+                                key,
+                                batch.column(1).as_primitive::<Int64Type>().value(row),
+                                batch.column(2).as_primitive::<Int64Type>().value(row),
+                            );
+                            let position = expected
+                                .iter()
+                                .position(|row| row == &actual)
+                                .ok_or("unexpected grouping row")?;
+                            assert!(prior.is_none_or(|prior| prior < position), "{sql}");
+                            prior = Some(position);
+                            positions.push(position);
+                        }
+                    }
+                }
+                if clause == "SORT BY" {
+                    positions.sort();
+                }
+                assert_eq!(positions, (0..expected.len()).collect::<Vec<_>>(), "{sql}");
+            }
+            let reference = records
+                .iter()
+                .find(|case| {
+                    case["id"] == "integer_array_mixed_order_1" && case["ansi"] == ansi_mode
+                })
+                .ok_or("missing hidden-key reference")?;
+            let sql = format!("SELECT id FROM integer_array_mixed {clause} k ASC NULLS LAST,id");
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(physical.schema().fields().len(), 1);
+            let mut positions = Vec::new();
+            for partition in collect_partitioned(physical, session.task_ctx()).await? {
+                let mut prior = None;
+                for batch in partition {
+                    for id in batch.column(0).as_primitive::<Int32Type>().values() {
+                        let reference = reference["expected"]["rows"]
+                            .as_array()
+                            .ok_or("missing rows")?
+                            .iter()
+                            .find(|row| row[0] == id.to_string())
+                            .ok_or("unexpected ID")?;
+                        let position = reference[2]
+                            .as_str()
+                            .ok_or("missing position")?
+                            .parse::<usize>()?;
+                        assert!(prior.is_none_or(|prior| prior < position), "{sql}");
+                        prior = Some(position);
+                        positions.push(position);
+                    }
+                }
+            }
+            if clause == "SORT BY" {
+                positions.sort();
+            }
+            assert_eq!(positions, (1..=10).collect::<Vec<_>>(), "{sql}");
+        }
+    }
     Ok(())
 }

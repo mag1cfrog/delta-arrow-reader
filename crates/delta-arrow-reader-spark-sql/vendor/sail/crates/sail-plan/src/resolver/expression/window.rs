@@ -13,7 +13,6 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{FunctionContextInput, WinFunctionInput};
-use crate::function::sort_keys::spark_sort_key;
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -151,13 +150,6 @@ impl PlanResolver<'_> {
                     }
                     None => None,
                 };
-                let sorts = sorts
-                    .into_iter()
-                    .map(|mut sort| {
-                        sort.expr = spark_sort_key(sort.expr, schema)?;
-                        Ok(sort)
-                    })
-                    .collect::<datafusion_common::Result<Vec<_>>>()?;
                 let input = WinFunctionInput {
                     arguments,
                     partition_by,

@@ -16,6 +16,7 @@ use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::RequiredSortNode;
 
 use crate::error::PlanResult;
+use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 use crate::resolver::tree::{PlanRewriter, empty_logical_plan};
@@ -78,7 +79,10 @@ impl TreeNodeRewriter for WindowRewriter<'_> {
 
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {
         match node {
-            Expr::WindowFunction(function) => {
+            Expr::WindowFunction(mut function) => {
+                for sort in &mut function.params.order_by {
+                    sort.expr = spark_sort_key(sort.expr.clone(), self.plan.schema())?;
+                }
                 let requires_input_order =
                     Self::requires_input_order(&function, self.plan.schema())
                         .map_err(|error| DataFusionError::External(Box::new(error)))?;

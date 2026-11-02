@@ -1274,7 +1274,10 @@ choices remain in the fixture. These queries contain no RANGE frames.
 positions, retaining original projected keys and metadata. RANK and DENSE_RANK
 expectations use equal-key groups from the same independently recorded positions.
 Separate controls retain native SQL ordering, evaluate every computed key child,
-and reject numeric RANGE offsets on nested keys.
+and reject numeric RANGE offsets on nested keys. Grouping-ID placeholders are
+rewritten before sort-key typing, including inside computed nested keys and
+window ordering. Global and partition-local sorts also retain keys omitted from
+the output projection.
 
 `nested-float-ordering-spark.jsonl` adds 64 independent observations over eight
 FLOAT/DOUBLE providers with the same four nested shapes. They contain signed
