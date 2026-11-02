@@ -33,7 +33,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let name = name.into_iter().map(|x| x.into()).collect::<Vec<String>>();
-        let named_source = matches!(
+        let direct_alias_source = matches!(
             &expr,
             spec::Expr::Alias { .. }
                 | spec::Expr::Literal(_)
@@ -55,7 +55,7 @@ impl PlanResolver<'_> {
                     "ARROW:extension:name" | "ARROW:extension:metadata"
                 )
             });
-        } else if !named_source && inherits_alias_metadata(&named_expr.expr) {
+        } else if !direct_alias_source && inherits_alias_metadata(&named_expr.expr) {
             // Computed aliases regain source metadata only after optimization.
             named_expr.expr = drop_inherited_column_metadata_for_analysis(named_expr.expr);
         }
