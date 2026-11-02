@@ -149,10 +149,18 @@ ordering replay now passes all 228 references at both batch sizes, for 456
 comparisons. Its 204 scalar and 24 grouped-extrema references preserve every
 byte of the original capture records. The original MAX/DESC/LIMIT and native heap
 eligibility controls, statistics tests and native constant-group checks all pass.
-The manual cost test also passes with 16 baseline/candidate observations; the
-comparison is retained in `extrema-integrated-cost-comparison.json` without a
-timing acceptance threshold. Full workspace validation and final review remain
-pending after rebasing onto the latest staging prerequisites.
+The manual cost test passes with 16 baseline/candidate observations. Ordinary
+frontend aggregates cost 13 to 53 microseconds more than baseline; narrow and
+wide windows take about 20% less time. This is a small sample without a timing
+acceptance threshold, retained in `extrema-integrated-cost-comparison.json`.
+
+Full Linux workspace validation at `bb51b094` passes 593 tests across 77 suites
+with zero failures and three ignored tests: two inherited doctests and the manual
+cost test already run separately. The complete replay retains all 456 scalar
+ordering comparisons and 544 extrema comparisons, including the eight explicit
+#710 marker records. Clippy passes. The sole reported formatting difference in
+the scalar ordering test has been corrected without changing its logic. Final
+review, staging PR merge and issue closure remain pending.
 
 PR #759 merged the #752 ordering prerequisite at `d68c686f`. Its worktree,
 local/remote branches and temporary posting files are removed. Issue #752 remains

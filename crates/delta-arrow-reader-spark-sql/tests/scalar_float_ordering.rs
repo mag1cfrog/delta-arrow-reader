@@ -25,10 +25,11 @@ fn reference_cases() -> TestResult<Vec<Value>> {
         .lines()
         .map(serde_json::from_str)
         .collect::<Result<_, _>>()?;
-    let mut grouped: Vec<Value> = include_str!("fixtures/scalar-float-grouped-ordering-spark.jsonl")
-        .lines()
-        .map(serde_json::from_str)
-        .collect::<Result<_, _>>()?;
+    let mut grouped: Vec<Value> =
+        include_str!("fixtures/scalar-float-grouped-ordering-spark.jsonl")
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<_, _>>()?;
     assert_eq!(records.len() - 1, 204);
     assert_eq!(grouped.len() - 1, 24);
     assert_eq!(records[0], grouped.remove(0));
