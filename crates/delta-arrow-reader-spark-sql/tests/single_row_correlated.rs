@@ -6,6 +6,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+use arrow::array::Array;
 use arrow::datatypes::DataType;
 use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::execution::SessionStateBuilder;
@@ -15,7 +16,7 @@ use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use sail_plan::expression_errors::{PreserveSparkExpressionErrors, SparkSqlErrorSemantics};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
@@ -208,6 +209,198 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
         assert_eq!(checked, 24);
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn single_row_scalars_preserve_analyzed_nullability() -> TestResult {
+    let records = include_str!("fixtures/single-row-correlated-nonnullable-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len(), 9);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: "UTC".into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let mut state = session.state();
+            state
+                .config_mut()
+                .options_mut()
+                .extensions
+                .insert(SparkSqlErrorSemantics::default());
+            let analyzed = state.analyzer().execute_and_check(
+                query.logical_plan.clone(),
+                state.config_options(),
+                |_, _| {},
+            )?;
+            for schema in [query.logical_plan.schema(), analyzed.schema()] {
+                let fields = schema
+                    .fields()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field)| {
+                        assert_eq!(field.data_type(), &DataType::Int32);
+                        json!({"name":query.column_names[index], "type":"integer",
+                        "nullable":field.is_nullable(), "metadata":field.metadata()})
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    json!({"type":"struct", "fields":fields}),
+                    case["expected"]["schema"],
+                    "{} batch={batch_size}",
+                    case["id"]
+                );
+            }
+            let physical = query.create_physical_plan(&session).await?;
+            let physical_schema = physical.schema();
+            assert_eq!(
+                physical_schema.fields().len(),
+                analyzed.schema().fields().len()
+            );
+            for (index, field) in physical_schema.fields().iter().enumerate() {
+                let declared = analyzed.schema().field(index);
+                assert_eq!(field.name(), &query.column_names[index]);
+                assert_eq!(field.data_type(), declared.data_type());
+                assert_eq!(field.metadata(), declared.metadata());
+                // The one-row proof permits narrower physical nullability.
+                assert!(!field.is_nullable() || declared.is_nullable());
+            }
+            let mut rows = Vec::new();
+            for batch in collect(physical, session.task_ctx()).await? {
+                for row in 0..batch.num_rows() {
+                    rows.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .enumerate()
+                            .map(|(index, column)| {
+                                if column.is_null(row) {
+                                    assert!(analyzed.schema().field(index).is_nullable());
+                                    assert!(physical_schema.field(index).is_nullable());
+                                    Ok(Value::Null)
+                                } else {
+                                    arrow::util::display::array_value_to_string(
+                                        column.as_ref(),
+                                        row,
+                                    )
+                                    .map(Value::String)
+                                }
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+            }
+            rows.sort_by_key(|row| json!(row).to_string());
+            assert_eq!(
+                json!(rows),
+                case["expected"]["rows"],
+                "{} batch={batch_size}",
+                case["id"]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn scalar_results_preserve_arrow_extensions_and_native_metadata() -> TestResult {
+    use arrow::array::{Int32Array, StringArray};
+    use arrow::datatypes::{Field, Schema};
+    use arrow::record_batch::RecordBatch;
+
+    let extensions = [
+        ("ARROW:extension:name".into(), "arrow.json".into()),
+        ("ARROW:extension:metadata".into(), "".into()),
+    ]
+    .into_iter()
+    .collect::<std::collections::HashMap<String, String>>();
+    let mut inherited = extensions.clone();
+    inherited.insert("origin".into(), "outer".into());
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("value", DataType::Utf8, true).with_metadata(inherited.clone()),
+        ])),
+        vec![
+            Arc::new(Int32Array::from(vec![0, 1, 2])),
+            Arc::new(StringArray::from(vec![
+                Some("{\"n\":1}"),
+                None,
+                Some("null"),
+            ])),
+        ],
+    )?;
+    let configured = session(32);
+    let native = SessionContext::new();
+    for context in [&configured, &native] {
+        context.register_batch("extension_values", batch.clone())?;
+    }
+    for ansi_mode in [true, false] {
+        for suffix in ["", ",CAST(7 AS INT) AS incidental"] {
+            let sql = format!(
+                "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value{suffix} FROM extension_values p ORDER BY p.id"
+            );
+            let query = plan_query(
+                &configured,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let physical = query.create_physical_plan(&configured).await?;
+            for (index, expected) in [&inherited, &extensions].into_iter().enumerate() {
+                let logical = query.logical_plan.schema().field(index);
+                let field = physical.schema().field(index).clone();
+                assert_eq!(logical.data_type(), &DataType::Utf8);
+                assert!(logical.is_nullable());
+                assert_eq!(logical.metadata(), expected);
+                assert_eq!(field.name(), &query.column_names[index]);
+                assert_eq!(field.data_type(), logical.data_type());
+                assert_eq!(field.is_nullable(), logical.is_nullable());
+                assert_eq!(field.metadata(), logical.metadata());
+            }
+            let mut values = Vec::new();
+            for batch in collect(physical, configured.task_ctx()).await? {
+                assert_eq!(batch.column(0), batch.column(1));
+                values.extend(
+                    batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .ok_or("expected JSON strings")?
+                        .iter()
+                        .map(|value| value.map(str::to_owned)),
+                );
+            }
+            assert_eq!(
+                values,
+                vec![Some("{\"n\":1}".into()), None, Some("null".into())]
+            );
+        }
+    }
+    let sql = "SELECT value,(SELECT value FROM extension_values WHERE id=0) AS scalar_value FROM extension_values ORDER BY id";
+    let expected = native.sql(sql).await?.collect().await?;
+    let actual = configured.sql(sql).await?.collect().await?;
+    assert_eq!(actual, expected);
+    for batch in actual {
+        assert_eq!(batch.schema().field(0).metadata(), &inherited);
+        assert_eq!(batch.schema().field(1).metadata(), &inherited);
+    }
     Ok(())
 }
 

@@ -1,14 +1,16 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_KEY};
+use datafusion::arrow::datatypes::{DataType, FieldRef, TimeUnit};
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion::prelude::SessionContext;
 use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams, WindowFunctionParams};
 use datafusion_expr::{
-    AggregateUDF, BinaryExpr, ExprSchemable, Operator, ScalarUDF, ScalarUDFImpl, WindowFrame,
+    AggregateUDF, BinaryExpr, ColumnarValue, ExprSchemable, Operator, ReturnFieldArgs,
+    ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility, WindowFrame,
     WindowFunctionDefinition, WindowUDF, cast, expr, lit,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -26,6 +28,52 @@ use crate::function::comparison::{
     temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+
+pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Expr {
+    ScalarUDF::from(DropInheritedColumnMetadata).call(vec![expression])
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct DropInheritedColumnMetadata;
+
+impl ScalarUDFImpl for DropInheritedColumnMetadata {
+    fn name(&self) -> &str {
+        "drop_inherited_column_metadata"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> =
+            std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+        let [data_type] = args else {
+            return datafusion_common::plan_err!("expected one result value");
+        };
+        Ok(data_type.clone())
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        let mut field = args.arg_fields[0].as_ref().clone().with_name(self.name());
+        // Spark drops user metadata on derived values; Arrow extensions describe their type.
+        field.metadata_mut().retain(|key, _| {
+            matches!(
+                key.as_str(),
+                EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
+            )
+        });
+        Ok(Arc::new(field))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        Ok(value)
+    }
+}
 
 pub struct FunctionContextInput<'a> {
     /// The names of function arguments.

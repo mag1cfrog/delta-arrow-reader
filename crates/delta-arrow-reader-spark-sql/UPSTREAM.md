@@ -171,6 +171,10 @@ planning or enable additional cast/predicate preparation. Real inner relations
 and volatile scalar results retain their separate execution boundary under
 #140. The [single-row references](tests/fixtures/README.md#guaranteed-single-row-correlated-scalars)
 distinguish exact result comparisons from those retained boundaries.
+Spark scalar-result construction removes inherited user metadata before either
+lowering route, using the same adapter as value-returning windows. Direct
+projections keep their source metadata, and Arrow extension metadata remains
+part of the result type. Native DataFusion scalar construction is unchanged.
 VALUES column declarations use the coerced expressions' nullability. Projected
 IN can reuse its nonnullable match result when both operands are nonnullable;
 nullable operands retain the existing three-valued comparison.

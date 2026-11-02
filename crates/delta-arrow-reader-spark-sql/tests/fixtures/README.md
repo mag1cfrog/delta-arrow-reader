@@ -997,6 +997,21 @@ types, nullability and metadata for 152 references at batch sizes 1 and 32.
 This includes zero/one/multiple-row uncorrelated inner controls and projected
 EXISTS. Required cardinality errors must report the cardinality failure.
 
+`single-row-correlated-metadata-spark.jsonl` adds 24 exact references with
+nonempty source-column metadata and volatile sibling evaluation counts. Direct
+projections retain that metadata; scalar results remove inherited user metadata.
+The scalar-result construction and value-window factory share the existing
+metadata-removal adapter, which preserves Arrow extension metadata, data types,
+NULLs and values. Scalar extension/native controls and the existing window
+metadata tests protect both consumers.
+
+`single-row-correlated-nonnullable-spark.jsonl` adds eight references with
+nonnullable source fields. Rust compares complete resolved and analyzed schemas
+with Spark and checks exact rows at both batch sizes. Optimized and physical
+scalar fields may narrow their nullability after the single-row proof. Their
+types, metadata and returned NULLs must still fit the analyzed declaration; the
+test does not replace their fields with expected schemas.
+
 The other references record explicit boundaries. Eighteen correlated queries
 over real inner relations and 24 queries with a volatile scalar result retain
 their scalar plans during preparation; this checks that the one-row rewrite
@@ -1022,7 +1037,10 @@ fresh output path to preserve the committed evidence:
 ```sh
 single_row_capture=$(mktemp -d)
 python tests/fixtures/capture_single_row_correlated_spark.py "$single_row_capture/single-row-correlated-spark.jsonl"
+python tests/fixtures/capture_single_row_correlated_metadata_spark.py "$single_row_capture/single-row-correlated-metadata-spark.jsonl"
+python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$single_row_capture/single-row-correlated-nonnullable-spark.jsonl"
 cargo test --workspace --test single_row_correlated
+cargo test --workspace --test window_metadata
 ```
 
 ## COUNT_IF aggregate filters
