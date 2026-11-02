@@ -32,6 +32,15 @@ def queries():
             alias = " AS value" if explicit else ""
             yield f"{table}_{'explicit' if explicit else 'generated'}", (
                 f"SELECT p.id,(SELECT p.id){alias} FROM {table} p")
+    for name, expression in [
+        ("outer_order_ab", "p.a + p.b"),
+        ("outer_order_ba", "p.b + p.a"),
+        ("outer_repeated", "p.b + p.a + p.b"),
+        ("outer_case", "p.A + p.b"),
+    ]:
+        yield name, f"SELECT (SELECT {expression}) FROM VALUES (1,2) p(a,B)"
+    yield "outer_duplicate_names", (
+        "SELECT (SELECT l.id + r.id) FROM scalar_inputs l CROSS JOIN scalar_inputs r")
     yield "multiple_rows", "SELECT (SELECT id FROM scalar_inputs)"
     yield "multiple_columns", "SELECT (SELECT 1,2)"
     yield "fallible_scalar", "SELECT (SELECT CAST('bad' AS INT))"
@@ -66,8 +75,8 @@ def main():
             for name, sql in queries():
                 records.append({"id": name, "ansi": ansi, "sql": sql,
                                 "expected": capture(spark, sql)})
-        assert len(records) == 55
-        assert len({(r["id"], r["ansi"]) for r in records[1:]}) == 54
+        assert len(records) == 65
+        assert len({(r["id"], r["ansi"]) for r in records[1:]}) == 64
         with args.output.open("x") as output:
             output.write("".join(json.dumps(record, separators=(",", ":")) + "\n"
                                  for record in records))
