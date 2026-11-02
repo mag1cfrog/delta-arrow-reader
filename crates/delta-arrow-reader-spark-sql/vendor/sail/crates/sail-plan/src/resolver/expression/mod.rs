@@ -32,6 +32,8 @@ pub(super) struct NamedExpr {
     /// A list of names may be present for multi-expression (a temporary expression
     /// to be expanded into multiple ones in the projection).
     pub name: Vec<String>,
+    /// Display inside another expression, when it differs from the projection name.
+    pub expression_name: Option<String>,
     pub expr: expr::Expr,
     pub metadata: Vec<(String, String)>,
 }
@@ -62,6 +64,7 @@ impl NamedExpr {
         };
         Self {
             name,
+            expression_name: None,
             expr,
             metadata,
         }
@@ -71,6 +74,7 @@ impl NamedExpr {
         match expr {
             expr::Expr::Alias(alias) => Ok(Self {
                 name: vec![alias.name],
+                expression_name: None,
                 expr: *alias.expr,
                 metadata: alias
                     .metadata
@@ -86,6 +90,18 @@ impl NamedExpr {
     pub fn with_metadata(mut self, metadata: Vec<(String, String)>) -> Self {
         self.metadata = metadata;
         self
+    }
+
+    pub fn with_expression_name(mut self, name: String) -> Self {
+        self.expression_name = Some(name);
+        self
+    }
+
+    pub fn expression_name(&self) -> PlanResult<String> {
+        match &self.expression_name {
+            Some(name) => Ok(name.clone()),
+            None => Ok(self.name.clone().one()?),
+        }
     }
 }
 
@@ -374,11 +390,11 @@ impl PlanResolver<'_> {
         let mut names: Vec<String> = Vec::with_capacity(expressions.len());
         let mut exprs: Vec<expr::Expr> = Vec::with_capacity(expressions.len());
         for expression in expressions {
-            let NamedExpr { name, expr, .. } = self
+            let named = self
                 .resolve_named_expression(expression, schema, state)
                 .await?;
-            names.push(name.one()?);
-            exprs.push(expr);
+            names.push(named.expression_name()?);
+            exprs.push(named.expr);
         }
         Ok((names, exprs))
     }
@@ -449,6 +465,7 @@ mod tests {
             .await?,
             NamedExpr {
                 name: vec!["(NOT true)".to_string()],
+                expression_name: None,
                 expr: Expr::Not(Box::new(Expr::Literal(
                     ScalarValue::Boolean(Some(true)),
                     None
@@ -498,6 +515,7 @@ mod tests {
             .await?,
             NamedExpr {
                 name: vec!["c".to_string()],
+                expression_name: None,
                 expr: Expr::Alias(Alias {
                     expr: Box::new(Expr::Alias(Alias {
                         expr: Box::new(Expr::BinaryExpr(BinaryExpr {

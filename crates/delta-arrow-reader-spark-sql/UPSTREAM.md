@@ -378,6 +378,13 @@ and union aggregates expose non-null binary results. Scalar estimation and union
 inherit their inputs' nullability. The [HLL references](tests/fixtures/README.md#empty-hll-sketches)
 check empty-state configuration, schemas, FILTER and downstream consumers.
 
+Resolved nested fields carry separate projection and expression display names.
+Direct dot projections keep the leaf name; enclosing expressions keep the field
+path without its relation qualifier. Function arguments, casts and extraction
+use the display name while projections retain their existing names and metadata.
+The [field-name references](tests/fixtures/README.md#nested-field-expression-names)
+record remaining STRUCT schema, alias display and metadata differences separately.
+
 ### Derived window metadata
 
 Spark value-returning windows remove inherited top-level user metadata from
