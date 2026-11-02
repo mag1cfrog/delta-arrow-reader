@@ -4,8 +4,10 @@ use std::cmp::Ordering;
 use std::mem::{size_of, size_of_val};
 use std::sync::Arc;
 
-use arrow::array::{Array, ArrayRef, ArrowNativeTypeOp, AsArray, BooleanArray, PrimitiveArray};
-use arrow::buffer::{BooleanBufferBuilder, NullBuffer};
+use arrow::array::{
+    Array, ArrayRef, ArrowNativeTypeOp, AsArray, BooleanArray, BooleanBufferBuilder, PrimitiveArray,
+};
+use arrow::buffer::NullBuffer;
 use arrow::datatypes::{ArrowPrimitiveType, DataType, Float32Type, Float64Type};
 use datafusion::functions_aggregate::min_max::{self, MovingMin};
 use datafusion::physical_expr::expressions::Column;
