@@ -281,7 +281,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             has_null_sensitive_comparison,
         };
         let plan = if check_groups {
-            plan.transform_up_with_subqueries(prepare_foldable_groups)?
+            plan.transform_up_with_subqueries(|plan| prepare_foldable_groups(plan, options))?
                 .data
         } else {
             plan
@@ -638,8 +638,14 @@ impl datafusion_expr::ScalarUDFImpl for NullAfterSubqueries {
 
 // Keep foldable outputs available for live uses, but do not evaluate them
 // merely to form groups. A real key column preserves zero groups on empty input.
-fn prepare_foldable_groups(plan: LogicalPlan) -> Result<Transformed<LogicalPlan>> {
+fn prepare_foldable_groups(
+    plan: LogicalPlan,
+    options: &ConfigOptions,
+) -> Result<Transformed<LogicalPlan>> {
     use datafusion_expr::{Aggregate, Projection};
+    if options.extensions.get::<SparkSqlErrorSemantics>().is_none() {
+        return Ok(Transformed::no(plan));
+    }
     let LogicalPlan::Aggregate(aggregate) = plan else {
         return Ok(Transformed::no(plan));
     };
@@ -930,7 +936,9 @@ impl Prepare {
                         rewrite_expr(expr)
                     }
                 })?
-                .transform_data(prepare_foldable_groups)
+                .transform_data(|plan| {
+                    prepare_foldable_groups(plan, self.props.config_options.as_ref().unwrap())
+                })
             })?
             .data)
     }

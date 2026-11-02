@@ -151,6 +151,13 @@ exposes eligible one-sided filters before that simplification; outer/anti
 preservation rules remain with DataFusion. Its references and remaining
 differences are described in the [fixture notes](tests/fixtures/README.md#array-membership).
 
+Foldable group preparation requires the query-local Spark marker at both
+preparation call sites. Native SQL in a Spark-configured session retains DataFusion's
+constant-group elimination, including its aggregate kernels and required CAST
+errors, before and after Spark execution. The
+[native constant-group checks](tests/fixtures/README.md#native-constant-group-preservation)
+compare plans, complete schemas and original floating bits against a plain session.
+
 CASE, IF, COALESCE, IFNULL and NVL share Spark numeric result types with Decimal
 VALUES columns. Precision reduction preserves integral digits, so DECIMAL(38,20)
 and BIGINT share DECIMAL(38,18). Decimal/floating mixtures become DOUBLE;
