@@ -1,6 +1,6 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::functions::expr_fn;
 use datafusion_expr::{Expr, ScalarUDF, expr};
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -32,11 +32,39 @@ fn r#struct(input: ScalarFunctionInput) -> PlanResult<Expr> {
     }))
 }
 
+fn named_struct(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    if !input.arguments.len().is_multiple_of(2) {
+        return Err(PlanError::invalid(format!(
+            "named_struct requires an even number of arguments, got {} instead",
+            input.arguments.len()
+        )));
+    }
+    let field_names = input
+        .arguments
+        .iter()
+        .enumerate()
+        .step_by(2)
+        .map(|(index, argument)| {
+            argument
+                .as_literal()
+                .and_then(|value| value.try_as_str().flatten())
+                .map(str::to_owned)
+                .ok_or_else(|| {
+                    PlanError::invalid(format!(
+                        "named_struct requires {index}-th (0-indexed) field name as constant string"
+                    ))
+                })
+        })
+        .collect::<PlanResult<Vec<_>>>()?;
+    Ok(ScalarUDF::from(StructFunction::new(field_names))
+        .call(input.arguments.into_iter().skip(1).step_by(2).collect()))
+}
+
 pub(super) fn list_built_in_struct_functions() -> Vec<(&'static str, ScalarFunction)> {
     use crate::function::common::ScalarFunctionBuilder as F;
 
     vec![
-        ("named_struct", F::var_arg(expr_fn::named_struct)),
+        ("named_struct", F::custom(named_struct)),
         ("struct", F::custom(r#struct)),
     ]
 }
