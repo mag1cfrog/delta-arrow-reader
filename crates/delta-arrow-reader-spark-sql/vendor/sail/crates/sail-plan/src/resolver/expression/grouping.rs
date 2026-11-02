@@ -18,7 +18,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let (names, expr) = self
-            .resolve_expressions_and_names(rollup, schema, state)
+            .resolve_expression_arguments(rollup, schema, state)
             .await?;
         Ok(NamedExpr::new(
             names,
@@ -33,7 +33,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let (names, expr) = self
-            .resolve_expressions_and_names(cube, schema, state)
+            .resolve_expression_arguments(cube, schema, state)
             .await?;
         Ok(NamedExpr::new(
             names,
@@ -52,7 +52,7 @@ impl PlanResolver<'_> {
         for grouping_set in grouping_sets {
             let mut expr_set = vec![];
             let exprs = self
-                .resolve_named_expressions(grouping_set, schema, state)
+                .resolve_named_output_expressions(grouping_set, schema, state)
                 .await?;
             for NamedExpr { name, expr, .. } in exprs {
                 let name = name.one()?;

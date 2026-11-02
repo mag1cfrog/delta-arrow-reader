@@ -44,12 +44,16 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
+        let include_cast_in_name = state.config().include_cast_in_expression_name;
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = true;
         // CAST(expr AS VARIANT) → rewrite to SparkCastToVariant UDF
         // Must intercept before resolve_data_type converts Variant to Struct.
         if matches!(cast_to_type, spec::DataType::Variant) {
             let NamedExpr { expr, name, .. } =
                 self.resolve_named_expression(expr, schema, state).await?;
-            let name = if need_rename_cast(&expr) {
+            let name = if include_cast_in_name || need_rename_cast(&expr) {
                 let prefix = if is_try { "TRY_" } else { "" };
                 vec![format!("{}CAST({} AS VARIANT)", prefix, name.one()?)]
             } else {
@@ -78,7 +82,7 @@ impl PlanResolver<'_> {
         let expr_field = expr.to_field(schema)?.1;
         let expr_type = expr_field.data_type().clone();
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
-        let name = if need_rename_cast(&expr) {
+        let name = if include_cast_in_name || need_rename_cast(&expr) {
             let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
             vec![format!(
                 "{}CAST({} AS {})",
@@ -416,8 +420,6 @@ fn need_rename_cast(expr: &expr::Expr) -> bool {
         expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..) => {
             false
         }
-        expr::Expr::Cast(cast) => need_rename_cast(cast.expr.as_ref()),
-        expr::Expr::TryCast(try_cast) => need_rename_cast(try_cast.expr.as_ref()),
         _ => true,
     }
 }

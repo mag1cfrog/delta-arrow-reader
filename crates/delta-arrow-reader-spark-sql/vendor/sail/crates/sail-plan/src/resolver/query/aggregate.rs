@@ -92,7 +92,7 @@ impl PlanResolver<'_> {
             let projections = resolved_projections.iter().flatten().cloned().collect();
             let mut scope = state.enter_aggregate_scope(AggregateState::Grouping { projections });
             let state = scope.state();
-            self.resolve_named_expressions(grouping, schema, state)
+            self.resolve_named_output_expressions(grouping, schema, state)
                 .await?
         };
 
@@ -912,7 +912,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<ResolvedProjections> {
         if let Ok(resolved) = self
-            .resolve_named_expressions(projections.to_vec(), schema, state)
+            .resolve_named_output_expressions(projections.to_vec(), schema, state)
             .await
         {
             return Ok((resolved.into_iter().map(Some).collect(), vec![]));
@@ -921,10 +921,10 @@ impl PlanResolver<'_> {
         let mut deferred = vec![];
         for (index, projection) in projections.iter().enumerate() {
             match self
-                .resolve_named_expression(projection.clone(), schema, state)
+                .resolve_named_output_expressions(vec![projection.clone()], schema, state)
                 .await
             {
-                Ok(named) => resolved.push(Some(named)),
+                Ok(named) => resolved.push(Some(named.one()?)),
                 Err(_) => {
                     resolved.push(None);
                     deferred.push(index);
@@ -947,8 +947,13 @@ impl PlanResolver<'_> {
     ) -> PlanResult<Vec<NamedExpr>> {
         for index in deferred {
             resolved[index] = Some(
-                self.resolve_named_expression(projections[index].clone(), schema, state)
-                    .await?,
+                self.resolve_named_output_expressions(
+                    vec![projections[index].clone()],
+                    schema,
+                    state,
+                )
+                .await?
+                .one()?,
             );
         }
         resolved

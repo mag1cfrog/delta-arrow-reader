@@ -66,7 +66,7 @@ impl PlanResolver<'_> {
         let has_spec_lambda_argument = arguments.iter().any(is_spec_lambda_argument);
 
         let (argument_display_names, arguments) = if canonical_function_name == "struct" {
-            self.resolve_struct_expressions_and_names(arguments, schema, state)
+            self.resolve_struct_arguments(arguments, schema, state)
                 .await?
         } else if has_spec_lambda_argument && is_higher_order_function(&canonical_function_name) {
             self.resolve_higher_order_function_arguments(
@@ -77,7 +77,7 @@ impl PlanResolver<'_> {
             )
             .await?
         } else {
-            self.resolve_expressions_and_names(arguments, schema, state)
+            self.resolve_expression_arguments(arguments, schema, state)
                 .await?
         };
 
@@ -192,7 +192,7 @@ impl PlanResolver<'_> {
             };
 
         let name = SparkPlanFormatter.function_to_string(
-            &function_name,
+            &canonical_function_name,
             argument_display_names.iter().map(|x| x.as_str()).collect(),
             is_distinct,
         )?;
@@ -236,12 +236,15 @@ impl PlanResolver<'_> {
             .await
     }
 
-    async fn resolve_struct_expressions_and_names(
+    async fn resolve_struct_arguments(
         &self,
         expressions: Vec<spec::Expr>,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<(Vec<String>, Vec<expr::Expr>)> {
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = true;
         let mut names: Vec<String> = vec![];
         let mut exprs: Vec<expr::Expr> = vec![];
 

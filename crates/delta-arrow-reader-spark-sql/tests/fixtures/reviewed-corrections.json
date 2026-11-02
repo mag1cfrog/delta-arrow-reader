@@ -730,5 +730,137 @@
       true,
       false
     ]
+  },
+  "replay/existing-nonansi-zero-cases/46/float_nullifzero_nonfinite_true": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "0"
+      ],
+      [
+        "0",
+        "0"
+      ],
+      [
+        "1",
+        "0"
+      ]
+    ],
+    "output_names": [
+      "CAST(isnan(nullifzero(CAST(b AS FLOAT))) AS INT)",
+      "r"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/existing-nonansi-zero-cases/46/float_nullifzero_nonfinite_false": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "0"
+      ],
+      [
+        "0",
+        "0"
+      ],
+      [
+        "1",
+        "0"
+      ]
+    ],
+    "output_names": [
+      "CAST(isnan(nullifzero(CAST(b AS FLOAT))) AS INT)",
+      "r"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/existing-nonansi-zero-cases/102/double_nullifzero_nonfinite_true": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "0"
+      ],
+      [
+        "0",
+        "0"
+      ],
+      [
+        "1",
+        "0"
+      ]
+    ],
+    "output_names": [
+      "CAST(isnan(nullifzero(CAST(b AS DOUBLE))) AS INT)",
+      "r"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
+  },
+  "replay/existing-nonansi-zero-cases/102/double_nullifzero_nonfinite_false": {
+    "status": "ok",
+    "types": [
+      "Int32",
+      "Int32"
+    ],
+    "rows": [
+      [
+        "0",
+        "0"
+      ],
+      [
+        "0",
+        "0"
+      ],
+      [
+        "1",
+        "0"
+      ]
+    ],
+    "output_names": [
+      "CAST(isnan(nullifzero(CAST(b AS DOUBLE))) AS INT)",
+      "r"
+    ],
+    "logical_nullable": [
+      true,
+      false
+    ],
+    "physical_nullable": [
+      true,
+      false
+    ]
   }
 }

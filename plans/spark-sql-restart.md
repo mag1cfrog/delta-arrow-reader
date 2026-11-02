@@ -7,9 +7,41 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### S04 PIVOT names and floating keys
+
+#656 completed floating PIVOT equality in PR #709, merged at `791f5aeaf`.
+The 128 independent Spark observations pass 256 comparisons, including signed
+zero, NaN, multiple pivot columns, empty groups and unchanged aggregate inputs.
+Linux validation passed 515 tests with no failures and two inherited ignored
+doctests, plus Clippy and formatting. Clean-context Sol/high review completed.
+The observed numeric PivotFirst duplicate-value difference remains in #142.
+
+#708 repairs generated aggregate names through the shared expression resolver.
+Nested CASTs and SORT_ARRAY's default argument remain visible; builtin function
+names use their canonical casing. Explicit aliases, raw pivot values, struct
+field names and native DataFusion SQL retain their contracts. Review found an
+omitted CAST inside STRUCT and an output-name context leak in deferred grouped
+projections inside scalar subqueries. Both now use the appropriate argument or
+output resolver. Those helper names also distinguish their different roles.
+
+The expanded capture contains 270 Spark observations over PIVOT, ordinary
+projections, structs, a registered UDF and grouping callers. All 540 comparisons
+pass. Final Linux validation passes 517 tests with no failures and two inherited
+ignored doctests, plus root Clippy and formatting. Clean-context Sol/high review
+found no remaining actionable issue after the naming and scope repairs.
+Four historical NULLIFZERO corrections
+change only independently verified output names; their conservative nullability
+remains explicit. Ordinary SELECT's missing generated-alias metadata is tracked
+separately in #710 under S07. PIVOT metadata is compared exactly.
+The direct grouped struct-to-string CAST has a pre-existing conservative
+nullability difference, now tracked in #711 under S07. Its naming control uses
+COALESCE; the original direct CAST remains unaccepted for schema parity.
+Next complete #142's remaining aggregate/window coverage, retaining the numeric
+duplicate PivotFirst policy and complete window-label differences explicitly.
+
 ### S04 window FILTER integration
 
-The #697 candidate is restored on `48fc97d6` after #705 merged through PR #706.
+The #697 repair merged in PR #707 at `74b1f307`. It builds on #705 in PR #706.
 Its original 210 independent Spark records pass all 420 comparisons on the
 corrected array scalar and HLL runtime. Clean-context review added a wider frame
 to distinguish FIRST/LAST and found AVG/LISTAGG NULL shortcuts discarding FILTER
@@ -19,8 +51,8 @@ unfiltered controls are included. All 440 comparisons from the expanded
 two inherited ignored doctests, plus root Clippy and formatting. Clean-context
 Sol/high review found no remaining actionable issue after those repairs. The
 custom aggregate builder also forwards the existing input structure instead of
-repeating eight positional arguments. After integration, #656 is the next S04
-runtime repair before #142's remaining coverage work.
+repeating eight positional arguments. Remaining S04 work is recorded above and
+in #142's aggregate/window coverage requirements.
 
 Eight records retain both the original Spark outcome and a captured result with
 exactly one optimizer rule disabled. EliminateAggregateFilter causes
@@ -461,10 +493,10 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S01 | Reproducible independent Spark SQL crate | #113, #165 | Selected-source reconstruction, builds, repair regressions and independent review |
 | S02 | NULL and array semantics | #116, #150, #606, #608, #610, #612, #613, #669 | ARRAY_CONTAINS truth table; NULLIF equality; conditional admission/evaluation; collection-size modes |
 | S03 | Decimal and conditional input coercion | #141, #150, #605, #615, #616, #618, #619, #624, #621, #622, #623, #627, #629, #633, #635, #650, #659, #660, #663, #665 | VALUES Decimal/integer values and types; NULLIF result/comparison types; mixed CASE Decimal execution; retained non-temporal IFNULL/NVL/COALESCE coercion; mixed-temporal promotion, nanosecond precision, STRING temporal comparisons and local-NULL preparation |
-| S04 | Conditional aggregation and window contracts | #142, #656, #696, #697 | COUNT_IF aggregate FILTER, aggregate window FILTER, floating PIVOT signed-zero equality, then aggregation/window coverage |
+| S04 | Conditional aggregation and window contracts | #142, #656, #696, #697, #708 | COUNT_IF aggregate FILTER, aggregate window FILTER, floating PIVOT signed-zero equality, generated PIVOT names, then remaining aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
-| S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661 | Classify remaining schema/error differences; separately fix multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
+| S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661, #710, #711 | Classify remaining schema/error differences; separately fix generated-alias metadata, struct-to-string nullability, multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156, #666 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |

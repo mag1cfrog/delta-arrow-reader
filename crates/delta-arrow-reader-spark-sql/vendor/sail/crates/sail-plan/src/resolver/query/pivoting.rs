@@ -60,7 +60,7 @@ impl PlanResolver<'_> {
         };
 
         let aggregates = self
-            .resolve_named_expressions(aggregate, &schema, state)
+            .resolve_named_output_expressions(aggregate, &schema, state)
             .await?;
 
         // Spark allows aggregate expressions and pure literals, but rejects columns outside an
@@ -74,7 +74,7 @@ impl PlanResolver<'_> {
         // DataFrame API always sets the list, and an empty one means grouping by nothing.
         let grouping = match grouping {
             Some(grouping) => {
-                self.resolve_named_expressions(grouping, &schema, state)
+                self.resolve_named_output_expressions(grouping, &schema, state)
                     .await?
             }
             None => Self::implicit_pivot_grouping(&schema, &pivot_column, &aggregates, state)?,

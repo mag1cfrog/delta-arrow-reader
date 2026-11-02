@@ -2,15 +2,17 @@ use datafusion_common::DFSchemaRef;
 use datafusion_expr::{BinaryExpr, expr};
 use datafusion_expr_common::operator::Operator;
 use sail_common::spec;
+use sail_common_datafusion::utils::items::ItemTaker;
 
 use crate::error::PlanResult;
+use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{spark_binary_expr, spark_in_list};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
-    // TODO: Construct better names for the expression (e.g. a IN (b, c)) for all functions below.
+    // TODO: Format the remaining predicate names (e.g. a IN (b, c)).
 
     pub(super) async fn resolve_expression_in_list(
         &self,
@@ -86,10 +88,17 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
-        let expr = self.resolve_expression(expr, schema, state).await?;
+        let (names, expressions) = self
+            .resolve_expression_arguments(vec![expr], schema, state)
+            .await?;
+        let name = SparkPlanFormatter.function_to_string(
+            "isnull",
+            names.iter().map(String::as_str).collect(),
+            false,
+        )?;
         Ok(NamedExpr::new(
-            vec!["is_null".to_string()],
-            expr::Expr::IsNull(Box::new(expr)),
+            vec![name],
+            expr::Expr::IsNull(Box::new(expressions.one()?)),
         ))
     }
 
@@ -99,10 +108,17 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
-        let expr = self.resolve_expression(expr, schema, state).await?;
+        let (names, expressions) = self
+            .resolve_expression_arguments(vec![expr], schema, state)
+            .await?;
+        let name = SparkPlanFormatter.function_to_string(
+            "isnotnull",
+            names.iter().map(String::as_str).collect(),
+            false,
+        )?;
         Ok(NamedExpr::new(
-            vec!["is_not_null".to_string()],
-            expr::Expr::IsNotNull(Box::new(expr)),
+            vec![name],
+            expr::Expr::IsNotNull(Box::new(expressions.one()?)),
         ))
     }
 
