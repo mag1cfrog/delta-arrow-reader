@@ -47,6 +47,7 @@ use sail_function::scalar::struct_function::StructFunction;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::collection_result::RequireNonNullCollectionElements;
+use crate::function::common::without_metadata_annotations;
 use crate::function::common::{
     AggFunction, AggFunctionInput, FunctionContextInput, count_min_sketch_args,
     get_arguments_and_null_treatment, get_null_treatment, hll_args_with_default_lg,
@@ -586,7 +587,7 @@ fn count(input: AggFunctionInput) -> PlanResult<expr::Expr> {
 }
 
 fn is_typed_null_literal(expression: &expr::Expr) -> bool {
-    match expression {
+    match without_metadata_annotations(expression) {
         expr::Expr::Alias(alias) => is_typed_null_literal(alias.expr.as_ref()),
         expr::Expr::Literal(value, _) => value.is_null(),
         expr::Expr::Cast(cast) => is_typed_null_literal(cast.expr.as_ref()),
@@ -596,7 +597,7 @@ fn is_typed_null_literal(expression: &expr::Expr) -> bool {
 }
 
 fn is_non_null_literal(expression: &expr::Expr) -> bool {
-    match expression {
+    match without_metadata_annotations(expression) {
         expr::Expr::Alias(alias) => is_non_null_literal(alias.expr.as_ref()),
         expr::Expr::Literal(value, _) => !value.is_null(),
         _ => false,

@@ -53,7 +53,9 @@ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, Spar
 pub(crate) use super::conditional::SparkNullIfZero;
 pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    FunctionContextInput, ScalarFunction, ScalarFunctionInput, without_metadata_annotations,
+};
 
 // Byte inputs retain Spark's input nullability while sharing native HEX formatting.
 #[derive(Debug, Default, PartialEq, Eq, Hash)]
@@ -491,12 +493,12 @@ fn is_zero_literal(expr: &Expr) -> bool {
         }
     }
 
-    match expr {
+    match without_metadata_annotations(expr) {
         // Direct literal
         Expr::Literal(scalar, _) => is_scalar_zero(scalar),
         // CAST(literal AS type) - unwrap the cast and check the inner literal
         Expr::Cast(cast_expr) => {
-            if let Expr::Literal(scalar, _) = cast_expr.expr.as_ref() {
+            if let Expr::Literal(scalar, _) = without_metadata_annotations(&cast_expr.expr) {
                 is_scalar_zero(scalar)
             } else {
                 false
@@ -504,7 +506,7 @@ fn is_zero_literal(expr: &Expr) -> bool {
         }
         // TryCast is similar to Cast
         Expr::TryCast(try_cast_expr) => {
-            if let Expr::Literal(scalar, _) = try_cast_expr.expr.as_ref() {
+            if let Expr::Literal(scalar, _) = without_metadata_annotations(&try_cast_expr.expr) {
                 is_scalar_zero(scalar)
             } else {
                 false
@@ -1461,7 +1463,7 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
         SparkCastStringToInteger, StringIntegerCastMode,
     };
 
-    match expr {
+    match without_metadata_annotations(expr) {
         Expr::Cast(cast) if cast.field.data_type().is_numeric() => {
             // Preserve the same local-column boundary after the CAST resolver
             // adds its native whitespace normalization. Do not unwrap other functions.
@@ -1481,7 +1483,7 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
                 }
                 expr => expr,
             };
-            match input {
+            match without_metadata_annotations(input) {
                 Expr::Column(_) => input
                     .get_type(schema)
                     .is_ok_and(|t| t.is_string() || t.is_numeric()),
@@ -1494,7 +1496,7 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
                 || f.func.inner().downcast_ref::<SparkCastStringToInteger>()
                     .is_some_and(|cast| cast.mode() == StringIntegerCastMode::Ansi) =>
         {
-            matches!(f.args.as_slice(), [expr] if matches!(expr, Expr::Column(_)) || column_cast(expr, schema))
+            matches!(f.args.as_slice(), [expr] if matches!(without_metadata_annotations(expr), Expr::Column(_)) || column_cast(expr, schema))
         }
         Expr::ScalarFunction(f)
             if f.func
@@ -1502,7 +1504,7 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
             ) || f.func.inner().is::<sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal>() =>
         {
-            matches!(f.args.as_slice(), [Expr::Column(_)])
+            matches!(f.args.as_slice(), [expr] if matches!(without_metadata_annotations(expr), Expr::Column(_)))
         }
         _ => false,
     }
@@ -1516,7 +1518,7 @@ pub(crate) fn guard_cast_arithmetic(
 ) -> datafusion_common::Result<datafusion_common::tree_node::Transformed<Expr>> {
     use datafusion_common::tree_node::Transformed;
     fn simple(expr: &Expr) -> bool {
-        match expr {
+        match without_metadata_annotations(expr) {
             Expr::Column(_) | Expr::Literal(_, _) => true,
             Expr::Cast(cast) => simple(&cast.expr),
             Expr::TryCast(cast) => simple(&cast.expr),
@@ -1571,7 +1573,7 @@ pub(crate) fn integer_divide_args<'a>(
     expr: &'a Expr,
     schema: &DFSchemaRef,
 ) -> Option<(&'a Expr, &'a Expr, bool)> {
-    match expr {
+    match without_metadata_annotations(expr) {
         Expr::ScalarFunction(f) if f.func.inner().is::<SparkIntegerDivide>() => Some((
             &f.args[0],
             &f.args[1],

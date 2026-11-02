@@ -16,8 +16,9 @@ use sail_function::scalar::table_input::TableInput;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
+use crate::function::common::drop_inherited_column_metadata;
 use crate::resolver::PlanResolver;
-use crate::resolver::expression::NamedExpr;
+use crate::resolver::expression::{NamedExpr, inherits_alias_metadata, needs_projection_expansion};
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -30,7 +31,18 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let name = name.into_iter().map(|x| x.into()).collect::<Vec<String>>();
-        let named_expr = self.resolve_named_expression(expr, schema, state).await?;
+        let mut named_expr = self.resolve_named_expression(expr, schema, state).await?;
+        if !needs_projection_expansion(&named_expr.expr)
+            && (metadata.is_some() || !inherits_alias_metadata(&named_expr.expr))
+        {
+            named_expr.expr = drop_inherited_column_metadata(named_expr.expr);
+            named_expr.metadata.retain(|(key, _)| {
+                matches!(
+                    key.as_str(),
+                    "ARROW:extension:name" | "ARROW:extension:metadata"
+                )
+            });
+        }
         let NamedExpr {
             name: inner_name,
             expr,

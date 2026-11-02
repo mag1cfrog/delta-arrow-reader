@@ -108,7 +108,7 @@ fn capture_schema(fields: &Fields, names: Option<&[String]>) -> TestResult<Value
         .collect::<TestResult<Vec<_>>>()?}))
 }
 
-fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
+pub(crate) fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
     Ok(match data_type {
         DataType::Null => json!("void"),
         DataType::Int8 => json!("byte"),
@@ -118,6 +118,7 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Boolean => json!("boolean"),
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
+        DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
             "elementType":spark_schema_type(field.data_type())?,"containsNull":field.is_nullable()}),
@@ -192,4 +193,45 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
         }
         _ => json!(array_value_to_string(column, row)?),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow::array::{ArrayRef, Int32Array, NullArray, StringArray};
+    use arrow::buffer::OffsetBuffer;
+    use arrow::datatypes::Field;
+
+    use super::*;
+
+    #[test]
+    fn null_values_are_distinct_from_empty_strings() -> TestResult {
+        let untyped: ArrayRef = Arc::new(NullArray::new(1));
+        let typed: ArrayRef = Arc::new(Int32Array::from(vec![None]));
+        let text: ArrayRef = Arc::new(StringArray::from(vec![""]));
+        assert_eq!(encode_value(untyped.as_ref(), 0)?, Value::Null);
+        assert_eq!(encode_value(typed.as_ref(), 0)?, Value::Null);
+        assert_eq!(encode_value(text.as_ref(), 0)?, json!(""));
+
+        let nested = StructArray::from(vec![
+            (
+                Arc::new(Field::new("untyped", DataType::Null, true)),
+                untyped.clone(),
+            ),
+            (Arc::new(Field::new("typed", DataType::Int32, true)), typed),
+            (Arc::new(Field::new("text", DataType::Utf8, false)), text),
+        ]);
+        assert_eq!(encode_value(&nested, 0)?, json!([null, null, ""]));
+
+        let lists = ListArray::try_new(
+            Arc::new(Field::new("item", DataType::Null, true)),
+            OffsetBuffer::new(vec![0, 1, 1].into()),
+            untyped,
+            None,
+        )?;
+        assert_eq!(encode_value(&lists, 0)?, json!([null]));
+        assert_eq!(encode_value(&lists, 1)?, json!([]));
+        Ok(())
+    }
 }
