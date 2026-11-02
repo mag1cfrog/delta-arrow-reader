@@ -127,11 +127,12 @@ impl ScalarUDFImpl for SparkCastStringToFloat {
         Ok(ExprSimplifyResult::Original(args))
     }
 
-    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> Result<FieldRef> {
+        // Spark keeps string casts nullable even in ANSI mode, preserving NULL predicate evaluation.
         Ok(Arc::new(Field::new(
             self.name(),
             self.data_type.clone(),
-            self.null_on_error || args.arg_fields[0].is_nullable(),
+            true,
         )))
     }
 

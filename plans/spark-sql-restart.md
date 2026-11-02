@@ -7,6 +7,42 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### S04 grouping NULL predicates
+
+The 38 retained grouping observations have been rerun on Spark 4.2.0 and staging
+`2685c653`. Both batch settings reproduce the same differences: 20 result
+differences, 11 unnecessary candidate failures and seven missing required errors.
+These are retained observations, not 38 independent defects. Empty grouping-set
+totals and optimizer-dependent evaluation need separate compatibility decisions.
+
+#713 corrects the shared STRING-to-FLOAT/DOUBLE nullable result declaration.
+The old declaration allowed NULL predicates to remove required invalid-input
+errors. #714 owns the separate integer DIV schema and evaluation repair. Both
+are native children of the active aggregation parent and block #142 acceptance.
+The focused cast capture compares analyzed schemas with Spark and checks physical
+NULL guarantees, including legitimate narrowing after constant folding.
+The changed operand declaration exposed a native NULL-safe comparison schema
+defect. Logical expression nullability, field construction and physical
+expressions now all declare IS [NOT] DISTINCT FROM nonnullable. Independent
+review caught the initially missing physical declaration; both native mixed-NULL
+controls and the focused Spark test failed without it.
+
+All 344 comparisons from 172 focused Spark observations pass. The complete
+25,180-observation historical replay passes with 252 explicit corrections:
+250 change only nullability and two restore required CAST errors. Fresh Spark
+references confirm every changed nullability field. Four unchanged projected-IN
+IS FALSE results retain the previously approved SQL NULL policy, with original
+Spark rows preserved. No historical rows, names or types otherwise change.
+Full Linux checks pass 520 tests, zero failures and two inherited ignored
+doctests, plus root all-target Clippy and formatting. The historical capture
+regenerates all 252 independent Spark records byte-for-byte. Clean-context
+Sol/high review verified the full correction set and found no remaining
+actionable issue after the NULL-safe schema repair.
+
+#715 separately records the legacy COALESCE STRING nullability difference under
+S07; that path does not invoke the repaired cast. Next continue #714, then the
+remaining #142 grouping/window coverage and compatibility decisions.
+
 ### S04 PIVOT names and floating keys
 
 #656 completed floating PIVOT equality in PR #709, merged at `791f5aeaf`.
