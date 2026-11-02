@@ -12,7 +12,7 @@ use datafusion_spark::function::string::elt::SparkElt;
 use datafusion_spark::function::string::expr_fn as string_fn;
 use datafusion_spark::function::string::format_string::FormatStringFunc;
 use datafusion_spark::function::string::length::SparkLengthFunc;
-use regex_syntax::hir::Look;
+use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 use sail_function::scalar::string::format_number::FormatNumber;
@@ -29,6 +29,7 @@ use sail_function::scalar::string::spark_quote::SparkQuote;
 use sail_function::scalar::string::spark_regexp_extract_all::{
     SparkRegexpExtract, SparkRegexpExtractAll,
 };
+use sail_function::scalar::string::spark_regexp_replace::SparkRegexpReplace;
 use sail_function::scalar::string::spark_sentences::SparkSentences;
 use sail_function::scalar::string::spark_split::SparkSplit;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
@@ -40,39 +41,54 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 use crate::function::scalar::datetime::date_format;
 
-fn is_single_capture_extract(pattern: &expr::Expr, replacement: &expr::Expr) -> bool {
-    let (expr::Expr::Literal(pattern, _), expr::Expr::Literal(replacement, _)) =
-        (pattern, replacement)
-    else {
-        return false;
-    };
-    let (Some(pattern), Some("$1")) = (
-        pattern.try_as_str().flatten(),
-        replacement.try_as_str().flatten(),
-    ) else {
-        return false;
-    };
-    if !pattern.starts_with('^') {
-        return false;
+fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        mut arguments,
+        function_context,
+    } = input;
+    if !(3..=4).contains(&arguments.len()) {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] regexp_replace requires 3 or 4 arguments, got {}",
+            arguments.len()
+        )));
     }
-    let Some(short_pattern) = pattern.strip_suffix(".*$") else {
-        return false;
-    };
-
-    // Absolute start anchoring makes global and single replacement equivalent.
-    regex_syntax::parse(short_pattern).is_ok_and(|pattern| {
-        let properties = pattern.properties();
-        properties.look_set_prefix().contains(Look::Start)
-            && properties.explicit_captures_len() == 1
-    })
-}
-
-fn regexp_replace(string: expr::Expr, pattern: expr::Expr, replacement: expr::Expr) -> expr::Expr {
-    if is_single_capture_extract(&pattern, &replacement) {
-        regex_fn::regexp_replace(string, pattern, lit("${1}"), None)
+    let position = if arguments.len() == 4 {
+        arguments
+            .pop()
+            .ok_or_else(|| PlanError::internal("missing regexp_replace position"))?
     } else {
-        regex_fn::regexp_replace(string, pattern, replacement, Some(lit("g")))
+        lit(1i32)
+    };
+    if position.is_volatile() || !position.column_refs().is_empty() {
+        return Err(PlanError::invalid(
+            "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression",
+        ));
     }
+    if !matches!(
+        position.get_type(function_context.schema)?,
+        DataType::Int32 | DataType::Null
+    ) {
+        return Err(PlanError::invalid(
+            "regexp_replace position coercion to INT is outside the supported position contract",
+        ));
+    }
+    let position = LiteralEvaluator::new().evaluate(&position)?;
+    let position = match position {
+        ScalarValue::Int32(Some(value)) if value > 0 => ScalarValue::Int32(Some(value)),
+        value if value.is_null() => ScalarValue::Int32(None),
+        ScalarValue::Int32(Some(value)) => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE] regexp_replace position must be in (0, 2147483647], got {value}"
+            )));
+        }
+        value => {
+            return Err(PlanError::internal(format!(
+                "unexpected regexp_replace position {value:?}"
+            )));
+        }
+    };
+    arguments.push(lit(position));
+    Ok(ScalarUDF::from(SparkRegexpReplace::new()).call(arguments))
 }
 
 fn regexp_substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -397,7 +413,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("regexp_extract", F::udf(SparkRegexpExtract::new())),
         ("regexp_extract_all", F::udf(SparkRegexpExtractAll::new())),
         ("regexp_instr", F::udf(RegexpInstrFunc::new())),
-        ("regexp_replace", F::ternary(regexp_replace)),
+        ("regexp_replace", F::custom(regexp_replace)),
         ("regexp_substr", F::custom(regexp_substr)),
         ("repeat", F::binary(expr_fn::repeat)),
         ("replace", F::var_arg(replace)),
