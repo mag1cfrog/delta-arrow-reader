@@ -1615,16 +1615,18 @@ payloads share a comparison key. Six direction/NULL choices cover defaults and
 explicit placement. LIMIT 1 and 8, query ordering after windows, hidden keys,
 ordinal keys and ordered subqueries exercise the query sort adapter.
 
-These references cover the independent ORDER BY prerequisite in #752. Grouped
-MAX also needs the floating extrema implementation in #730: even a singleton
-group containing negative infinity exposes native MAX's finite initial value.
-The grouped acceptance for #752 remains pending until #730 integrates the
-separately preserved 24 grouped references and the original MAX DESC LIMIT
-control.
+These 204 references cover the independent ORDER BY prerequisite in #752.
+`scalar-float-grouped-ordering-spark.jsonl` contains 24 singleton grouped MAX
+references with the same provider metadata. Grouped MAX also needs the floating
+extrema implementation in #730: even a singleton group containing negative
+infinity exposes native MAX's finite initial value. The original MAX DESC LIMIT
+control in `floating_extrema.rs` checks the combined behavior and guards against
+the native aggregate heap shortcut.
 
-`scalar_float_ordering.rs` compares every reference at batch sizes 1 and 32 with
-two provider partitions. It compares full fields and canonical rows, then checks
-the collected row order and original raw projected bits separately. Dictionary
+`scalar_float_ordering.rs` loads both fixtures and compares all 228 references
+at batch sizes 1 and 32 with two provider partitions, for 456 comparisons. It
+compares full fields and canonical rows, then checks the collected row order and
+original raw projected bits separately. Dictionary
 controls include both NULL keys and keys referencing NULL values. Native SQL is
 compared before and after Spark planning. The existing nested/window corpora
 cover those consumers of the shared comparison-key adapter.

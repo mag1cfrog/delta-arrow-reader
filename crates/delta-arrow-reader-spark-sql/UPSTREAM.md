@@ -441,10 +441,10 @@ Projected values and aggregate results retain their original bits. Direction,
 outer NULL placement and LIMIT remain the sort operator's responsibility.
 The [scalar ordering references](tests/fixtures/README.md#scalar-floating-query-order)
 cover ordinary sorting, projected and hidden keys, subqueries, dictionary
-decoding and native SQL before and after Spark planning. This is the independent
-ORDER BY prerequisite in #752; its grouped MAX acceptance remains pending until
-the floating extrema slice in #730 integrates the preserved grouped references
-and original MAX DESC LIMIT control.
+decoding and native SQL before and after Spark planning. The grouped references
+combine this ORDER BY prerequisite in #752 with the floating extrema slice in
+#730. The original MAX DESC LIMIT control in `floating_extrema.rs` also checks
+the combined behavior and guards against the native aggregate heap shortcut.
 
 ### Exact statistics aggregate results
 
