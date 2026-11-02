@@ -17,7 +17,7 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_inputs::register_recorded_inputs;
-use spark_results::{TestResult, encode_value, spark_schema_type, validate_batch};
+use spark_results::{TestResult, capture_schema, encode_value, spark_schema_type, validate_batch};
 
 fn records() -> TestResult<Vec<Value>> {
     Ok(
@@ -1015,6 +1015,102 @@ async fn reviewed_if_declarations_match_exact_spark_stages() -> TestResult {
                     "{} ANSI={} batch={batch_size}: {error}",
                     case["id"], case["ansi"]
                 ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
+    let records = include_str!("fixtures/review-710-positive-alias-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    assert_eq!(records.len() - 1, 24);
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert((
+            case["id"].as_str().ok_or("missing ID")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+        assert!(case.get("error").is_none());
+        assert_eq!(case["public_schema"], case["analyzed_schema"]);
+        assert_eq!(case["public_schema"], case["expected"]["schema"]);
+        assert_eq!(
+            case["optimized_schema"],
+            case["executed_schema_before_collect"]
+        );
+        assert_eq!(
+            case["executed_schema_before_collect"],
+            case["executed_schema_after_collect"]
+        );
+    }
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: "UTC".into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let public = capture_schema(
+                query.logical_plan.schema().fields(),
+                Some(&query.column_names),
+            )?;
+            let physical = query.create_physical_plan(&session).await?;
+            let schema = physical.schema();
+            let executed = capture_schema(schema.fields(), None)?;
+            let mut rows = Vec::new();
+            for batch in collect(physical, session.task_ctx()).await? {
+                validate_batch(schema.as_ref(), &batch)?;
+                for row in 0..batch.num_rows() {
+                    rows.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|column| encode_value(column.as_ref(), row))
+                            .collect::<TestResult<Vec<_>>>()?,
+                    );
+                }
+            }
+            rows.sort_by_key(|row| json!(row).to_string());
+            for (stage, actual, expected) in [
+                ("public schema", public, &case["public_schema"]),
+                (
+                    "executed schema",
+                    executed,
+                    &case["executed_schema_after_collect"],
+                ),
+                ("complete rows", json!(rows), &case["expected"]["rows"]),
+            ] {
+                if actual != *expected {
+                    differences.push(format!(
+                        "{} ANSI={} batch={batch_size} {stage}: expected {expected}, got {actual}",
+                        case["id"], case["ansi"]
+                    ));
+                }
             }
         }
     }

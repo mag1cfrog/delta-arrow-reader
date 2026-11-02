@@ -99,7 +99,7 @@ pub(crate) fn validate_batch(schema: &Schema, batch: &RecordBatch) -> TestResult
     Ok(())
 }
 
-fn capture_schema(fields: &Fields, names: Option<&[String]>) -> TestResult<Value> {
+pub(crate) fn capture_schema(fields: &Fields, names: Option<&[String]>) -> TestResult<Value> {
     Ok(json!({"type":"struct","fields":fields.iter().enumerate()
         .map(|(index, field)| Ok(json!({
             "name":names.map_or(field.name(), |names| &names[index]),
