@@ -3,7 +3,8 @@
 use std::error::Error;
 
 use arrow::array::{Array, AsArray, ListArray, StructArray};
-use arrow::datatypes::{DataType, Float32Type, Float64Type};
+use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema};
+use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::SessionContext;
@@ -13,6 +14,13 @@ use serde_json::{Value, json};
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 pub(crate) async fn capture_spark_query_result(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<Value> {
+    Ok(capture_spark_query_observation(session, case).await?["result"].take())
+}
+
+pub(crate) async fn capture_spark_query_observation(
     session: &SessionContext,
     case: &Value,
 ) -> TestResult<Value> {
@@ -28,30 +36,13 @@ pub(crate) async fn capture_spark_query_result(
     .await?;
     let physical = query.create_physical_plan(session).await?;
     let schema = physical.schema();
-    let fields = schema
-        .fields()
-        .iter()
-        .enumerate()
-        .map(|(index, field)| {
-            assert_eq!(field.name(), &query.column_names[index]);
-            let logical = query.logical_plan.schema().field(index);
-            if logical.data_type() != field.data_type()
-                || logical.is_nullable() != field.is_nullable()
-                || logical.metadata() != field.metadata()
-            {
-                return Err(format!(
-                    "logical field {logical:?} differs from physical field {field:?}"
-                )
-                .into());
-            }
-            Ok(
-                json!({"name":field.name(), "type":spark_schema_type(field.data_type())?,
-                  "nullable":field.is_nullable(), "metadata":field.metadata()}),
-            )
-        })
-        .collect::<TestResult<Vec<_>>>()?;
+    let resolved = query.logical_plan.schema().fields();
+    validate_physical_schema(resolved, &query.column_names, schema.fields())?;
+    let public_schema = capture_schema(resolved, Some(&query.column_names))?;
+    let physical_schema = capture_schema(schema.fields(), None)?;
     let mut rows = Vec::new();
     for batch in collect(physical, session.task_ctx()).await? {
+        validate_batch(schema.as_ref(), &batch)?;
         for row in 0..batch.num_rows() {
             rows.push(
                 batch
@@ -63,13 +54,65 @@ pub(crate) async fn capture_spark_query_result(
         }
     }
     rows.sort_by_key(|row| json!(row).to_string());
-    Ok(json!({"schema":{"type":"struct","fields":fields},"rows":rows}))
+    Ok(json!({"result":{"schema":public_schema,"rows":rows},
+        "physical_schema":physical_schema}))
+}
+
+pub(crate) fn validate_physical_schema(
+    resolved: &Fields,
+    names: &[String],
+    physical: &Fields,
+) -> TestResult {
+    if resolved.len() != names.len() || physical.len() != resolved.len() {
+        return Err("resolved and physical field counts differ from output names".into());
+    }
+    for ((logical, name), field) in resolved.iter().zip(names).zip(physical) {
+        // Only top-level nullability can narrow; nested declarations stay exact.
+        if field.name() != name
+            || logical.data_type() != field.data_type()
+            || logical.metadata() != field.metadata()
+            || (field.is_nullable() && !logical.is_nullable())
+        {
+            return Err(format!(
+                "resolved field {logical:?} (public name {name:?}) differs from physical field {field:?}"
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_batch(schema: &Schema, batch: &RecordBatch) -> TestResult {
+    if batch.schema().as_ref() != schema {
+        return Err("returned batch schema differs from physical schema".into());
+    }
+    for (field, column) in schema.fields().iter().zip(batch.columns()) {
+        if !field.is_nullable() && column.logical_null_count() != 0 {
+            return Err(format!(
+                "nonnullable physical field {:?} returned NULL",
+                field.name()
+            )
+            .into());
+        }
+        column.to_data().validate_full()?;
+    }
+    Ok(())
+}
+
+fn capture_schema(fields: &Fields, names: Option<&[String]>) -> TestResult<Value> {
+    Ok(json!({"type":"struct","fields":fields.iter().enumerate()
+        .map(|(index, field)| Ok(json!({
+            "name":names.map_or(field.name(), |names| &names[index]),
+            "type":spark_schema_type(field.data_type())?,
+            "nullable":field.is_nullable(),"metadata":field.metadata()})))
+        .collect::<TestResult<Vec<_>>>()?}))
 }
 
 fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
     Ok(match data_type {
         DataType::Null => json!("void"),
         DataType::Int8 => json!("byte"),
+        DataType::Int16 => json!("short"),
         DataType::Int32 => json!("integer"),
         DataType::Int64 => json!("long"),
         DataType::Boolean => json!("boolean"),
@@ -86,24 +129,28 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
     })
 }
 
-fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
+pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
     if column.is_null(row) {
         return Ok(Value::Null);
     }
     Ok(match column.data_type() {
-        DataType::List(_) => {
+        DataType::Null => Value::Null,
+        DataType::List(field) => {
             let values = column
                 .as_any()
                 .downcast_ref::<ListArray>()
                 .ok_or("expected list")?
                 .value(row);
+            if !field.is_nullable() && values.logical_null_count() != 0 {
+                return Err("nonnullable list element returned NULL".into());
+            }
             json!(
                 (0..values.len())
                     .map(|index| encode_value(values.as_ref(), index))
                     .collect::<TestResult<Vec<_>>>()?
             )
         }
-        DataType::Struct(_) => {
+        DataType::Struct(fields) => {
             let values = column
                 .as_any()
                 .downcast_ref::<StructArray>()
@@ -112,7 +159,18 @@ fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
                 values
                     .columns()
                     .iter()
-                    .map(|field| encode_value(field.as_ref(), row))
+                    .zip(fields)
+                    .map(|(column, field)| {
+                        let value = encode_value(column.as_ref(), row)?;
+                        if value.is_null() && !field.is_nullable() {
+                            return Err(format!(
+                                "nonnullable struct field {:?} returned NULL",
+                                field.name()
+                            )
+                            .into());
+                        }
+                        Ok(value)
+                    })
                     .collect::<TestResult<Vec<_>>>()?
             )
         }
