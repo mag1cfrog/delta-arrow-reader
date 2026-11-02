@@ -1,7 +1,5 @@
 //! Integer-day DATE arithmetic preserves the entire Date32 representation.
 
-use std::error::Error;
-
 use arrow::array::{Array, AsArray};
 use arrow::datatypes::{DataType, Date32Type, Field};
 use datafusion::execution::SessionStateBuilder;
@@ -14,7 +12,10 @@ use serde_json::{Value, json};
 mod spark_inputs;
 use spark_inputs::register_recorded_inputs;
 
-type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
+#[allow(dead_code)]
+#[path = "support/spark_results.rs"]
+mod spark_results;
+use spark_results::TestResult;
 
 pub(crate) async fn capture_date_result(
     session: &SessionContext,
@@ -61,7 +62,10 @@ pub(crate) async fn capture_date_result(
         assert!(resolved_field.is_nullable());
         physical_field
     } else {
-        assert_eq!(resolved_field.data_type(), &DataType::Date32);
+        assert!(
+            resolved_field.data_type() == &DataType::Date32
+                || matches!(resolved_field.data_type(), DataType::List(child) if child.data_type() == &DataType::Date32)
+        );
         resolved_field
     };
     let mut field = capture_field(comparison_field)?;
@@ -72,19 +76,10 @@ pub(crate) async fn capture_date_result(
         let column = batch.column(0);
         assert!(physical_field.is_nullable() || column.null_count() == 0);
         for row in 0..batch.num_rows() {
-            let value = if column.is_null(row) {
+            if column.is_null(row) {
                 assert!(resolved_field.is_nullable());
-                Value::Null
-            } else {
-                match column.data_type() {
-                    // Read stored days directly, including dates outside calendar ranges.
-                    DataType::Date32 => {
-                        json!(column.as_primitive::<Date32Type>().value(row).to_string())
-                    }
-                    DataType::Utf8 => json!(column.as_string::<i32>().value(row)),
-                    other => return Err(format!("unexpected result type: {other}").into()),
-                }
-            };
+            }
+            let value = capture_value(column.as_ref(), row)?;
             rows.push(vec![value]);
         }
     }
@@ -94,34 +89,75 @@ pub(crate) async fn capture_date_result(
             "metadata":query.logical_plan.schema().metadata()},
         "physical_schema":{"type":"struct","fields":[capture_field(physical_field)?],
             "metadata":physical_schema.metadata()},
+        "resolved_arrow_schema":format!("{:?}", query.logical_plan.schema()),
+        "physical_arrow_schema":format!("{physical_schema:?}"),
         "comparison_stage":if physical_control { "physical" } else { "resolved" },
         "compared":{"schema":{"type":"struct","fields":[field]},"rows":rows}
     }))
 }
 
 fn capture_field(field: &Field) -> TestResult<Value> {
-    let data_type = match field.data_type() {
-        DataType::Date32 => "date",
-        DataType::Utf8 => "string",
+    Ok(
+        json!({"name":field.name(),"type":capture_type(field.data_type())?,
+        "nullable":field.is_nullable(),"metadata":field.metadata()}),
+    )
+}
+
+fn capture_type(data_type: &DataType) -> TestResult<Value> {
+    Ok(match data_type {
+        DataType::Date32 => json!("date"),
+        DataType::Utf8 => json!("string"),
+        DataType::List(child) => json!({"type":"array",
+            "elementType":capture_type(child.data_type())?,"containsNull":child.is_nullable()}),
         other => return Err(format!("unexpected result type: {other}").into()),
-    };
-    Ok(json!({"name":field.name(),"type":data_type,
-        "nullable":field.is_nullable(),"metadata":field.metadata()}))
+    })
+}
+
+fn capture_value(column: &dyn Array, row: usize) -> TestResult<Value> {
+    if column.is_null(row) {
+        return Ok(Value::Null);
+    }
+    Ok(match column.data_type() {
+        // Read stored days directly, including dates outside calendar ranges.
+        DataType::Date32 => json!(column.as_primitive::<Date32Type>().value(row).to_string()),
+        DataType::Utf8 => json!(column.as_string::<i32>().value(row)),
+        DataType::List(child) => {
+            let values = column.as_list::<i32>().value(row);
+            assert!(child.is_nullable() || values.null_count() == 0);
+            json!(
+                (0..values.len())
+                    .map(|i| capture_value(values.as_ref(), i))
+                    .collect::<TestResult<Vec<_>>>()?
+            )
+        }
+        other => return Err(format!("unexpected result type: {other}").into()),
+    })
 }
 
 #[tokio::test]
 async fn date_day_arithmetic_matches_spark() -> TestResult {
     let mut differences = Vec::new();
-    for (capture, count) in [
+    for (capture, count, encoding) in [
         (
             include_str!("fixtures/date-day-arithmetic-spark.jsonl"),
             296,
+            "unix_date",
         ),
         (
             include_str!("fixtures/date-day-admission-probes-spark.jsonl"),
             68,
+            "unix_date",
         ),
-        (include_str!("fixtures/date-day-correlated-spark.jsonl"), 24),
+        (
+            include_str!("fixtures/date-day-correlated-spark.jsonl"),
+            24,
+            "unix_date",
+        ),
+        (
+            include_str!("fixtures/date-day-lambda-spark.jsonl"),
+            32,
+            "unix_date_array",
+        ),
     ] {
         let records = capture
             .lines()
@@ -129,7 +165,7 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
             .collect::<Result<Vec<_>, _>>()?;
         assert_eq!(records[0]["spark_version"], "4.2.0");
         assert_eq!(records[0]["timezone"], "UTC");
-        assert_eq!(records[0]["date_encoding"], "unix_date");
+        assert_eq!(records[0]["date_encoding"], encoding);
         assert_eq!(records.len() - 1, count);
         for batch_size in [1, 32] {
             let session = SessionContext::new_with_state(
@@ -144,7 +180,11 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
                 )
                 .build(),
             );
-            register_recorded_inputs(&session, &records[0], batch_size)?;
+            if encoding == "unix_date" {
+                register_recorded_inputs(&session, &records[0], batch_size)?;
+            } else {
+                assert!(records[0].get("inputs").is_none());
+            }
             for case in &records[1..] {
                 let actual = capture_date_result(&session, case).await;
                 eprintln!(

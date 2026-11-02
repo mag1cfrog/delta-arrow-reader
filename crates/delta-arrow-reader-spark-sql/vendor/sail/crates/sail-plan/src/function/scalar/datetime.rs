@@ -204,7 +204,8 @@ fn date_offset_by_days(
                 && !days.is_volatile()
                 && days.column_refs().is_empty()
                 && !days.contains_outer()
-                && !days.contains_scalar_subquery() =>
+                && !days.contains_scalar_subquery()
+                && days.clone().resolve_lambda_variables(schema).is_ok() =>
         {
             let context = SimplifyContextBuilder::default()
                 .with_schema(schema.clone())
