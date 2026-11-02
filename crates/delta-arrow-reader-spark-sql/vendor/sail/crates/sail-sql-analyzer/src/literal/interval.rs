@@ -523,15 +523,20 @@ mod tests {
     #[test]
     fn sql_literals_reject_mixed_families_without_changing_calendar_string_casts() -> SqlResult<()>
     {
-        for sql in [
-            "1 MONTH 1 DAY",
-            "0 MONTHS 0 DAYS",
-            "1 YEAR -12 MONTHS 0 HOURS",
+        for (sql, months, days, nanoseconds) in [
+            ("1 MONTH 1 DAY", 1, 1, 0),
+            ("0 MONTHS 0 DAYS", 0, 0, 0),
+            ("1 YEAR -12 MONTHS 0 HOURS", 0, 0, 0),
         ] {
-            assert!(matches!(
+            assert_eq!(
                 parse_unqualified_interval_string(sql, false)?,
-                IntervalValue::MonthDayNanosecond { .. }
-            ));
+                IntervalValue::MonthDayNanosecond {
+                    months,
+                    days,
+                    nanoseconds
+                },
+                "{sql}"
+            );
             let statement = crate::parser::parse_one_statement(&format!("SELECT INTERVAL {sql}"))?;
             let result = crate::statement::from_ast_statement(statement);
             assert!(
