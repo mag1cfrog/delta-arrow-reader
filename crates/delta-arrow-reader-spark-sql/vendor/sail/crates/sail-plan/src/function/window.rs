@@ -2,7 +2,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use arrow::datatypes::{DataType, Field};
+use arrow::datatypes::{DataType, Field, FieldRef};
+use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_KEY};
 use datafusion::functions::expr_fn::coalesce;
 use datafusion::functions_aggregate::{
     approx_distinct, approx_percentile_cont, array_agg, average, bit_and_or_xor, bool_and_or,
@@ -17,7 +18,8 @@ use datafusion::functions_window::row_number::row_number_udwf;
 use datafusion_common::ScalarValue;
 use datafusion_expr::expr::WindowFunctionParams;
 use datafusion_expr::{
-    AggregateUDF, ExprSchemable, WindowFunctionDefinition, cast, expr, lit, when,
+    AggregateUDF, ColumnarValue, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
+    ScalarUDFImpl, Signature, Volatility, WindowFunctionDefinition, cast, expr, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
 use lazy_static::lazy_static;
@@ -808,10 +810,74 @@ fn list_built_in_window_functions() -> Vec<(&'static str, WinFunction)> {
 }
 
 pub(crate) fn get_built_in_window_function(name: &str) -> PlanResult<WinFunction> {
-    Ok(BUILT_IN_WINDOW_FUNCTIONS
+    let function = BUILT_IN_WINDOW_FUNCTIONS
         .get(name)
         .ok_or_else(|| PlanError::unsupported(format!("unknown window function: {name}")))?
-        .clone())
+        .clone();
+    if !matches!(
+        name,
+        "lag"
+            | "lead"
+            | "first"
+            | "first_value"
+            | "last"
+            | "last_value"
+            | "nth_value"
+            | "any_value"
+    ) {
+        return Ok(function);
+    }
+    Ok(Arc::new(move |input| {
+        let schema = input.function_context.schema;
+        let result = function(input)?;
+        if !result.to_field(schema)?.1.metadata().is_empty() {
+            Ok(ScalarUDF::from(SparkWindowResultMetadata).call(vec![result]))
+        } else {
+            Ok(result)
+        }
+    }))
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SparkWindowResultMetadata;
+
+impl ScalarUDFImpl for SparkWindowResultMetadata {
+    fn name(&self) -> &str {
+        "spark_window_result_metadata"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> =
+            std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+        let [data_type] = args else {
+            return datafusion_common::plan_err!("expected one window result");
+        };
+        Ok(data_type.clone())
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        let mut field = args.arg_fields[0].as_ref().clone().with_name(self.name());
+        // Spark drops user metadata on derived values; Arrow extensions describe their type.
+        field.metadata_mut().retain(|key, _| {
+            matches!(
+                key.as_str(),
+                EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
+            )
+        });
+        Ok(Arc::new(field))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        Ok(value)
+    }
 }
 
 #[cfg(test)]
