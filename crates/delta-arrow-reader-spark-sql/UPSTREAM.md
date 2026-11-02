@@ -506,3 +506,13 @@ encoder directly. Non-byte inputs retain the original native HEX expression.
 The [HEX references](tests/fixtures/README.md#hex-byte-inputs) check complete fields,
 long view values, fixed-width binary inputs and native SQL preservation. Binary
 TO_CHAR/TO_VARCHAR and hashing retain their separate planning paths.
+
+REGEXP_EXTRACT reads Utf8, LargeUtf8 and Utf8View inputs directly and declares
+NULL results from its argument fields. The existing native regex memo compiles
+patterns only for non-NULL rows; group-index validation follows a successful
+match. Parser errors retain the native cause. The
+[extraction references](tests/fixtures/README.md#regular-expression-extraction)
+cover supported patterns, Spark INT indices and evaluation boundaries.
+BIGINT-to-INT index narrowing remains separate argument-coercion work.
+Java-only pattern syntax, including lookbehind, remains a separate engine
+limitation under #779.
