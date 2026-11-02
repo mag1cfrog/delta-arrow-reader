@@ -95,13 +95,14 @@ def inputs(probe):
             yield kind + "_" + label, kind, value_type, bits
 
 
-def allowed_rows(expected, input_bits, kind, grouped):
+def allowed_rows(expected, input_bits, kind, grouped, unordered_fields=None):
     allowed = []
     fields = expected["schema"]["fields"]
     for row in expected["rows"]:
         candidates = []
         for index, (value, field) in enumerate(zip(row, fields)):
-            if value is None or field["type"] not in ["float", "double"]:
+            if (value is None or field["type"] not in ["float", "double"]
+                    or (unordered_fields is not None and field["name"] not in unordered_fields)):
                 candidates.append([value])
                 continue
             target = decode(value, kind)
@@ -161,6 +162,7 @@ def main():
                 for label, window, named in [
                     ("prefix", "ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW", ""),
                     ("all", "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING", ""),
+                    ("all_ordered", "ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING", ""),
                     ("range", "ORDER BY id RANGE BETWEEN 2 PRECEDING AND CURRENT ROW", ""),
                     ("named_desc", "w", "WINDOW w AS (PARTITION BY id%2 ORDER BY id DESC ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)"),
                 ]:
@@ -191,6 +193,13 @@ def main():
                           "plan": frame._jdf.queryExecution().executedPlan().toString()}
                 if grouped is not None:
                     record["allowed_rows"] = allowed_rows(expected, bits, kind, grouped)
+                elif name.endswith("_all"):
+                    fields = ["low", "high"]
+                    record["allowed_rows"] = allowed_rows(expected, bits, kind, False, fields)
+                    record["constant_window_fields"] = fields
+                    for index, field in enumerate(expected["schema"]["fields"]):
+                        if field["name"] in fields:
+                            assert len({row[index] for row in expected["rows"]}) <= 1, name
                 records.append(record)
             if not args.probe:
                 for setting, value in [("spark.sql.codegen.factoryMode", "NO_CODEGEN"),

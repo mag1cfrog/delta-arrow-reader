@@ -1375,20 +1375,27 @@ It verifies every provider's input bits inside the JVM before capturing results,
 including providers repartitioned into three Spark partitions. Python float
 serialization is not used to inspect returned NaN payloads.
 
-The 240 references and 30 providers cover signed NaNs and zero signs, finite duplicates, infinities,
+The 256 references and 30 providers cover signed NaNs and zero signs, finite duplicates, infinities,
 NULLs, empty inputs, global/grouped MIN/MAX, DISTINCT, FILTER and ordered ROWS,
 RANGE, whole-partition, prefix, following and named descending windows. Extra
 captures select interpreted expression execution and the optional Spark 4.2
 segment-tree frame path; the latter requires a nonzero frame metric.
 
 `floating_extrema.rs` compares complete logical/physical schemas, metadata and
-row multiplicities at batch sizes 1 and 32. Ordered-window bits compare exactly.
-For unordered aggregates, each recorded output retains Spark's actual raw bits
+row multiplicities at batch sizes 1 and 32. Windows ordered by a unique ID compare
+result bits exactly, including explicitly ordered whole-partition frames.
+For unordered aggregates and whole-partition windows, each recorded output retains Spark's actual raw bits
 and lists the eligible original input payloads in its winning equality class.
 The test accepts only those payloads and requires redundant DISTINCT to retain
 the same bits as its ordinary counterpart. It does not infer a universal NaN
-payload or zero sign from one partition schedule. Separate controls compare
+payload or zero sign from one partition schedule. Unordered whole-partition
+windows permit choices only for their MIN/MAX columns, require one representative
+per column throughout the window, and keep projected input bits exact. They run
+again with reversed provider partition order. The full replay has 512 ordinary
+comparisons and 32 additional partition-order comparisons. Separate controls compare
 native SQL before/after Spark planning and include dictionary float providers.
+Those controls capture every native query before the first Spark call, so a
+pre-existing cross-context difference cannot be mistaken for session pollution.
 
 The four default-name references also expose the existing generated-alias marker
 gap owned by [#710](https://github.com/mag1cfrog/delta-arrow-reader/issues/710).
@@ -1405,6 +1412,11 @@ or preserve a zero representative.
 A manually selected ignored cost test reports native/frontend execution times
 and plans for global/grouped results and narrow/wide windows; it has no timing
 pass threshold.
+Grouped ORDER BY MIN/MAX LIMIT controls check Spark's winning group against the
+independent grouped references and verify that physical aggregates do not advertise
+the native TopK comparator. Registered constant-projection views supply exact
+provider statistics for integration checks of safe substitution, conservative
+MAX scanning, signed-zero payloads, empty/all-NULL results and complete schemas.
 
 Regenerate with Python 3.12, PySpark 4.2.0 and Java 21:
 

@@ -22,8 +22,13 @@ use spark_results::TestResult;
 async fn native_snapshot(session: &SessionContext, sql: &str) -> TestResult<Value> {
     let frame = session.sql(sql).await?;
     let schema = frame.schema().as_arrow().clone();
+    let physical = frame.create_physical_plan().await?;
+    eprintln!(
+        "native {sql}: {}",
+        datafusion::physical_plan::displayable(physical.as_ref()).indent(true)
+    );
     let mut rows = Vec::new();
-    for batch in frame.collect().await? {
+    for batch in collect(physical, session.task_ctx()).await? {
         for row in 0..batch.num_rows() {
             rows.push(
                 batch
@@ -106,6 +111,27 @@ async fn capture_raw(session: &SessionContext, case: &Value) -> TestResult<Value
     Ok(json!({"schema":{"type":"struct","fields":fields},"rows":rows,"plan":plan}))
 }
 
+async fn reverse_input_partitions(session: &SessionContext, metadata: &Value) -> TestResult {
+    use datafusion::datasource::MemTable;
+
+    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
+        let name = input["name"].as_str().ok_or("missing table name")?;
+        let provider = session.deregister_table(name)?.ok_or("missing provider")?;
+        let table = provider
+            .downcast_ref::<MemTable>()
+            .ok_or("expected MemTable")?;
+        let mut partitions = Vec::with_capacity(table.batches.len());
+        for partition in table.batches.iter().rev() {
+            partitions.push(partition.read().await.clone());
+        }
+        session.register_table(
+            name,
+            Arc::new(MemTable::try_new(provider.schema(), partitions)?),
+        )?;
+    }
+    Ok(())
+}
+
 fn reference_status(actual: &Value, case: &Value) -> TestResult<&'static str> {
     let mut expected_schema = case["expected"]["schema"].clone();
     let mut status = "matched";
@@ -150,6 +176,9 @@ fn reference_status(actual: &Value, case: &Value) -> TestResult<&'static str> {
     if rows.len() != allowed.len() {
         return Ok("mismatch");
     }
+    let fields = actual["schema"]["fields"]
+        .as_array()
+        .ok_or("missing fields")?;
     for (row, permitted) in rows.iter().zip(allowed) {
         let row = row.as_array().ok_or("missing row")?;
         let permitted = permitted.as_array().ok_or("missing permitted cells")?;
@@ -161,9 +190,6 @@ fn reference_status(actual: &Value, case: &Value) -> TestResult<&'static str> {
                 return Ok("mismatch");
             }
         }
-        let fields = actual["schema"]["fields"]
-            .as_array()
-            .ok_or("missing fields")?;
         for (plain, distinct) in [("low", "unique_low"), ("high", "unique_high")] {
             if let (Some(plain), Some(distinct)) = (
                 fields.iter().position(|field| field["name"] == plain),
@@ -174,7 +200,54 @@ fn reference_status(actual: &Value, case: &Value) -> TestResult<&'static str> {
             }
         }
     }
+    if let Some(names) = case.get("constant_window_fields") {
+        for name in names.as_array().ok_or("missing constant window fields")? {
+            let index = fields
+                .iter()
+                .position(|field| field["name"] == *name)
+                .ok_or("missing constant window output")?;
+            if let Some(first) = rows.first()
+                && rows.iter().any(|row| row[index] != first[index])
+            {
+                return Ok("mismatch");
+            }
+        }
+    }
     Ok(status)
+}
+
+#[test]
+fn unordered_whole_windows_keep_input_payloads_and_one_extremal_representative() -> TestResult {
+    let expected = json!({"schema":{"type":"struct","fields":[
+        {"name":"id","type":"integer","nullable":false,"metadata":{}},
+        {"name":"k","type":"float","nullable":true,"metadata":{}},
+        {"name":"low","type":"float","nullable":true,"metadata":{}},
+        {"name":"high","type":"float","nullable":true,"metadata":{}}
+    ]},"rows":[["0","80000000","80000000","80000000"],
+               ["1","00000000","80000000","80000000"]]});
+    let case = json!({"id":"float_zeros_negative_all","expected":expected,
+    "constant_window_fields":["low","high"],"allowed_rows":[
+        [["0"],["80000000"],["80000000","00000000"],["80000000","00000000"]],
+        [["1"],["00000000"],["80000000","00000000"],["80000000","00000000"]]
+    ]});
+    let mut actual = expected.clone();
+    for row in actual["rows"].as_array_mut().ok_or("missing rows")? {
+        row[2] = json!("00000000");
+        row[3] = json!("00000000");
+    }
+    assert_eq!(reference_status(&actual, &case)?, "matched");
+    let mut inconsistent = actual.clone();
+    inconsistent["rows"][1][2] = json!("80000000");
+    assert_eq!(reference_status(&inconsistent, &case)?, "mismatch");
+    let mut changed_input = actual.clone();
+    changed_input["rows"][0][1] = json!("00000000");
+    assert_eq!(reference_status(&changed_input, &case)?, "mismatch");
+    let mut fabricated = actual.clone();
+    fabricated["rows"][0][3] = json!("7fc00000");
+    assert_eq!(reference_status(&fabricated, &case)?, "mismatch");
+    let ordered = json!({"id":"float_zeros_negative_all_ordered","expected":expected});
+    assert_eq!(reference_status(&actual, &ordered)?, "mismatch");
+    Ok(())
 }
 
 #[test]
@@ -227,7 +300,7 @@ async fn floating_extrema_match_independent_spark_bits_and_schemas() -> TestResu
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records.len() - 1,
-        if records[0]["probe"] == true { 24 } else { 240 }
+        if records[0]["probe"] == true { 24 } else { 256 }
     );
     assert!(
         records[0]["raw_bits"]
@@ -266,21 +339,31 @@ async fn floating_extrema_match_independent_spark_bits_and_schemas() -> TestResu
         let schema_control =
             spark_results::capture_spark_query_result(&session, &records[1]).await?;
         assert_eq!(schema_control["schema"], records[1]["expected"]["schema"]);
-        for case in &records[1..] {
-            let actual = capture_raw(&session, case).await;
-            let status = match &actual {
-                Ok(actual) => reference_status(actual, case)?,
-                Err(_) => "error",
-            };
-            let matched = matches!(status, "matched" | "matched_except_generated_alias_marker");
-            reports.push(json!({"id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+        for reverse in [false, true] {
+            if reverse {
+                reverse_input_partitions(&session, &records[0]).await?;
+            }
+            for case in &records[1..] {
+                if reverse && case.get("constant_window_fields").is_none() {
+                    continue;
+                }
+                let actual = capture_raw(&session, case).await;
+                let status = match &actual {
+                    Ok(actual) => reference_status(actual, case)?,
+                    Err(_) => "error",
+                };
+                let matched = matches!(status, "matched" | "matched_except_generated_alias_marker");
+                reports.push(json!({"id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                "provider_partition_order":if reverse { "reversed" } else { "forward" },
                 "expected":case["expected"],"allowed_rows":case.get("allowed_rows"),
+                "constant_window_fields":case.get("constant_window_fields"),
                 "actual":actual.as_ref().ok(),"error":actual.as_ref().err().map(ToString::to_string),"matched":matched,"status":status}));
-            if !matched {
-                failures.push(format!(
-                    "{} ANSI={} batch={batch_size}: {actual:?}",
-                    case["id"], case["ansi"]
-                ));
+                if !matched {
+                    failures.push(format!(
+                        "{} ANSI={} batch={batch_size} reversed={reverse}: {actual:?}",
+                        case["id"], case["ansi"]
+                    ));
+                }
             }
         }
     }
@@ -295,6 +378,156 @@ async fn floating_extrema_match_independent_spark_bits_and_schemas() -> TestResu
         "mismatched":failures.len()})
     );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn grouped_extrema_limits_keep_spark_order_and_avoid_the_native_heap() -> TestResult {
+    use datafusion::physical_plan::aggregates::AggregateExec;
+
+    let records = include_str!("fixtures/floating-extrema-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    register_recorded_inputs(&session, &records[0], 1)?;
+    for kind in ["float", "double"] {
+        for ansi in [true, false] {
+            let reference = records[1..]
+                .iter()
+                .find(|case| case["id"] == format!("{kind}_mixed_group") && case["ansi"] == ansi)
+                .ok_or("missing grouped Spark reference")?;
+            for (function, direction, group, value_index) in
+                [("MIN", "ASC", "0", 1), ("MAX", "DESC", "1", 2)]
+            {
+                let row_index = reference["expected"]["rows"]
+                    .as_array()
+                    .ok_or("missing rows")?
+                    .iter()
+                    .position(|row| row[0] == group)
+                    .ok_or("missing winning group")?;
+                let row = &reference["expected"]["rows"][row_index];
+                let allowed = &reference["allowed_rows"][row_index];
+                let mut value_field =
+                    reference["expected"]["schema"]["fields"][value_index].clone();
+                value_field["name"] = json!("extremum");
+                let sql = format!(
+                    "SELECT id%2 AS g,{function}(k) AS extremum FROM {kind}_mixed GROUP BY id%2 ORDER BY extremum {direction} LIMIT 1"
+                );
+                let case = json!({"id":format!("{kind}_limited_{function}"),"ansi":ansi,"sql":sql,
+                    "expected":{"schema":{"type":"struct","fields":[reference["expected"]["schema"]["fields"][0],value_field]},"rows":[[row[0],row[value_index]]]},
+                    "allowed_rows":[[allowed[0],allowed[value_index]]]});
+                let actual = capture_raw(&session, &case).await?;
+                assert_eq!(
+                    reference_status(&actual, &case)?,
+                    "matched",
+                    "{sql}: {actual}"
+                );
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode: ansi,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                let mut pending = vec![query.create_physical_plan(&session).await?];
+                let mut aggregates = 0;
+                while let Some(node) = pending.pop() {
+                    if let Some(aggregate) = node.downcast_ref::<AggregateExec>() {
+                        aggregates += 1;
+                        assert!(
+                            aggregate.get_minmax_desc().is_none(),
+                            "{sql}: native heap shortcut was advertised"
+                        );
+                    }
+                    pending.extend(node.children().into_iter().cloned());
+                }
+                assert!(aggregates > 0, "{sql}: aggregate was not exercised");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn registered_provider_statistics_preserve_safe_shortcuts_and_raw_boundaries() -> TestResult {
+    use arrow::array::Int32Array;
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::{ScalarValue, stats::Precision};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for (name, rows, value, bits, min_shortcut, max_shortcut) in [
+        (
+            "many_numeric",
+            3,
+            "1.5",
+            Some("3ff8000000000000"),
+            true,
+            false,
+        ),
+        (
+            "one_numeric",
+            1,
+            "1.5",
+            Some("3ff8000000000000"),
+            true,
+            true,
+        ),
+        ("zeros", 3, "'-0.0'", Some("8000000000000000"), false, false),
+        ("nulls", 3, "NULL", None, true, true),
+        ("empty", 0, "1.5", None, true, true),
+    ] {
+        let ids = format!("statistics_ids_{name}");
+        let table = format!("statistics_values_{name}");
+        session.register_batch(
+            ids.as_str(),
+            RecordBatch::try_from_iter(vec![(
+                "id",
+                Arc::new(Int32Array::from_iter_values(0..rows)) as arrow::array::ArrayRef,
+            )])?,
+        )?;
+        let view = session
+            .sql(&format!("SELECT CAST({value} AS DOUBLE) AS k FROM {ids}"))
+            .await?;
+        session.register_table(table.as_str(), view.into_view())?;
+        let source = session
+            .table(table.as_str())
+            .await?
+            .create_physical_plan()
+            .await?;
+        let statistics = source.partition_statistics(None)?;
+        assert_eq!(statistics.num_rows, Precision::Exact(rows as usize));
+        if value == "1.5" && rows > 0 {
+            assert_eq!(
+                statistics.column_statistics[0].min_value,
+                Precision::Exact(ScalarValue::Float64(Some(1.5)))
+            );
+            assert_eq!(
+                statistics.column_statistics[0].max_value,
+                Precision::Exact(ScalarValue::Float64(Some(1.5)))
+            );
+        }
+        for (function, shortcut) in [("MIN", min_shortcut), ("MAX", max_shortcut)] {
+            let sql = format!("SELECT {function}(k) AS result FROM {table}");
+            let actual = capture_raw(&session, &json!({"sql":sql,"ansi":true})).await?;
+            assert_eq!(actual["rows"], json!([[bits]]), "{sql}: {actual}");
+            assert_eq!(
+                !actual["plan"]
+                    .as_str()
+                    .ok_or("missing plan")?
+                    .contains("AggregateExec:"),
+                shortcut,
+                "{sql}: {actual}"
+            );
+            println!("registered statistics {sql}: {statistics:?}; {actual}");
+        }
+    }
     Ok(())
 }
 
@@ -361,13 +594,25 @@ async fn floating_extrema_dictionary_and_statistics_diagnostic() -> TestResult {
                 "{table} scan statistics: {:?}",
                 scan.partition_statistics(None)?
             );
-            for sql in [
+            let queries = [
                 format!("SELECT MIN(k) AS low,MAX(k) AS high FROM {table}"),
                 format!("SELECT MIN(k) AS low,MAX(k) AS high FROM {table} GROUP BY CAST(1 AS INT)"),
                 format!("SELECT MIN(k) OVER () AS low,MAX(k) OVER () AS high FROM {table}"),
-            ] {
-                let native_before = native_snapshot(&native, &sql).await?;
-                assert_eq!(native_snapshot(&session, &sql).await?, native_before);
+            ];
+            let mut before_first_spark = Vec::new();
+            for sql in queries {
+                let plain = native_snapshot(&native, &sql).await?;
+                let configured = native_snapshot(&session, &sql).await?;
+                eprintln!(
+                    "native before first Spark query {sql}: plain={plain}, configured={configured}"
+                );
+                before_first_spark.push((sql, plain, configured));
+            }
+            for (sql, native_before, configured_before) in before_first_spark {
+                assert_eq!(
+                    configured_before, native_before,
+                    "{sql}: native contexts differ before first Spark query"
+                );
                 let actual = capture_raw(&session, &json!({"sql":sql,"ansi":true})).await;
                 eprintln!("extrema diagnostic {sql}: {actual:?}");
                 let actual = actual?;
@@ -381,7 +626,10 @@ async fn floating_extrema_dictionary_and_statistics_diagnostic() -> TestResult {
                     ));
                 }
                 let native_after = native_snapshot(&session, &sql).await?;
-                assert_eq!(native_before, native_after);
+                assert_eq!(
+                    configured_before, native_after,
+                    "{sql}: native result changed after Spark planning"
+                );
             }
         }
     }
