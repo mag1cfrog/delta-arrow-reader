@@ -48,6 +48,7 @@ def queries():
     yield "outer_projection_and_filter", (
         "SELECT (SELECT p.a FROM VALUES (1) q(x) WHERE q.x=p.b) "
         "FROM VALUES (1,1) p(a,b)")
+    yield "outer_wildcard", "SELECT (SELECT p.*) FROM VALUES (1) p(a)"
     yield "multiple_rows", "SELECT (SELECT id FROM scalar_inputs)"
     yield "multiple_columns", "SELECT (SELECT 1,2)"
     yield "fallible_scalar", "SELECT (SELECT CAST('bad' AS INT))"
@@ -82,8 +83,8 @@ def main():
             for name, sql in queries():
                 records.append({"id": name, "ansi": ansi, "sql": sql,
                                 "expected": capture(spark, sql)})
-        assert len(records) == 71
-        assert len({(r["id"], r["ansi"]) for r in records[1:]}) == 70
+        assert len(records) == 73
+        assert len({(r["id"], r["ansi"]) for r in records[1:]}) == 72
         with args.output.open("x") as output:
             output.write("".join(json.dumps(record, separators=(",", ":")) + "\n"
                                  for record in records))

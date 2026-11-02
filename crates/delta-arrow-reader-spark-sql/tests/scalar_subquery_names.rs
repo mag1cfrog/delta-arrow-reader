@@ -49,7 +49,7 @@ async fn scalar_subquery_names_fields_and_errors_match_spark() -> TestResult {
 async fn correlated_scalar_subquery_names_match_spark_occurrences() -> TestResult {
     replay_fixture(
         include_str!("fixtures/scalar-subquery-names-correlated-spark.jsonl"),
-        17,
+        19,
     )
     .await
 }
