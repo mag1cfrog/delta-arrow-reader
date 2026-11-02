@@ -986,6 +986,73 @@ UNION/LIMIT early-error differences remain owned by #149 for S07; their complete
 accepted-runtime alternatives remain explicit. Exact Spark error-stage and
 analyzed-nullability parity are not established by the row/schema checks here.
 
+## Guaranteed single-row correlated scalars
+
+`single-row-correlated-spark.jsonl` records 202 independent Spark 4.2.0
+observations in UTC and both ANSI modes. Populated, empty and NULL-valued outer
+providers cover scalar projections and alias chains over a one-row relation,
+with and without an unrelated CAST. Live, dead and conditional DIV/CAST cases
+keep their required errors. The Rust replay compares complete rows, names,
+types, nullability and metadata for 152 references at batch sizes 1 and 32.
+This includes zero/one/multiple-row uncorrelated inner controls and projected
+EXISTS. Required cardinality errors must report the cardinality failure.
+
+`single-row-correlated-metadata-spark.jsonl` adds 24 exact references with
+nonempty source-column metadata and volatile sibling evaluation counts. Direct
+projections retain that metadata; scalar results remove inherited user metadata.
+The scalar-result construction and value-window factory share the existing
+metadata-removal adapter, which preserves Arrow extension metadata, data types,
+NULLs and values. Scalar extension/native controls and the existing window
+metadata tests protect both consumers.
+
+`single-row-correlated-case-metadata-spark.jsonl` adds 12 references where an
+inner CASE initially has no metadata and later simplifies to a source column.
+The replay first verifies that empty inner metadata, then compares complete
+results at both batch sizes, including direct source metadata and empty scalar
+metadata. Bare and incidental-CAST cases require the same boundary. Checking
+only metadata present during scalar construction would miss these cases.
+
+`single-row-correlated-nonnullable-spark.jsonl` adds eight references with
+nonnullable source fields. Rust compares the complete public resolved schema
+with Spark and checks exact rows at both batch sizes. Internal analysis includes
+expression rewrites; its CAST lane can already narrow a scalar field after the
+single-row proof. Internal and physical fields must retain compatible names,
+types and metadata, and may safely narrow nullability. Returned NULLs must fit
+every declaration. The test logs the actual stage schemas and does not replace
+fields with expected schemas.
+
+The other references record explicit boundaries. Eighteen correlated queries
+over real inner relations and 24 queries with a volatile scalar result retain
+their scalar plans during preparation; this checks that the one-row rewrite
+does not consume them. Their Spark execution results are preserved as evidence
+for #140, and are not claimed as passing runtime comparisons. Spark evaluates a
+volatile alias reused as `x+x` once per outer row, so substituting that alias
+twice would be incorrect. The replay does check unused volatile outputs, and a
+separate counting UDF test checks zero evaluations during planning and one per
+executed outer row for a volatile sibling. Empty outer input evaluates no rows.
+
+Six raw projected IN records retain Spark's NULL behavior; separate tests keep
+the approved SQL three-valued policy and native DataFusion behavior. Two raw
+RAND observations keep their original values and schemas as observations only;
+random values from independent executions are not treated as equal. The
+double-nested scalar references require Spark's unresolved-column error. This
+bounded repair does not complete correlated cardinality or volatile scalar
+execution under #140. The original PIVOT/control references remain unchanged
+in the PIVOT fixture and require their separate integration replay.
+
+From the Spark crate directory, use the pinned Python/Java setup above and a
+fresh output path to preserve the committed evidence:
+
+```sh
+single_row_capture=$(mktemp -d)
+python tests/fixtures/capture_single_row_correlated_spark.py "$single_row_capture/single-row-correlated-spark.jsonl"
+python tests/fixtures/capture_single_row_correlated_metadata_spark.py "$single_row_capture/single-row-correlated-metadata-spark.jsonl"
+python tests/fixtures/capture_single_row_correlated_case_metadata_spark.py "$single_row_capture/single-row-correlated-case-metadata-spark.jsonl"
+python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$single_row_capture/single-row-correlated-nonnullable-spark.jsonl"
+cargo test --workspace --test single_row_correlated
+cargo test --workspace --test window_metadata
+```
+
 ## COUNT_IF aggregate filters
 
 `count-if-spark.jsonl` contains 164 independent Spark 4.2.0 observations from
