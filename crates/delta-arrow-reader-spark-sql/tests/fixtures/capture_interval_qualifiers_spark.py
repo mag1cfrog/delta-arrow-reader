@@ -112,12 +112,13 @@ def capture_query(spark, sql):
     try:
         frame = spark.sql(sql)
         schema = frame.schema.jsonValue()
-        # PySpark cannot convert year-month intervals to Python values.
+        # Keep interval support and timestamp formatting independent of Python's host timezone.
         columns = [functions.col("`" + field.name.replace("`", "``") + "`")
                    for field in frame.schema]
         values = frame.select(*[
             (column.cast("string") if isinstance(field.dataType,
-             (types.YearMonthIntervalType, types.DayTimeIntervalType)) else column).alias(str(index))
+             (types.YearMonthIntervalType, types.DayTimeIntervalType,
+              types.TimestampType, types.TimestampNTZType)) else column).alias(str(index))
             for index, (column, field) in enumerate(zip(columns, frame.schema))])
         rows = [encode(row, values.schema) for row in values.collect()]
         rows.sort(key=lambda row: json.dumps(row, separators=(",", ":")))
@@ -150,7 +151,7 @@ def main():
         rows = [(0, 2), (1, 3), (2, None), (3, 5)]
         spark.createDataFrame(rows, schema).createOrReplaceTempView("inputs")
         records = [{"spark_version": spark.version, "timezone": "UTC",
-                    "interval_encoding": "cast_string", "inputs": [
+                    "interval_encoding": "cast_string", "timestamp_encoding": "cast_string", "inputs": [
                         {"name": "inputs", "schema": schema.jsonValue(),
                          "rows": [encode(row, schema) for row in rows]}]}]
         definitions = list(queries())

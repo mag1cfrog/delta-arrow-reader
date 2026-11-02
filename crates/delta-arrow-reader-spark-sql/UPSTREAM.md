@@ -471,3 +471,17 @@ queries retain the default literal schemas. Exact statistics still eliminate the
 aggregate and its scan. The [statistics references](tests/fixtures/README.md#exact-statistics-aggregate-results)
 cover result schemas, values and shortcut eligibility. Metadata preservation
 starts at the physical aggregate schema available to this optimizer.
+
+### Interval expression names
+
+The SQL analyzer retains interval start/end fields alongside month or
+microsecond literal values. Unit presence determines the family even when a
+multiunit literal is zero or cancels. SQL interval literals reject mixed
+year-month/day-time units; calendar interval string casts retain the shared
+parser's calendar representation.
+
+The existing Spark formatter uses those fields for literal and CAST names.
+Resolved operand types determine interval multiplication order and timestamp
+addition/subtraction names. Execution keeps the existing Arrow interval storage.
+The [interval references](tests/fixtures/README.md#interval-field-ranges-and-generated-names)
+record the standalone checks and the separate window/admission/CAST gates.

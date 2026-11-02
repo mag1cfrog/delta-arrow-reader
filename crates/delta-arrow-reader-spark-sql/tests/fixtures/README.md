@@ -1701,3 +1701,46 @@ Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 python tests/fixtures/capture_scalar_float_ordering_spark.py
 cargo test --locked --workspace --test scalar_float_ordering
 ```
+
+## Interval field ranges and generated names
+
+`interval-qualifiers-spark.jsonl` contains 432 independent Spark 4.2.0
+observations in UTC and both ANSI modes, including 16 required errors. It
+covers all 13 year-month and day-time field ranges, zero and negative literals,
+fractional seconds, multiunit literals, cancellation, arithmetic, timestamp
+operand order, interval casts, and timestamp/DATE RANGE bounds. The capture
+retains original schemas and collects interval and timestamp values through SQL
+string casts, so Python's host timezone cannot change the recorded timestamps.
+
+`interval_qualifiers.rs` checks all 392 scalar records: generated names,
+nullability, complete metadata, and agreement between logical and physical Arrow
+fields. Arrow stores intervals as months or microseconds; analyzer unit tests
+check the retained logical field ranges, including zero and cancelled values.
+The replay compares raw values for 374 scalar records. Fourteen non-NULL narrow
+CAST value checks remain gated by [#765](https://github.com/mag1cfrog/delta-arrow-reader/issues/765),
+which owns interval CAST truncation; their names and fields are still checked.
+Twelve aliased timestamp RANGE records compare complete rows and schemas.
+All eight mixed-family interval errors are checked before window resolution.
+Native DataFusion interval queries have separate controls.
+
+The raw capture also retains unaliased OVER names for combined acceptance with
+[#727](https://github.com/mag1cfrog/delta-arrow-reader/issues/727), DATE RANGE
+admission for [#747](https://github.com/mag1cfrog/delta-arrow-reader/issues/747),
+and numeric TIMESTAMP RANGE admission errors. Those remaining consumers are
+not counted as passing standalone interval-name checks. The original 276 window
+references and the original 48 DATE interval references remain unchanged.
+
+The canonical portable capture has SHA256
+`a69f5483344ac3a986eb3cbb35a4fe2dafb71cbd70301a32961ea840410386bf`;
+its script has SHA256
+`12cc8fd6d0e5b755e7d7b99f4040c192e550e1eca2c346200fe80e8c393fc5f7`.
+The first capture remains external review evidence only: its timestamp values
+used the Python host timezone. Commit `72fa7047` preserves that original script.
+
+Regenerate with an existing Python 3.12, PySpark 4.2.0 and Java 21 environment
+from this crate, writing to a fresh path:
+
+```sh
+python tests/fixtures/capture_interval_qualifiers_spark.py /fresh/path/interval-qualifiers-spark.jsonl
+cargo test --locked --workspace --test interval_qualifiers
+```
