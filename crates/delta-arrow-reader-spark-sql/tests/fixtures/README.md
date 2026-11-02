@@ -20,17 +20,36 @@ invalid types and arities, plus month/year interval and timestamp controls.
 days, NULL/error ordering, typed NULL strings, live string providers and arity
 checks with valid arguments. ANSI conversion skips NULL start rows;
 legacy coercion accepts constant string expressions and converts a constant
-NULL string day to zero.
-`date_day_arithmetic.rs` compares full results and field types, nullability and
-metadata at batch sizes 1 and 32. Separate native DataFusion controls retain
-calendar interval arithmetic. DATE RANGE window behavior has its own references.
+NULL string day to zero. `date-day-correlated-spark.jsonl` adds 24 observations
+for outer integer and STRING day operands. Legacy mode rejects outer STRING
+operands, while ANSI mode converts selected values and skips NULL start rows.
+`date-day-lambda-spark.jsonl` adds 32 observations for STRING/integer lambda
+operands and missing columns inside CASE. Legacy mode rejects STRING lambda
+day operands, including typed NULLs; integer operands work in both modes.
+The capture retains the original array of DATE schema and observes each stored
+day through `unix_date`.
+
+`date_day_arithmetic.rs` compares complete rows, field names, types, nullability
+and metadata at batch sizes 1 and 32. DATE results use the resolved declaration
+for comparison with Spark's analyzed schema. Physical fields may become
+nonnullable after folding; every returned NULL must fit both declarations.
+The seven unchanged calendar/timestamp controls retain conservative resolved
+fields and compare their physical fields with the reference. This does not
+establish analyzed nullability parity for those controls. With `--nocapture`,
+the test logs every raw resolved and physical schema, the comparison stage,
+and all result rows or the required error. Stored Date32 day values avoid
+calendar conversion in the Rust observation as well as the Spark capture.
+Separate native DataFusion controls retain calendar interval arithmetic.
+DATE RANGE window behavior has its own references.
 
 Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
 
 ```sh
 python tests/fixtures/capture_date_day_arithmetic_spark.py
 python tests/fixtures/capture_date_day_admission_probes_spark.py
-cargo test --locked --workspace --test date_day_arithmetic
+python tests/fixtures/capture_date_day_correlated_spark.py
+python tests/fixtures/capture_date_day_lambda_spark.py
+cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
 ```
 
 ## Parallel errors

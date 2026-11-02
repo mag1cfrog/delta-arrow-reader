@@ -258,7 +258,12 @@ Two-argument DATE_ADD/DATEADD and DATE_SUB operate on signed 32-bit day values,
 including wrapping overflow in both ANSI modes. They retain their DATE result
 and Spark nullability without converting integer days into calendar intervals.
 Their lazy argument evaluation skips ANSI day-string conversion on NULL start
-rows, and legacy mode coerces constant day strings during planning.
+rows, and legacy mode coerces constant day strings during planning while
+rejecting outer and lambda STRING references. DATE_ADD/DATEADD convert an
+unquoted date unit only for their three-argument timestamp form. Missing
+attributes in empty local and outer scopes retain the unresolved-column
+condition without suggestions; scopes with possible suggestions keep their
+existing diagnostic.
 The [day arithmetic references](tests/fixtures/README.md#integer-day-date-arithmetic)
 cover the full Date32 boundary, string coercion and invalid inputs. Month/year
 intervals, three-argument timestamp forms and the Sail-only ADD_DAYS keep their
