@@ -6,8 +6,10 @@ use datafusion::arrow::datatypes::{
     DataType, IntervalDayTimeType, IntervalUnit, IntervalYearMonthType, TimeUnit,
 };
 use datafusion::functions::expr_fn;
+use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{self, Expr};
+use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
     BinaryExpr, ExprSchemable, HigherOrderUDF, Operator, ScalarUDF, cast, lit, try_cast, when,
 };
@@ -15,10 +17,12 @@ use datafusion_functions::core::expr_ext::FieldAccessor;
 use datafusion_spark::function::datetime::make_dt_interval::SparkMakeDtInterval;
 use datafusion_spark::function::datetime::make_interval::SparkMakeInterval;
 use sail_common::utils::datetime::time_unit_to_multiplier;
+use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_common_datafusion::variant::is_variant_storage_field;
 use sail_function::scalar::datetime::convert_tz::{ConvertTz, ConvertTzLazy};
 use sail_function::scalar::datetime::spark_date::SparkDate;
+use sail_function::scalar::datetime::spark_date_day_arithmetic::SparkDateDayArithmetic;
 use sail_function::scalar::datetime::spark_date_format::SparkDateFormat;
 use sail_function::scalar::datetime::spark_date_part::SparkDatePart;
 use sail_function::scalar::datetime::spark_date_trunc::SparkDateTrunc;
@@ -164,6 +168,76 @@ fn format_interval(interval: Expr, unit: &str) -> Expr {
     })
 }
 
+fn date_day_arithmetic(
+    input: ScalarFunctionInput,
+    function_name: &str,
+    op: Operator,
+) -> PlanResult<Expr> {
+    if input.arguments.len() != 2 {
+        return Err(PlanError::invalid(format!(
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] {function_name} requires 2 arguments"
+        )));
+    }
+    let (date, days) = input.arguments.two()?;
+    let schema = input.function_context.schema;
+    let ansi = input.function_context.plan_config.ansi_mode;
+    let date = match date.get_type(schema)? {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
+            ScalarUDF::from(SparkDate::new(!ansi)).call(vec![date])
+        }
+        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _) | DataType::Null => {
+            cast(date, DataType::Date32)
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires a DATE start, got {other}"
+            )));
+        }
+    };
+    let days = match days.get_type(schema)? {
+        DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Null => {
+            cast(days, DataType::Int32)
+        }
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View if ansi => days,
+        other
+            if other.is_string()
+                && !days.is_volatile()
+                && days.column_refs().is_empty()
+                && !days.contains_scalar_subquery() =>
+        {
+            let context = SimplifyContextBuilder::default()
+                .with_schema(schema.clone())
+                .build();
+            let days = ExprSimplifier::new(context).coerce(days, schema)?;
+            let days = LiteralEvaluator::new().evaluate(&days)?;
+            match days {
+                ScalarValue::Utf8(Some(value))
+                | ScalarValue::LargeUtf8(Some(value))
+                | ScalarValue::Utf8View(Some(value)) => {
+                    let days = value.trim_matches(|c| c <= ' ' || c == '\u{7f}')
+                        .parse::<i32>().map_err(|error| PlanError::invalid(format!(
+                            "[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER] {function_name} requires integer days: {error}"
+                        )))?;
+                    lit(days)
+                }
+                // Spark's legacy string-day coercion converts a foldable NULL string to zero.
+                value if value.is_null() => lit(0_i32),
+                other => {
+                    return Err(PlanError::internal(format!(
+                        "expected string days, got {other}"
+                    )));
+                }
+            }
+        }
+        other => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {function_name} requires integer days, got {other}"
+            )));
+        }
+    };
+    Ok(ScalarUDF::from(SparkDateDayArithmetic::new(op)).call(vec![date, days]))
+}
+
 fn timestampadd_interval(function_name: &str, unit: &str, quantity: Expr) -> PlanResult<Expr> {
     let zero_i32 = || lit(0_i32);
     let zero_f64 = || lit(0_f64);
@@ -256,10 +330,10 @@ fn timestampadd(input: ScalarFunctionInput) -> PlanResult<Expr> {
 
 fn dateadd(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
     match input.arguments.len() {
-        2 => interval_arithmetic(input, "days", Operator::Plus),
+        2 => date_day_arithmetic(input, function_name, Operator::Plus),
         3 => timestampadd_with_name(input, function_name),
         _ => Err(PlanError::invalid(format!(
-            "{function_name} requires 2 or 3 arguments"
+            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] {function_name} requires 2 or 3 arguments"
         ))),
     }
 }
@@ -1284,7 +1358,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("date_part", F::binary(date_part)),
         (
             "date_sub",
-            F::custom(|input| interval_arithmetic(input, "days", Operator::Minus)),
+            F::custom(|input| date_day_arithmetic(input, "date_sub", Operator::Minus)),
         ),
         ("date_trunc", F::custom(date_trunc)),
         ("dateadd", F::custom(|input| dateadd(input, "dateadd"))),

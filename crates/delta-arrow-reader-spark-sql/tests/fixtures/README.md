@@ -5,6 +5,34 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Integer-day DATE arithmetic
+
+`date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
+observations in UTC and both ANSI modes. The capture keeps the original DATE
+schema and collects its values through `unix_date`, so Python's calendar range
+does not limit the reference. Seven day values, including both signed 32-bit
+limits, form a 49-pair input matrix. Required, nullable and empty providers,
+literal expressions and subquery aliases cover DATE_ADD, DATEADD and DATE_SUB.
+
+The cases include wrapping overflow, small integer widths, string coercion,
+invalid types and arities, plus month/year interval and timestamp controls.
+`date-day-admission-probes-spark.jsonl` adds 68 observations for constant string
+days, NULL/error ordering, typed NULL strings, live string providers and arity
+checks with valid arguments. ANSI conversion skips NULL start rows;
+legacy coercion accepts constant string expressions and converts a constant
+NULL string day to zero.
+`date_day_arithmetic.rs` compares full results and field types, nullability and
+metadata at batch sizes 1 and 32. Separate native DataFusion controls retain
+calendar interval arithmetic. DATE RANGE window behavior has its own references.
+
+Regenerate with Python 3.12, PySpark 4.2.0 and Java 21 from this crate:
+
+```sh
+python tests/fixtures/capture_date_day_arithmetic_spark.py
+python tests/fixtures/capture_date_day_admission_probes_spark.py
+cargo test --locked --workspace --test date_day_arithmetic
+```
+
 ## Parallel errors
 
 A single capture cannot specify which unordered partition finishes first.

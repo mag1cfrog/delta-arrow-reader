@@ -3,6 +3,7 @@ pub mod convert_tz;
 pub mod format;
 pub mod negate_duration;
 pub mod spark_date;
+pub mod spark_date_day_arithmetic;
 pub mod spark_date_format;
 pub mod spark_date_part;
 pub mod spark_date_trunc;

@@ -254,6 +254,16 @@ space or uppercase `T`. Partial dates and calendar validation retain their own
 checks. The [boundary references](tests/fixtures/README.md#date-string-boundaries)
 cover strict/tolerant casts and distinguish this repair from timestamp parsing.
 
+Two-argument DATE_ADD/DATEADD and DATE_SUB operate on signed 32-bit day values,
+including wrapping overflow in both ANSI modes. They retain their DATE result
+and Spark nullability without converting integer days into calendar intervals.
+Their lazy argument evaluation skips ANSI day-string conversion on NULL start
+rows, and legacy mode coerces constant day strings during planning.
+The [day arithmetic references](tests/fixtures/README.md#integer-day-date-arithmetic)
+cover the full Date32 boundary, string coercion and invalid inputs. Month/year
+intervals, three-argument timestamp forms and the Sail-only ADD_DAYS keep their
+existing paths.
+
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
