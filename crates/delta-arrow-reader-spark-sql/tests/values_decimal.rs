@@ -182,7 +182,7 @@ async fn match_spark_values_decimal_coercion() -> TestResult {
                                 || message
                                     .contains("Cannot cast string 'bad' to value of Int32 type")
                         }
-                        Some("REMAINDER_BY_ZERO") => message.contains("Divide by zero error"),
+                        Some("REMAINDER_BY_ZERO") => message.contains("[REMAINDER_BY_ZERO]"),
                         _ => false,
                     }
                 }

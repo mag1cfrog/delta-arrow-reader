@@ -7,6 +7,43 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
+### Shared nullability prerequisites for S04
+
+The shared repair combines #714, #718, #719 and #720. Correct VALUES input
+inference exposes the nullable-result contracts of integer DIV, numeric Decimal
+casts and remainder, so these changes need to be validated together. The numeric
+cast adapter also serves implicit integer-literal Decimal conversions. Native
+Arrow/DataFusion kernels continue to perform conversion and arithmetic.
+
+Independent Spark 4.2.0 captures contain 582 numeric-cast, 218 integer-DIV,
+358 arithmetic and 122 VALUES observations. The Rust harness runs each at batch
+sizes 1 and 32. Expanded cases caught NULL/NULL remainder's incorrect type;
+the candidate now coerces its operands to DOUBLE while preserving evaluation.
+Final review also found that the new numeric cast hid a literal-zero divisor
+from legacy remainder pruning. The shared zero check now recognizes that cast;
+20 new reference observations include fallible dividends and nonzero controls.
+The projected-IN rewrite uses a nonnullable match result when both operands are
+nonnullable, keeping physical schemas within their analyzed declarations.
+
+The complete 25,180-observation replay changes 2,297 outcomes: 2,102 schema-only
+changes, ten corrected small-integer remainder types, 180 diagnostic changes and
+five restored required DIV errors. Independent Spark execution covers each
+changed query. Successful rows and names remain unchanged. The independent replay reference regenerates byte-for-byte. Full Linux checks
+pass 525 tests with no failures and two inherited ignored doctests. Fresh
+clean-context Sol/high review found the legacy zero-divisor regression described
+above; the fix and expanded tests passed the repeated full workspace.
+The 1,280 focused observations yield 2,538 Spark matches and 22 exact retained-gap
+comparisons at two batch sizes. Complete historical replacements are recorded
+without relaxing the matcher or its parallel-error alternatives.
+
+Five existing VALUES differences remain explicit: unreachable CASE branches
+widen analyzed nullability (#721), and an unused invalid inline CAST misses its
+required error (#722). Six additional projected-IN/NULL observations also differ
+from Spark on the unchanged staging baseline. They remain unresolved #142 work,
+separate from its previously approved four-case policy. Raw Spark facts remain
+intact and these observations do not count as compatibility matches.
+#717 separately tracks generated DIV names, alongside #710's alias metadata.
+
 ### S04 grouping NULL predicates
 
 The 38 retained grouping observations have been rerun on Spark 4.2.0 and staging
@@ -40,8 +77,9 @@ Sol/high review verified the full correction set and found no remaining
 actionable issue after the NULL-safe schema repair.
 
 #715 separately records the legacy COALESCE STRING nullability difference under
-S07; that path does not invoke the repaired cast. Next continue #714, then the
-remaining #142 grouping/window coverage and compatibility decisions.
+S07; that path does not invoke the repaired cast. The shared DIV/VALUES/cast
+prerequisites are verified above. Next finish the remaining #142 grouping/window
+coverage and compatibility decisions.
 
 ### S04 PIVOT names and floating keys
 
@@ -532,7 +570,7 @@ their own small implementation issues. Assign resumed work to `mag1cfrog`.
 | S04 | Conditional aggregation and window contracts | #142, #656, #696, #697, #708 | COUNT_IF aggregate FILTER, aggregate window FILTER, floating PIVOT signed-zero equality, generated PIVOT names, then remaining aggregation/window coverage |
 | S05 | Dates, timestamps and timezones | #152, #153, #154, #632 | DATE_DIFF width, tolerant parsing, TIMESTAMPDIFF units/elapsed time, date-string boundaries, timestamp-literal separators and DST boundaries |
 | S06 | JSON extraction and hashing | New bounded children of #167 | Requested get_json_object and sha2 behavior, nulls, invalid inputs and dynamic arguments |
-| S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661, #710, #711 | Classify remaining schema/error differences; separately fix generated-alias metadata, struct-to-string nullability, multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
+| S07 | Arithmetic schema and diagnostic contracts | #149, #293, #661, #710, #711, #715, #717, #721, #722 | Generated names/alias metadata, struct-to-string and conditional nullability, unused inline CAST errors, multi-output CAST error order, legacy Decimal-to-integer overflow and the retained BROUND gaps below |
 | S08 | Reader and CLI integration | #189, #190, #191, #192 | Select the same dependency patches at the consuming workspace root; verify Delta snapshots/rows, stream lifecycle, read-only admission, cancellation and resource limits |
 | S09 | Names, projections and subqueries | #137, #138, #139, #140 | Identifiers, SELECT * EXCEPT, case-sensitive resolution and retained nested correlated queries |
 | S10 | Remaining string and nested-value coverage | #151, #155, #156, #666 | Declared string/binary behavior, ELEMENT_AT modes, maps, arrays and explode contracts |

@@ -44,10 +44,13 @@ use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
 use sail_function::scalar::misc::raise_error::RaiseError;
+use sail_function::scalar::spark_cast_numeric_to_decimal::{
+    DecimalCastMode, SparkCastNumericToDecimal,
+};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 
 pub(crate) use super::conditional::SparkNullIfZero;
-pub(crate) use super::small_int_divide::SparkIntegerDivide;
+pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
 
@@ -97,10 +100,10 @@ fn coerce_spark_arithmetic_operands(
         );
     }
     if let Some(target) = spark_decimal_literal_datatype(&left, right_type) {
-        left = cast(left, target);
+        left = cast_integer_literal_to_decimal(left, target, ansi_mode);
     }
     if let Some(target) = spark_decimal_literal_datatype(&right, left_type) {
-        right = cast(right, target);
+        right = cast_integer_literal_to_decimal(right, target, ansi_mode);
     }
     (left, right)
 }
@@ -144,8 +147,13 @@ fn spark_decimal_arithmetic(
     schema: &DFSchemaRef,
     ansi_mode: bool,
 ) -> Expr {
-    let binary =
-        |left, right| Expr::BinaryExpr(BinaryExpr::new(Box::new(left), op, Box::new(right)));
+    let binary = |left, right| {
+        if op == Operator::Modulo {
+            ScalarUDF::from(SparkCheckedModulo::new()).call(vec![left, right])
+        } else {
+            Expr::BinaryExpr(BinaryExpr::new(Box::new(left), op, Box::new(right)))
+        }
+    };
     let (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) =
         (left.get_type(schema), right.get_type(schema))
     else {
@@ -169,7 +177,13 @@ fn spark_decimal_arithmetic(
         _ => return binary(left, right),
     };
     if intermediate_precision <= i32::from(DECIMAL128_MAX_PRECISION) {
-        return binary(left, right);
+        let result = binary(left, right);
+        if ansi_mode || op == Operator::Modulo {
+            return result;
+        }
+        // Legacy Decimal arithmetic remains nullable even when its bounds fit exactly.
+        let (precision, scale) = adjust_precision_scale(precision, scale);
+        return try_cast(result, DataType::Decimal128(precision, scale));
     }
     left = cast(left, DataType::Decimal256(p1, s1));
     right = cast(right, DataType::Decimal256(p2, s2));
@@ -445,6 +459,9 @@ fn is_zero_literal(expr: &Expr) -> bool {
                 false
             }
         }
+        Expr::ScalarFunction(f) if f.func.inner().is::<SparkCastNumericToDecimal>() => {
+            matches!(f.args.as_slice(), [Expr::Literal(scalar, _)] if is_scalar_zero(scalar))
+        }
         _ => false,
     }
 }
@@ -484,7 +501,8 @@ fn make_safe_divisor(
         let zero = match divisor_type {
             DataType::Decimal128(p, s) => lit(ScalarValue::Decimal128(Some(0), *p, *s)),
             DataType::Decimal256(p, s) => lit(ScalarValue::Decimal256(Some(i256::ZERO), *p, *s)),
-            _ => lit(0),
+            DataType::Null => lit(0),
+            _ => cast(lit(0), divisor_type.clone()),
         };
         expr_fn::nullif(divisor, zero)
     }
@@ -649,7 +667,12 @@ fn integer_digit_count(value: i128) -> u8 {
 
 // Numeric/NULL subset of Sail PR 2225's operand coercion, used only by `/`.
 // The probe uses Spark's default literal.pickMinimumPrecision=true.
-fn coerce_decimal_divide_operands(left: Expr, right: Expr, schema: &DFSchemaRef) -> (Expr, Expr) {
+fn coerce_decimal_divide_operands(
+    left: Expr,
+    right: Expr,
+    schema: &DFSchemaRef,
+    ansi_mode: bool,
+) -> (Expr, Expr) {
     let (Ok(left_type), Ok(right_type)) = (left.get_type(schema), right.get_type(schema)) else {
         return (left, right);
     };
@@ -663,15 +686,28 @@ fn coerce_decimal_divide_operands(left: Expr, right: Expr, schema: &DFSchemaRef)
         );
     }
     let left = match spark_decimal_literal_datatype(&left, &right_type) {
-        Some(target) => cast(left, target),
+        Some(target) => cast_integer_literal_to_decimal(left, target, ansi_mode),
         None => left,
     };
     let right = match spark_decimal_literal_datatype(&right, &left_type) {
-        Some(target) => cast(right, target),
+        Some(target) => cast_integer_literal_to_decimal(right, target, ansi_mode),
         None => right,
     };
     let (left, right) = coerce_spark_divide_null_operand(left, right, &left_type, &right_type);
     coerce_decimal_peer_operand(left, right, schema)
+}
+
+fn cast_integer_literal_to_decimal(expr: Expr, target: DataType, ansi_mode: bool) -> Expr {
+    if let DataType::Decimal128(precision, scale) = target {
+        let mode = if ansi_mode {
+            DecimalCastMode::Ansi
+        } else {
+            DecimalCastMode::Legacy
+        };
+        ScalarUDF::from(SparkCastNumericToDecimal::new(precision, scale, mode)).call(vec![expr])
+    } else {
+        cast(expr, target)
+    }
 }
 
 // Research prototype: compute Spark's final-scale coefficient in one array pass.
@@ -973,7 +1009,16 @@ fn check_float_divisor<T: datafusion::arrow::datatypes::ArrowPrimitiveType>(
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct SparkCheckedModulo {
     signature: datafusion_expr::Signature,
-    data_type: DataType,
+}
+
+impl SparkCheckedModulo {
+    fn new() -> Self {
+        Self {
+            signature: datafusion_expr::Signature::user_defined(
+                datafusion_expr::Volatility::Immutable,
+            ),
+        }
+    }
 }
 
 impl datafusion_expr::ScalarUDFImpl for SparkCheckedModulo {
@@ -983,31 +1028,41 @@ impl datafusion_expr::ScalarUDFImpl for SparkCheckedModulo {
     fn signature(&self) -> &datafusion_expr::Signature {
         &self.signature
     }
-    fn return_type(&self, _arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
-        Ok(self.data_type.clone())
+    fn coerce_types(&self, types: &[DataType]) -> datafusion_common::Result<Vec<DataType>> {
+        let [left, right] = types else {
+            return datafusion_common::internal_err!("spark_checked_modulo requires two arguments");
+        };
+        let (left, right) =
+            datafusion_expr::binary::BinaryTypeCoercer::new(left, &Operator::Modulo, right)
+                .get_input_types()?;
+        Ok(vec![left, right])
+    }
+    fn return_type(&self, types: &[DataType]) -> datafusion_common::Result<DataType> {
+        let [left, right] = types else {
+            return datafusion_common::internal_err!("spark_checked_modulo requires two arguments");
+        };
+        datafusion_expr::binary::BinaryTypeCoercer::new(left, &Operator::Modulo, right)
+            .get_result_type()
     }
     fn simplify(
         &self,
         args: Vec<Expr>,
-        _info: &datafusion_expr::simplify::SimplifyContext,
+        info: &datafusion_expr::simplify::SimplifyContext,
     ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
         use datafusion_expr::simplify::ExprSimplifyResult;
         if args
             .iter()
             .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
         {
+            let types = args
+                .iter()
+                .map(|arg| info.get_data_type(arg))
+                .collect::<datafusion_common::Result<Vec<_>>>()?;
             return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::try_from(
-                &self.data_type,
+                &self.return_type(&types)?,
             )?)));
         }
-        if matches!(&args[1], Expr::Literal(ScalarValue::Float32(Some(b)), _) if *b != 0.0)
-            || matches!(&args[1], Expr::Literal(ScalarValue::Float64(Some(b)), _) if *b != 0.0)
-        {
-            let (left, right) = args.two()?;
-            return Ok(ExprSimplifyResult::Simplified(Expr::BinaryExpr(
-                BinaryExpr::new(Box::new(left), Operator::Modulo, Box::new(right)),
-            )));
-        }
+        // Keep the nullable UDF boundary even for a nonzero constant divisor.
         Ok(ExprSimplifyResult::Original(args))
     }
     fn invoke_with_args(
@@ -1021,23 +1076,19 @@ impl datafusion_expr::ScalarUDFImpl for SparkCheckedModulo {
             return datafusion_common::internal_err!("spark_checked_modulo requires two arguments");
         };
         apply(left, right, |left, right| {
-            let check = match self.data_type {
+            let check = match left.get().0.data_type() {
                 DataType::Float32 => check_float_divisor::<Float32Type>(left, right),
                 DataType::Float64 => check_float_divisor::<Float64Type>(left, right),
-                _ => {
-                    return Err(ArrowError::ComputeError(
-                        "unexpected floating remainder type".into(),
-                    ));
-                }
+                // Arrow checks integer and Decimal zeros using both validity masks.
+                _ => Ok(()),
             };
-            check.map_err(|error| {
+            check.and_then(|()| rem(left, right)).map_err(|error| {
                 if matches!(error, ArrowError::DivideByZero) {
                     ArrowError::ComputeError("[REMAINDER_BY_ZERO] Remainder by zero".into())
                 } else {
                     error
                 }
-            })?;
-            rem(left, right)
+            })
         })
     }
 }
@@ -1213,7 +1264,7 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
         false,
     )?;
     let (dividend, divisor) =
-        coerce_decimal_divide_operands(dividend, divisor, function_context.schema);
+        coerce_decimal_divide_operands(dividend, divisor, function_context.schema, ansi_mode);
     let dividend_type = dividend.get_type(function_context.schema);
     let divisor_type = divisor.get_type(function_context.schema);
 
@@ -1383,6 +1434,12 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
             }
         }
         Expr::ScalarFunction(f)
+            if f.func.inner().downcast_ref::<SparkCastNumericToDecimal>()
+                .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi) =>
+        {
+            matches!(f.args.as_slice(), [expr] if matches!(expr, Expr::Column(_)) || column_cast(expr, schema))
+        }
+        Expr::ScalarFunction(f)
             if f.func
                 .inner()
                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
@@ -1407,6 +1464,9 @@ pub(crate) fn guard_cast_arithmetic(
             Expr::Cast(cast) => simple(&cast.expr),
             Expr::TryCast(cast) => simple(&cast.expr),
             Expr::Alias(alias) => simple(&alias.expr),
+            Expr::ScalarFunction(f) if f.func.inner().is::<SparkCastNumericToDecimal>() => {
+                matches!(f.args.as_slice(), [expr] if simple(expr))
+            }
             _ => false,
         }
     }
@@ -1531,44 +1591,45 @@ fn spark_div(input: ScalarFunctionInput) -> PlanResult<Expr> {
         }
     }
 
-    if let (Ok(left @ (DataType::Int8 | DataType::Int16 | DataType::Int32)), Ok(right)) =
-        (&dividend_type, &divisor_type)
-        && left == right
-    {
+    if integer_operands {
+        // Keep equal small widths for the widening kernel; mixed widths use BIGINT.
+        let input_type = match (&dividend_type, &divisor_type) {
+            (Ok(left), Ok(right)) if left == right && left.is_signed_integer() => left.clone(),
+            _ => DataType::Int64,
+        };
+        let coerce = |expr, data_type: &datafusion_common::Result<DataType>| {
+            if data_type
+                .as_ref()
+                .is_ok_and(|data_type| *data_type == input_type)
+            {
+                expr
+            } else {
+                cast(expr, input_type.clone())
+            }
+        };
+        let dividend = coerce(dividend, &dividend_type);
+        let divisor = coerce(divisor, &divisor_type);
         let divisor = if function_context.plan_config.ansi_mode {
             divisor
         } else {
-            // Keep NULLIF at the input width; an Int32 zero would widen Int8/Int16.
-            expr_fn::nullif(divisor, lit(ScalarValue::new_zero(right)?))
+            expr_fn::nullif(divisor, lit(ScalarValue::new_zero(&input_type)?))
         };
         return Ok(ScalarUDF::from(SparkIntegerDivide {
             ansi: function_context.plan_config.ansi_mode,
             signature: datafusion_expr::Signature::exact(
-                vec![left.clone(); 2],
+                vec![input_type; 2],
                 datafusion_expr::Volatility::Immutable,
             ),
         })
         .call(vec![dividend, divisor]));
     }
 
-    // Decimal peers have their own coercion; widen only the signed-integer family.
-    let (dividend, divisor) = match (&dividend_type, &divisor_type) {
-        (Ok(left), Ok(right)) if integer_operands => {
-            let widen = |expr, data_type: &DataType| match data_type {
-                DataType::Int8 | DataType::Int16 | DataType::Int32 => cast(expr, DataType::Int64),
-                _ => expr,
-            };
-            (widen(dividend, left), widen(divisor, right))
-        }
-        _ => (dividend, divisor),
-    };
-
     let ansi_mode = function_context.plan_config.ansi_mode;
 
     // Native Decimal division, like integer division, checks only live zeros.
     // A separate divisor CASE hides a NULL divisor from scalar CAST pruning.
     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
-    let divisor = if ansi_mode && (integer_operands || decimal_operands) {
+    let divisor = if ansi_mode && decimal_operands {
         divisor
     } else {
         make_safe_divisor(
@@ -1578,19 +1639,6 @@ fn spark_div(input: ScalarFunctionInput) -> PlanResult<Expr> {
             "Division by zero",
         )
     };
-
-    // Only a BIGINT dividend can overflow after integer widening. Keep the
-    // checked ANSI expression; legacy BIGINT uses the existing integer kernel.
-    if !ansi_mode && integer_operands && matches!(dividend_type, Ok(DataType::Int64)) {
-        return Ok(ScalarUDF::from(SparkIntegerDivide {
-            ansi: function_context.plan_config.ansi_mode,
-            signature: datafusion_expr::Signature::exact(
-                vec![DataType::Int64; 2],
-                datafusion_expr::Volatility::Immutable,
-            ),
-        })
-        .call(vec![dividend, divisor]));
-    }
 
     let div_expr = match (&dividend_type, &divisor_type) {
         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
@@ -1868,13 +1916,7 @@ fn checked_modulo_respects_slices_nulls_and_scalar_positions() -> datafusion_com
     use datafusion_common::config::ConfigOptions;
     use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl};
     for data_type in [DataType::Float32, DataType::Float64] {
-        let udf = SparkCheckedModulo {
-            signature: datafusion_expr::Signature::exact(
-                vec![data_type.clone(); 2],
-                datafusion_expr::Volatility::Immutable,
-            ),
-            data_type: data_type.clone(),
-        };
+        let udf = SparkCheckedModulo::new();
         let scalar = |v| -> datafusion_common::Result<ColumnarValue> {
             Ok(ColumnarValue::Scalar(
                 ScalarValue::Float64(v).cast_to(&data_type)?,
@@ -1991,6 +2033,10 @@ fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
         dividend.get_type(function_context.schema),
         divisor.get_type(function_context.schema),
     ) {
+        (Ok(DataType::Null), Ok(DataType::Null)) => (
+            cast(dividend, DataType::Float64),
+            cast(divisor, DataType::Float64),
+        ),
         (Ok(left_type), Ok(right_type)) => {
             let (dividend, divisor) = coerce_spark_arithmetic_operands(
                 dividend,
@@ -2023,21 +2069,6 @@ fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
         return Ok(lit(ScalarValue::try_from(&data_type)?));
     }
     if ansi_mode {
-        if matches!(data_type, DataType::Float32 | DataType::Float64) {
-            return Ok(ScalarUDF::from(SparkCheckedModulo {
-                signature: datafusion_expr::Signature::exact(
-                    vec![data_type.clone(); 2],
-                    datafusion_expr::Volatility::Immutable,
-                ),
-                data_type: data_type.clone(),
-            })
-            .call(vec![
-                cast(dividend, data_type.clone()),
-                cast(divisor, data_type),
-            ]));
-        }
-        // Arrow integer/Decimal remainder already checks zeros only on valid
-        // rows. A separate divisor-only CASE loses the dividend's NULL mask.
         return Ok(modulo(dividend, divisor));
     }
     let divisor_type = divisor.get_type(function_context.schema)?;
@@ -2686,15 +2717,23 @@ mod checked_integer_tests {
                     );
                 }
             }
-            let plan = frame(&ctx, false, "SELECT a DIV 2L AS q FROM bounds")
-                .await
-                .into_optimized_plan()
-                .unwrap();
-            assert!(
-                !plan
-                    .display_indent()
-                    .to_string()
-                    .contains("spark_integer_divide")
+            let constant_divisor = frame(&ctx, false, "SELECT a DIV 2L AS q FROM bounds").await;
+            assert!(constant_divisor.schema().field(0).is_nullable());
+            let values = constant_divisor.collect().await.unwrap();
+            let values = values
+                .iter()
+                .flat_map(|batch| {
+                    batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .unwrap()
+                        .iter()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                values,
+                vec![Some(i64::MIN / 2), Some((i64::MIN + 1) / 2), None, Some(3)]
             );
             for query_ansi in [false, true] {
                 for sql in [

@@ -9,10 +9,12 @@ use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams, WindowFunctionParams};
 use datafusion_expr::{
     AggregateUDF, BinaryExpr, ExprSchemable, Operator, ScalarUDF, ScalarUDFImpl, WindowFrame,
-    WindowFunctionDefinition, WindowUDF, cast, expr, lit, try_cast,
+    WindowFunctionDefinition, WindowUDF, cast, expr, lit,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
+use sail_function::scalar::spark_cast_numeric_to_decimal::{
+    DecimalCastMode, SparkCastNumericToDecimal,
+};
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
 use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIES};
@@ -174,15 +176,16 @@ impl ScalarFunctionBuilder {
                             ))
                             .call(vec![arg]));
                         }
-                        DataType::Float32 | DataType::Float64 => {
-                            return Ok(if function_context.plan_config.ansi_mode {
-                                ScalarUDF::new_from_impl(SparkCastFloatToDecimal::new(
-                                    precision, scale,
-                                ))
-                                .call(vec![arg])
+                        source if source.is_numeric() => {
+                            let mode = if function_context.plan_config.ansi_mode {
+                                DecimalCastMode::Ansi
                             } else {
-                                try_cast(arg, data_type.clone())
-                            });
+                                DecimalCastMode::Legacy
+                            };
+                            return Ok(ScalarUDF::new_from_impl(SparkCastNumericToDecimal::new(
+                                precision, scale, mode,
+                            ))
+                            .call(vec![arg]));
                         }
                         _ => {}
                     }
@@ -599,7 +602,7 @@ fn in_list_skips_only_irrelevant_float_normalization() -> datafusion_common::Res
             ),
             (
                 "try_casts",
-                vec![try_cast(lit(1_i64), ty.clone())],
+                vec![datafusion_expr::try_cast(lit(1_i64), ty.clone())],
                 vec![Some(1.0)],
                 true,
             ),
@@ -1649,7 +1652,7 @@ fn comparison_float_simplifies_only_canonical_inputs() -> datafusion_common::Res
         for data_type in [DataType::Float32, DataType::Float64] {
             for safe in [false, true] {
                 let cast = if safe {
-                    try_cast(col("v"), data_type.clone())
+                    datafusion_expr::try_cast(col("v"), data_type.clone())
                 } else {
                     cast(col("v"), data_type.clone())
                 };

@@ -118,6 +118,18 @@ nonnullable results even for nullable operands. Both expression nullability and
 field construction use that rule, as does the physical expression, preserving
 NULL-safe comparison consumers.
 
+Numeric-to-Decimal CAST, integer DIV and remainder retain their Spark nullable
+declarations around the existing Arrow kernels. Numeric CAST modes share the
+same overflow rule, including implicit integer-literal conversions. Legacy
+Decimal arithmetic retains nullable results even when its declared bounds fit.
+The expression-error analyzer recognizes these adapters so NULL propagation
+and local-input pruning preserve required conversion and arithmetic errors.
+VALUES column declarations use the coerced expressions' nullability. Projected
+IN can reuse its nonnullable match result when both operands are nonnullable;
+nullable operands retain the existing three-valued comparison.
+The [expression references](tests/fixtures/README.md#numeric-decimal-and-arithmetic-nullability)
+cover exact schemas, rows, required errors and separately recorded open gaps.
+
 ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
 batch results. The Spark analyzer exposes known NULLs through projection/alias

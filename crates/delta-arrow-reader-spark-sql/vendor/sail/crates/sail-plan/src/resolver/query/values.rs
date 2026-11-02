@@ -40,7 +40,29 @@ impl PlanResolver<'_> {
             Ok::<_, PlanError>(results)
         }
         .await?;
-        let plan = LogicalPlanBuilder::values(values)?.build()?;
+        let mut plan = LogicalPlanBuilder::values(values)?.build()?;
+        if let LogicalPlan::Values(values) = &mut plan {
+            let fields = values
+                .schema
+                .fields()
+                .iter()
+                .enumerate()
+                .map(|(column, field)| {
+                    let nullable = values.values.iter().try_fold(false, |nullable, row| {
+                        Ok::<_, datafusion_common::DataFusionError>(
+                            nullable || row[column].nullable(&schema)?,
+                        )
+                    })?;
+                    Ok::<_, datafusion_common::DataFusionError>(
+                        field.as_ref().clone().with_nullable(nullable),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            values.schema = Arc::new(DFSchema::from_unqualified_fields(
+                fields.into(),
+                values.schema.metadata().clone(),
+            )?);
+        }
         let expr = plan
             .schema()
             .columns()

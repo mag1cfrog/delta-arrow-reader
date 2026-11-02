@@ -37,7 +37,7 @@ use datafusion_expr::expr_rewriter::create_col_from_scalar_expr;
 use datafusion_expr::logical_plan::{JoinType, Subquery};
 use datafusion_expr::utils::{conjunction, expr_to_columns, split_conjunction_owned};
 use datafusion_expr::{
-    BinaryExpr, Expr, Filter, LogicalPlan, LogicalPlanBuilder, Operator, exists,
+    BinaryExpr, Expr, ExprSchemable, Filter, LogicalPlan, LogicalPlanBuilder, Operator, exists,
     in_subquery, lit, not, not_exists, not_in_subquery, when,
 };
 
@@ -228,6 +228,14 @@ fn in_subquery_value_mark_join(
     else {
         return Ok(None);
     };
+
+    // Nonnullable inputs cannot produce UNKNOWN, including an empty subquery.
+    if !expr.nullable(left.schema())? && !subquery.schema().field(0).is_nullable() {
+        return Ok(Some((
+            matched_plan,
+            if negated { not(matched) } else { matched },
+        )));
+    }
 
     // SQL IN needs three facts per outer row to distinguish FALSE from UNKNOWN.
     // This filter is above the subquery, so read its output column rather
