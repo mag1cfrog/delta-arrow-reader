@@ -129,6 +129,22 @@ async fn struct_identifier_positions_after_wildcards_match_spark() -> TestResult
 }
 
 #[tokio::test]
+async fn struct_anonymous_positions_after_wildcards_match_spark() -> TestResult {
+    let wildcard_records = include_str!("fixtures/review-757-ordinary-wildcard-spark-v1.jsonl")
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(wildcard_records.len() - 1, 8);
+    assert!(
+        wildcard_records[0]["spark_build"]
+            .as_str()
+            .ok_or("missing Spark build")?
+            .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
+    );
+    compare_spark_cases(&wildcard_records, None).await
+}
+
+#[tokio::test]
 async fn native_struct_results_are_unchanged() -> TestResult {
     let records = records()?;
     let native = SessionContext::new();
