@@ -109,20 +109,22 @@ async fn equivalent_windows_keep_native_sql_unchanged() -> TestResult {
         register_recorded_inputs(session, &metadata, 2)?;
     }
     for table in ["inputs", "empty_inputs", "null_inputs"] {
-        let sql = format!(
-            "SELECT id,LEAD(v,2) OVER w AS literal,LEAD(v,1+1) OVER w AS folded,\
-             LEAD(v,CAST(2 AS INT)) OVER w AS cast_offset,LEAD(v,2) OVER w AS duplicate \
-             FROM {table} WINDOW w AS (ORDER BY id) ORDER BY id"
-        );
-        let mut results = Vec::new();
-        for session in [&native, &configured] {
-            let query = session.sql(&sql).await?;
-            let logical_schema = query.schema().clone();
-            let physical = query.create_physical_plan().await?;
-            assert_eq!(logical_schema.as_arrow(), physical.schema().as_ref());
-            results.push(collect(physical, session.task_ctx()).await?);
+        for offset in ["2", "1+1", "CAST(2 AS INT)"] {
+            let sql = format!(
+                "SELECT id,LEAD(v,{offset}) OVER w AS value,\
+                 LEAD(v,{offset}) OVER w AS duplicate \
+                 FROM {table} WINDOW w AS (ORDER BY id) ORDER BY id"
+            );
+            let mut results = Vec::new();
+            for session in [&native, &configured] {
+                let query = session.sql(&sql).await?;
+                let logical_schema = query.schema().clone();
+                let physical = query.create_physical_plan().await?;
+                assert_eq!(logical_schema.as_arrow(), physical.schema().as_ref());
+                results.push(collect(physical, session.task_ctx()).await?);
+            }
+            assert_eq!(results[0], results[1], "{sql}");
         }
-        assert_eq!(results[0], results[1], "{sql}");
     }
     Ok(())
 }
