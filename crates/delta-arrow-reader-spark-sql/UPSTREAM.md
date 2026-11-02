@@ -40,6 +40,12 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
+The DataFusion expression fork also recognizes aliases when deriving
+ROW_NUMBER's functional dependencies in `Window::try_new`. Spark materializes
+windows under opaque field aliases so equivalent offsets retain separate
+outputs through simplification. The existing dependency rule still applies only
+to ROW_NUMBER without PARTITION BY.
+
 Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
 to their pinned registry packages. They use those packages directly; the inventory
 retains their accepted file hashes and registry mappings.
