@@ -13,6 +13,9 @@ use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
 
+// Generated labels hide declared lambda parameter names.
+pub(super) const LAMBDA_VARIABLE_EXPRESSION_NAME: &str = "namedlambdavariable()";
+
 pub(super) fn is_spec_lambda_argument(argument: &spec::Expr) -> bool {
     match argument {
         spec::Expr::LambdaFunction { .. } => true,
@@ -86,7 +89,7 @@ impl PlanResolver<'_> {
         let mut names: Vec<String> = Vec::with_capacity(slots.len());
         let mut exprs: Vec<expr::Expr> = Vec::with_capacity(slots.len());
         for slot in slots {
-            let NamedExpr { name, expr, .. } = match slot {
+            let named = match slot {
                 Slot::Resolved(named) => named,
                 Slot::Lambda(function, arguments) => {
                     let param_fields = lambda_params.next().ok_or_else(|| {
@@ -104,8 +107,8 @@ impl PlanResolver<'_> {
                     .await?
                 }
             };
-            names.push(name.one()?);
-            exprs.push(expr);
+            names.push(named.expression_name()?);
+            exprs.push(named.expr);
         }
         Ok((names, exprs))
     }
@@ -167,8 +170,12 @@ impl PlanResolver<'_> {
         };
         let name = format!(
             "lambdafunction({}, {})",
-            body.name.clone().one()?,
-            params.join(", ")
+            body.expression_name()?,
+            params
+                .iter()
+                .map(|_| LAMBDA_VARIABLE_EXPRESSION_NAME)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
         Ok(NamedExpr::new(
             vec![name],
@@ -199,6 +206,7 @@ impl PlanResolver<'_> {
         Ok(NamedExpr::new(
             vec![declared.clone()],
             expr::Expr::LambdaVariable(LambdaVariable::new(declared, field)),
-        ))
+        )
+        .with_expression_name(LAMBDA_VARIABLE_EXPRESSION_NAME.to_string()))
     }
 }

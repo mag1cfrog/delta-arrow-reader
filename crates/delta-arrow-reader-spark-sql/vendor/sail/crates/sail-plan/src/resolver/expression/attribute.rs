@@ -12,6 +12,7 @@ use sail_function::scalar::array_struct_field::ArrayStructField;
 use crate::error::{PlanError, PlanResult};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::expression::lambda::LAMBDA_VARIABLE_EXPRESSION_NAME;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -33,7 +34,7 @@ impl PlanResolver<'_> {
                 .resolve_lambda_parameter(first.as_ref())
                 .map(|(param, field)| (param.to_string(), field.cloned()))
         {
-            let display = rest
+            let projection_name = rest
                 .last()
                 .map(|x| x.as_ref())
                 .unwrap_or(declared.as_str())
@@ -45,7 +46,13 @@ impl PlanResolver<'_> {
                     vec![expr, lit(part.as_ref().to_string())],
                 ));
             }
-            return Ok(NamedExpr::new(vec![display], expr));
+            let expression_name = std::iter::once(LAMBDA_VARIABLE_EXPRESSION_NAME)
+                .chain(rest.iter().map(|part| part.as_ref()))
+                .collect::<Vec<_>>()
+                .join(".");
+            return Ok(
+                NamedExpr::new(vec![projection_name], expr).with_expression_name(expression_name)
+            );
         }
         if let Some((name, expr)) =
             self.resolve_aggregate_field(&name, state.get_grouping_for_having())?
@@ -57,8 +64,8 @@ impl PlanResolver<'_> {
         {
             return Ok(NamedExpr::new(vec![name], expr));
         }
-        if let Some((name, expr)) = self.resolve_field_or_nested_field(&name, schema, state)? {
-            return Ok(NamedExpr::new(vec![name], expr));
+        if let Some(named) = self.resolve_field_or_nested_field(&name, schema, state)? {
+            return Ok(named);
         }
         if let Some((name, expr)) =
             self.resolve_aggregate_field(&name, state.get_projections_for_grouping())?
@@ -88,7 +95,7 @@ impl PlanResolver<'_> {
         name: &spec::ObjectName,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<Option<(String, expr::Expr)>> {
+    ) -> PlanResult<Option<NamedExpr>> {
         let candidates = Self::generate_qualified_nested_field_candidates(name.parts());
         let mut candidates = schema
             .iter()
@@ -108,8 +115,19 @@ impl PlanResolver<'_> {
                                 field.data_type(),
                                 inner,
                             )?;
-                            let name = inner.last().unwrap_or(name).as_ref().to_string();
-                            Some((name, expr))
+                            let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
+                            let named = NamedExpr::new(vec![projection_name], expr);
+                            Some(if inner.is_empty() {
+                                named
+                            } else {
+                                named.with_expression_name(
+                                    std::iter::once(*name)
+                                        .chain(inner.iter())
+                                        .map(|part| part.as_ref())
+                                        .collect::<Vec<_>>()
+                                        .join("."),
+                                )
+                            })
                         } else {
                             None
                         }

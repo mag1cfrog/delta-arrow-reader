@@ -306,16 +306,9 @@ impl PlanResolver<'_> {
         let projections = projections
             .into_iter()
             .map(|x| {
-                let NamedExpr {
-                    name,
-                    expr,
-                    metadata,
-                } = x;
-                let expr = Self::rebase_expression(expr, &aggregate_or_grouping_exprs, &plan)?;
                 Ok(NamedExpr {
-                    name,
-                    expr,
-                    metadata,
+                    expr: Self::rebase_expression(x.expr, &aggregate_or_grouping_exprs, &plan)?,
+                    ..x
                 })
             })
             .collect::<PlanResult<Vec<_>>>()?;
@@ -342,6 +335,7 @@ impl PlanResolver<'_> {
                     name,
                     expr,
                     metadata: _,
+                    ..
                 } = x;
                 Ok(expr.alias(state.register_field_name(name.one()?)))
             })
@@ -856,6 +850,7 @@ impl PlanResolver<'_> {
             name,
             expr,
             metadata,
+            expression_name,
         } in grouping
         {
             let exprs = match expr {
@@ -871,6 +866,7 @@ impl PlanResolver<'_> {
                 name: vec![name],
                 expr,
                 metadata: metadata.clone(),
+                expression_name: expression_name.clone(),
             }));
         }
         Ok(result)
@@ -973,17 +969,12 @@ impl PlanResolver<'_> {
             .into_iter()
             .enumerate()
             .map(|(index, named)| {
-                let NamedExpr {
-                    name,
-                    expr,
-                    metadata,
-                } = named.ok_or_else(|| {
+                let named = named.ok_or_else(|| {
                     PlanError::internal(format!("projection {index} was not resolved"))
                 })?;
                 Ok(NamedExpr {
-                    name,
-                    expr: Self::replace_generator_expressions(expr, generator_replacements)?,
-                    metadata,
+                    expr: Self::replace_generator_expressions(named.expr, generator_replacements)?,
+                    ..named
                 })
             })
             .collect()
@@ -995,20 +986,14 @@ impl PlanResolver<'_> {
         has_grouping_set: bool,
         grouping_order: &[usize],
     ) -> PlanResult<NamedExpr> {
-        let NamedExpr {
-            name,
-            expr,
-            metadata,
-        } = named_expr;
         Ok(NamedExpr {
-            name,
             expr: Self::rewrite_grouping_expr(
-                expr,
+                named_expr.expr,
                 grouping_exprs,
                 has_grouping_set,
                 grouping_order,
             )?,
-            metadata,
+            ..named_expr
         })
     }
 

@@ -266,9 +266,15 @@ impl PlanResolver<'_> {
         let mut exprs: Vec<expr::Expr> = vec![];
 
         for expression in expressions {
-            let NamedExpr { name, expr, .. } = self
+            let named = self
                 .resolve_named_expression(expression, schema, state)
                 .await?;
+            let NamedExpr {
+                name,
+                expression_name,
+                expr,
+                ..
+            } = named;
 
             match expr {
                 // Expand wildcard inside `struct(...)` only, to match Spark behavior:
@@ -314,7 +320,7 @@ impl PlanResolver<'_> {
                 }
 
                 other => {
-                    names.push(name.one()?);
+                    names.push(expression_name.unwrap_or(name.one()?));
                     exprs.push(other);
                 }
             }
