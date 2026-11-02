@@ -1,7 +1,11 @@
 //! Integer-day DATE arithmetic preserves the entire Date32 representation.
 
-use arrow::datatypes::DataType;
+use std::error::Error;
+
+use arrow::array::{Array, AsArray};
+use arrow::datatypes::{DataType, Date32Type, Field};
 use datafusion::execution::SessionStateBuilder;
+use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
@@ -10,9 +14,7 @@ use serde_json::{Value, json};
 mod spark_inputs;
 use spark_inputs::register_recorded_inputs;
 
-#[path = "support/spark_results.rs"]
-mod spark_results;
-use spark_results::{TestResult, capture_spark_query_result};
+type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 pub(crate) async fn capture_date_result(
     session: &SessionContext,
@@ -31,31 +33,80 @@ pub(crate) async fn capture_date_result(
     )
     .await?;
     let physical = query.create_physical_plan(session).await?;
-    let schema = physical.schema();
+    let physical_schema = physical.schema();
     assert_eq!(query.column_names, ["r"]);
-    assert_eq!(schema.fields().len(), 1);
-    let field = schema.field(0);
-    if field.data_type() != &DataType::Date32 {
-        return capture_spark_query_result(session, case).await;
+    assert_eq!(physical_schema.fields().len(), 1);
+    let physical_field = physical_schema.field(0);
+    let resolved_field = query.logical_plan.schema().field(0);
+    assert_eq!(physical_field.name(), &query.column_names[0]);
+    assert_eq!(resolved_field.data_type(), physical_field.data_type());
+    assert_eq!(resolved_field.metadata(), physical_field.metadata());
+    // Folding can narrow a physical field while the analyzed declaration stays nullable.
+    assert!(!physical_field.is_nullable() || resolved_field.is_nullable());
+    let physical_control = matches!(
+        case["id"].as_str(),
+        Some(
+            "month_end"
+                | "year_interval"
+                | "day_interval"
+                | "timestamp_day"
+                | "timestamp_month"
+                | "dateadd_three"
+                | "date_add_three"
+        )
+    );
+    let comparison_field = if physical_control {
+        assert_eq!(resolved_field.data_type(), &DataType::Utf8);
+        // These unchanged controls have conservative resolved fields before folding.
+        assert!(resolved_field.is_nullable());
+        physical_field
+    } else {
+        assert_eq!(resolved_field.data_type(), &DataType::Date32);
+        resolved_field
+    };
+    let mut field = capture_field(comparison_field)?;
+    field["name"] = json!(query.column_names[0]);
+    let mut rows = Vec::new();
+    for batch in collect(physical, session.task_ctx()).await? {
+        assert_eq!(batch.schema(), physical_schema);
+        let column = batch.column(0);
+        assert!(physical_field.is_nullable() || column.null_count() == 0);
+        for row in 0..batch.num_rows() {
+            let value = if column.is_null(row) {
+                assert!(resolved_field.is_nullable());
+                Value::Null
+            } else {
+                match column.data_type() {
+                    // Read stored days directly, including dates outside calendar ranges.
+                    DataType::Date32 => {
+                        json!(column.as_primitive::<Date32Type>().value(row).to_string())
+                    }
+                    DataType::Utf8 => json!(column.as_string::<i32>().value(row)),
+                    other => return Err(format!("unexpected result type: {other}").into()),
+                }
+            };
+            rows.push(vec![value]);
+        }
     }
-    let logical = query.logical_plan.schema().field(0);
-    assert_eq!(field.name(), &query.column_names[0]);
-    if logical.data_type() != field.data_type()
-        || logical.is_nullable() != field.is_nullable()
-        || logical.metadata() != field.metadata()
-    {
-        return Err(format!("logical field {logical:?} differs from DATE field {field:?}").into());
-    }
-    let schema = json!({"type":"struct","fields":[{"name":field.name(),"type":"date",
-        "nullable":field.is_nullable(),"metadata":field.metadata()}]});
-    // UNIX_DATE observes Date32 extrema without converting them to a calendar date.
-    let mut result = capture_spark_query_result(
-        session,
-        &json!({"ansi":ansi_mode,"sql":format!("SELECT unix_date(r) AS r FROM ({sql}) observed")}),
-    )
-    .await?;
-    result["schema"] = schema;
-    Ok(result)
+    rows.sort_by_key(|row| json!(row).to_string());
+    Ok(json!({
+        "resolved_schema":{"type":"struct","fields":[capture_field(resolved_field)?],
+            "metadata":query.logical_plan.schema().metadata()},
+        "physical_schema":{"type":"struct","fields":[capture_field(physical_field)?],
+            "metadata":physical_schema.metadata()},
+        "comparison_stage":if physical_control { "physical" } else { "resolved" },
+        "compared":{"schema":{"type":"struct","fields":[field]},"rows":rows}
+    }))
+}
+
+fn capture_field(field: &Field) -> TestResult<Value> {
+    let data_type = match field.data_type() {
+        DataType::Date32 => "date",
+        DataType::Utf8 => "string",
+        other => return Err(format!("unexpected result type: {other}").into()),
+    };
+    Ok(json!({"name":field.name(),"type":data_type,
+        "nullable":field.is_nullable(),"metadata":field.metadata()}))
 }
 
 #[tokio::test]
@@ -70,6 +121,7 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
             include_str!("fixtures/date-day-admission-probes-spark.jsonl"),
             68,
         ),
+        (include_str!("fixtures/date-day-correlated-spark.jsonl"), 24),
     ] {
         let records = capture
             .lines()
@@ -95,12 +147,24 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
             register_recorded_inputs(&session, &records[0], batch_size)?;
             for case in &records[1..] {
                 let actual = capture_date_result(&session, case).await;
+                eprintln!(
+                    "date-day observation: {}",
+                    json!({
+                        "id":case["id"],"ansi":case["ansi"],"batch_size":batch_size,
+                        "outcome":match &actual {
+                            Ok(value) => value.clone(),
+                            Err(error) => json!({"error":error.to_string()}),
+                        }
+                    })
+                );
                 let expected = &case["expected"];
                 let matches = match expected["condition"].as_str() {
                     Some(condition) => actual
                         .as_ref()
                         .is_err_and(|error| error.to_string().contains(&format!("[{condition}]"))),
-                    None => actual.as_ref().ok() == Some(expected),
+                    None => actual
+                        .as_ref()
+                        .is_ok_and(|actual| actual["compared"] == *expected),
                 };
                 if !matches {
                     differences.push(format!(
@@ -131,6 +195,42 @@ async fn spark_date_functions_preserve_native_calendar_arithmetic() -> TestResul
             configured.sql(sql).await?.collect().await?,
             native.sql(sql).await?.collect().await?,
             "{sql}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn missing_attributes_only_classify_scopes_without_suggestions() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for (sql, no_suggestions) in [
+        ("SELECT missing AS r", true),
+        ("SELECT (SELECT missing) AS r", true),
+        ("SELECT missing AS r FROM (VALUES (1)) t(candidate)", false),
+        (
+            "SELECT t.missing AS r FROM (VALUES (1)) t(candidate)",
+            false,
+        ),
+        (
+            "SELECT (SELECT missing) AS r FROM (VALUES (1)) t(candidate)",
+            false,
+        ),
+    ] {
+        let error = plan_query(&session, sql, &SparkSqlOptions::default())
+            .await
+            .err()
+            .ok_or("missing attribute unexpectedly resolved")?
+            .to_string();
+        assert!(
+            error.contains("is missing from the schema: cannot resolve attribute"),
+            "{error}"
+        );
+        assert_eq!(
+            error.contains("[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION]"),
+            no_suggestions,
+            "{sql}: {error}"
         );
     }
     Ok(())

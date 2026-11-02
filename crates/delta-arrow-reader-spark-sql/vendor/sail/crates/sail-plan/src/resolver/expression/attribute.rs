@@ -75,17 +75,33 @@ impl PlanResolver<'_> {
         if let Some((name, expr)) = self.resolve_hidden_field(&name, schema, state)? {
             return Ok(NamedExpr::new(vec![name], expr));
         }
+        // Keep suggestion-bearing scopes on their existing diagnostic path.
+        let no_suggestions = schema.fields().is_empty()
+            && state.get_projections_for_grouping().is_empty()
+            && state.get_projections_for_having().is_empty()
+            && state.get_grouping_for_having().is_empty()
+            && !state.in_lambda_scope();
+        let condition = if no_suggestions {
+            " [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION]"
+        } else {
+            ""
+        };
         let Some(outer_schema) = state.get_outer_query_schema().cloned() else {
             return Err(PlanError::AnalysisError(format!(
                 // Spark tests expect the error message to start with: "attribute {name:?} is missing"
-                "attribute {name:?} is missing from the schema: cannot resolve attribute"
+                "attribute {name:?} is missing from the schema: cannot resolve attribute{condition}"
             )));
+        };
+        let condition = if no_suggestions && outer_schema.fields().is_empty() {
+            condition
+        } else {
+            ""
         };
         match self.resolve_outer_field(&name, &outer_schema, state)? {
             Some((name, expr)) => Ok(NamedExpr::new(vec![name], expr)),
             None => Err(PlanError::AnalysisError(format!(
                 // Spark tests expect the error message to start with: "attribute {name:?} is missing"
-                "attribute {name:?} is missing from the schema: cannot resolve attribute or outer attribute"
+                "attribute {name:?} is missing from the schema: cannot resolve attribute or outer attribute{condition}"
             ))),
         }
     }

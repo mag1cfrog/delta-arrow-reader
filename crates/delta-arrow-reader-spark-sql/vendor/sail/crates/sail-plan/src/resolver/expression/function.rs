@@ -389,9 +389,12 @@ impl PlanResolver<'_> {
             "timestampdiff",
             "timestamp_diff",
         ];
-        if arguments.len() >= 3
-            && DATE_PART_FUNCTIONS.contains(&function_name.trim().to_lowercase().as_str())
-            && let spec::Expr::UnresolvedAttribute { ref name, .. } = arguments[0]
+        let function_name = function_name.trim().to_lowercase();
+        let accepts_date_part = match function_name.as_str() {
+            "date_add" | "dateadd" => arguments.len() == 3,
+            _ => arguments.len() >= 3 && DATE_PART_FUNCTIONS.contains(&function_name.as_str()),
+        };
+        if accepts_date_part && let spec::Expr::UnresolvedAttribute { ref name, .. } = arguments[0]
         {
             let parts: Vec<String> = name.clone().into();
             if parts.len() == 1 {

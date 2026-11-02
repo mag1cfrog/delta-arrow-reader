@@ -168,7 +168,7 @@ fn format_interval(interval: Expr, unit: &str) -> Expr {
     })
 }
 
-fn date_day_arithmetic(
+fn date_offset_by_days(
     input: ScalarFunctionInput,
     function_name: &str,
     op: Operator,
@@ -203,6 +203,7 @@ fn date_day_arithmetic(
             if other.is_string()
                 && !days.is_volatile()
                 && days.column_refs().is_empty()
+                && !days.contains_outer()
                 && !days.contains_scalar_subquery() =>
         {
             let context = SimplifyContextBuilder::default()
@@ -330,7 +331,7 @@ fn timestampadd(input: ScalarFunctionInput) -> PlanResult<Expr> {
 
 fn dateadd(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
     match input.arguments.len() {
-        2 => date_day_arithmetic(input, function_name, Operator::Plus),
+        2 => date_offset_by_days(input, function_name, Operator::Plus),
         3 => timestampadd_with_name(input, function_name),
         _ => Err(PlanError::invalid(format!(
             "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] {function_name} requires 2 or 3 arguments"
@@ -1358,7 +1359,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
         ("date_part", F::binary(date_part)),
         (
             "date_sub",
-            F::custom(|input| date_day_arithmetic(input, "date_sub", Operator::Minus)),
+            F::custom(|input| date_offset_by_days(input, "date_sub", Operator::Minus)),
         ),
         ("date_trunc", F::custom(date_trunc)),
         ("dateadd", F::custom(|input| dateadd(input, "dateadd"))),
