@@ -1807,5 +1807,28 @@ recorded in the fixture; fresh outputs can be collected with the shared replayer
 Utf8View at batch sizes 1 and 32. Kernel tests also cover sliced arrays,
 out-of-line view strings, scalar forms, strict-helper errors and parser-buffer
 reset after invalid text. Native encoding controls run before and after Spark
-queries. HEX result fields and binary representations remain a separate #784
-slice; these tests establish no family-wide binary compatibility claim.
+queries. HEX result fields and binary representations have separate references
+below; these tests establish no family-wide binary compatibility claim.
+
+## HEX byte inputs
+
+`hex-spark.jsonl` retains the original 22 independent Spark 4.2.0 observations for
+required, nullable and empty STRING/BINARY providers and literals in both ANSI
+modes. `hex-expanded-spark.jsonl` adds 48 observations for long Unicode strings,
+all 256 byte values, all-NULL providers, scalar empty/NULL/long values and binary
+providers equivalent to Arrow fixed widths 0, 3 and 20. Each fixed width has
+required, nullable, all-NULL and empty provider cases. The capture records exact
+runtime identity, input schemas and values, settings, and separate analyzed,
+optimized and executed result fields. The shared replayer collects fresh Spark
+observations from these inputs and queries without reading expected results.
+
+`hex.rs` retains all 132 original comparisons and adds 288 comparisons across
+Utf8/LargeUtf8/Utf8View and Binary/LargeBinary/BinaryView, at batch sizes 1 and 32.
+It verifies that view inputs contain out-of-line buffers. Another 60 comparisons
+replay the captured fixed-width equivalents as declared FixedSizeBinary arrays,
+including slices that exclude surrounding values and zero-width arrays. All
+comparisons check complete result fields and ordered values. Native SQL controls
+run before and after Spark use. A planner unit test checks that numeric and
+other non-byte arguments retain the original native HEX expression; these
+references do not expand numeric HEX compatibility or cover binary
+TO_CHAR/TO_VARCHAR and hashing.

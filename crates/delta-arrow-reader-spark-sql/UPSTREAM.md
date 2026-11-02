@@ -498,3 +498,11 @@ builder. Invalid hexadecimal text remains NULL, odd-length text retains its
 leading zero nibble, and the existing strict internal helper keeps its error
 behavior. The [UNHEX references](tests/fixtures/README.md#unhex-string-representations)
 cover complete fields and values without changing native encoding functions.
+
+HEX preserves STRING/BINARY argument nullability through a private Spark planning
+adapter. BinaryView inputs use an Arrow cast to Binary before the native encoder;
+other string and binary representations, including FixedSizeBinary, use that
+encoder directly. Non-byte inputs retain the original native HEX expression.
+The [HEX references](tests/fixtures/README.md#hex-byte-inputs) check complete fields,
+long view values, fixed-width binary inputs and native SQL preservation. Binary
+TO_CHAR/TO_VARCHAR and hashing retain their separate planning paths.

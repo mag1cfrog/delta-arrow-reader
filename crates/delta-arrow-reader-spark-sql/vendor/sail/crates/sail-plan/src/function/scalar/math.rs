@@ -10,9 +10,10 @@ use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{
-    BinaryExpr, Expr, ExprSchemable, Operator, ScalarUDF, cast, expr, lit, try_cast,
+    BinaryExpr, Expr, ExprSchemable, Operator, ScalarUDF, ScalarUDFImpl, cast, expr, lit, try_cast,
 };
 use datafusion_spark::function::math::expr_fn as math_fn;
+use datafusion_spark::function::math::hex::SparkHex;
 use half::f16;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -53,6 +54,56 @@ pub(crate) use super::conditional::SparkNullIfZero;
 pub(crate) use super::integer_divide::SparkIntegerDivide;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+
+// Byte inputs retain Spark's input nullability while sharing native HEX formatting.
+#[derive(Debug, Default, PartialEq, Eq, Hash)]
+struct SparkHexBytes(SparkHex);
+
+impl ScalarUDFImpl for SparkHexBytes {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    fn signature(&self) -> &datafusion_expr::Signature {
+        self.0.signature()
+    }
+
+    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+        self.0.return_type(arg_types)
+    }
+
+    fn return_field_from_args(
+        &self,
+        args: datafusion_expr::ReturnFieldArgs,
+    ) -> datafusion_common::Result<datafusion::arrow::datatypes::FieldRef> {
+        let [input] = datafusion_common::utils::take_function_args(self.name(), args.arg_fields)?;
+        let nullable = input.is_nullable();
+        let field = self.0.return_field_from_args(args)?;
+        Ok(Arc::new(field.as_ref().clone().with_nullable(nullable)))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: datafusion_expr::ScalarFunctionArgs,
+    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
+        self.0.invoke_with_args(args)
+    }
+}
+
+fn hex(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let value = input.arguments.one()?;
+    let value = match value.get_type(input.function_context.schema)? {
+        DataType::Utf8
+        | DataType::LargeUtf8
+        | DataType::Utf8View
+        | DataType::Binary
+        | DataType::LargeBinary
+        | DataType::FixedSizeBinary(_) => value,
+        DataType::BinaryView => cast(value, DataType::Binary),
+        _ => return Ok(math_fn::hex(value)),
+    };
+    Ok(ScalarUDF::from(SparkHexBytes::default()).call(vec![value]))
+}
 
 fn add_day_time_interval_to_string(
     string: Expr,
@@ -2365,7 +2416,7 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("factorial", F::unary(expr_fn::factorial)),
         ("floor", F::custom(|arg| ceil_floor(arg, "floor"))),
         ("greatest", F::var_arg(expr_fn::greatest)),
-        ("hex", F::unary(math_fn::hex)),
+        ("hex", F::custom(hex)),
         ("hypot", F::binary(hypot)),
         ("least", F::var_arg(expr_fn::least)),
         ("ln", F::unary(double(ln))),
@@ -2404,6 +2455,59 @@ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunctio
         ("uniform", F::udf(SparkUniform::new())),
         ("width_bucket", F::quaternary(math_fn::width_bucket)),
     ]
+}
+
+#[cfg(test)]
+#[test]
+fn hex_non_byte_inputs_keep_native_udf_selection() -> PlanResult<()> {
+    use crate::config::PlanConfig;
+    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::prelude::SessionContext;
+    use datafusion_common::ToDFSchema;
+    use datafusion_expr::col;
+
+    let session = SessionContext::new();
+    for ansi_mode in [true, false] {
+        let config = Arc::new(PlanConfig {
+            ansi_mode,
+            ..Default::default()
+        });
+        for data_type in [
+            DataType::Null,
+            DataType::Boolean,
+            DataType::Int8,
+            DataType::Int16,
+            DataType::Int32,
+            DataType::Int64,
+            DataType::UInt8,
+            DataType::UInt16,
+            DataType::UInt32,
+            DataType::UInt64,
+            DataType::Float16,
+            DataType::Float32,
+            DataType::Float64,
+            DataType::Decimal32(8, 2),
+            DataType::Decimal64(16, 2),
+            DataType::Decimal128(38, 2),
+            DataType::Decimal256(76, 2),
+            DataType::Date32,
+        ] {
+            let schema = Schema::new(vec![Field::new("value", data_type.clone(), true)])
+                .to_dfschema_ref()?;
+            let value = col("value");
+            let expression = hex(ScalarFunctionInput {
+                arguments: vec![value.clone()],
+                function_context: FunctionContextInput {
+                    argument_display_names: &[],
+                    plan_config: &config,
+                    session_context: &session,
+                    schema: &schema,
+                },
+            })?;
+            assert_eq!(expression, math_fn::hex(value), "{data_type:?}");
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
