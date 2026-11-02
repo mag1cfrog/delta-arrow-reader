@@ -34,6 +34,7 @@ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmeti
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
+    spark_year_month_scale::SparkYearMonthScale,
 };
 use sail_function::scalar::spark_cast_numeric_to_decimal::{
     DecimalCastMode, SparkCastNumericToDecimal,
@@ -135,6 +136,7 @@ fn null_discarded(expr: &Expr) -> bool {
                 || inner.is::<SparkCheckedDivide>()
                 || inner.is::<SparkCheckedModulo>()
                 || inner.is::<SparkCheckedArithmetic>()
+                || inner.is::<SparkYearMonthScale>()
                 || inner.is::<SparkIntegerDivide>())
                 && f.args.iter().any(null_literal))
                 || null_round(expr)
@@ -155,6 +157,7 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
         || integer_divide_args(expr, schema).is_some_and(|(_, _, ansi)| ansi)
         || matches!(expr, Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkCheckedArithmetic>()
+                || f.func.inner().is::<SparkYearMonthScale>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkCastNumericToDecimal>()
