@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use arrow::array::{Array, StringArray};
+use arrow::array::StringArray;
 use arrow::datatypes::{DataType, Field, IntervalUnit, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
@@ -293,15 +293,6 @@ async fn year_month_scaling_matches_independent_spark_references() -> TestResult
                 expected["schema"], observed["schema"]
             ));
         }
-        if expected.get("error_phase").is_some() {
-            if !matches_error(&observed, expected)? {
-                differences.push(format!(
-                    "{label}: expected error {}, got {observed}",
-                    expected["error_message"]
-                ));
-            }
-            continue;
-        }
         let mut later = observed["physical_schema"].clone();
         if later.is_object() {
             let public_nullable = expected["schema"]["fields"][0]["nullable"]
@@ -314,11 +305,25 @@ async fn year_month_scaling_matches_independent_spark_references() -> TestResult
                 differences.push(format!("{label}: physical schema widened requiredness"));
             }
             later["fields"][0]["nullable"] = json!(public_nullable);
+            if later != expected["schema"] {
+                differences.push(format!(
+                    "{label}: physical schema: expected {}, got {}",
+                    expected["schema"], observed["physical_schema"]
+                ));
+            }
+        } else if expected.get("optimized_schema").is_some() {
+            differences.push(format!("{label}: missing physical schema"));
         }
-        if later != expected["schema"]
-            || observed["rows"] != expected_rows(expected)?
-            || observed.get("error").is_some()
-        {
+        if expected.get("error_phase").is_some() {
+            if !matches_error(&observed, expected)? {
+                differences.push(format!(
+                    "{label}: expected error {}, got {observed}",
+                    expected["error_message"]
+                ));
+            }
+            continue;
+        }
+        if observed["rows"] != expected_rows(expected)? || observed.get("error").is_some() {
             differences.push(format!("{label}: expected {expected}, got {observed}"));
         }
     }
