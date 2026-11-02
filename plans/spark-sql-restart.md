@@ -7,7 +7,66 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-### S04 nested collection result types
+### Parallel execution and review
+
+The current batch separates native nested window frames (#738), derived-window
+metadata (#739), and nested NULL ordering (#740). Sol/xhigh implementers own
+isolated worktrees. Available agent slots take independent implementation,
+analysis or review tasks; a task need not occupy an entire issue. The coordinator
+schedules all Rust builds and Spark captures serially, reconciles integration,
+and owns this plan. New clean-context Sol/xhigh agents independently review each
+completed change. Review findings return to the implementation owner. Each issue
+keeps its own staging PR.
+
+The current session permits three active workers plus the coordinator. Fill a
+free slot when useful independent work is ready; do not start duplicate builds
+or overlapping edits to keep workers busy. Remove owned worktrees, merged
+branches and temporary output after integration. Keep required reference and
+review evidence, and check build artifacts separately because they dominate
+disk use.
+
+### Completed S04 nested windows, ordering and metadata
+
+Native RANGE peer and completion comparisons now use Arrow nested ordering.
+Current/unbounded frames avoid irrelevant arithmetic coercion; numeric and date
+bounds keep their validation. Per-batch comparison state is reused, invalidated
+when arrays change, and released when the frame is pruned. PR #741 supplies this
+native repair.
+
+PR #742 separates nested child NULL ordering from outer container NULL placement.
+Spark comparison keys pack only visible list/dictionary values before normalizing
+floating keys; projected values and their original bits remain intact. Key
+adaptation follows grouping and hidden-column rebasing in query and window paths.
+The full historical replay caught the initial GROUPING_ID phase regression, and
+the permanent regression now covers scalar/nested keys and global/local/window
+consumers. Issues #738 and #740 are complete.
+
+The separate #739 repair removes inherited top-level user metadata from derived
+value-window results. Projected fields, nested metadata, Arrow extensions and
+native SQL retain their contracts. Generated-alias markers remain with #710.
+
+The complete original 600-reference frame corpus is unchanged and passes all
+1,200 comparisons at batch sizes 1 and 32. Separate native-frame, integer/string
+ordering, floating ordering and metadata captures retain 600, 64, 64 and 102
+independent Spark observations respectively. Original failures remain in external
+evidence. No historical matcher, correction or expected result was relaxed.
+
+The integrated Linux workspace passes 562 tests with zero failures and two
+inherited ignored doctests, including all 25,180 historical observations.
+Formatting and Clippy pass. The final test-only ID-comparison cleanup was checked
+by rerunning its four-test suite; product source matches the full workspace run.
+Clean-context Sol/xhigh reviews have no remaining actionable findings. Their
+findings added permanent cache-lifetime and interleaved completion checks,
+visible-only storage preparation, floating composition references and the
+post-grouping sort regression.
+
+Next resume #726's floating partition/scalar-order candidate against these
+prerequisites, preserving its original 848-reference capture. Window labels
+(#727) and floating MIN/MAX (#730) have read-only preparation notes and still
+require implementation, independent captures and review. The next three-platform
+checkpoint covers this completed batch before further staging integration.
+
+### Completed S04 nested collection result types
 
 #725 completed through PR #734 at staging `6e94e3d8`; its merged tree matches
 the reviewed commit. #729 now refines the NULL-free collection element field
@@ -24,8 +83,7 @@ Final Linux workspace validation passes 536 tests with no failures and two
 inherited ignored doctests, including all 25,180 historical observations without
 changing their matcher or corrections. Clippy and formatting pass. Clean-context
 Sol/high Bulletproof Review found no remaining actionable findings and verified
-all 12 changed files and their connected callers. #729 remains open until its
-staging PR is merged.
+all 12 changed files and their connected callers. #729 is complete through PR #737.
 
 The first full workspace run preserved the historical replay but caught eight
 prior constant-array comparisons: removing the final CAST allowed folding to
@@ -695,10 +753,11 @@ is claimed.
 
 ## Working rules
 
-- Implement, verify and independently review one slice at a time. The user's
-  2026-10-31 instruction authorizes ordered progress without waiting for approval
-  between slices. Keep separate issues and commits, and fix review findings before
-  proceeding.
+- Keep implementation, validation and independent review scoped to reviewable
+  slices. The user's 2026-10-31 instruction authorizes progress without waiting
+  for approval between slices; the later parallel-work instruction allows
+  independent slices to advance concurrently. Keep separate issues and commits,
+  and resolve a slice's findings before merging it.
 - Merge accepted slices into `feat/spark-sql-staging`, not `main`. Keep the
   staging branch separate from ordinary releases until the user requests adoption.
 - Each staging PR requires the full local Linux Spark workspace tests, root-crate
@@ -711,7 +770,7 @@ is claimed.
   issue before implementing it. Link the issue family through native sub-issues;
   keep review and validation detail in comments. Do not fold unrelated fixes
   into a passing slice merely because they touch the same module.
-- Review completed work with a clean-context Sol/high sub-agent and the latest
+- Review completed work with a clean-context Sol/xhigh sub-agent and the latest
   `/home/hanbo/.agents/skills/bulletproof-review/SKILL.md`. Review correctness,
   tests, names, responsibilities, documentation, integration and simplicity.
 - Keep the forty completed historical issues closed. Consolidate their accepted
