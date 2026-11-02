@@ -259,6 +259,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn calendar_interval_string_preserves_mixed_components() -> Result<()> {
+        assert_eq!(
+            string_to_calendar_interval("1 MONTH 1 DAY 5 MICROSECONDS")?,
+            IntervalMonthDayNano::new(1, 1, 5_000)
+        );
+        Ok(())
+    }
+
+    #[test]
     fn day_time_interval_preserves_calendar_days_and_microsecond_remainder() -> Result<()> {
         const MICROSECONDS_PER_DAY: i64 = 24 * 60 * 60 * 1_000_000;
 
