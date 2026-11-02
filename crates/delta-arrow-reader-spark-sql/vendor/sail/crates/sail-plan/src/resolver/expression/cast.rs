@@ -14,7 +14,9 @@ use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
-use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
+use sail_function::scalar::spark_cast_numeric_to_decimal::{
+    DecimalCastMode, SparkCastNumericToDecimal, decimal_cast_can_overflow,
+};
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
@@ -153,12 +155,15 @@ impl PlanResolver<'_> {
                     lit(data_type_string),
                 ])
             }
-            (
-                DataType::Float32 | DataType::Float64,
-                DataType::Decimal128(precision, scale),
-                false,
-            ) if self.config.ansi_mode => {
-                ScalarUDF::new_from_impl(SparkCastFloatToDecimal::new(precision, scale))
+            (from, DataType::Decimal128(precision, scale), is_try) if from.is_numeric() => {
+                let mode = if is_try {
+                    DecimalCastMode::Try
+                } else if self.config.ansi_mode {
+                    DecimalCastMode::Ansi
+                } else {
+                    DecimalCastMode::Legacy
+                };
+                ScalarUDF::new_from_impl(SparkCastNumericToDecimal::new(precision, scale, mode))
                     .call(vec![expr])
             }
             (
@@ -291,23 +296,6 @@ impl PlanResolver<'_> {
             (_, to, _) => cast(expr, to),
         };
         Ok(NamedExpr::new(name, expr))
-    }
-}
-
-fn decimal_cast_can_overflow(from: &DataType, precision: u8, scale: i8) -> bool {
-    let integer_digits = i16::from(precision) - i16::from(scale);
-    match from {
-        DataType::Decimal128(from_precision, from_scale)
-        | DataType::Decimal256(from_precision, from_scale) => {
-            let source_integer_digits = i16::from(*from_precision) - i16::from(*from_scale);
-            integer_digits < source_integer_digits
-                || (integer_digits == source_integer_digits && scale < *from_scale)
-        }
-        DataType::Int8 | DataType::UInt8 => scale < 0 || integer_digits < 3,
-        DataType::Int16 | DataType::UInt16 => scale < 0 || integer_digits < 5,
-        DataType::Int32 | DataType::UInt32 => scale < 0 || integer_digits < 10,
-        DataType::Int64 | DataType::UInt64 => scale < 0 || integer_digits < 20,
-        _ => true,
     }
 }
 

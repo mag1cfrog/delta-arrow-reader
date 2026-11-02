@@ -140,6 +140,7 @@
     },
     {
       "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_float_to_decimal.rs",
+      "renamed_to": "vendor/sail/crates/sail-function/src/scalar/spark_cast_numeric_to_decimal.rs",
       "accepted_sha256": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
       "archive": "empty-input-scalar-runs.json.gz",
       "member": "baseline/float-cast.rs",
@@ -225,6 +226,7 @@
     },
     {
       "path": "vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs",
+      "renamed_to": "vendor/sail/crates/sail-plan/src/function/scalar/integer_divide.rs",
       "accepted_sha256": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131",
       "archive": "empty-input-scalar-runs.json.gz",
       "member": "baseline/small-int-divide.rs",

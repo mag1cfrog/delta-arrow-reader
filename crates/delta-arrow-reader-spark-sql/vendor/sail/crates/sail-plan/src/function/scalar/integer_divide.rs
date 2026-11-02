@@ -1,13 +1,11 @@
-// Local integer DIV kernel for the Delta reader Spark SQL experiment.
+//! Spark integer DIV keeps nullable results and widens small integers before division.
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{Expr, cast, lit};
-use sail_common_datafusion::utils::items::ItemTaker;
+use datafusion_expr::{Expr, lit};
 
-// Widen small integers in Arrow's traversal; BIGINT is used only in legacy mode.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct SparkIntegerDivide {
     pub(super) signature: datafusion_expr::Signature,
@@ -29,13 +27,13 @@ impl datafusion_expr::ScalarUDFImpl for SparkIntegerDivide {
 
     fn return_field_from_args(
         &self,
-        args: datafusion_expr::ReturnFieldArgs,
+        _args: datafusion_expr::ReturnFieldArgs,
     ) -> datafusion_common::Result<datafusion::arrow::datatypes::FieldRef> {
-        // Match the native binary expression after guards and constants simplify.
+        // Spark keeps DIV nullable in ANSI mode too; NULL predicates must evaluate it.
         Ok(Arc::new(datafusion::arrow::datatypes::Field::new(
             "spark_integer_divide",
             DataType::Int64,
-            args.arg_fields.iter().any(|field| field.is_nullable()),
+            true,
         )))
     }
 
@@ -53,24 +51,6 @@ impl datafusion_expr::ScalarUDFImpl for SparkIntegerDivide {
             return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Int64(
                 None,
             ))));
-        }
-        // At the original width, only MIN / -1 can overflow. Folded nonzero
-        // divisors other than -1 can keep the native division and final cast.
-        if let Expr::Literal(value, _) = &args[1] {
-            let safe = match value {
-                ScalarValue::Int8(Some(v)) => *v != 0 && *v != -1,
-                ScalarValue::Int16(Some(v)) => *v != 0 && *v != -1,
-                ScalarValue::Int32(Some(v)) => *v != 0 && *v != -1,
-                ScalarValue::Int64(Some(v)) => *v != 0 && *v != -1,
-                _ => false,
-            };
-            if safe {
-                let (left, right) = args.two()?;
-                return Ok(ExprSimplifyResult::Simplified(cast(
-                    left / right,
-                    DataType::Int64,
-                )));
-            }
         }
         Ok(ExprSimplifyResult::Original(args))
     }
@@ -143,6 +123,9 @@ impl datafusion_expr::ScalarUDFImpl for SparkIntegerDivide {
                     b.as_primitive::<Int32Type>(),
                     b_scalar,
                 ),
+                (DataType::Int64, DataType::Int64) if self.ansi => {
+                    return datafusion::arrow::compute::kernels::numeric::div(left, right);
+                }
                 (DataType::Int64, DataType::Int64) => divide(
                     a.as_primitive::<Int64Type>(),
                     a_scalar,
@@ -188,7 +171,7 @@ fn integer_divide_masks_and_scalars() -> datafusion_common::Result<()> {
                     arg_fields: &fields,
                     scalar_arguments: &[None, None],
                 })?;
-                assert_eq!(result.is_nullable(), left_nullable || right_nullable);
+                assert!(result.is_nullable());
                 assert_eq!(result.data_type(), &DataType::Int64);
             }
         }

@@ -1,33 +1,48 @@
-// Local Spark adapter around DataFusion/Arrow's strict numeric cast.
+//! Numeric Decimal casts retain Spark schemas and error modes around Arrow conversion.
 use std::sync::Arc;
 
 use arrow::array::AsArray;
+use arrow::compute::CastOptions;
 use arrow::datatypes::{DataType, Field, FieldRef, Float32Type, Float64Type};
+use datafusion_common::format::DEFAULT_CAST_OPTIONS;
 use datafusion_common::{Result, ScalarValue, exec_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct SparkCastFloatToDecimal {
-    target: DataType,
-    signature: Signature,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DecimalCastMode {
+    Ansi,
+    Legacy,
+    Try,
 }
 
-impl SparkCastFloatToDecimal {
-    pub fn new(precision: u8, scale: i8) -> Self {
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct SparkCastNumericToDecimal {
+    target: DataType,
+    signature: Signature,
+    mode: DecimalCastMode,
+}
+
+impl SparkCastNumericToDecimal {
+    pub fn new(precision: u8, scale: i8, mode: DecimalCastMode) -> Self {
         Self {
             target: DataType::Decimal128(precision, scale),
-            signature: Signature::uniform(
-                1,
-                vec![DataType::Float32, DataType::Float64],
-                Volatility::Immutable,
-            ),
+            signature: Signature::numeric(1, Volatility::Immutable),
+            mode,
         }
     }
 
+    pub fn mode(&self) -> DecimalCastMode {
+        self.mode
+    }
+
     fn convert(&self, arg: &ColumnarValue) -> Result<ColumnarValue> {
-        match arg.cast_to(&self.target, None) {
+        let options = CastOptions {
+            safe: self.mode != DecimalCastMode::Ansi,
+            ..DEFAULT_CAST_OPTIONS
+        };
+        match arg.cast_to(&self.target, Some(&options)) {
             Ok(value) => Ok(value),
             Err(error) => {
                 // Spark maps non-finite input to NULL even in ANSI mode. Retry
@@ -59,9 +74,9 @@ impl SparkCastFloatToDecimal {
     }
 }
 
-impl ScalarUDFImpl for SparkCastFloatToDecimal {
+impl ScalarUDFImpl for SparkCastNumericToDecimal {
     fn name(&self) -> &str {
-        "spark_cast_float_to_decimal"
+        "spark_cast_numeric_to_decimal"
     }
 
     fn signature(&self) -> &Signature {
@@ -72,15 +87,63 @@ impl ScalarUDFImpl for SparkCastFloatToDecimal {
         Ok(self.target.clone())
     }
 
-    fn return_field_from_args(&self, _: ReturnFieldArgs) -> Result<FieldRef> {
-        Ok(Arc::new(Field::new(self.name(), self.target.clone(), true)))
+    fn simplify(
+        &self,
+        args: Vec<datafusion_expr::Expr>,
+        _info: &datafusion_expr::simplify::SimplifyContext,
+    ) -> Result<datafusion_expr::simplify::ExprSimplifyResult> {
+        use datafusion_expr::{Expr, lit, simplify::ExprSimplifyResult};
+        if matches!(args.as_slice(), [Expr::Literal(value, _)] if value.is_null()) {
+            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::try_from(
+                &self.target,
+            )?)));
+        }
+        Ok(ExprSimplifyResult::Original(args))
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let [input] = args.arg_fields else {
+            return exec_err!("numeric-to-Decimal CAST expects one argument");
+        };
+        let DataType::Decimal128(precision, scale) = self.target else {
+            unreachable!("the constructor creates a Decimal128 target")
+        };
+        let from = input.data_type();
+        // TRY_CAST also declares nullable for Decimal scale reduction without overflow.
+        let loses_scale = self.mode == DecimalCastMode::Try
+            && matches!(from, DataType::Decimal128(_, source_scale) | DataType::Decimal256(_, source_scale)
+                if scale < *source_scale);
+        let nullable =
+            input.is_nullable() || decimal_cast_can_overflow(from, precision, scale) || loses_scale;
+        Ok(Arc::new(Field::new(
+            self.name(),
+            self.target.clone(),
+            nullable,
+        )))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [arg] = args.args.as_slice() else {
-            return exec_err!("float-to-Decimal CAST expects one argument");
+            return exec_err!("numeric-to-Decimal CAST expects one argument");
         };
         self.convert(arg)
+    }
+}
+
+pub fn decimal_cast_can_overflow(from: &DataType, precision: u8, scale: i8) -> bool {
+    let integer_digits = i16::from(precision) - i16::from(scale);
+    match from {
+        DataType::Decimal128(from_precision, from_scale)
+        | DataType::Decimal256(from_precision, from_scale) => {
+            let source_integer_digits = i16::from(*from_precision) - i16::from(*from_scale);
+            integer_digits < source_integer_digits
+                || (integer_digits == source_integer_digits && scale < *from_scale)
+        }
+        DataType::Int8 | DataType::UInt8 => scale < 0 || integer_digits < 3,
+        DataType::Int16 | DataType::UInt16 => scale < 0 || integer_digits < 5,
+        DataType::Int32 | DataType::UInt32 => scale < 0 || integer_digits < 10,
+        DataType::Int64 | DataType::UInt64 => scale < 0 || integer_digits < 20,
+        _ => true,
     }
 }
 
@@ -92,7 +155,7 @@ mod tests {
 
     #[test]
     fn nonfinite_float_cast_preserves_finite_overflow_and_nulls() -> Result<()> {
-        let udf = SparkCastFloatToDecimal::new(10, 2);
+        let udf = SparkCastNumericToDecimal::new(10, 2, DecimalCastMode::Ansi);
         let values = [
             Some(1.25),
             Some(f64::NAN),
