@@ -1,9 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::{Column, JoinType, NullEquality};
-use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Operator, build_join_schema};
+use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Operator, build_join_schema, lit};
+use datafusion_functions::expr_fn::with_metadata;
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
@@ -120,7 +120,8 @@ impl PlanResolver<'_> {
             .map(|name| {
                 let left_column = self.resolve_one_column(left.schema(), name.as_ref(), state)?;
                 let right_column = self.resolve_one_column(right.schema(), name.as_ref(), state)?;
-                Ok((name.into(), (left_column, right_column)))
+                let name = state.get_field_info(left_column.name())?.name().to_owned();
+                Ok((name, (left_column, right_column)))
             })
             .collect()
     }
@@ -184,63 +185,69 @@ impl PlanResolver<'_> {
                 None,
             )?
         };
+        let left_key_sources = left_columns
+            .iter()
+            .map(|key| state.join_key_source(key))
+            .collect::<Vec<_>>();
+        let right_key_sources = right_columns
+            .iter()
+            .map(|key| state.join_key_source(key))
+            .collect::<Vec<_>>();
         let preserved_keys = match join_type {
             JoinType::Inner
             | JoinType::Left
             | JoinType::LeftSemi
             | JoinType::LeftAnti
-            | JoinType::LeftMark => left_columns.as_slice(),
+            | JoinType::LeftMark => left_key_sources.as_slice(),
             JoinType::Right | JoinType::RightSemi | JoinType::RightAnti | JoinType::RightMark => {
-                right_columns.as_slice()
+                right_key_sources.as_slice()
             }
             JoinType::Full => &[],
         };
-        // Keep the visible key's qualifier so a later USING join can hide that same key.
-        let mut columns = builder.schema().columns();
-        // Qualified wildcards expose USING keys before the remaining columns,
-        // in USING-list order, including keys retained from earlier joins.
-        columns.sort_by_key(|col| {
-            left_columns
-                .iter()
-                .position(|key| key == col)
-                .or_else(|| right_columns.iter().position(|key| key == col))
-                .unwrap_or(left_columns.len())
-        });
-        let hidden_columns = columns
-            .into_iter()
-            .filter(|col| !preserved_keys.contains(col))
-            .map(|col| {
-                if left_columns.iter().any(|x| x.name == col.name)
-                    || right_columns.iter().any(|x| x.name == col.name)
-                {
-                    let info = state.get_field_info(col.name())?.clone();
-                    let field_id = state.register_hidden_field_name(info.name());
-                    let qualifier = col.relation.clone();
-                    let metadata =
-                        HashMap::from([("__metadata_col".to_string(), info.name().to_string())]);
-                    Ok(Expr::Column(col).alias_qualified_with_metadata(
-                        qualifier,
-                        field_id,
-                        Some(metadata.into()),
-                    ))
-                } else {
-                    Ok(Expr::Column(col))
-                }
-            })
-            .collect::<PlanResult<Vec<_>>>()?;
+        let columns = builder.schema().columns();
+        let mut hidden_columns = Vec::new();
+        // Keep every USING occurrence, in list order, for qualified wildcards.
+        for col in left_columns
+            .iter()
+            .zip(&right_columns)
+            .flat_map(|(left, right)| [left, right])
+        {
+            if preserved_keys.contains(&state.join_key_source(col)) || !columns.contains(col) {
+                continue;
+            }
+            let name = state.get_field_info(col.name())?.name().to_owned();
+            let field_id = state.register_join_key_alias(col, true)?;
+            hidden_columns.push(
+                with_metadata(vec![
+                    Expr::Column(col.clone()),
+                    lit("__metadata_col"),
+                    lit(name),
+                ])
+                .alias_qualified(col.relation.clone(), field_id),
+            );
+        }
+        hidden_columns.extend(
+            columns
+                .into_iter()
+                .filter(|col| {
+                    let source = state.join_key_source(col);
+                    !left_key_sources.contains(&source) && !right_key_sources.contains(&source)
+                })
+                .map(Expr::Column),
+        );
         let builder = match join_type {
             JoinType::Inner | JoinType::Left | JoinType::Right => {
                 let uses_right = matches!(join_type, JoinType::Right);
                 let projections = join_columns
                     .into_iter()
-                    .map(|(name, (left, right))| {
+                    .map(|(_, (left, right))| {
                         let column = if uses_right { right } else { left };
                         let qualifier = column.relation.clone();
-                        Expr::Column(column)
-                            .alias_qualified(qualifier, state.register_field_name(name))
+                        let field_id = state.register_join_key_alias(&column, false)?;
+                        Ok(Expr::Column(column).alias_qualified(qualifier, field_id))
                     })
-                    .chain(hidden_columns);
-                builder.project(projections)?
+                    .collect::<PlanResult<Vec<_>>>()?;
+                builder.project(projections.into_iter().chain(hidden_columns))?
             }
             JoinType::Full => {
                 let join_schema = builder.schema().clone();
@@ -274,14 +281,14 @@ impl PlanResolver<'_> {
                 );
                 let projections = join_columns
                     .into_iter()
-                    .map(|(name, (left, right))| {
+                    .map(|(_, (left, right))| {
                         let col = if uses_right { right } else { left };
                         let qualifier = col.relation.clone();
-                        Expr::Column(col)
-                            .alias_qualified(qualifier, state.register_field_name(name))
+                        let field_id = state.register_join_key_alias(&col, false)?;
+                        Ok(Expr::Column(col).alias_qualified(qualifier, field_id))
                     })
-                    .chain(hidden_columns);
-                builder.project(projections)?
+                    .collect::<PlanResult<Vec<_>>>()?;
+                builder.project(projections.into_iter().chain(hidden_columns))?
             }
         };
         Ok(builder.build()?)

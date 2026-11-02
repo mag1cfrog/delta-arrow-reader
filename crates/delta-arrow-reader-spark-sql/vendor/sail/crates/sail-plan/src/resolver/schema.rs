@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use datafusion_common::{Column, DFSchemaRef, TableReference};
@@ -38,12 +39,17 @@ impl PlanResolver<'_> {
         name: &str,
         state: &PlanResolverState,
     ) -> Vec<Column> {
+        let mut sources = HashSet::new();
         schema
             .iter()
-            .filter(|(_, field)| {
-                state
-                    .get_field_info(field.name())
-                    .is_ok_and(|info| !info.is_hidden() && info.name().eq_ignore_ascii_case(name))
+            .filter(|(qualifier, field)| {
+                state.get_field_info(field.name()).is_ok_and(|info| {
+                    !info.is_hidden()
+                        && info.name().eq_ignore_ascii_case(name)
+                        && sources.insert(
+                            state.join_key_source(&Column::new(qualifier.cloned(), field.name())),
+                        )
+                })
             })
             .map(|x| x.into())
             .collect()

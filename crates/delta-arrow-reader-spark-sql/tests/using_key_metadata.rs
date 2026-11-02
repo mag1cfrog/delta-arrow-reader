@@ -114,6 +114,43 @@ async fn using_key_metadata_matches_spark() -> TestResult {
 }
 
 #[tokio::test]
+async fn using_key_aliases_do_not_merge_distinct_source_fields() -> TestResult {
+    let metadata: Value = serde_json::from_str(
+        include_str!("fixtures/using-key-metadata-spark.jsonl")
+            .lines()
+            .next()
+            .ok_or("missing metadata")?,
+    )?;
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    register_recorded_inputs(&session, &metadata, 32)?;
+    for (criteria, cause) in [
+        ("USING(id)", "[AMBIGUOUS_REFERENCE]"),
+        ("ON l.id=r.id", "ambiguous attribute"),
+    ] {
+        let sql = format!(
+            "SELECT l.id FROM (SELECT id,id FROM left_mixed) l \
+             LEFT JOIN right_mixed r {criteria}"
+        );
+        let result = plan_query(&session, &sql, &SparkSqlOptions::default()).await;
+        assert!(
+            result.is_err_and(|error| error.to_string().contains(cause)),
+            "{sql} must reject distinct source fields"
+        );
+    }
+    let result = plan_query(
+        &session,
+        "WITH shared AS (SELECT id FROM left_mixed) \
+         SELECT id FROM shared l JOIN shared r ON l.id=r.id",
+        &SparkSqlOptions::default(),
+    )
+    .await;
+    assert!(result.is_err_and(|error| error.to_string().contains("ambiguous attribute")));
+    Ok(())
+}
+
+#[tokio::test]
 async fn using_key_metadata_keeps_native_sql_unchanged() -> TestResult {
     async fn capture_native(
         session: &SessionContext,

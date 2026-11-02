@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field};
@@ -113,6 +114,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<Option<NamedExpr>> {
         let candidates = Self::generate_qualified_nested_field_candidates(name.parts());
+        let mut sources = HashSet::new();
         let mut candidates = schema
             .iter()
             .flat_map(|(qualifier, field)| {
@@ -133,6 +135,15 @@ impl PlanResolver<'_> {
                             )?;
                             let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
                             let named = NamedExpr::new(vec![projection_name], expr);
+                            if !sources.insert((
+                                state.join_key_source(&Column::new(
+                                    qualifier.cloned(),
+                                    field.name(),
+                                )),
+                                inner.to_vec(),
+                            )) {
+                                return None;
+                            }
                             Some(if inner.is_empty() {
                                 named
                             } else {
@@ -235,6 +246,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<Option<(String, expr::Expr)>> {
         let candidates = Self::generate_qualified_field_candidates(name.parts());
+        let mut sources = HashSet::new();
         let mut candidates = schema
             .iter()
             .flat_map(|(qualifier, field)| {
@@ -247,6 +259,13 @@ impl PlanResolver<'_> {
                         (!info.is_hidden() || q.is_some())
                             && qualifier_matches(q.as_ref(), qualifier)
                             && info.name().eq_ignore_ascii_case(name.as_ref())
+                            && sources.insert((
+                                state.join_key_source(&Column::new(
+                                    qualifier.cloned(),
+                                    field.name(),
+                                )),
+                                name.as_ref().to_string(),
+                            ))
                     })
                     .map(|(_, name)| {
                         (
