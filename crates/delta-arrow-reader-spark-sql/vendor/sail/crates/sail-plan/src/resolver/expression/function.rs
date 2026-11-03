@@ -4,8 +4,10 @@ use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
 use datafusion_expr::{EmptyRelation, Expr, LogicalPlan, expr};
+use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::array_struct_field::ArrayStructField;
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
@@ -265,10 +267,55 @@ impl PlanResolver<'_> {
         let mut names: Vec<String> = vec![];
         let mut exprs: Vec<expr::Expr> = vec![];
 
-        for expression in expressions {
-            let named = self
-                .resolve_named_expression(expression, schema, state)
-                .await?;
+        for (argument_index, expression) in expressions.into_iter().enumerate() {
+            let identifier_argument = matches!(&expression, spec::Expr::IdentifierClause { .. });
+            let field_name = match &expression {
+                spec::Expr::UnresolvedAttribute { name, .. } => {
+                    name.parts().last().map(|name| name.as_ref().to_string())
+                }
+                spec::Expr::UnresolvedExtractValue { extraction, .. } => {
+                    match extraction.as_ref() {
+                        spec::Expr::UnresolvedAttribute { name, .. } => {
+                            name.parts().last().map(|name| name.as_ref().to_string())
+                        }
+                        spec::Expr::Literal(spec::Literal::Utf8 { value }) => value.clone(),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            let wildcard_target = match &expression {
+                spec::Expr::UnresolvedStar { target, .. } => target.clone(),
+                _ => None,
+            };
+            let (named, alias_display_name) = match expression {
+                spec::Expr::Alias {
+                    expr,
+                    name,
+                    metadata,
+                } => {
+                    let direct_alias_source = Self::is_direct_alias_source(&expr);
+                    let named = self.resolve_named_expression(*expr, schema, state).await?;
+                    let source_name = named.expression_name()?;
+                    let has_alias = !name.is_empty();
+                    let named =
+                        Self::apply_expression_alias(named, name, metadata, direct_alias_source)?;
+                    let display_name = if has_alias {
+                        Some(struct_alias_display_name(
+                            &source_name,
+                            &named.name.clone().one()?,
+                        ))
+                    } else {
+                        None
+                    };
+                    (named, display_name)
+                }
+                expression => (
+                    self.resolve_named_expression(expression, schema, state)
+                        .await?,
+                    None,
+                ),
+            };
             let NamedExpr {
                 name,
                 expression_name,
@@ -301,14 +348,20 @@ impl PlanResolver<'_> {
                     if func.inner().is::<MultiExpr>() =>
                 {
                     if name.len() == args.len() {
+                        let source_name = wildcard_target
+                            .map(|target| {
+                                self.resolve_expression_attribute(target, false, schema, state)?
+                                    .expression_name()
+                            })
+                            .transpose()?;
                         for (n, arg) in name.into_iter().zip(args) {
-                            let field_name = n;
-                            names.push(field_name.clone());
-                            exprs.push(Expr::Alias(expr::Alias::new(
-                                arg,
-                                None::<datafusion_common::TableReference>,
-                                field_name,
-                            )));
+                            names.push(match &source_name {
+                                Some(source) => {
+                                    struct_alias_display_name(&format!("{source}.{n}"), &n)
+                                }
+                                None => n.clone(),
+                            });
+                            exprs.push(arg.alias(n));
                         }
                     } else {
                         return Err(PlanError::internal(format!(
@@ -320,7 +373,26 @@ impl PlanResolver<'_> {
                 }
 
                 other => {
-                    names.push(expression_name.unwrap_or(name.one()?));
+                    names.push(
+                        alias_display_name
+                            .or(expression_name)
+                            .unwrap_or(name.one()?),
+                    );
+                    let other = if let Some(field_name) = field_name
+                        && matches!(&other, Expr::ScalarFunction(ScalarFunction { func, .. })
+                            if func.inner().is::<GetFieldFunc>() || func.inner().is::<ArrayStructField>())
+                    {
+                        other.alias(field_name)
+                    } else if identifier_argument
+                        || !matches!(
+                            &other,
+                            Expr::Column(_) | Expr::OuterReferenceColumn(_, _) | Expr::Alias(_)
+                        )
+                    {
+                        other.alias(format!("col{}", argument_index + 1))
+                    } else {
+                        other
+                    };
                     exprs.push(other);
                 }
             }
@@ -405,6 +477,20 @@ impl PlanResolver<'_> {
         }
         arguments
     }
+}
+
+fn struct_alias_display_name(source: &str, alias: &str) -> String {
+    let mut chars = alias.chars();
+    let unquoted = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    let alias = if unquoted {
+        alias.to_string()
+    } else {
+        format!("`{}`", alias.replace('`', "``"))
+    };
+    format!("{source} AS {alias}")
 }
 
 /// Extract metadata from a UDF by calling return_field_from_args with real argument information

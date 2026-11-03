@@ -24,17 +24,9 @@ use crate::resolver::expression::{NamedExpr, inherits_alias_metadata, needs_proj
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
-    pub(super) async fn resolve_expression_alias(
-        &self,
-        expr: spec::Expr,
-        name: Vec<spec::Identifier>,
-        metadata: Option<Vec<(String, String)>>,
-        schema: &DFSchemaRef,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<NamedExpr> {
-        let name = name.into_iter().map(|x| x.into()).collect::<Vec<String>>();
-        let direct_alias_source = matches!(
-            &expr,
+    pub(super) fn is_direct_alias_source(expr: &spec::Expr) -> bool {
+        matches!(
+            expr,
             spec::Expr::Alias { .. }
                 | spec::Expr::Literal(_)
                 | spec::Expr::UnresolvedAttribute { .. }
@@ -43,8 +35,29 @@ impl PlanResolver<'_> {
                 | spec::Expr::UnresolvedDate { .. }
                 | spec::Expr::UnresolvedTime { .. }
                 | spec::Expr::UnresolvedTimestamp { .. }
-        );
-        let mut named_expr = self.resolve_named_expression(expr, schema, state).await?;
+        )
+    }
+
+    pub(super) async fn resolve_expression_alias(
+        &self,
+        expr: spec::Expr,
+        name: Vec<spec::Identifier>,
+        metadata: Option<Vec<(String, String)>>,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<NamedExpr> {
+        let direct_alias_source = Self::is_direct_alias_source(&expr);
+        let named_expr = self.resolve_named_expression(expr, schema, state).await?;
+        Self::apply_expression_alias(named_expr, name, metadata, direct_alias_source)
+    }
+
+    pub(super) fn apply_expression_alias(
+        mut named_expr: NamedExpr,
+        name: Vec<spec::Identifier>,
+        metadata: Option<Vec<(String, String)>>,
+        direct_alias_source: bool,
+    ) -> PlanResult<NamedExpr> {
+        let name = name.into_iter().map(|x| x.into()).collect::<Vec<String>>();
         if !needs_projection_expansion(&named_expr.expr)
             && (metadata.is_some() || !inherits_alias_metadata(&named_expr.expr))
         {
