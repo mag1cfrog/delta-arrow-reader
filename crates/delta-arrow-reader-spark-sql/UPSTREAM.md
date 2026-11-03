@@ -203,6 +203,14 @@ registration, coercion and value evaluation retain their existing paths. The
 [declaration references](tests/fixtures/README.md#array_contains-result-declarations)
 record complete fields, actual NULLs and required errors separately from values.
 
+Spark FLATTEN converts immediate inner ListView/LargeListView storage to
+List/LargeList before the existing native kernel. Arrow's checked cast gathers
+the visible ranges, including overlap, while retaining the matching offset
+width, NULL buffers and field declarations. Outer storage is retained. The
+[inner-view controls](tests/fixtures/README.md#flatten-inner-list-views) compare
+complete results with the corresponding canonical storage and preserve native
+SQL behavior. Canonical FLATTEN declaration inference remains under #835.
+
 Foldable group preparation requires the query-local Spark marker at both
 preparation call sites. Native SQL in a Spark-configured session retains DataFusion's
 constant-group elimination, including its aggregate kernels and required CAST

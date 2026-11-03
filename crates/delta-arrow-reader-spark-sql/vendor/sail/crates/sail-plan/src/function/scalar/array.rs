@@ -345,13 +345,36 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     .end()?)
 }
 
+fn normalize_flatten_inner_views(
+    array: expr::Expr,
+    schema: &datafusion_common::DFSchemaRef,
+) -> PlanResult<expr::Expr> {
+    let mut array_type = array.get_type(schema)?;
+    let inner = match &mut array_type {
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::FixedSizeList(field, _)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field) => field,
+        _ => return Ok(array),
+    };
+    let inner_type = match inner.data_type() {
+        DataType::ListView(field) => DataType::List(field.clone()),
+        DataType::LargeListView(field) => DataType::LargeList(field.clone()),
+        _ => return Ok(array),
+    };
+    // Native FLATTEN needs canonical inner lists; Arrow gathers the checked view ranges.
+    *inner = Arc::new(inner.as_ref().clone().with_data_type(inner_type));
+    Ok(cast(array, array_type))
+}
+
 fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
         arguments,
         function_context,
     } = input;
 
-    let array = arguments.one()?;
+    let array = normalize_flatten_inner_views(arguments.one()?, function_context.schema)?;
     let array_type = array.get_type(function_context.schema)?;
 
     // Convert array type to nullable version to avoid Arrow errors with non-nullable empty arrays
