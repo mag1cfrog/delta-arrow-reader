@@ -123,6 +123,11 @@ fn duplicate_struct_casts_keep_strict_and_safe_leaf_errors() -> TestResult {
     ], None)?;
     actual.to_data().validate_full()?;
     assert_eq!(actual.to_data(), expected.to_data());
+    Ok(())
+}
+
+#[test]
+fn duplicate_struct_casts_reject_nulls_produced_for_required_fields() -> TestResult {
     let required_source: ArrayRef = Arc::new(StructArray::try_new(vec![
         Field::new("item", DataType::Utf8, false),
         Field::new("item", DataType::Int32, false),
