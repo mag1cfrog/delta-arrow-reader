@@ -41,7 +41,14 @@ pub(crate) async fn capture_date_result(
     if let Some(expected) = case.get("public_schema") {
         let mut field = capture_field(resolved_field)?;
         field["name"] = json!(query.column_names[0]);
-        assert_eq!(json!({"type":"struct","fields":[field]}), *expected);
+        assert_eq!(
+            json!({"type":"struct","fields":[field]}),
+            *expected,
+            "{} ANSI={} SQL={sql}; resolved plan:\n{}",
+            case["id"],
+            case["ansi"],
+            query.logical_plan.display_indent_schema()
+        );
     }
     let physical = query.create_physical_plan(session).await?;
     let physical_schema = physical.schema();
@@ -53,7 +60,10 @@ pub(crate) async fn capture_date_result(
         // Correlated scalar inlining can restore the generated marker after analysis.
         assert_eq!(
             json!({"type":"struct","fields":[capture_field(physical_field)?]}),
-            *expected
+            *expected,
+            "{} ANSI={} SQL={sql}: before collect",
+            case["id"],
+            case["ansi"]
         );
     } else {
         assert_eq!(resolved_field.metadata(), physical_field.metadata());
@@ -102,7 +112,10 @@ pub(crate) async fn capture_date_result(
     if let Some(expected) = case.get("executed_schema_after_collect") {
         assert_eq!(
             json!({"type":"struct","fields":[capture_field(physical.schema().field(0))?]}),
-            *expected
+            *expected,
+            "{} ANSI={} SQL={sql}: after collect",
+            case["id"],
+            case["ansi"]
         );
     }
     rows.sort_by_key(|row| json!(row).to_string());
