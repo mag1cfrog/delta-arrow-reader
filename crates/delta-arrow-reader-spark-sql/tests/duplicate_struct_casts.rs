@@ -19,6 +19,9 @@ mod spark_inputs;
 mod spark_results;
 use spark_results::{TestResult, capture_schema, encode_value, validate_batch};
 
+#[path = "support/spark_map_comparison.rs"]
+mod spark_map_comparison;
+
 #[tokio::test]
 async fn duplicate_struct_casts_match_spark() -> TestResult {
     let reference = std::env::var_os("DAR_DUPLICATE_STRUCT_CASTS_REFERENCE").map_or_else(
@@ -145,7 +148,8 @@ async fn constructor_cases_match_spark(
                     actual["public_schema"] == case["public_schema"]
                         && actual["executed_schema_before_collect"] == case["executed_schema_before_collect"]
                         && actual["executed_schema_after_collect"] == case["executed_schema_after_collect"]
-                        && actual["rows"] == case["expected"]["rows"]
+                        && spark_map_comparison::unordered_rows_match(
+                            &actual["rows"], &case["expected"]["rows"], &case["public_schema"])
                 }
                 Ok(Ok(())) => false,
                 Ok(Err(error)) => {
