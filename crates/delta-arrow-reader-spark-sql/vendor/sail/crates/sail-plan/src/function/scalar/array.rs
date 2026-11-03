@@ -607,6 +607,132 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn flatten_keeps_element_fields_across_list_storage_and_slices() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{Array, ArrayRef, AsArray, Int32Array};
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use arrow::datatypes::{Field, Schema};
+
+        let session = SessionContext::new();
+        let config = Arc::new(crate::config::PlanConfig::default());
+        for element_nullable in [false, true] {
+            for inner_nullable in [false, true] {
+                for outer_nullable in [false, true] {
+                    let element = Arc::new(
+                        Field::new("element", DataType::Int32, element_nullable)
+                            .with_metadata([("origin".into(), "flatten-leaf".into())].into()),
+                    );
+                    let values: ArrayRef = Arc::new(Int32Array::from(vec![
+                        Some(1),
+                        if element_nullable { None } else { Some(2) },
+                        Some(3),
+                        Some(4),
+                    ]));
+                    let inner: ArrayRef = Arc::new(ListArray::try_new(
+                        element.clone(),
+                        OffsetBuffer::from_lengths([1; 4]),
+                        values,
+                        inner_nullable.then(|| NullBuffer::from(vec![true, false, true, true])),
+                    )?);
+                    let inner_field = Arc::new(Field::new(
+                        "inner",
+                        inner.data_type().clone(),
+                        inner_nullable,
+                    ));
+                    let outer: ArrayRef = Arc::new(ListArray::try_new(
+                        inner_field.clone(),
+                        OffsetBuffer::from_lengths([2; 2]),
+                        inner,
+                        outer_nullable.then(|| NullBuffer::from(vec![true, false])),
+                    )?);
+                    for storage in [
+                        DataType::List(inner_field.clone()),
+                        DataType::LargeList(inner_field.clone()),
+                        DataType::FixedSizeList(inner_field.clone(), 2),
+                        DataType::ListView(inner_field.clone()),
+                        DataType::LargeListView(inner_field.clone()),
+                    ] {
+                        let input = arrow::compute::cast(outer.as_ref(), &storage)?;
+                        for (offset, len) in [(0, 2), (1, 1), (1, 0)] {
+                            let schema = Arc::new(Schema::new(vec![Field::new(
+                                "items",
+                                storage.clone(),
+                                outer_nullable,
+                            )]));
+                            let batch = RecordBatch::try_new(
+                                schema.clone(),
+                                vec![input.slice(offset, len)],
+                            )?;
+                            let schema = Arc::new(DFSchema::try_from(schema)?);
+                            let expression = flatten(ScalarFunctionInput {
+                                arguments: vec![col("items")],
+                                function_context: FunctionContextInput {
+                                    argument_display_names: &[],
+                                    plan_config: &config,
+                                    session_context: &session,
+                                    schema: &schema,
+                                },
+                            })?;
+                            let output_type = if matches!(
+                                storage,
+                                DataType::LargeList(_) | DataType::LargeListView(_)
+                            ) {
+                                DataType::LargeList(element.clone())
+                            } else {
+                                DataType::List(element.clone())
+                            };
+                            let (_, field) = expression.to_field(&schema)?;
+                            assert_eq!(field.data_type(), &output_type);
+                            assert_eq!(field.is_nullable(), outer_nullable || inner_nullable);
+                            let physical = session.create_physical_expr(expression, &schema)?;
+                            assert_eq!(
+                                physical.return_field(schema.inner())?.data_type(),
+                                &output_type
+                            );
+                            let result = physical.evaluate(&batch)?.into_array(len)?;
+                            result.to_data().validate_full()?;
+                            assert_eq!(result.data_type(), &output_type);
+                            for row in 0..len {
+                                let source_row = offset + row;
+                                assert_eq!(
+                                    result.is_null(row),
+                                    if source_row == 0 {
+                                        inner_nullable
+                                    } else {
+                                        outer_nullable
+                                    }
+                                );
+                                if result.is_valid(row) {
+                                    let values = match result.data_type() {
+                                        DataType::List(_) => result.as_list::<i32>().value(row),
+                                        _ => result.as_list::<i64>().value(row),
+                                    };
+                                    let actual =
+                                        values.as_any().downcast_ref::<Int32Array>().ok_or_else(
+                                            || PlanError::internal("expected flattened integers"),
+                                        )?;
+                                    assert_eq!(
+                                        actual.iter().collect::<Vec<_>>(),
+                                        if source_row == 0 {
+                                            vec![
+                                                Some(1),
+                                                if element_nullable { None } else { Some(2) },
+                                            ]
+                                        } else {
+                                            vec![Some(3), Some(4)]
+                                        }
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     #[expect(clippy::unwrap_used, clippy::panic)]
     #[test]
     fn test_slice() -> PlanResult<()> {
