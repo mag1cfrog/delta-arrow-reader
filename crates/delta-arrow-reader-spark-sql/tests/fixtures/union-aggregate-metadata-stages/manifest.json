@@ -1,0 +1,20 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [],
+  "queries": [
+    {
+      "id": "right_union_cast_order_limit_metadata_barrier_control",
+      "sql": "SELECT ABS(CAST('1' AS INT)) AS r UNION ALL (SELECT ABS(CAST('3' AS INT)) UNION ALL SELECT ABS(CAST('2' AS INT)) ORDER BY 1 LIMIT 1)"
+    },
+    {
+      "id": "right_union_cast_order_limit_metadata_barrier_distinct",
+      "sql": "SELECT ABS(CAST('1' AS INT)) AS r UNION (SELECT ABS(CAST('3' AS INT)) UNION ALL SELECT ABS(CAST('2' AS INT)) ORDER BY 1 LIMIT 1)"
+    },
+    {
+      "id": "right_union_cast_order_limit_metadata_barrier_grouped",
+      "sql": "SELECT r, COUNT(*) AS n FROM (SELECT ABS(CAST('1' AS INT)) AS r UNION ALL (SELECT ABS(CAST('3' AS INT)) UNION ALL SELECT ABS(CAST('2' AS INT)) ORDER BY 1 LIMIT 1)) u GROUP BY r"
+    }
+  ]
+}

@@ -85,6 +85,38 @@ async fn union_metadata_barrier_matches_pinned_spark_stages() -> TestResult {
     replay_set_operation_metadata(&records[0], &cases, "barrier_regression").await
 }
 
+#[tokio::test]
+async fn union_aggregate_metadata_matches_pinned_spark_stages() -> TestResult {
+    let records = include_str!("fixtures/union-aggregate-metadata-stages/union-aggregate-metadata-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/union-aggregate-metadata-stages/manifest.json"
+    ))?;
+    assert_eq!(records.len() - 1, 6);
+    assert_eq!(
+        records[0]["manifest_sha256"],
+        "7bbbb1fc95b9539b58140096f7b6a9d07fb9e5ec5b92e5f4fa9187905b9f412d"
+    );
+    assert_eq!(
+        records[0]["capture_sha256"],
+        "e238376897f02079a82bc21752ae4c6162a3dfd94141fe1c4161227a2be97728"
+    );
+    for case in &records[1..] {
+        assert!(
+            manifest["queries"].as_array().ok_or("missing queries")?
+                .iter().any(|query| query["id"] == case["id"] && query["sql"] == case["sql"])
+        );
+        assert_eq!(case["schema_stages"]["analyzed"]["fields"][0]["nullable"], true);
+        for stage in ["optimized", "executed_before_collect", "executed"] {
+            assert_eq!(case["schema_stages"][stage]["fields"][0]["nullable"], false);
+        }
+    }
+    let cases = records[1..].iter().collect::<Vec<_>>();
+    replay_set_operation_metadata(&records[0], &cases, "aggregate_barrier_regression").await
+}
+
 async fn replay_set_operation_metadata(
     header: &Value,
     cases: &[&Value],

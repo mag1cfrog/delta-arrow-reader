@@ -2291,6 +2291,115 @@ fn metadata_value_analysis_uses_implementation_identity() {
 
 #[cfg(test)]
 #[test]
+fn metadata_annotations_derive_fields_before_physical_parent_planning()
+-> datafusion_common::Result<()> {
+    use datafusion::arrow::datatypes::Schema;
+    use datafusion::physical_expr::{create_physical_expr, expressions::Column};
+    use datafusion::physical_plan::ExecutionPlan;
+    use datafusion::physical_plan::aggregates::{AggregateExec, AggregateMode, PhysicalGroupBy};
+    use datafusion::physical_plan::empty::EmptyExec;
+    use datafusion::physical_plan::projection::ProjectionExec;
+    use datafusion_expr::execution_props::ExecutionProps;
+
+    let captured_child = Field::new("x", DataType::Int32, true)
+        .with_metadata(HashMap::from([("child".into(), "captured".into())]));
+    let captured_type = DataType::Struct(vec![Arc::new(captured_child.clone())].into());
+    let actual_type = DataType::Struct(vec![Arc::new(captured_child.with_nullable(false))].into());
+    let logical_schema = DFSchema::try_from(Schema::new(vec![Field::new(
+        "k",
+        captured_type.clone(),
+        true,
+    )]))?;
+    let captured = Arc::new(Field::new("r", captured_type, true));
+    let mut annotated = preserve_result_field_metadata(datafusion_expr::col("k"), &captured);
+    for _ in 0..16 {
+        annotated = drop_inherited_column_metadata(annotated);
+    }
+    let metadata = HashMap::from([("result".into(), "outer".into())]);
+    let annotated = ScalarUDF::from(SparkResultMetadata {
+        metadata: metadata.clone().into(),
+        lifetime: ResultMetadataLifetime::Permanent,
+        metadata_source_type: None,
+    })
+    .with_aliases(["metadata_alias"])
+    .call(vec![annotated]);
+    let expression = create_physical_expr(&annotated, &logical_schema, &ExecutionProps::new())?;
+    let logical_field = expression.return_field(logical_schema.inner())?;
+    assert!(logical_field.is_nullable());
+    for nullable in [false, true] {
+        let actual_schema = Arc::new(Schema::new(vec![Field::new(
+            "k",
+            actual_type.clone(),
+            nullable,
+        )]));
+        let expected = Field::new("spark_result_metadata", actual_type.clone(), nullable)
+            .with_metadata(metadata.clone());
+        assert_eq!(expression.return_field(&actual_schema)?.as_ref(), &expected);
+        assert_eq!(expression.data_type(&actual_schema)?, actual_type);
+        assert_eq!(expression.nullable(&actual_schema)?, nullable);
+        let projection = Arc::new(ProjectionExec::try_new(
+            vec![(Arc::clone(&expression), "r".to_string())],
+            Arc::new(EmptyExec::new(actual_schema)),
+        )?);
+        assert_eq!(projection.schema().field(0), &expected.with_name("r"));
+        let partial = Arc::new(AggregateExec::try_new(
+            AggregateMode::Partial,
+            PhysicalGroupBy::new_single(vec![(Arc::new(Column::new("r", 0)), "r".into())]),
+            vec![],
+            vec![],
+            Arc::clone(&projection) as _,
+            projection.schema(),
+        )?);
+        let final_aggregate = AggregateExec::try_new(
+            AggregateMode::Final,
+            partial.group_expr().as_final(),
+            vec![],
+            vec![],
+            Arc::clone(&partial) as _,
+            projection.schema(),
+        )?;
+        for aggregate in [partial.as_ref(), &final_aggregate] {
+            assert_eq!(aggregate.schema(), projection.schema());
+            assert_eq!(aggregate.input_schema(), projection.schema());
+        }
+    }
+    assert_eq!(expression.return_field(logical_schema.inner())?, logical_field);
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn native_function_fields_keep_their_planned_declaration() -> datafusion_common::Result<()> {
+    use datafusion::arrow::datatypes::Schema;
+    use datafusion::physical_expr::create_physical_expr;
+    use datafusion_expr::create_udf;
+    use datafusion_expr::execution_props::ExecutionProps;
+
+    let logical_schema = DFSchema::try_from(Schema::new(vec![Field::new(
+        "k",
+        DataType::Int32,
+        true,
+    )]))?;
+    let actual_schema = Schema::new(vec![Field::new("k", DataType::Int32, false)]);
+    let native = create_udf(
+        "spark_result_metadata",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(|arguments| Ok(arguments[0].clone())),
+    )
+    .call(vec![datafusion_expr::col("k")]);
+    let expression = create_physical_expr(&native, &logical_schema, &ExecutionProps::new())?;
+    let planned = expression.return_field(logical_schema.inner())?;
+    assert!(planned.is_nullable());
+    assert_eq!(expression.return_field(&actual_schema)?, planned);
+    assert!(expression.nullable(&actual_schema)?);
+    assert_eq!(expression.data_type(&actual_schema)?, DataType::Int32);
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
 fn analysis_metadata_annotations_restore_the_original_value() -> datafusion_common::Result<()> {
     use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::optimizer::simplify_expressions::ExprSimplifier;
