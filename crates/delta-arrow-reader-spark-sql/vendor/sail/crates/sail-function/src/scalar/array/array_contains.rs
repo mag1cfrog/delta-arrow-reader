@@ -3,11 +3,12 @@
 
 use std::sync::Arc;
 
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, Expr, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, lit, when,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
+    lit, when,
 };
 use datafusion_functions_nested::array_has::array_has_udf;
 use datafusion_spark::function::array::spark_array_contains;
@@ -36,6 +37,26 @@ impl ScalarUDFImpl for ArrayContains {
 
     fn return_type(&self, args: &[DataType]) -> Result<DataType> {
         self.spark_function.inner().return_type(args)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let [array, element] =
+            datafusion_common::utils::take_function_args(self.name(), args.arg_fields)?;
+        let nullable = array.is_nullable()
+            || element.is_nullable()
+            || match array.data_type() {
+                DataType::List(field)
+                | DataType::LargeList(field)
+                | DataType::FixedSizeList(field, _)
+                | DataType::ListView(field)
+                | DataType::LargeListView(field) => field.is_nullable(),
+                _ => true,
+            };
+        Ok(Arc::new(Field::new(
+            self.name(),
+            DataType::Boolean,
+            nullable,
+        )))
     }
 
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
@@ -75,8 +96,47 @@ impl ScalarUDFImpl for ArrayContains {
 mod tests {
     use super::*;
     use arrow::array::{Array, ArrayRef, Int32Array, ListArray, NullArray};
-    use arrow::datatypes::{Field, Int32Type};
+    use arrow::datatypes::Int32Type;
     use datafusion_common::config::ConfigOptions;
+
+    #[test]
+    fn result_fields_include_array_element_and_lookup_nullability() -> Result<()> {
+        for array_nullable in [false, true] {
+            for element_nullable in [false, true] {
+                for lookup_nullable in [false, true] {
+                    let element =
+                        Arc::new(Field::new_list_field(DataType::Int32, element_nullable));
+                    for storage in [
+                        DataType::List(element.clone()),
+                        DataType::LargeList(element.clone()),
+                        DataType::FixedSizeList(element.clone(), 1),
+                        DataType::ListView(element.clone()),
+                        DataType::LargeListView(element),
+                    ] {
+                        let fields = [
+                            Arc::new(
+                                Field::new("array", storage, array_nullable)
+                                    .with_metadata([("origin".into(), "input".into())].into()),
+                            ),
+                            Arc::new(Field::new("lookup", DataType::Int32, lookup_nullable)),
+                        ];
+                        let result =
+                            ArrayContains::default().return_field_from_args(ReturnFieldArgs {
+                                arg_fields: &fields,
+                                scalar_arguments: &[None, None],
+                            })?;
+                        assert_eq!(result.data_type(), &DataType::Boolean);
+                        assert_eq!(
+                            result.is_nullable(),
+                            array_nullable || element_nullable || lookup_nullable
+                        );
+                        assert!(result.metadata().is_empty());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn null_results_cover_the_input_batch() -> Result<()> {
