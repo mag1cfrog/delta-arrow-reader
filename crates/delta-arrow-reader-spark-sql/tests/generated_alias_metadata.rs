@@ -1022,7 +1022,7 @@ async fn reviewed_if_declarations_match_exact_spark_stages() -> TestResult {
     Ok(())
 }
 
-async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestResult {
+async fn replay_alias_schema_stages(raw: &str, count: usize) -> TestResult {
     let records = raw
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -1034,6 +1034,7 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
     for case in &records[1..] {
         assert!(identities.insert((
             case["id"].as_str().ok_or("missing ID")?,
+            case.get("input").and_then(Value::as_str),
             case["ansi"].as_bool().ok_or("missing ANSI mode")?,
         )));
         assert!(case.get("error").is_none());
@@ -1049,6 +1050,7 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
         );
     }
     let mut differences = Vec::new();
+    let mut comparisons = 0;
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -1095,6 +1097,16 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
                 }
             }
             rows.sort_by_key(|row| json!(row).to_string());
+            comparisons += 1;
+            eprintln!(
+                "alias_schema_stages: {}",
+                json!({"id":case["id"],"input":case["input"],"ansi":case["ansi"],
+                    "batch_size":batch_size,"matches":public == case["public_schema"]
+                        && executed == case["executed_schema_after_collect"]
+                        && json!(rows) == case["expected"]["rows"],
+                    "expected":case,"actual":{"public_schema":public,
+                        "executed_schema":executed,"rows":rows}})
+            );
             for (stage, actual, expected) in [
                 ("public schema", public, &case["public_schema"]),
                 (
@@ -1106,20 +1118,21 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
             ] {
                 if actual != *expected {
                     differences.push(format!(
-                        "{} ANSI={} batch={batch_size} {stage}: expected {expected}, got {actual}",
-                        case["id"], case["ansi"]
+                        "{} input={} ANSI={} batch={batch_size} {stage}: expected {expected}, got {actual}",
+                        case["id"], case["input"], case["ansi"]
                     ));
                 }
             }
         }
     }
+    assert_eq!(comparisons, count * 2);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
 
 #[tokio::test]
 async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    replay_positive_alias_schema_stages(
+    replay_alias_schema_stages(
         include_str!("fixtures/review-710-positive-alias-spark.jsonl"),
         24,
     )
@@ -1128,7 +1141,7 @@ async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResul
 
 #[tokio::test]
 async fn nested_positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    replay_positive_alias_schema_stages(
+    replay_alias_schema_stages(
         include_str!("fixtures/review-710-nested-positive-alias-spark.jsonl"),
         12,
     )
@@ -1137,7 +1150,7 @@ async fn nested_positive_aliases_match_public_and_executed_spark_schemas() -> Te
 
 #[tokio::test]
 async fn extracted_positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    replay_positive_alias_schema_stages(
+    replay_alias_schema_stages(
         include_str!("fixtures/review-710-nested-positive-alias-forms-spark.jsonl"),
         24,
     )
@@ -1222,4 +1235,44 @@ async fn collection_errors_cannot_hide_physical_schema_mismatches() -> TestResul
     );
     assert!(result.unwrap_err().to_string().contains("executed schema"));
     Ok(())
+}
+
+#[tokio::test]
+async fn correlated_scalar_aliases_match_public_and_executed_spark_schemas() -> TestResult {
+    let raw = include_str!("fixtures/correlated-scalar-metadata-stages/scope-spark.jsonl");
+    let seed = include_str!("fixtures/correlated-scalar-metadata-stages/original-scope-spark.jsonl");
+    assert!(
+        raw.starts_with(seed),
+        "original 24 observations were rewritten"
+    );
+    let records = raw
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 36);
+    assert_eq!(seed.lines().count() - 1, 24);
+    assert!(
+        records[0]["spark_build"]
+            .as_str()
+            .ok_or("missing Spark build")?
+            .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
+    );
+    for case in &records[1..] {
+        assert!(
+            [
+                "correlated_direct_outer_alias",
+                "struct_direct_child_alias",
+                "struct_positive_child_alias",
+                "struct_unary_positive_child_alias",
+                "correlated_struct_inner_alias",
+                "correlated_direct_inner_alias",
+            ]
+            .contains(&case["id"].as_str().ok_or("missing ID")?)
+        );
+        assert!(
+            ["struct_mixed", "struct_nulls", "struct_empty"]
+                .contains(&case["input"].as_str().ok_or("missing input")?)
+        );
+    }
+    replay_alias_schema_stages(raw, 36).await
 }
