@@ -329,8 +329,8 @@ native controls. IF keeps its existing unmarked CASE path. This is another
 partial #721 slice; broader conditional coercion remains separate.
 The query-local preparation rule reconstructs an empty-schema, one-row Spark
 relation for its existing local cast checks. Required literal WHEN conversions
-therefore retain their planning-error phase. Native queries and zero-row
-relations keep their existing preparation paths.
+therefore retain their planning-error phase. Direct zero-row EmptyRelation
+inputs and native queries retain their existing preparation paths.
 
 Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
