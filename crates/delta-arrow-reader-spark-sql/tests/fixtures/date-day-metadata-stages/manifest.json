@@ -1,0 +1,29 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "date_encoding": "unix_date_or_unix_date_array",
+  "baseline": "d178f9e21e1dbe8cd96dae10dea0e34ed6060cf6",
+  "purpose": "Preserve each original SQL and expected result while observing independent public and executed fields. No product behavior is inferred before capture.",
+  "observations": 68,
+  "sources": [
+    {
+      "path": "../date-day-correlated-spark.jsonl",
+      "bytes": 6879,
+      "sha256": "8b45bfc6737c7e3725febd7efe3ad71a3970b64c35e0602fb911103828a6031f",
+      "observations": 24
+    },
+    {
+      "path": "../date-day-lambda-spark.jsonl",
+      "bytes": 8173,
+      "sha256": "0b2fb628b8f5bffdc9d8697d1861d56c44c62a98845c49a9e29aa59fad50a160",
+      "observations": 32
+    },
+    {
+      "path": "../date-day-closed-lambda-spark.jsonl",
+      "bytes": 2939,
+      "sha256": "6af61070a8af3d7d5ef59b2b658b214868ccf80133204b727f6d0f6edf1b75da",
+      "observations": 12
+    }
+  ]
+}
