@@ -2543,6 +2543,133 @@ fn invocation_consumes_physical_or_default_cached_return_fields() -> datafusion_
 
 #[cfg(test)]
 #[test]
+fn metadata_field_cache_bounds_derivation_and_resets_with_children() -> datafusion_common::Result<()> {
+    use std::hash::{Hash, Hasher};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use datafusion::arrow::array::{Array, Int32Array};
+    use datafusion::arrow::datatypes::Schema;
+    use datafusion::arrow::record_batch::RecordBatch;
+    use datafusion::physical_expr::expressions::{BinaryExpr, Column, Literal};
+    use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr};
+
+    #[derive(Debug)]
+    struct CountedMetadata {
+        annotation: SparkResultMetadata,
+        derivations: Arc<AtomicUsize>,
+    }
+
+    impl PartialEq for CountedMetadata {
+        fn eq(&self, other: &Self) -> bool {
+            self.annotation == other.annotation
+        }
+    }
+
+    impl Eq for CountedMetadata {}
+
+    impl Hash for CountedMetadata {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.annotation.hash(state);
+        }
+    }
+
+    impl ScalarUDFImpl for CountedMetadata {
+        fn name(&self) -> &str {
+            self.annotation.name()
+        }
+
+        fn signature(&self) -> &Signature {
+            self.annotation.signature()
+        }
+
+        fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+            self.annotation.return_type(args)
+        }
+
+        fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+            self.derivations.fetch_add(1, Ordering::Relaxed);
+            self.annotation.return_field_from_args(args)
+        }
+
+        fn return_field_uses_physical_input_schema(&self) -> bool {
+            true
+        }
+
+        fn invoke_with_args(
+            &self,
+            args: ScalarFunctionArgs,
+        ) -> datafusion_common::Result<ColumnarValue> {
+            self.annotation.invoke_with_args(args)
+        }
+    }
+
+    let logical_schema = Schema::new(vec![
+        Field::new("k", DataType::Int32, true),
+        Field::new("v", DataType::Int32, true),
+    ]);
+    let physical_schema = Arc::new(Schema::new(vec![
+        Field::new("k", DataType::Int32, false),
+        Field::new("v", DataType::Int32, true),
+    ]));
+    let replacement_values = Arc::new(Int32Array::from(vec![None, Some(9)]));
+    let batch = RecordBatch::try_new(
+        Arc::clone(&physical_schema),
+        vec![Arc::new(Int32Array::from(vec![1, 2])), replacement_values.clone()],
+    )?;
+    for depth in [1_usize, 4, 8, 16] {
+        let derivations = Arc::new(AtomicUsize::new(0));
+        let function = Arc::new(ScalarUDF::from(CountedMetadata {
+            annotation: SparkResultMetadata {
+                metadata: FieldMetadata::default(),
+                lifetime: ResultMetadataLifetime::Permanent,
+                metadata_source_type: None,
+            },
+            derivations: Arc::clone(&derivations),
+        }));
+        let mut expression: Arc<dyn PhysicalExpr> = Arc::new(Column::new("k", 0));
+        for _ in 0..depth {
+            expression = Arc::new(ScalarFunctionExpr::try_new(
+                Arc::clone(&function),
+                vec![Arc::new(BinaryExpr::new(
+                    expression,
+                    Operator::Plus,
+                    Arc::new(Literal::new(ScalarValue::Int32(Some(1)))),
+                ))],
+                &logical_schema,
+                Arc::new(Default::default()),
+            )?);
+        }
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), depth);
+        let expected = Field::new("spark_result_metadata", DataType::Int32, false);
+        assert_eq!(expression.return_field(&physical_schema)?.as_ref(), &expected);
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), depth);
+        assert_eq!(expression.return_field(&physical_schema.as_ref().clone())?.as_ref(), &expected);
+        assert_eq!(expression.data_type(&physical_schema)?, DataType::Int32);
+        assert!(!expression.nullable(&physical_schema)?);
+        let returned = expression.evaluate(&batch)?.into_array(2)?;
+        let expected_values = Int32Array::from(vec![1 + depth as i32, 2 + depth as i32]);
+        assert_eq!(returned.to_data(), expected_values.to_data());
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), 0);
+
+        let schema_metadata = physical_schema.as_ref().clone().with_metadata(HashMap::from([
+            ("schema".into(), "other".into()),
+        ]));
+        assert_eq!(expression.return_field(&schema_metadata)?.as_ref(), &expected);
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), depth);
+        assert_eq!(expression.return_field(&physical_schema)?.as_ref(), &expected);
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), depth);
+
+        let replaced = expression.with_new_children(vec![Arc::new(Column::new("v", 1))])?;
+        assert_eq!(replaced.return_field(&physical_schema)?.as_ref(), &expected.with_nullable(true));
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), 1);
+        assert_eq!(replaced.evaluate(&batch)?.into_array(2)?.to_data(), replacement_values.to_data());
+        assert_eq!(derivations.swap(0, Ordering::Relaxed), 0);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
 fn analysis_metadata_annotations_restore_the_original_value() -> datafusion_common::Result<()> {
     use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::optimizer::simplify_expressions::ExprSimplifier;
