@@ -314,8 +314,19 @@ without one, THEN and ELSE declarations remain nullable when any result is
 nullable, and a missing ELSE remains nullable. FALSE, typed-NULL and nonliteral
 guards retain their original result declarations. The
 [reachable-result references](tests/fixtures/README.md#case-literal-true-result-fields)
-cover this bounded #721 behavior. Validation, result types, metadata, branch
-storage and execution retain their existing paths; wider #721 work remains open.
+cover this bounded #721 behavior. Condition validation, metadata and branch
+storage retain their existing paths; wider #721 work remains open.
+
+Spark-marked CASE result types merge nested child declarations with the existing
+CASE common-type rule. The analyzer retains value conversions and defers casts
+that only widen compatible nested declarations. Physical planning casts the
+current arms to their current common type, including whole-CASE constant
+evaluation. When pruning removes all guards without an ELSE, the synthesized
+NULL keeps the original merged nested type. The
+[nested-result references](tests/case_nested_fields.rs) cover
+typed Boolean and DATE arrays, structs, nested arrays, discarded branches and
+native controls. IF keeps its existing unmarked CASE path. This is another
+partial #721 slice; broader conditional coercion remains separate.
 
 Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
