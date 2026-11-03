@@ -46,8 +46,16 @@ fn references() -> TestResult<Vec<Value>> {
             case["ansi"].as_bool().ok_or("missing ANSI")?,
         )));
         if case["expected"]["condition"].is_null() {
-            assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
-            for stage in ["analyzed", "optimized", "executed_before_collect", "executed"] {
+            assert_eq!(
+                case["expected"]["schema"],
+                case["schema_stages"]["analyzed"]
+            );
+            for stage in [
+                "analyzed",
+                "optimized",
+                "executed_before_collect",
+                "executed",
+            ] {
                 assert!(case["schema_stages"][stage].is_object(), "{case}");
             }
             assert!(case["expected"]["rows"].is_array());
@@ -69,14 +77,18 @@ fn spark_case_type_merges_nested_child_declarations() -> TestResult {
             vec![
                 Field::new("required", required.clone(), false),
                 Field::new("nullable", nullable.clone(), false),
-            ].into(),
+            ]
+            .into(),
             Default::default(),
         )?;
         let arms = vec![(Box::new(lit(true)), Box::new(col("required")))];
         let otherwise = Some(Box::new(col("nullable")));
         let spark = Expr::Case(Case::new_spark_searched(arms.clone(), otherwise.clone()));
         assert_eq!(spark.get_type(&schema)?, nullable, "depth={depth}");
-        assert!(!spark.nullable(&schema)?, "literal TRUE keeps the required top-level result");
+        assert!(
+            !spark.nullable(&schema)?,
+            "literal TRUE keeps the required top-level result"
+        );
         let native = Expr::Case(Case::new(None, arms, otherwise));
         assert_eq!(native.get_type(&schema)?, required, "depth={depth}");
     }
@@ -91,15 +103,21 @@ async fn case_nested_result_fields_match_spark() -> TestResult {
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
-                SessionStateBuilder::new().with_default_features().with_config(
-                    SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
-                ),
-            ).build(),
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
         );
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             comparisons += 1;
-            let mut comparison = spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            let mut comparison =
+                spark_results::compare_exact_spark_query_stages(&session, case).await?;
             comparison["id"] = case["id"].clone();
             comparison["input"] = case["input"].clone();
             comparison["ansi"] = case["ansi"].clone();
@@ -122,14 +140,38 @@ async fn case_validates_unselected_nested_results_and_conditions() -> TestResult
     );
     for ansi_mode in [true, false] {
         for (sql, diagnostic) in [
-            ("SELECT CASE WHEN TRUE THEN ARRAY(TRUE) ELSE NAMED_STRUCT('leaf', TRUE) END AS r", "CASE result types are incompatible"),
-            ("SELECT CASE WHEN FALSE THEN ARRAY(TRUE) ELSE NAMED_STRUCT('leaf', TRUE) END AS r", "CASE result types are incompatible"),
-            ("SELECT CASE WHEN 1 THEN ARRAY(TRUE) ELSE ARRAY(FALSE) END AS r", "CASE WHEN condition must be BOOLEAN"),
-            ("SELECT CASE WHEN TRUE THEN ARRAY(TRUE) WHEN 1 THEN ARRAY(FALSE) ELSE ARRAY(TRUE) END AS r", "CASE WHEN condition must be BOOLEAN"),
-            ("SELECT CASE WHEN FALSE THEN missing_result ELSE ARRAY(TRUE) END AS r", "missing_result"),
+            (
+                "SELECT CASE WHEN TRUE THEN ARRAY(TRUE) ELSE NAMED_STRUCT('leaf', TRUE) END AS r",
+                "CASE result types are incompatible",
+            ),
+            (
+                "SELECT CASE WHEN FALSE THEN ARRAY(TRUE) ELSE NAMED_STRUCT('leaf', TRUE) END AS r",
+                "CASE result types are incompatible",
+            ),
+            (
+                "SELECT CASE WHEN 1 THEN ARRAY(TRUE) ELSE ARRAY(FALSE) END AS r",
+                "CASE WHEN condition must be BOOLEAN",
+            ),
+            (
+                "SELECT CASE WHEN TRUE THEN ARRAY(TRUE) WHEN 1 THEN ARRAY(FALSE) ELSE ARRAY(TRUE) END AS r",
+                "CASE WHEN condition must be BOOLEAN",
+            ),
+            (
+                "SELECT CASE WHEN FALSE THEN missing_result ELSE ARRAY(TRUE) END AS r",
+                "missing_result",
+            ),
         ] {
-            let error = plan_query(&session, sql, &SparkSqlOptions { ansi_mode, ..SparkSqlOptions::default() })
-                .await.err().ok_or("invalid CASE reached physical planning")?;
+            let error = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await
+            .err()
+            .ok_or("invalid CASE reached physical planning")?;
             assert!(error.to_string().contains(diagnostic), "{sql}: {error}");
         }
     }
@@ -151,7 +193,11 @@ async fn spark_configuration_preserves_native_nested_case() -> TestResult {
             let query = plan_query(&configured,
                 "SELECT CASE WHEN id=0 THEN ARRAY(TRUE) ELSE ARRAY(CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_mixed",
                 &SparkSqlOptions::default()).await?;
-            collect(query.create_physical_plan(&configured).await?, configured.task_ctx()).await?;
+            collect(
+                query.create_physical_plan(&configured).await?,
+                configured.task_ctx(),
+            )
+            .await?;
         }
         for sql in [
             "SELECT CASE WHEN TRUE THEN [TRUE] ELSE [CAST(NULL AS BOOLEAN)] END AS r",
