@@ -263,7 +263,9 @@ async fn assert_case_schema_stages_and_rows(
                             .collect::<TestResult<Vec<_>>>()?);
                     }
                 }
-                rows.sort_by_key(|row| json!(row).to_string());
+                if case["ordered"].as_bool() != Some(true) {
+                    rows.sort_by_key(|row| json!(row).to_string());
+                }
                 Ok(rows)
             }.await;
             let public_matches = case["schema_stages"].get("analyzed")
