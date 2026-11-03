@@ -29,15 +29,20 @@ fn references() -> TestResult<Vec<Value>> {
         "32f7299601108917fb01920a54e084595b7b3bf8"
     );
     assert_eq!(records.len() - 1, 74);
-    let pruning = include_str!("fixtures/case-nested-pruning-spark.jsonl")
-        .lines()
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(pruning.len() - 1, 22);
-    for key in ["spark_version", "spark_revision", "inputs"] {
-        assert_eq!(pruning[0][key], records[0][key]);
+    for (fixture, count) in [
+        (include_str!("fixtures/case-nested-pruning-spark.jsonl"), 22),
+        (include_str!("fixtures/case-nested-numeric-pruning-spark.jsonl"), 2),
+    ] {
+        let supplement = fixture
+            .lines()
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(supplement.len() - 1, count);
+        for key in ["spark_version", "spark_revision", "inputs"] {
+            assert_eq!(supplement[0][key], records[0][key]);
+        }
+        records.extend(supplement.into_iter().skip(1));
     }
-    records.extend(pruning.into_iter().skip(1));
     let mut identities = std::collections::BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -128,7 +133,7 @@ async fn case_nested_result_fields_match_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(comparisons, 192);
+    assert_eq!(comparisons, 196);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
@@ -207,6 +212,7 @@ async fn spark_configuration_preserves_native_nested_case() -> TestResult {
             "SELECT CASE WHEN id=0 THEN [DATE '2024-02-29'] ELSE [CAST(NULL AS DATE)] END AS r FROM case_nested_empty",
             "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('leaf', TRUE) ELSE NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_null",
             "SELECT CASE WHEN TRUE THEN [TRUE] ELSE NAMED_STRUCT('leaf', TRUE) END AS r",
+            "SELECT CASE WHEN CAST('bad' AS BOOLEAN) THEN [TRUE] ELSE [FALSE] END AS r",
         ] {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
             let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
