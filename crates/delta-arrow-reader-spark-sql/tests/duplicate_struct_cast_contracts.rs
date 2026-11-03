@@ -388,3 +388,78 @@ fn positional_struct_rename_preserves_input_parent_nullability() -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn constructor_name_alignment_preserves_each_list_storage_variant() -> TestResult {
+    use arrow::array::{FixedSizeListArray, LargeListArray, ListArray};
+    use arrow::buffer::OffsetBuffer;
+    use datafusion::logical_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
+    use sail_function::scalar::spark_struct_rename::{
+        SparkStructRename, align_constructor_struct_field_names,
+    };
+
+    fn wrap_values(data_type: &DataType, values: ArrayRef) -> TestResultWithArray {
+        let nulls = Some(NullBuffer::from(vec![true, false]));
+        Ok(match data_type {
+            DataType::List(field) => Arc::new(ListArray::try_new(field.clone(),
+                OffsetBuffer::new(vec![0_i32, 2, 4].into()), values, nulls)?),
+            DataType::LargeList(field) => Arc::new(LargeListArray::try_new(field.clone(),
+                OffsetBuffer::new(vec![0_i64, 2, 4].into()), values, nulls)?),
+            DataType::FixedSizeList(field, size) => Arc::new(FixedSizeListArray::try_new(
+                field.clone(), *size, values, nulls)?),
+            _ => return Err("expected a List storage variant".into()),
+        })
+    }
+    type TestResultWithArray = Result<ArrayRef, Box<dyn std::error::Error + Send + Sync>>;
+
+    let left_fields: Fields = vec![
+        Field::new("item", DataType::Int32, false),
+        Field::new("ITEM", DataType::Int32, true),
+    ].into();
+    let right_fields: Fields = ["ITEM", "item"].into_iter().enumerate().map(|(index, name)| {
+        Field::new(name, DataType::Int64, true).with_metadata(
+            [("position".to_owned(), index.to_string())].into())
+    }).collect();
+    let expected_fields: Fields = right_fields.iter().zip(["item", "ITEM"])
+        .map(|(field, name)| field.as_ref().clone().with_name(name)).collect();
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(Int64Array::from(vec![Some(21), None, Some(31), Some(41)])),
+        Arc::new(Int64Array::from(vec![22, 32, 42, 52])),
+    ];
+    let struct_nulls = Some(NullBuffer::from(vec![true, false, true, true]));
+    let source_values: ArrayRef = Arc::new(StructArray::try_new(
+        right_fields.clone(), columns.clone(), struct_nulls.clone())?);
+    let expected_values: ArrayRef = Arc::new(StructArray::try_new(
+        expected_fields.clone(), columns, struct_nulls)?);
+    let left_field = Arc::new(Field::new("element", DataType::Struct(left_fields), false)
+        .with_metadata([("source".to_owned(), "left".to_owned())].into()));
+    let right_field = Arc::new(Field::new("element", DataType::Struct(right_fields), true)
+        .with_metadata([("source".to_owned(), "right".to_owned())].into()));
+    let expected_field = Arc::new(right_field.as_ref().clone()
+        .with_data_type(DataType::Struct(expected_fields)));
+    let wrappers: [fn(Arc<Field>) -> DataType; 3] = [
+        DataType::List, DataType::LargeList, |field| DataType::FixedSizeList(field, 2),
+    ];
+    for wrap_left in wrappers {
+        for wrap_right in wrappers {
+            let left = wrap_left(left_field.clone());
+            let right = wrap_right(right_field.clone());
+            let expected = wrap_right(expected_field.clone());
+            let aligned = align_constructor_struct_field_names(&[left.clone(), right.clone()])?;
+            assert_eq!(aligned, vec![left, expected.clone()]);
+            let arg_field = Arc::new(Field::new("input", right.clone(), true));
+            let rename = SparkStructRename::new(aligned[1].clone());
+            let return_field = rename.return_field_from_args(ReturnFieldArgs {
+                arg_fields: std::slice::from_ref(&arg_field), scalar_arguments: &[],
+            })?;
+            let actual = rename.invoke_with_args(ScalarFunctionArgs {
+                args: vec![ColumnarValue::Array(wrap_values(&right, source_values.clone())?)],
+                arg_fields: vec![arg_field], number_rows: 2, return_field,
+                config_options: Default::default(),
+            })?.into_array(2)?;
+            actual.to_data().validate_full()?;
+            assert_eq!(actual.to_data(), wrap_values(&expected, expected_values.clone())?.to_data());
+        }
+    }
+    Ok(())
+}
