@@ -1304,3 +1304,26 @@ async fn map_owner_interactions_match_exact_spark_stages() -> TestResult {
     )
     .await
 }
+
+#[tokio::test]
+async fn map_factories_retain_throwing_argument_errors() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for (value, condition) in [
+        ("CAST('bad' AS INT)", "Cannot cast string 'bad' to value of Int32 type"),
+        ("1 DIV 0", "Divide by zero error"),
+    ] {
+        for expression in [
+            format!("MAP('k', {value})"),
+            format!("MAP_FROM_ARRAYS(ARRAY('k'), ARRAY({value}))"),
+            format!("MAP_FROM_ENTRIES(ARRAY(STRUCT('k' AS named_key, {value} AS named_value)))"),
+        ] {
+            let sql = format!("SELECT (SELECT {expression}) AS r");
+            let case = json!({"sql":sql,"ansi":true,"expected":{"condition":condition}});
+            let result = compare_case(&session, &case).await;
+            assert!(has_engine_condition(&result, condition), "{sql}: {result:?}");
+        }
+    }
+    Ok(())
+}

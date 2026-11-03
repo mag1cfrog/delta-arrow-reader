@@ -160,14 +160,14 @@ that invariant; it does not define Spark's CASE nullability policy. Literal
 nullable Spark child in both stages. The baseline DAR public/executed differences
 remain strict references for #721 and its constructor follow-up. MAP's inherited
 top-level scalar nullability gap is tracked by #824. Its no-order nested
-`source=plain` metadata is a separate #818 contract. MAP construction records
-only its resolved value nullability; nested types follow the live arguments.
-The focused control checks duplicate field values, scalar and array results,
-duplicate-key policy, and rejection of actual NULLs in required values. The
-default MAP_FROM_ARRAYS/MAP_FROM_ENTRIES paths and explicit SQL CAST retain their
-existing implementations; their interactions with scalar inlining require
-independent reference checks. No expectation is changed to make a gap appear
-compatible.
+`source=plain` metadata is a separate #818 contract. MAP, MAP_FROM_ARRAYS and
+MAP_FROM_ENTRIES record only their resolved value nullability in the existing
+MAP UDFs; a shared policy derives nested types from live arguments. Focused
+controls check positional entry names, duplicate child values, scalar and array
+results, duplicate-key policy, NULL entries/keys, required value validation and
+throwing arguments. Direct default UDF construction retains its original policy;
+explicit SQL CAST retains its declared type. No expectation is changed to make
+a gap appear compatible.
 
 The 12 `map-interactions/map-interactions-spark.jsonl` records, SHA256
 `89e9d955fbe8f3817897aa1bd71413f0ed80c533bbfc9d8ce3d2613c74406101`, cover
