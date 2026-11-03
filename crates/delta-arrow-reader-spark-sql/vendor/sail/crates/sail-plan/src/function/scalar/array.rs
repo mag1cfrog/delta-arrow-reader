@@ -1,14 +1,15 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{
-    ExprSchemable, HigherOrderUDF, ScalarUDF, ScalarUDFImpl, cast, expr, is_null, lit, not, or,
-    when,
+    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs,
+    ScalarUDF, ScalarUDFImpl, Signature, cast, expr, is_null, lit, not, or, when,
 };
+use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
 use datafusion_spark::function::array::expr_fn as array_fn;
 use sail_common::utils::string::SPARK_WHITESPACE_OR_ISO_CONTROL_CHARACTERS;
@@ -374,11 +375,26 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         function_context,
     } = input;
 
+    if arguments.len() != 1 {
+        return Err(PlanError::invalid(format!(
+            "FLATTEN requires one argument, got {}",
+            arguments.len()
+        )));
+    }
     let array = normalize_flatten_inner_views(arguments.one()?, function_context.schema)?;
     let array_type = array.get_type(function_context.schema)?;
+    let flattened = ScalarUDF::from(FlattenResult::default()).call(vec![array.clone()]);
+    let inner = array_element_field(&array_type)
+        .ok_or_else(|| PlanError::invalid("FLATTEN requires an array of arrays"))?;
+    if !inner.data_type().is_list() {
+        return Err(PlanError::invalid("FLATTEN requires an array of arrays"));
+    }
+    if !inner.is_nullable() {
+        return Ok(flattened);
+    }
 
-    // Convert array type to nullable version to avoid Arrow errors with non-nullable empty arrays
-    let nullable_array_type = make_nullable_array_type(&array_type);
+    // The NULL probe only needs nullable inner arrays, not nullable output elements.
+    let nullable_array_type = nullable_array_probe_type(&array_type);
     let nullable_array = cast(array.clone(), nullable_array_type.clone());
 
     // Cast the null-only array to the nullable type to match
@@ -391,12 +407,69 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
-        when_then_expr: vec![(
-            Box::new(not(array_has_null)),
-            Box::new(expr_fn::flatten(nullable_array)),
-        )],
+        when_then_expr: vec![(Box::new(not(array_has_null)), Box::new(flattened))],
         else_expr: None,
     }))
+}
+
+fn array_element_field(data_type: &DataType) -> Option<&FieldRef> {
+    match data_type {
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::FixedSizeList(field, _)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field) => Some(field),
+        _ => None,
+    }
+}
+
+fn nullable_array_probe_type(data_type: &DataType) -> DataType {
+    let Some(field) = array_element_field(data_type) else {
+        return data_type.clone();
+    };
+    let field = Arc::new(field.as_ref().clone().with_nullable(true));
+    if matches!(
+        data_type,
+        DataType::LargeList(_) | DataType::LargeListView(_)
+    ) {
+        DataType::LargeList(field)
+    } else {
+        DataType::List(field)
+    }
+}
+
+// The planner guards nullable inner arrays; native FLATTEN supplies the values.
+#[derive(Debug, Default, PartialEq, Eq, Hash)]
+struct FlattenResult(Flatten);
+
+impl ScalarUDFImpl for FlattenResult {
+    fn name(&self) -> &str {
+        "flatten"
+    }
+
+    fn signature(&self) -> &Signature {
+        self.0.signature()
+    }
+
+    fn return_type(&self, arguments: &[DataType]) -> datafusion_common::Result<DataType> {
+        self.0.return_type(arguments)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        let [array] = datafusion_common::utils::take_function_args(self.name(), args.arg_fields)?;
+        Ok(Arc::new(Field::new(
+            self.name(),
+            self.return_type(&[array.data_type().clone()])?,
+            array.is_nullable(),
+        )))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        self.0.invoke_with_args(args)
+    }
 }
 
 fn sequence_trim_string(argument: expr::Expr) -> expr::Expr {

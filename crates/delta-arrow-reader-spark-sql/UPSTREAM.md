@@ -595,3 +595,14 @@ and native SQL isolation through 442 Spark observations and 32 dictionary
 provider configurations. The broader #762 qualification/PIVOT and #757 naming
 acceptances remain open. Ordinary NULL extraction remains under #815; the
 nonnullable literal Map lambda's physical-planning mismatch remains under #816.
+
+### FLATTEN declarations
+
+Spark FLATTEN uses the native value kernel with a private result adapter that
+retains the input array's nullability and the inner array's element field.
+Nullable inner arrays add a NULL-result guard. Its singleton NULL probe uses
+List or LargeList storage so a fixed array width does not constrain the probe.
+Spark resolution rejects non-nested arrays and wrong arity before evaluation.
+The [FLATTEN references](tests/fixtures/README.md#flatten-result-fields) cover
+complete fields, rows, invalid inputs and native SQL isolation. Constant STRUCT
+parents use the separate declaration-preservation prerequisite #849.
