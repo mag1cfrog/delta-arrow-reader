@@ -39,4 +39,4 @@ The test logs every main and supplemental observation with the strict Spark comp
 | [#864](https://github.com/mag1cfrog/delta-arrow-reader/issues/864) | ELEMENT_AT and ARRAY_INSERT index-zero errors lack their own identifiers; their empty-input field declarations also differ. |
 | [#865](https://github.com/mag1cfrog/delta-arrow-reader/issues/865) | ANSI integral DIV returns an unclassified Arrow divide-by-zero error. |
 
-The supplemental `literal_index` and `floating_div` probes remain raw diagnostics. Spark returns NULL rows with a non-nullable field for `ARRAY(v)[1]`, and rejects DOUBLE DIV at resolution. These records do not establish an internal RaiseError execution path or an additional parity claim.
+The supplemental `literal_index` and `floating_div` probes remain raw diagnostics. Spark returns NULL rows with a non-nullable field for `ARRAY(v)[1]`, and rejects DOUBLE DIV at resolution. In ANSI mode, `literal_index` reaches the local default RaiseError and preserves its INVALID_ARRAY_INDEX cause, with the Spark mismatch retained. The `floating_div` probe does not establish an internal execution path.
