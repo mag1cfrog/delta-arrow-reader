@@ -6,8 +6,8 @@ use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{
-    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs,
-    ScalarUDF, ScalarUDFImpl, Signature, cast, expr, is_null, lit, not, or, when,
+    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
+    ScalarUDFImpl, Signature, cast, expr, is_null, lit, not, or, when,
 };
 use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;

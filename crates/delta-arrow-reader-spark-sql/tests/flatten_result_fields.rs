@@ -119,10 +119,7 @@ async fn assert_flatten_result_records(records: &[Value], expected_cases: usize)
 
 // These exact resolver diagnostics predate Spark condition tags.
 fn apply_flatten_diagnostic_alias(case: &Value, comparison: &mut Value) {
-    let diagnostic = match (
-        case["expected"]["condition"].as_str(),
-        case["sql"].as_str(),
-    ) {
+    let diagnostic = match (case["expected"]["condition"].as_str(), case["sql"].as_str()) {
         (
             Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"),
             Some(
@@ -145,9 +142,15 @@ fn apply_flatten_diagnostic_alias(case: &Value, comparison: &mut Value) {
                 .is_some_and(|error| error.contains(diagnostic))
     );
     comparison["matches"] = json!(
-        ["public_matches", "before_matches", "physical_matches", "rows_match", "error_matches"]
-            .iter()
-            .all(|key| comparison[key] == true)
+        [
+            "public_matches",
+            "before_matches",
+            "physical_matches",
+            "rows_match",
+            "error_matches"
+        ]
+        .iter()
+        .all(|key| comparison[key] == true)
     );
 }
 
