@@ -2191,3 +2191,27 @@ modules from the parent fixture directory:
 PYTHONPATH=tests/fixtures python tests/fixtures/null-base-attribute-evaluation-815/capture_attribute_evaluation.py /tmp/null-base-attribute-evaluation-815-spark.jsonl
 cargo test --locked --workspace --test null_base_extraction
 ```
+
+## Map constructor nullability
+
+`map-constructor-nullability-spark.jsonl` preserves 102 Spark 4.2.0 observations
+from revision `32f7299601108917fb01920a54e084595b7b3bf8`, in UTC and both ANSI
+modes. Direct MAP, empty maps, ARRAY and STRUCT nesting, nested map values,
+lambda results, scalar inlining, hidden ORDER BY columns, explicit casts and
+MAP_FROM_ARRAYS/ENTRIES controls run on mixed, all-null and empty providers.
+Duplicate-key errors and duplicate STRUCT field positions remain observable.
+
+`map_constructor_nullability.rs` compares the full public declaration and the
+executed declarations before and after collection, validates every returned
+batch, and compares structural rows at batch sizes 1 and 32. Map values use
+ordered entry pairs and STRUCT values use field positions. Duplicate rows
+remain in the comparison. Native array construction also compares plain and
+Spark-configured DataFusion sessions. The provenance JSON pins the unchanged
+reference, capture source and shared helpers. Separate coercion and duplicate
+STRUCT widening probes are required before accepting changes to the temporary
+array constructor.
+
+```sh
+python tests/fixtures/capture_map_constructor_nullability_spark.py /tmp/map-constructor-nullability-spark.jsonl
+cargo test --locked --workspace --test map_constructor_nullability
+```
