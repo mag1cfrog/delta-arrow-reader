@@ -1,4 +1,4 @@
-//! Array result fields and values match independently captured Spark plans.
+//! Constant STRUCT fields and values match independently captured Spark plans.
 
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -14,22 +14,11 @@ use spark_results::TestResult;
 
 #[tokio::test]
 async fn constant_struct_fields_match_spark_without_array_leaves() -> TestResult {
-    assert_array_result_fields(
-        include_str!("fixtures/constant-struct-result-fields-spark.jsonl"),
-        10,
-    )
-    .await
-}
-
-async fn assert_array_result_fields(source: &str, expected_cases: usize) -> TestResult {
-    let records = source
+    let records = include_str!("fixtures/constant-struct-result-fields-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_array_result_records(&records, expected_cases).await
-}
-
-async fn assert_array_result_records(records: &[Value], expected_cases: usize) -> TestResult {
+    let expected_cases = 10;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records[0]["spark_revision"],
@@ -82,7 +71,7 @@ async fn assert_array_result_records(records: &[Value], expected_cases: usize) -
             comparison["id"] = case["id"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch_size);
-            eprintln!("ARRAY_RESULT_FIELDS_OBSERVATION {comparison}");
+            eprintln!("CONSTANT_STRUCT_RESULT_FIELDS_OBSERVATION {comparison}");
             if comparison["matches"] != true {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: expected={} stages={}, actual={comparison}",
@@ -97,7 +86,7 @@ async fn assert_array_result_records(records: &[Value], expected_cases: usize) -
 }
 
 #[tokio::test]
-async fn array_stage_comparator_rejects_wrong_error_fields_and_phase() -> TestResult {
+async fn constant_struct_stage_comparator_rejects_wrong_error_fields_and_phase() -> TestResult {
     let case = include_str!("fixtures/constant-struct-result-fields-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)

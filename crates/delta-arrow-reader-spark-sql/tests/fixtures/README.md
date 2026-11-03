@@ -2138,7 +2138,7 @@ executed fields, rows and required error phases at batch sizes 1 and 32 through
 the existing strict stage comparator and current provider loader. Negative
 controls reject a wrong analyzed field and a wrong required error phase.
 Native SQL controls compare configured and unconfigured STRUCT schemas and
-batches. This fixture supplies the constant parent-declaration prerequisite
+batches. This fixture covers #849, the constant parent-declaration prerequisite
 shared by FLATTEN #835 and ARRAY_CONTAINS #837; its leaves contain no arrays.
 
 ## STRUCT field resolution
