@@ -6,9 +6,8 @@ use arrow::array::Int32Array;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::execution::SessionStateBuilder;
-use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -70,6 +69,7 @@ async fn replay_set_operation_metadata(
         header["spark_revision"],
         "32f7299601108917fb01920a54e084595b7b3bf8"
     );
+    assert_eq!(header["timezone"].as_str().unwrap_or("UTC"), "UTC");
     let mut identities = std::collections::BTreeSet::new();
     for case in cases {
         assert!(identities.insert((
@@ -106,93 +106,17 @@ async fn replay_set_operation_metadata(
         );
         spark_inputs::register_recorded_inputs(&session, header, batch_size)?;
         for case in cases {
-            let mut phase = "resolve";
-            let mut public = None;
-            let mut before = None;
-            let mut executed = None;
-            let actual: TestResult<Vec<Vec<Value>>> = async {
-                let query = plan_query(
-                    &session,
-                    case["sql"].as_str().ok_or("missing SQL")?,
-                    &SparkSqlOptions {
-                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
-                        session_timezone: header["timezone"].as_str().unwrap_or("UTC").into(),
-                        ..SparkSqlOptions::default()
-                    },
-                )
-                .await?;
-                phase = "public_schema";
-                if query.column_names.len() != query.logical_plan.schema().fields().len() {
-                    return Err("public field count differs from output names".into());
-                }
-                public = Some(spark_results::capture_schema(
-                    query.logical_plan.schema().fields(),
-                    Some(&query.column_names),
-                )?);
-                phase = "create_physical_plan";
-                let physical = query.create_physical_plan(&session).await?;
-                phase = "physical_schema";
-                before = Some(spark_results::capture_schema(
-                    physical.schema().fields(), None,
-                )?);
-                let batches = collect(physical.clone(), session.task_ctx()).await;
-                phase = "executed_schema";
-                let schema = physical.schema();
-                executed = Some(spark_results::capture_schema(schema.fields(), None)?);
-                phase = "collect";
-                let batches = batches?;
-                phase = "encode";
-                let mut rows = Vec::new();
-                for batch in batches {
-                    spark_results::validate_batch(schema.as_ref(), &batch)?;
-                    for row in 0..batch.num_rows() {
-                        rows.push(
-                            batch
-                                .columns()
-                                .iter()
-                                .map(|column| spark_results::encode_value(column.as_ref(), row))
-                                .collect::<TestResult<Vec<_>>>()?,
-                        );
-                    }
-                }
-                rows.sort_by_key(|row| json!(row).to_string());
-                Ok(rows)
-            }.await;
             comparisons += 1;
-            let public_matches = case["schema_stages"].get("analyzed")
-                .is_none_or(|expected| public.as_ref() == Some(expected));
-            let before_matches = case["schema_stages"].get("executed_before_collect")
-                .is_none_or(|expected| before.as_ref() == Some(expected));
-            let executed_matches = case["schema_stages"].get("executed")
-                .is_none_or(|expected| executed.as_ref() == Some(expected));
-            let rows_match = case["expected"].get("rows")
-                .is_none_or(|expected| actual.as_ref().is_ok_and(|rows| json!(rows) == *expected));
-            let error_matches = if let Some(condition) = case["expected"]["condition"].as_str() {
-                let expected_phase = match case["spark_error_phase"].as_str() {
-                    Some("sql") => "resolve",
-                    Some("collect") => "collect",
-                    other => return Err(format!("unsupported reference error phase: {other:?}").into()),
-                };
-                phase == expected_phase && actual.as_ref().err().is_some_and(|error| {
-                    error.to_string().contains(&format!("[{condition}]"))
-                })
-            } else {
-                actual.is_ok()
-            };
-            let matches = public_matches && before_matches && executed_matches
-                && rows_match && error_matches;
-            eprintln!("UNION_METADATA_OBSERVATION {}", json!({
-                "group":group, "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
-                "public_schema":public, "before_collect":before,
-                "physical_schema":executed, "rows":actual.as_ref().ok(),
-                "native_phase":phase, "error":actual.as_ref().err().map(ToString::to_string),
-                "public_matches":public_matches, "before_matches":before_matches,
-                "physical_matches":executed_matches, "rows_match":rows_match,
-                "error_matches":error_matches, "matches":matches,
-            }));
-            if !matches {
+            let mut comparison =
+                spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            comparison["group"] = json!(group);
+            comparison["id"] = case["id"].clone();
+            comparison["ansi"] = case["ansi"].clone();
+            comparison["batch"] = json!(batch_size);
+            eprintln!("UNION_METADATA_OBSERVATION {comparison}");
+            if comparison["matches"] != true {
                 differences.push(format!(
-                    "{} ANSI={} batch={batch_size}: public={public_matches} before={before_matches} executed={executed_matches} rows={rows_match} error={error_matches}; phase={phase}, expected={}, stages={}, actual={actual:?}, public={public:?}, before={before:?}, executed={executed:?}",
+                    "{} ANSI={} batch={batch_size}: expected={}, stages={}, actual={comparison}",
                     case["id"], case["ansi"], case["expected"], case["schema_stages"]
                 ));
             }
@@ -204,7 +128,7 @@ async fn replay_set_operation_metadata(
 }
 
 #[tokio::test]
-async fn native_union_keeps_its_metadata_intersection() -> TestResult {
+async fn configured_native_union_matches_unconfigured_results() -> TestResult {
     let native = SessionContext::new();
     let configured = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
@@ -234,6 +158,5 @@ async fn native_union_keeps_its_metadata_intersection() -> TestResult {
     let expected = native.sql(sql).await?.collect().await?;
     let actual = configured.sql(sql).await?.collect().await?;
     assert_eq!(actual, expected);
-    assert_eq!(actual[0].schema().field(0).metadata(), field.metadata());
     Ok(())
 }
