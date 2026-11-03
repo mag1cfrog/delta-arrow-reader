@@ -62,11 +62,8 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         None
     };
     let mut when_then_expr = Vec::new();
-    let mut nullable = false;
-    let mut unconditional = false;
     for (condition, value) in conditions.into_iter().zip(branch_values) {
-        nullable |= value.nullable(function_context.schema)?;
-        unconditional = matches!(condition, expr::Expr::Literal(ScalarValue::Boolean(Some(true)), _));
+        let unconditional = matches!(condition, expr::Expr::Literal(ScalarValue::Boolean(Some(true)), _));
         if unconditional {
             // Keep the native CASE metadata boundary until the optimizer selects this value.
             else_expr = Some(Box::new(value.clone()));
@@ -76,25 +73,12 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             break;
         }
     }
-    if !unconditional {
-        nullable |= else_expr
-            .as_ref()
-            .map(|value| value.nullable(function_context.schema))
-            .transpose()?
-            .unwrap_or(true);
-    }
-    let mut result = expr::Expr::Case(expr::Case {
-        expr: None,
+    // The Boolean base counts result declarations without predicate-based nullability inference.
+    Ok(expr::Expr::Case(expr::Case {
+        expr: Some(Box::new(lit(true))),
         when_then_expr,
         else_expr,
-    });
-    // Spark counts nullable results even when their conditions prove those values nonnull.
-    if nullable && !result.nullable(function_context.schema)?
-        && let expr::Expr::Case(case) = &mut result
-    {
-        case.expr = Some(Box::new(lit(true)));
-    }
-    Ok(result)
+    }))
 }
 
 fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {

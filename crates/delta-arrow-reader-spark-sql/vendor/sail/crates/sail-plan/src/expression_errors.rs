@@ -1466,7 +1466,8 @@ impl Prepare {
                 Ok(expr.transform_down(|expr| {
                     if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
                         || !row_expression(&expr, false)?
-                        || !expr.exists(|child| Ok(matches!(child, Expr::Case(_))))?
+                        || !expr.exists(|child| Ok(matches!(child, Expr::Case(case)
+                            if matches!(case.expr.as_deref(), Some(Expr::Literal(ScalarValue::Boolean(Some(true)), _))))))?
                     {
                         return Ok(Transformed::no(expr));
                     }
