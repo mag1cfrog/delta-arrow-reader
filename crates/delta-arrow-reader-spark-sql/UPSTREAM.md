@@ -359,11 +359,13 @@ from literal TRUE during analysis. Unmarked native CASE keeps its existing rules
 
 The shared conditional value coercer supplies runtime conversions. Marked CASE
 merges the current branch fields for its declared type without casting live
-values merely to widen nested nullability or replace metadata. The shared nested
-declaration merger retains identical declarations and clears child metadata when
-branch fields differ. Scalar result coercion keeps the native CASE path. Native
-branch pruning can then expose the selected source fields. Physical construction
-aligns surviving arms to their current common type; whole-CASE constant evaluation uses
+values merely to widen nested nullability or replace metadata. Where supported,
+the shared declaration merger retains identical nested declarations and clears
+child metadata when branch fields differ. If declaration resolution cannot merge
+any child, CASE keeps the already admitted native type. Scalar result coercion
+keeps the native CASE path. Native branch pruning can then expose the selected
+source fields. Physical construction aligns surviving arms to their current
+common type; whole-CASE constant evaluation uses
 the same path to retain its merged datatype. The separate constant STRUCT-parent
 rule preserves original child declarations. The
 [CASE references](tests/case_result_nullability.rs) compare analyzed and executed

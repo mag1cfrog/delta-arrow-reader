@@ -155,11 +155,11 @@ impl ExprSchemable for Expr {
                     .map(|value| value.get_type(schema)).transpose()?;
                 let result_type =
                     get_coerce_type_for_case_expression(&then_types, else_type.as_ref());
-                // Value coercion has aligned leaves; merge complete nested declarations.
+                // Declaration refinement must preserve types already admitted by native CASE.
                 let result_type = if result_type.as_ref().is_some_and(DataType::is_nested) {
                     let result_types = then_types.iter().chain(else_type.iter())
                         .cloned().collect::<Vec<_>>();
-                    type_union_resolution(&result_types)
+                    type_union_resolution(&result_types).or(result_type)
                 } else { result_type };
                 result_type
                     .ok_or_else(|| plan_datafusion_err!(
