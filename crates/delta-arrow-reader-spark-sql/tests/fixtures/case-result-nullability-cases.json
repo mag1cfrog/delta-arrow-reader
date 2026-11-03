@@ -1,0 +1,923 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "baseline": "e80d6e47c8cffe8f1e4556d0b35795253368aa32",
+  "inputs": [
+    {
+      "name": "case_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "case-id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "case-value"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "9"
+        ]
+      ]
+    },
+    {
+      "name": "case_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "case-id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "case-value"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "case_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "case-id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "case-value"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "case_count": 162,
+  "observations": 324,
+  "batch_sizes": [
+    1,
+    32
+  ],
+  "cases": [
+    {
+      "id": "searched_true",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "searched_false",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "searched_typed_null",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "searched_folded_true",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "searched_folded_false",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN 1=0 THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "searched_folded_null",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN NULL AND true THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "simple_literal_true",
+      "input": "case_mixed",
+      "sql": "SELECT CASE true WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "simple_literal_false",
+      "input": "case_mixed",
+      "sql": "SELECT CASE false WHEN true THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "simple_null_operand",
+      "input": "case_mixed",
+      "sql": "SELECT CASE CAST(NULL AS INT) WHEN 1 THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "simple_null_match",
+      "input": "case_mixed",
+      "sql": "SELECT CASE 1 WHEN NULL THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "true_missing_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "false_missing_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN false THEN 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "null_missing_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_missing_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_required_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE 2 END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_nullable_then",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN v ELSE 2 END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_nullable_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE v END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_guarded_nullable",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN v IS NOT NULL THEN v ELSE 2 END AS r FROM case_mixed"
+    },
+    {
+      "id": "true_then_nullable",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN v ELSE 2 END AS r FROM case_mixed"
+    },
+    {
+      "id": "actual_null",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) ELSE 2 END AS r FROM case_mixed"
+    },
+    {
+      "id": "multiple_true_cuts_nullable",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 WHEN true THEN 2 WHEN id=2 THEN v ELSE NULL END AS r FROM case_mixed"
+    },
+    {
+      "id": "nullable_before_true",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN v WHEN true THEN 2 ELSE NULL END AS r FROM case_mixed"
+    },
+    {
+      "id": "false_before_true",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) WHEN true THEN 2 ELSE NULL END AS r FROM case_mixed"
+    },
+    {
+      "id": "true_before_nullable",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN 2 WHEN id=0 THEN v ELSE NULL END AS r FROM case_mixed"
+    },
+    {
+      "id": "multiple_without_true",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 WHEN id=1 THEN 2 ELSE 3 END AS r FROM case_mixed"
+    },
+    {
+      "id": "simple_column",
+      "input": "case_mixed",
+      "sql": "SELECT CASE id WHEN 0 THEN 1 WHEN 1 THEN v ELSE 3 END AS r FROM case_mixed"
+    },
+    {
+      "id": "dead_error_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "dead_error_then",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN false THEN CAST('bad' AS INT) ELSE 1 END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_dead_error",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id>=0 THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "required_error_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "column_required_error",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_mixed"
+    },
+    {
+      "id": "dead_raise_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE RAISE_ERROR('case-required') END AS r FROM case_mixed"
+    },
+    {
+      "id": "required_raise_else",
+      "input": "case_mixed",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE RAISE_ERROR('case-required') END AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_searched_true",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_searched_false",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_searched_typed_null",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_searched_folded_true",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_searched_folded_false",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE WHEN 1=0 THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_searched_folded_null",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE WHEN NULL AND true THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_simple_literal_true",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE true WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_simple_literal_false",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE false WHEN true THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_simple_null_operand",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE CAST(NULL AS INT) WHEN 1 THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "struct_simple_null_match",
+      "input": "case_mixed",
+      "sql": "SELECT STRUCT(CASE 1 WHEN NULL THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_mixed"
+    },
+    {
+      "id": "searched_true",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "searched_false",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "searched_typed_null",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "searched_folded_true",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "searched_folded_false",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN 1=0 THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "searched_folded_null",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN NULL AND true THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "simple_literal_true",
+      "input": "case_nulls",
+      "sql": "SELECT CASE true WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "simple_literal_false",
+      "input": "case_nulls",
+      "sql": "SELECT CASE false WHEN true THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "simple_null_operand",
+      "input": "case_nulls",
+      "sql": "SELECT CASE CAST(NULL AS INT) WHEN 1 THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "simple_null_match",
+      "input": "case_nulls",
+      "sql": "SELECT CASE 1 WHEN NULL THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "true_missing_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "false_missing_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN false THEN 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "null_missing_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_missing_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_required_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE 2 END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_nullable_then",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN v ELSE 2 END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_nullable_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE v END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_guarded_nullable",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN v IS NOT NULL THEN v ELSE 2 END AS r FROM case_nulls"
+    },
+    {
+      "id": "true_then_nullable",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN v ELSE 2 END AS r FROM case_nulls"
+    },
+    {
+      "id": "actual_null",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) ELSE 2 END AS r FROM case_nulls"
+    },
+    {
+      "id": "multiple_true_cuts_nullable",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 WHEN true THEN 2 WHEN id=2 THEN v ELSE NULL END AS r FROM case_nulls"
+    },
+    {
+      "id": "nullable_before_true",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN v WHEN true THEN 2 ELSE NULL END AS r FROM case_nulls"
+    },
+    {
+      "id": "false_before_true",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) WHEN true THEN 2 ELSE NULL END AS r FROM case_nulls"
+    },
+    {
+      "id": "true_before_nullable",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN 2 WHEN id=0 THEN v ELSE NULL END AS r FROM case_nulls"
+    },
+    {
+      "id": "multiple_without_true",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 WHEN id=1 THEN 2 ELSE 3 END AS r FROM case_nulls"
+    },
+    {
+      "id": "simple_column",
+      "input": "case_nulls",
+      "sql": "SELECT CASE id WHEN 0 THEN 1 WHEN 1 THEN v ELSE 3 END AS r FROM case_nulls"
+    },
+    {
+      "id": "dead_error_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "dead_error_then",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN false THEN CAST('bad' AS INT) ELSE 1 END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_dead_error",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id>=0 THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "required_error_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "column_required_error",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_nulls"
+    },
+    {
+      "id": "dead_raise_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE RAISE_ERROR('case-required') END AS r FROM case_nulls"
+    },
+    {
+      "id": "required_raise_else",
+      "input": "case_nulls",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE RAISE_ERROR('case-required') END AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_searched_true",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_searched_false",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_searched_typed_null",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_searched_folded_true",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_searched_folded_false",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE WHEN 1=0 THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_searched_folded_null",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE WHEN NULL AND true THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_simple_literal_true",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE true WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_simple_literal_false",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE false WHEN true THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_simple_null_operand",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE CAST(NULL AS INT) WHEN 1 THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "struct_simple_null_match",
+      "input": "case_nulls",
+      "sql": "SELECT STRUCT(CASE 1 WHEN NULL THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_nulls"
+    },
+    {
+      "id": "searched_true",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "searched_false",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "searched_typed_null",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "searched_folded_true",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "searched_folded_false",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN 1=0 THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "searched_folded_null",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN NULL AND true THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "simple_literal_true",
+      "input": "case_empty",
+      "sql": "SELECT CASE true WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "simple_literal_false",
+      "input": "case_empty",
+      "sql": "SELECT CASE false WHEN true THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "simple_null_operand",
+      "input": "case_empty",
+      "sql": "SELECT CASE CAST(NULL AS INT) WHEN 1 THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "simple_null_match",
+      "input": "case_empty",
+      "sql": "SELECT CASE 1 WHEN NULL THEN CAST(NULL AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "true_missing_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "false_missing_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN false THEN 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "null_missing_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "column_missing_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "column_required_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE 2 END AS r FROM case_empty"
+    },
+    {
+      "id": "column_nullable_then",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN v ELSE 2 END AS r FROM case_empty"
+    },
+    {
+      "id": "column_nullable_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE v END AS r FROM case_empty"
+    },
+    {
+      "id": "column_guarded_nullable",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN v IS NOT NULL THEN v ELSE 2 END AS r FROM case_empty"
+    },
+    {
+      "id": "true_then_nullable",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN v ELSE 2 END AS r FROM case_empty"
+    },
+    {
+      "id": "actual_null",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) ELSE 2 END AS r FROM case_empty"
+    },
+    {
+      "id": "multiple_true_cuts_nullable",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 WHEN true THEN 2 WHEN id=2 THEN v ELSE NULL END AS r FROM case_empty"
+    },
+    {
+      "id": "nullable_before_true",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN v WHEN true THEN 2 ELSE NULL END AS r FROM case_empty"
+    },
+    {
+      "id": "false_before_true",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) WHEN true THEN 2 ELSE NULL END AS r FROM case_empty"
+    },
+    {
+      "id": "true_before_nullable",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN 2 WHEN id=0 THEN v ELSE NULL END AS r FROM case_empty"
+    },
+    {
+      "id": "multiple_without_true",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 WHEN id=1 THEN 2 ELSE 3 END AS r FROM case_empty"
+    },
+    {
+      "id": "simple_column",
+      "input": "case_empty",
+      "sql": "SELECT CASE id WHEN 0 THEN 1 WHEN 1 THEN v ELSE 3 END AS r FROM case_empty"
+    },
+    {
+      "id": "dead_error_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "dead_error_then",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN false THEN CAST('bad' AS INT) ELSE 1 END AS r FROM case_empty"
+    },
+    {
+      "id": "column_dead_error",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id>=0 THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "required_error_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "column_required_error",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN 1 ELSE CAST('bad' AS INT) END AS r FROM case_empty"
+    },
+    {
+      "id": "dead_raise_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN true THEN 1 ELSE RAISE_ERROR('case-required') END AS r FROM case_empty"
+    },
+    {
+      "id": "required_raise_else",
+      "input": "case_empty",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE RAISE_ERROR('case-required') END AS r FROM case_empty"
+    },
+    {
+      "id": "struct_searched_true",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_searched_false",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE WHEN false THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_searched_typed_null",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_searched_folded_true",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_searched_folded_false",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE WHEN 1=0 THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_searched_folded_null",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE WHEN NULL AND true THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_simple_literal_true",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE true WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_simple_literal_false",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE false WHEN true THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_simple_null_operand",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE CAST(NULL AS INT) WHEN 1 THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "struct_simple_null_match",
+      "input": "case_empty",
+      "sql": "SELECT STRUCT(CASE 1 WHEN NULL THEN CAST(NULL AS INT) ELSE 1 END AS x) AS r FROM case_empty"
+    },
+    {
+      "id": "issue_values",
+      "input": "none",
+      "sql": "SELECT v AS r FROM VALUES (CASE WHEN true THEN 1 ELSE NULL END), (2) t(v)"
+    },
+    {
+      "id": "issue_values_empty",
+      "input": "none",
+      "sql": "SELECT v AS r FROM VALUES (CASE WHEN true THEN 1 ELSE NULL END), (2) t(v) LIMIT 0"
+    },
+    {
+      "id": "interval_false",
+      "input": "none",
+      "sql": "SELECT CASE WHEN false THEN INTERVAL '1' MONTH ELSE INTERVAL '1' MONTH END AS r"
+    },
+    {
+      "id": "interval_true",
+      "input": "none",
+      "sql": "SELECT CASE WHEN true THEN INTERVAL '1' MONTH ELSE CAST(NULL AS INTERVAL MONTH) END AS r"
+    },
+    {
+      "id": "interval_nullable",
+      "input": "none",
+      "sql": "SELECT CASE WHEN false THEN INTERVAL '1' MONTH ELSE CAST(NULL AS INTERVAL MONTH) END AS r"
+    },
+    {
+      "id": "values_folded",
+      "input": "none",
+      "sql": "SELECT v AS r FROM VALUES (CASE WHEN 1=1 THEN 1 ELSE NULL END), (2) t(v)"
+    },
+    {
+      "id": "simple_missing_else",
+      "input": "none",
+      "sql": "SELECT CASE 1 WHEN 1 THEN 1 END AS r"
+    },
+    {
+      "id": "untyped_null_condition",
+      "input": "none",
+      "sql": "SELECT CASE WHEN NULL THEN 1 ELSE 2 END AS r"
+    },
+    {
+      "id": "invalid_dead_condition",
+      "input": "none",
+      "sql": "SELECT CASE WHEN true THEN 1 WHEN NULL THEN 2 ELSE 3 END AS r"
+    },
+    {
+      "id": "coalesce_literal",
+      "input": "case_mixed",
+      "sql": "SELECT COALESCE(CASE WHEN true THEN 1 ELSE NULL END,3) AS r FROM case_mixed"
+    },
+    {
+      "id": "predicate_literal",
+      "input": "case_mixed",
+      "sql": "SELECT id AS r FROM case_mixed WHERE (CASE WHEN true THEN 1 ELSE NULL END) IS NULL"
+    },
+    {
+      "id": "null_predicate_literal",
+      "input": "case_mixed",
+      "sql": "SELECT (CASE WHEN true THEN 1 ELSE NULL END) IS NULL AS r FROM case_mixed"
+    },
+    {
+      "id": "metadata_literal",
+      "input": "case_mixed",
+      "sql": "SELECT id AS original,CASE WHEN true THEN 1 ELSE NULL END AS r FROM case_mixed"
+    },
+    {
+      "id": "coalesce_folded",
+      "input": "case_mixed",
+      "sql": "SELECT COALESCE(CASE WHEN 1=1 THEN 1 ELSE NULL END,3) AS r FROM case_mixed"
+    },
+    {
+      "id": "predicate_folded",
+      "input": "case_mixed",
+      "sql": "SELECT id AS r FROM case_mixed WHERE (CASE WHEN 1=1 THEN 1 ELSE NULL END) IS NULL"
+    },
+    {
+      "id": "null_predicate_folded",
+      "input": "case_mixed",
+      "sql": "SELECT (CASE WHEN 1=1 THEN 1 ELSE NULL END) IS NULL AS r FROM case_mixed"
+    },
+    {
+      "id": "metadata_folded",
+      "input": "case_mixed",
+      "sql": "SELECT id AS original,CASE WHEN 1=1 THEN 1 ELSE NULL END AS r FROM case_mixed"
+    },
+    {
+      "id": "coalesce_column",
+      "input": "case_mixed",
+      "sql": "SELECT COALESCE(CASE WHEN id=0 THEN v ELSE 2 END,3) AS r FROM case_mixed"
+    },
+    {
+      "id": "predicate_column",
+      "input": "case_mixed",
+      "sql": "SELECT id AS r FROM case_mixed WHERE (CASE WHEN id=0 THEN v ELSE 2 END) IS NULL"
+    },
+    {
+      "id": "null_predicate_column",
+      "input": "case_mixed",
+      "sql": "SELECT (CASE WHEN id=0 THEN v ELSE 2 END) IS NULL AS r FROM case_mixed"
+    },
+    {
+      "id": "metadata_column",
+      "input": "case_mixed",
+      "sql": "SELECT id AS original,CASE WHEN id=0 THEN v ELSE 2 END AS r FROM case_mixed"
+    },
+    {
+      "id": "coalesce_literal",
+      "input": "case_empty",
+      "sql": "SELECT COALESCE(CASE WHEN true THEN 1 ELSE NULL END,3) AS r FROM case_empty"
+    },
+    {
+      "id": "predicate_literal",
+      "input": "case_empty",
+      "sql": "SELECT id AS r FROM case_empty WHERE (CASE WHEN true THEN 1 ELSE NULL END) IS NULL"
+    },
+    {
+      "id": "null_predicate_literal",
+      "input": "case_empty",
+      "sql": "SELECT (CASE WHEN true THEN 1 ELSE NULL END) IS NULL AS r FROM case_empty"
+    },
+    {
+      "id": "metadata_literal",
+      "input": "case_empty",
+      "sql": "SELECT id AS original,CASE WHEN true THEN 1 ELSE NULL END AS r FROM case_empty"
+    },
+    {
+      "id": "coalesce_folded",
+      "input": "case_empty",
+      "sql": "SELECT COALESCE(CASE WHEN 1=1 THEN 1 ELSE NULL END,3) AS r FROM case_empty"
+    },
+    {
+      "id": "predicate_folded",
+      "input": "case_empty",
+      "sql": "SELECT id AS r FROM case_empty WHERE (CASE WHEN 1=1 THEN 1 ELSE NULL END) IS NULL"
+    },
+    {
+      "id": "null_predicate_folded",
+      "input": "case_empty",
+      "sql": "SELECT (CASE WHEN 1=1 THEN 1 ELSE NULL END) IS NULL AS r FROM case_empty"
+    },
+    {
+      "id": "metadata_folded",
+      "input": "case_empty",
+      "sql": "SELECT id AS original,CASE WHEN 1=1 THEN 1 ELSE NULL END AS r FROM case_empty"
+    },
+    {
+      "id": "coalesce_column",
+      "input": "case_empty",
+      "sql": "SELECT COALESCE(CASE WHEN id=0 THEN v ELSE 2 END,3) AS r FROM case_empty"
+    },
+    {
+      "id": "predicate_column",
+      "input": "case_empty",
+      "sql": "SELECT id AS r FROM case_empty WHERE (CASE WHEN id=0 THEN v ELSE 2 END) IS NULL"
+    },
+    {
+      "id": "null_predicate_column",
+      "input": "case_empty",
+      "sql": "SELECT (CASE WHEN id=0 THEN v ELSE 2 END) IS NULL AS r FROM case_empty"
+    },
+    {
+      "id": "metadata_column",
+      "input": "case_empty",
+      "sql": "SELECT id AS original,CASE WHEN id=0 THEN v ELSE 2 END AS r FROM case_empty"
+    }
+  ]
+}

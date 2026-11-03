@@ -3,7 +3,7 @@
 use std::error::Error;
 
 use arrow::array::{Array, AsArray, ListArray, StructArray};
-use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema, TimeUnit, TimestampMicrosecondType};
+use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, IntervalUnit, IntervalYearMonthType, Schema, TimeUnit, TimestampMicrosecondType};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::physical_plan::collect;
@@ -133,6 +133,7 @@ pub(crate) fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Float64 => json!("double"),
         DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
         DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => json!("timestamp"),
+        DataType::Interval(IntervalUnit::YearMonth) => json!("interval month"),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
             "elementType":spark_schema_type(field.data_type())?,"containsNull":field.is_nullable()}),
@@ -227,6 +228,9 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
                     })
                     .collect::<TestResult<Vec<_>>>()?
             )
+        }
+        DataType::Interval(IntervalUnit::YearMonth) => {
+            json!(column.as_primitive::<IntervalYearMonthType>().value(row).to_string())
         }
         DataType::Float32 => {
             let value = column.as_primitive::<Float32Type>().value(row);
