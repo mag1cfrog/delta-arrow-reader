@@ -42,6 +42,7 @@ pub(crate) async fn capture_spark_query_observation(
     if let Some(expected) = case
         .get("executed_schema_after_collect")
         .or_else(|| case.get("executed_schema_before_collect"))
+        .or_else(|| case.get("schema_stages").and_then(|stages| stages.get("executed")))
     {
         if physical_schema != *expected {
             return Err(
