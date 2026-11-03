@@ -67,6 +67,7 @@ fn redeclare_map_value_nullability(
 pub struct SparkMapFromArrays {
     delegate: MapFromArrays,
     last_value_wins: bool,
+    non_nullable_result: bool,
     value_contains_null: Option<bool>,
 }
 
@@ -75,8 +76,15 @@ impl SparkMapFromArrays {
         Self {
             delegate: MapFromArrays::new(),
             last_value_wins,
+            non_nullable_result: false,
             value_contains_null: None,
         }
+    }
+
+    /// SQL MAP constructs both arrays, so its result container cannot be NULL.
+    pub fn with_non_nullable_result(mut self) -> Self {
+        self.non_nullable_result = true;
+        self
     }
 
     /// Keep resolved value nullability while deriving nested types from live arguments.
@@ -101,7 +109,12 @@ impl ScalarUDFImpl for SparkMapFromArrays {
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
         let field = self.delegate.return_field_from_args(args)?;
-        map_return_field_with_value_nullability(field, self.value_contains_null)
+        let field = map_return_field_with_value_nullability(field, self.value_contains_null)?;
+        if self.non_nullable_result {
+            Ok(Arc::new(field.as_ref().clone().with_nullable(false)))
+        } else {
+            Ok(field)
+        }
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {

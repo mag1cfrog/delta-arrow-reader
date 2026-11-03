@@ -192,9 +192,9 @@ types from live arguments, then enforces the recorded value nullability on the
 returned Arrow declaration after the existing duplicate-key and NULL handling.
 Their inputs retain their own field declarations. Explicit SQL CAST keeps its
 separate declared type.
-MAP uses the existing Spark ARRAY constructor for its temporary key and value
-arrays, so the constructed Map is nonnullable even when its values can be NULL.
-This also retains nonnullable Map elements in nested arrays and lambda results.
+MAP refines its result container to nonnullable in the existing Map UDF while
+retaining native temporary-array coercion and positional duplicate STRUCT fields.
+Its nullable values and nested Map elements keep their separate declarations.
 The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
 retain independent public and executed fields, the original scalar guards and
 the explicit Arrow type-contract difference from Spark. Native DataFusion

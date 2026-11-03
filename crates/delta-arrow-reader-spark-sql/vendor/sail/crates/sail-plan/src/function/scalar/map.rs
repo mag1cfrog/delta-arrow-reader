@@ -6,7 +6,6 @@ use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::map::map_entries::SparkMapEntries;
 use sail_function::scalar::map::map_from::{SparkMapFromArrays, SparkMapFromEntries};
 use sail_function::scalar::map::str_to_map::StrToMap;
@@ -36,12 +35,13 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         Ok::<_, PlanError>(nullable || value.nullable(schema.as_ref())?)
     })?;
 
-    let array = ScalarUDF::from(SparkArray::new());
-    let keys = array.call(keys);
-    let values = array.call(values);
+    let keys = expr_fn::make_array(keys);
+    let values = expr_fn::make_array(values);
     let last_value_wins =
         input.function_context.plan_config.map_key_dedup_policy == MapKeyDedupPolicy::LastWin;
-    F::udf(SparkMapFromArrays::new(last_value_wins).with_value_contains_null(value_contains_null))(
+    F::udf(SparkMapFromArrays::new(last_value_wins)
+        .with_non_nullable_result()
+        .with_value_contains_null(value_contains_null))(
         ScalarFunctionInput {
             arguments: vec![keys, values],
             function_context: input.function_context,
