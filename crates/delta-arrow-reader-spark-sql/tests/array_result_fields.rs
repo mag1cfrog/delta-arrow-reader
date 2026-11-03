@@ -86,10 +86,7 @@ async fn array_contains_result_fields_match_spark() -> TestResult {
 
 fn array_contains_reference_matches(case: &Value, comparison: &Value) -> bool {
     // These two pinned resolver diagnostics have no Spark condition tag.
-    let diagnostic = match (
-        case["expected"]["condition"].as_str(),
-        case["sql"].as_str(),
-    ) {
+    let diagnostic = match (case["expected"]["condition"].as_str(), case["sql"].as_str()) {
         (
             Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"),
             Some("SELECT ARRAY_CONTAINS(1, 1) AS r"),
@@ -127,7 +124,10 @@ async fn array_contains_diagnostic_aliases_reject_wrong_cause_or_phase() -> Test
     let mut checked = 0;
     for case in records.iter().filter(|case| {
         case["ansi"] == true
-            && matches!(case["id"].as_str(), Some("invalid_scalar" | "invalid_arity"))
+            && matches!(
+                case["id"].as_str(),
+                Some("invalid_scalar" | "invalid_arity")
+            )
     }) {
         let comparison = spark_results::compare_exact_spark_query_stages(&session, case).await?;
         assert!(array_contains_reference_matches(case, &comparison));
@@ -172,7 +172,10 @@ async fn array_stage_comparator_rejects_wrong_error_fields_and_phase() -> TestRe
         spark_results::compare_exact_spark_query_stages(&session, &wrong_fields).await?;
     assert_eq!(comparison["public_matches"], false);
     assert_eq!(comparison["error_matches"], true);
-    assert!(!array_contains_reference_matches(&wrong_fields, &comparison));
+    assert!(!array_contains_reference_matches(
+        &wrong_fields,
+        &comparison
+    ));
     let mut wrong_phase = case;
     wrong_phase["spark_error_phase"] = json!("collect");
     let comparison =

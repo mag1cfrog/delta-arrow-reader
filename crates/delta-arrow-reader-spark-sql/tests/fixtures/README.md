@@ -2296,7 +2296,7 @@ Its SHA256 is
 `c5b0d06e76112648c45af8d7b4fad8496c23a97f43164411e553dc75c233aa82`.
 The pinned Spark revision is `32f7299601108917fb01920a54e084595b7b3bf8`.
 Both ANSI modes cover direct and nested results, required/nullable columns,
-empty providers and arrays, NULL arrays/lookups/elements, hit/miss results,
+empty query results and arrays, NULL arrays/lookups/elements, hit/miss results,
 integer limits, signed zero, NaN and required conversion errors.
 
 `array_result_fields.rs` replays every record at batch sizes 1 and 32. The
