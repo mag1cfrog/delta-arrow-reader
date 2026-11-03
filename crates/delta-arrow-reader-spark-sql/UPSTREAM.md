@@ -26,11 +26,12 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Thirteen dependencies have local source overrides in this crate's Cargo.toml:
+Fourteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
 | DataFusion common | 54.1.0 | Preserve aligned duplicate STRUCT fields by position during casting and validation; return checked construction errors |
+| DataFusion expression common | 54.1.0 | Merge constructor STRUCT declarations and preserve aligned duplicate positions recursively |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic and buffer handling changes |
@@ -47,9 +48,11 @@ their scalar arguments and keys can still share a computed input. The
 [window references](tests/fixtures/README.md#equivalent-window-offsets) check
 folded offsets and predicates above partitioned windows.
 
-Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
-to their pinned registry packages. They use those packages directly; the inventory
-retains their accepted file hashes and registry mappings.
+The original `arrow-select` override is identical to its pinned registry package
+and uses that package directly. `datafusion-expr-common` has a local override for
+shared STRUCT declaration merging. The inventory retains both packages' accepted
+file hashes and registry mappings; `later_dependency_overrides` records the
+current expression-common fork and its archive comparison.
 
 The extracted Sail crates share this crate's Cargo workspace, dependency
 overrides and lockfile. Their internal module boundaries are retained, so updates
@@ -199,7 +202,18 @@ Its nullable values and nested Map elements keep their separate declarations.
 The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
 retain independent public and executed fields, the original scalar guards and
 the explicit Arrow type-contract difference from Spark. Native DataFusion
-scalar construction is unchanged.
+scalar construction uses its existing functions.
+
+Shared STRUCT union resolution gives every constructor argument the same child
+declarations before concatenation. Fields combine nullability and clear inherited
+metadata through the existing coercion policy. Identical input declarations keep
+their metadata. Recursive coercion uses child positions when the complete name
+sequence matches, including duplicate names. Spark ARRAY uses this shared merge
+for aligned STRUCT arguments before its existing comparison-coercion fallback.
+Native MakeArray retains its primitive coercion and conversion errors. The same
+union resolution also serves native COALESCE and DataFusion Spark IF. The
+[constructor references](tests/fixtures/README.md#array-and-map-struct-declarations)
+check these declarations separately from the value-casting path.
 
 Shared DataFusion STRUCT casts preserve child positions when the complete field
 name sequence matches, including duplicate names. Type and nullability

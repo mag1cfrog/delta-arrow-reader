@@ -49,7 +49,7 @@
       "package": "datafusion-expr-common",
       "version": "54.1.0",
       "registry_archive_sha256": "b7b19a8c95522bee8cbb313d74263b85e355d2b52f42e67ef5694bf5de9e9356",
-      "source": "registry"
+      "source": "vendor/dependencies/datafusion-expr-common"
     },
     {
       "package": "datafusion-expr",
@@ -1028,6 +1028,30 @@
       "registry_version": "58.4.0",
       "registry_member": "src/filter.rs",
       "registry_source_sha256": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d"
+    }
+  ],
+  "later_dependency_overrides": [
+    {
+      "package": "datafusion-expr-common",
+      "version": "54.1.0",
+      "issue": 827,
+      "registry_archive_sha256": "b7b19a8c95522bee8cbb313d74263b85e355d2b52f42e67ef5694bf5de9e9356",
+      "retained_files": 25,
+      "modified_files": [
+        {
+          "path": "src/type_coercion/binary.rs",
+          "registry_source_sha256": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+          "change": "Use one merged STRUCT child declaration for constructor arguments and keep matching field-name sequences positional, including nested duplicate names."
+        }
+      ],
+      "omitted_files": {
+        "Cargo.lock": "Dependency lockfiles are not used by the consuming workspace.",
+        "Cargo.toml.orig": "The normalized published Cargo.toml is retained, matching the existing dependency fork layout."
+      },
+      "license_files": [
+        "LICENSE.txt",
+        "NOTICE.txt"
+      ]
     }
   ]
 }

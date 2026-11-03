@@ -2236,3 +2236,33 @@ declarations, and native unique-name matching and array construction.
 python tests/fixtures/capture_duplicate_struct_casts_spark.py /tmp/duplicate-struct-casts-spark.jsonl
 cargo test --locked --workspace --test duplicate_struct_casts --test duplicate_struct_cast_contracts
 ```
+
+
+## ARRAY and MAP STRUCT declarations
+
+`array-struct-declarations-spark.jsonl` adds 54 independent Spark 4.2.0
+observations from revision `32f7299601108917fb01920a54e084595b7b3bf8`, in UTC
+and both ANSI modes. Literal and provider expressions cover nullable children,
+nullable parents, required controls, nested STRUCTs, numeric widening, source
+metadata and required conversion errors. Providers contain mixed rows, NULLs or
+no rows. The two ANSI failures retain `CAST_INVALID_INPUT`; legacy mode retains
+the captured successful NULL results.
+
+`array-struct-metadata-spark.jsonl` adds 24 observations that isolate metadata
+from value types and nullability. Differing child metadata merges to an empty
+metadata map. Identical-source controls retain the child's original metadata.
+These references complement the existing duplicate STRUCT and MAP constructor
+fixtures without replacing their observations or required native cast failures.
+
+The constructor tests in `duplicate_struct_casts.rs` compare every public and
+executed field before and after collection and every row, at batch sizes 1 and
+32. The new references add 156 comparisons. The shared observer validates actual
+Arrow batches and records each panic as a failed comparison. The positional
+contract test also checks recursive STRUCT/List declarations and rejects
+mismatched field names.
+
+```sh
+python tests/fixtures/capture_array_struct_declarations_spark.py /tmp/array-struct-declarations-spark.jsonl
+python tests/fixtures/capture_array_struct_metadata_spark.py /tmp/array-struct-metadata-spark.jsonl
+cargo test --locked --workspace --test duplicate_struct_casts --test duplicate_struct_cast_contracts --test map_constructor_nullability
+```

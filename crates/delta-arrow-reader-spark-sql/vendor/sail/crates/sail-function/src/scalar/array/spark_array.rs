@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 /// [Credit]: <https://github.com/apache/datafusion/blob/c21d025df463ce623f9193c4b24d86141fce81ca/datafusion/functions-nested/src/make_array.rs>
 /// Spark defaults to DataType::Int32 while DataFusion defaults to DataType::Int64.
 use std::sync::Arc;
@@ -10,7 +11,9 @@ use datafusion::arrow::buffer::OffsetBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::utils::SingleRowListArrayBuilder;
 use datafusion_common::{Result, plan_datafusion_err, plan_err};
-use datafusion_expr::type_coercion::binary::comparison_coercion;
+use datafusion_expr::type_coercion::binary::{
+    comparison_coercion, try_type_union_resolution_with_struct,
+};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, TypeSignature,
     Volatility,
@@ -139,7 +142,15 @@ impl ScalarUDFImpl for SparkArray {
                 // coercible for the arguments. `comparison_coercion` returns more loose
                 // types that can be coerced to both `acc` and `x` for comparison purpose.
                 // See `maybe_data_types` for the actual coercion.
-                let coerced_type = comparison_coercion(&acc, x);
+                let coerced_type = match (&acc, x) {
+                    (DataType::Struct(_), DataType::Struct(_)) => {
+                        try_type_union_resolution_with_struct(&[acc.clone(), x.clone()])
+                            .ok()
+                            .and_then(|types| types.into_iter().next())
+                            .or_else(|| comparison_coercion(&acc, x))
+                    }
+                    _ => comparison_coercion(&acc, x),
+                };
                 if let Some(coerced_type) = coerced_type {
                     Ok(coerced_type)
                 } else {
