@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -855,6 +856,9 @@ impl Case {
     const SPARK_SEARCHED_CASE: &str = "delta_arrow_reader.spark_searched_case";
 
     /// Create a Spark searched CASE, preserving its branch declaration rules.
+    ///
+    /// Values must already have passed Spark value coercion. Nested declaration-only
+    /// differences are merged without replacing their live branch fields.
     pub fn new_spark_searched(
         when_then_expr: Vec<(Box<Expr>, Box<Expr>)>,
         else_expr: Option<Box<Expr>>,

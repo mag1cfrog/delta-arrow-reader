@@ -5,7 +5,7 @@ use arrow::datatypes::DataType;
 use datafusion::functions::expr_fn;
 use datafusion::functions::math::iszero::IsZeroFunc;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, cast, expr, lit};
+use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, expr, lit};
 use datafusion_expr::type_coercion::other::get_coerce_type_for_case_expression;
 use sail_common_datafusion::utils::items::ItemTaker;
 
@@ -51,15 +51,10 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .map(|value| value.get_type(function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
     let (then_types, else_types) = result_types.split_at(result_types.len() - usize::from(has_else));
-    let result_type = get_coerce_type_for_case_expression(then_types, else_types.first())
+    get_coerce_type_for_case_expression(then_types, else_types.first())
         .ok_or_else(|| PlanError::InvalidArgument(format!(
             "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] CASE result types are incompatible: {result_types:?}"
         )))?;
-    branch_values = branch_values.into_iter().zip(result_types)
-        .map(|(value, source_type)| {
-            if source_type == result_type { value } else { cast(value, result_type.clone()) }
-        })
-        .collect();
     let else_expr = if has_else {
         branch_values.pop().map(Box::new)
     } else {

@@ -259,6 +259,8 @@ pub fn create_physical_expr(
             similar_to(*negated, *case_insensitive, physical_expr, physical_pattern)
         }
         Expr::Case(case) => {
+            let result_type = case.is_spark_searched()
+                .then(|| e.get_type(input_dfschema)).transpose()?;
             let expr: Option<Arc<dyn PhysicalExpr>> = if let Some(e) = &case.expr {
                 Some(create_physical_expr(
                     e.as_ref(),
@@ -277,6 +279,12 @@ pub fn create_physical_expr(
                 create_physical_exprs(when_expr, input_dfschema, execution_props)?;
             let then_expr =
                 create_physical_exprs(then_expr, input_dfschema, execution_props)?;
+            // Align current Spark arms, including whole-CASE constant evaluation.
+            let then_expr = if let Some(data_type) = &result_type {
+                then_expr.into_iter()
+                    .map(|value| expressions::cast(value, input_schema, data_type.clone()))
+                    .collect::<Result<Vec<_>>>()?
+            } else { then_expr };
             let when_then_expr: Vec<(Arc<dyn PhysicalExpr>, Arc<dyn PhysicalExpr>)> =
                 when_expr
                     .iter()
@@ -293,6 +301,10 @@ pub fn create_physical_expr(
                 } else {
                     None
                 };
+            let else_expr = else_expr.map(|value| match &result_type {
+                Some(data_type) => expressions::cast(value, input_schema, data_type.clone()),
+                None => Ok(value),
+            }).transpose()?;
             Ok(expressions::case(expr, when_then_expr, else_expr)?)
         }
         Expr::Cast(Cast { expr, field }) => expressions::cast_with_target_field(

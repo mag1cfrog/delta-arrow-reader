@@ -1036,6 +1036,7 @@ fn coerce_arguments_for_signature<F: UDFCoercionExt>(
 }
 
 fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
+    let spark_values_coerced = case.is_spark_searched();
     // Given expressions like:
     //
     // CASE a1
@@ -1142,13 +1143,16 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
                     Box::new(e),
                 )
             })?;
-            let then = then.cast_to(&then_else_coerce_type, schema)?;
+            // Spark has converted values already; declaration-only casts would freeze live fields.
+            let then = if spark_values_coerced { *then }
+                else { then.cast_to(&then_else_coerce_type, schema)? };
             Ok((Box::new(when), Box::new(then)))
         })
         .collect::<Result<Vec<_>>>()?;
     let else_expr = case
         .else_expr
-        .map(|expr| expr.cast_to(&then_else_coerce_type, schema))
+        .map(|expr| if spark_values_coerced { Ok(*expr) }
+            else { expr.cast_to(&then_else_coerce_type, schema) })
         .transpose()?
         .map(Box::new);
 

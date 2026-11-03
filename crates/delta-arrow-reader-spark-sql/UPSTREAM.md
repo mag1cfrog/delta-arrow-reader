@@ -350,6 +350,25 @@ The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
 CASE successes with independently confirmed planning failures.
 
+Spark CASE retains all original branches through required subquery preparation.
+An internal marker on the native Boolean CASE selects Spark's declaration rules:
+all result values determine the common type, while outer nullability considers
+only the prefix ending at the first literal TRUE guard, or the explicit or
+implicit ELSE when no such guard exists. Folded comparisons remain distinct
+from literal TRUE during analysis. Unmarked native CASE keeps its existing rules.
+
+The shared conditional value coercer supplies runtime conversions. Marked CASE
+merges the current branch fields for its declared type without casting live
+values merely to widen nested nullability or replace metadata. Native branch
+pruning can then expose the selected source fields. Physical construction aligns
+surviving arms to their current common type; whole-CASE constant evaluation uses
+the same path to retain its merged datatype. The separate constant STRUCT-parent
+rule preserves original child declarations. The
+[CASE references](tests/case_result_nullability.rs) compare analyzed and executed
+fields, rows, required errors and ordered references independently. The
+[evaluation controls](tests/conditional_evaluation.rs) also count nested and
+volatile result evaluations.
+
 Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
 ARRAY_SIZE always preserves NULL. The [size references](tests/fixtures/README.md#collection-sizes)

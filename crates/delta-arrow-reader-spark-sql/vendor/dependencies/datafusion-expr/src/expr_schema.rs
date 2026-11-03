@@ -26,6 +26,7 @@ use crate::expr::{
 use crate::expr::{FieldMetadata, LambdaVariable};
 use crate::higher_order_function::HigherOrderReturnFieldArgs;
 use crate::type_coercion::functions::value_fields_with_higher_order_udf_and_lambdas;
+use crate::type_coercion::other::get_coerce_type_for_case_expression;
 use crate::type_coercion::functions::{UDFCoercionExt, fields_with_udf};
 use crate::udf::ReturnFieldArgs;
 use crate::{LogicalPlan, Operator, Projection, Subquery, WindowFunctionDefinition, utils};
@@ -144,6 +145,17 @@ impl ExprSchemable for Expr {
             Expr::OuterReferenceColumn(field, _) => Ok(field.data_type().clone()),
             Expr::ScalarVariable(field, _) => Ok(field.data_type().clone()),
             Expr::Literal(l, _) => Ok(l.data_type()),
+            Expr::Case(case) if case.is_spark_searched() => {
+                let then_types = case.when_then_expr.iter()
+                    .map(|(_, value)| value.get_type(schema))
+                    .collect::<Result<Vec<_>>>()?;
+                let else_type = case.else_expr.as_ref()
+                    .map(|value| value.get_type(schema)).transpose()?;
+                get_coerce_type_for_case_expression(&then_types, else_type.as_ref())
+                    .ok_or_else(|| plan_datafusion_err!(
+                        "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] CASE result types are incompatible: {then_types:?}, {else_type:?}"
+                    ))
+            }
             Expr::Case(case) => {
                 for (_, then_expr) in &case.when_then_expr {
                     let then_type = then_expr.get_type(schema)?;
