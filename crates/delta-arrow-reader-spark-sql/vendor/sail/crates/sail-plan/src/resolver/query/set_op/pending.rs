@@ -234,7 +234,23 @@ impl PendingSetOperation {
         is_all: bool,
     ) -> Result<Self> {
         let source_schema = if set_op_type == SetOpType::Union {
-            Union::try_new(vec![Arc::new(left.clone()), Arc::new(right.clone())])?.schema
+            let union_schema =
+                Union::try_new(vec![Arc::new(left.clone()), Arc::new(right.clone())])?.schema;
+            // Spark keeps the left attribute's metadata, including generated-alias provenance.
+            let fields = union_schema
+                .iter()
+                .zip(left.schema().fields())
+                .map(|((qualifier, field), left)| {
+                    (
+                        qualifier.cloned(),
+                        Arc::new(field.as_ref().clone().with_metadata(left.metadata().clone())),
+                    )
+                })
+                .collect();
+            Arc::new(DFSchema::new_with_metadata(
+                fields,
+                union_schema.metadata().clone(),
+            )?)
         } else {
             left.schema().clone()
         };

@@ -17,6 +17,7 @@ use super::pending::{
     PendingSetOperation, SetLoweringResult, allow_nullable_float_results, lower_sets,
 };
 use super::{distinct_set_operation_rows, set_result_expressions};
+use crate::function::common::set_result_metadata;
 use crate::resolver::state::PlanResolverState;
 
 pub(super) fn lower_union<'a>(
@@ -56,7 +57,7 @@ pub(super) fn lower_union<'a>(
         union.schema = allow_nullable_float_results(&union.schema)?;
         let union = LogicalPlan::Union(union);
         if set.is_all {
-            return rename_union_columns(union, plan.schema());
+            return project_union_output(union, plan.schema());
         }
         let mut constants = constants.clone();
         for (marker, field) in constants.iter_mut().zip(union.schema().fields()) {
@@ -73,7 +74,7 @@ pub(super) fn lower_union<'a>(
         } else {
             distinct_set_operation_rows(projected)?
         };
-        rename_union_columns(result, plan.schema())
+        project_union_output(result, plan.schema())
     };
     let executable = build_union(
         branches
@@ -83,7 +84,7 @@ pub(super) fn lower_union<'a>(
     )?;
     let constant_analysis = if same_branches {
         // Removing a duplicate branch only in the analysis copy exposes its constants.
-        rename_union_columns(first.1.constant_analysis.clone(), plan.schema())?
+        project_union_output(first.1.constant_analysis.clone(), plan.schema())?
     } else {
         build_union(
             branches
@@ -127,13 +128,21 @@ fn lower_distinct_union_branches<'a>(
     Ok(())
 }
 
-fn rename_union_columns(input: LogicalPlan, output: &DFSchema) -> Result<LogicalPlan> {
+fn project_union_output(input: LogicalPlan, output: &DFSchema) -> Result<LogicalPlan> {
     let expressions = input
         .schema()
         .iter()
         .zip(output.iter())
         .map(|(source, (qualifier, field))| {
-            Expr::from(source).alias_qualified_with_metadata(
+            let expression = if source.1.metadata() == field.metadata() {
+                Expr::from(source)
+            } else {
+                set_result_metadata(
+                    Expr::from(source),
+                    field.metadata().clone().into_iter().collect(),
+                )
+            };
+            expression.alias_qualified_with_metadata(
                 qualifier.cloned(),
                 field.name(),
                 Some(field.metadata().clone().into()),
