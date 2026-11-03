@@ -1,0 +1,6667 @@
+{
+  "source_head": "3dda18219085af27fdfe796f805594bf2de95fa1",
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/818",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "original_observations": 202,
+  "observations": 152,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 304,
+  "selection": "Exact unchanged single_row_projections_match_spark predicate. All152 selected observations are included. The50 excluded identities retain their existing separate execution contracts and remain in the immutable original raw file.",
+  "excluded_original_identities": [
+    {
+      "source_index": 22,
+      "id": "inputs_correlated_zero",
+      "ansi": true
+    },
+    {
+      "source_index": 24,
+      "id": "inputs_correlated_one",
+      "ansi": true
+    },
+    {
+      "source_index": 26,
+      "id": "inputs_correlated_multiple",
+      "ansi": true
+    },
+    {
+      "source_index": 27,
+      "id": "inputs_projected_in",
+      "ansi": true
+    },
+    {
+      "source_index": 50,
+      "id": "empty_inputs_correlated_zero",
+      "ansi": true
+    },
+    {
+      "source_index": 52,
+      "id": "empty_inputs_correlated_one",
+      "ansi": true
+    },
+    {
+      "source_index": 54,
+      "id": "empty_inputs_correlated_multiple",
+      "ansi": true
+    },
+    {
+      "source_index": 55,
+      "id": "empty_inputs_projected_in",
+      "ansi": true
+    },
+    {
+      "source_index": 78,
+      "id": "null_inputs_correlated_zero",
+      "ansi": true
+    },
+    {
+      "source_index": 80,
+      "id": "null_inputs_correlated_one",
+      "ansi": true
+    },
+    {
+      "source_index": 82,
+      "id": "null_inputs_correlated_multiple",
+      "ansi": true
+    },
+    {
+      "source_index": 83,
+      "id": "null_inputs_projected_in",
+      "ansi": true
+    },
+    {
+      "source_index": 85,
+      "id": "inputs_volatile_direct_bare",
+      "ansi": true
+    },
+    {
+      "source_index": 86,
+      "id": "inputs_volatile_direct_cast",
+      "ansi": true
+    },
+    {
+      "source_index": 87,
+      "id": "empty_inputs_volatile_direct_bare",
+      "ansi": true
+    },
+    {
+      "source_index": 88,
+      "id": "empty_inputs_volatile_direct_cast",
+      "ansi": true
+    },
+    {
+      "source_index": 89,
+      "id": "inputs_volatile_nested_once_bare",
+      "ansi": true
+    },
+    {
+      "source_index": 90,
+      "id": "inputs_volatile_nested_once_cast",
+      "ansi": true
+    },
+    {
+      "source_index": 91,
+      "id": "empty_inputs_volatile_nested_once_bare",
+      "ansi": true
+    },
+    {
+      "source_index": 92,
+      "id": "empty_inputs_volatile_nested_once_cast",
+      "ansi": true
+    },
+    {
+      "source_index": 93,
+      "id": "inputs_volatile_nested_reuse_bare",
+      "ansi": true
+    },
+    {
+      "source_index": 94,
+      "id": "inputs_volatile_nested_reuse_cast",
+      "ansi": true
+    },
+    {
+      "source_index": 95,
+      "id": "empty_inputs_volatile_nested_reuse_bare",
+      "ansi": true
+    },
+    {
+      "source_index": 96,
+      "id": "empty_inputs_volatile_nested_reuse_cast",
+      "ansi": true
+    },
+    {
+      "source_index": 101,
+      "id": "volatile_rand_raw",
+      "ansi": true
+    },
+    {
+      "source_index": 123,
+      "id": "inputs_correlated_zero",
+      "ansi": false
+    },
+    {
+      "source_index": 125,
+      "id": "inputs_correlated_one",
+      "ansi": false
+    },
+    {
+      "source_index": 127,
+      "id": "inputs_correlated_multiple",
+      "ansi": false
+    },
+    {
+      "source_index": 128,
+      "id": "inputs_projected_in",
+      "ansi": false
+    },
+    {
+      "source_index": 151,
+      "id": "empty_inputs_correlated_zero",
+      "ansi": false
+    },
+    {
+      "source_index": 153,
+      "id": "empty_inputs_correlated_one",
+      "ansi": false
+    },
+    {
+      "source_index": 155,
+      "id": "empty_inputs_correlated_multiple",
+      "ansi": false
+    },
+    {
+      "source_index": 156,
+      "id": "empty_inputs_projected_in",
+      "ansi": false
+    },
+    {
+      "source_index": 179,
+      "id": "null_inputs_correlated_zero",
+      "ansi": false
+    },
+    {
+      "source_index": 181,
+      "id": "null_inputs_correlated_one",
+      "ansi": false
+    },
+    {
+      "source_index": 183,
+      "id": "null_inputs_correlated_multiple",
+      "ansi": false
+    },
+    {
+      "source_index": 184,
+      "id": "null_inputs_projected_in",
+      "ansi": false
+    },
+    {
+      "source_index": 186,
+      "id": "inputs_volatile_direct_bare",
+      "ansi": false
+    },
+    {
+      "source_index": 187,
+      "id": "inputs_volatile_direct_cast",
+      "ansi": false
+    },
+    {
+      "source_index": 188,
+      "id": "empty_inputs_volatile_direct_bare",
+      "ansi": false
+    },
+    {
+      "source_index": 189,
+      "id": "empty_inputs_volatile_direct_cast",
+      "ansi": false
+    },
+    {
+      "source_index": 190,
+      "id": "inputs_volatile_nested_once_bare",
+      "ansi": false
+    },
+    {
+      "source_index": 191,
+      "id": "inputs_volatile_nested_once_cast",
+      "ansi": false
+    },
+    {
+      "source_index": 192,
+      "id": "empty_inputs_volatile_nested_once_bare",
+      "ansi": false
+    },
+    {
+      "source_index": 193,
+      "id": "empty_inputs_volatile_nested_once_cast",
+      "ansi": false
+    },
+    {
+      "source_index": 194,
+      "id": "inputs_volatile_nested_reuse_bare",
+      "ansi": false
+    },
+    {
+      "source_index": 195,
+      "id": "inputs_volatile_nested_reuse_cast",
+      "ansi": false
+    },
+    {
+      "source_index": 196,
+      "id": "empty_inputs_volatile_nested_reuse_bare",
+      "ansi": false
+    },
+    {
+      "source_index": 197,
+      "id": "empty_inputs_volatile_nested_reuse_cast",
+      "ansi": false
+    },
+    {
+      "source_index": 202,
+      "id": "volatile_rand_raw",
+      "ansi": false
+    }
+  ],
+  "inputs": [
+    {
+      "name": "inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "txt",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          "0",
+          "bad"
+        ],
+        [
+          "1",
+          "0",
+          "1",
+          "7"
+        ],
+        [
+          "2",
+          "1",
+          "-2",
+          "-2"
+        ],
+        [
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "empty_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "txt",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "null_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "txt",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "one_input",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "g",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "txt",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "0",
+          "1",
+          "7"
+        ]
+      ]
+    }
+  ],
+  "expected_status_counts": {
+    "ok": 130,
+    "error": 22
+  },
+  "expected_error_conditions": {
+    "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION": 12,
+    "DIVIDE_BY_ZERO": 2,
+    "CAST_INVALID_INPUT": 2,
+    "SCALAR_SUBQUERY_TOO_MANY_ROWS": 6
+  },
+  "old_evaluation_records": 8,
+  "cases": [
+    {
+      "source_index": 1,
+      "group": "original_main_replay",
+      "id": "inputs_plain_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_plain_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 2,
+      "group": "original_main_replay",
+      "id": "inputs_plain_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_plain_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 3,
+      "group": "original_main_replay",
+      "id": "inputs_nested_alias_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_alias_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 4,
+      "group": "original_main_replay",
+      "id": "inputs_nested_alias_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_alias_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 5,
+      "group": "original_main_replay",
+      "id": "inputs_nested_reuse_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_reuse_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "2"
+            ],
+            [
+              "2",
+              "4"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 6,
+      "group": "original_main_replay",
+      "id": "inputs_nested_reuse_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_reuse_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "2",
+              "7"
+            ],
+            [
+              "2",
+              "4",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 7,
+      "group": "original_main_replay",
+      "id": "inputs_nested_scalar_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_scalar_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 8,
+      "group": "original_main_replay",
+      "id": "inputs_nested_scalar_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_scalar_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 9,
+      "group": "original_main_replay",
+      "id": "inputs_nullable_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nullable_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 10,
+      "group": "original_main_replay",
+      "id": "inputs_nullable_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nullable_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 11,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_live_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_live_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "DIVIDE_BY_ZERO"
+        }
+      }
+    },
+    {
+      "source_index": 12,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_live_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_live_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "DIVIDE_BY_ZERO"
+        }
+      }
+    },
+    {
+      "source_index": 13,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "-3"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 14,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              "1",
+              "7",
+              "7"
+            ],
+            [
+              "2",
+              "-3",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 15,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_dead_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_dead_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 16,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_dead_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_dead_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 17,
+      "group": "original_main_replay",
+      "id": "inputs_cast_live_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_live_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "CAST_INVALID_INPUT"
+        }
+      }
+    },
+    {
+      "source_index": 18,
+      "group": "original_main_replay",
+      "id": "inputs_cast_live_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_live_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "CAST_INVALID_INPUT"
+        }
+      }
+    },
+    {
+      "source_index": 19,
+      "group": "original_main_replay",
+      "id": "inputs_cast_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "-2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 20,
+      "group": "original_main_replay",
+      "id": "inputs_cast_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "7",
+              "7"
+            ],
+            [
+              "2",
+              "-2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 21,
+      "group": "original_main_replay",
+      "id": "inputs_uncorrelated_zero",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_uncorrelated_zero",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              "1",
+              null
+            ],
+            [
+              "2",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 23,
+      "group": "original_main_replay",
+      "id": "inputs_uncorrelated_one",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_uncorrelated_one",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "1"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "1"
+            ],
+            [
+              null,
+              "1"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 25,
+      "group": "original_main_replay",
+      "id": "inputs_uncorrelated_multiple",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_uncorrelated_multiple",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        }
+      }
+    },
+    {
+      "source_index": 28,
+      "group": "original_main_replay",
+      "id": "inputs_projected_exists",
+      "ansi": true,
+      "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_projected_exists",
+        "ansi": true,
+        "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "boolean",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "2",
+              "true"
+            ],
+            [
+              null,
+              "false"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 29,
+      "group": "original_main_replay",
+      "id": "empty_inputs_plain_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_plain_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 30,
+      "group": "original_main_replay",
+      "id": "empty_inputs_plain_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_plain_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 31,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_alias_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_alias_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 32,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_alias_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_alias_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 33,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_reuse_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_reuse_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 34,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_reuse_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_reuse_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 35,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_scalar_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_scalar_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 36,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_scalar_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_scalar_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 37,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nullable_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nullable_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 38,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nullable_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nullable_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 39,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_live_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_live_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 40,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_live_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_live_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 41,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 42,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 43,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_dead_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_dead_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 44,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_dead_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_dead_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 45,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_live_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_live_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 46,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_live_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_live_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 47,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 48,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 49,
+      "group": "original_main_replay",
+      "id": "empty_inputs_uncorrelated_zero",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_uncorrelated_zero",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 51,
+      "group": "original_main_replay",
+      "id": "empty_inputs_uncorrelated_one",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_uncorrelated_one",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 53,
+      "group": "original_main_replay",
+      "id": "empty_inputs_uncorrelated_multiple",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_uncorrelated_multiple",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        }
+      }
+    },
+    {
+      "source_index": 56,
+      "group": "original_main_replay",
+      "id": "empty_inputs_projected_exists",
+      "ansi": true,
+      "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_projected_exists",
+        "ansi": true,
+        "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "boolean",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 57,
+      "group": "original_main_replay",
+      "id": "null_inputs_plain_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_plain_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 58,
+      "group": "original_main_replay",
+      "id": "null_inputs_plain_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_plain_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 59,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_alias_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_alias_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 60,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_alias_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_alias_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 61,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_reuse_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_reuse_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 62,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_reuse_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_reuse_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 63,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_scalar_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_scalar_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 64,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_scalar_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_scalar_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 65,
+      "group": "original_main_replay",
+      "id": "null_inputs_nullable_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nullable_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 66,
+      "group": "original_main_replay",
+      "id": "null_inputs_nullable_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nullable_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 67,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_live_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_live_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 68,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_live_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_live_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 69,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 70,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 71,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_dead_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_dead_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 72,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_dead_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_dead_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 73,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_live_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_live_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 74,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_live_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_live_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 75,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 76,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 77,
+      "group": "original_main_replay",
+      "id": "null_inputs_uncorrelated_zero",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_uncorrelated_zero",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 79,
+      "group": "original_main_replay",
+      "id": "null_inputs_uncorrelated_one",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_uncorrelated_one",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "1"
+            ],
+            [
+              null,
+              "1"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 81,
+      "group": "original_main_replay",
+      "id": "null_inputs_uncorrelated_multiple",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_uncorrelated_multiple",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        }
+      }
+    },
+    {
+      "source_index": 84,
+      "group": "original_main_replay",
+      "id": "null_inputs_projected_exists",
+      "ansi": true,
+      "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_projected_exists",
+        "ansi": true,
+        "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "boolean",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "true"
+            ],
+            [
+              null,
+              "false"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 97,
+      "group": "original_main_replay",
+      "id": "inputs_volatile_unused_bare",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM inputs p",
+      "original_observation": {
+        "id": "inputs_volatile_unused_bare",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 98,
+      "group": "original_main_replay",
+      "id": "inputs_volatile_unused_cast",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM inputs p",
+      "original_observation": {
+        "id": "inputs_volatile_unused_cast",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 99,
+      "group": "original_main_replay",
+      "id": "empty_inputs_volatile_unused_bare",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM empty_inputs p",
+      "original_observation": {
+        "id": "empty_inputs_volatile_unused_bare",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM empty_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 100,
+      "group": "original_main_replay",
+      "id": "empty_inputs_volatile_unused_cast",
+      "ansi": true,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM empty_inputs p",
+      "original_observation": {
+        "id": "empty_inputs_volatile_unused_cast",
+        "ansi": true,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM empty_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 102,
+      "group": "original_main_replay",
+      "id": "inputs_plain_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_plain_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 103,
+      "group": "original_main_replay",
+      "id": "inputs_plain_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_plain_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 104,
+      "group": "original_main_replay",
+      "id": "inputs_nested_alias_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_alias_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 105,
+      "group": "original_main_replay",
+      "id": "inputs_nested_alias_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_alias_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 106,
+      "group": "original_main_replay",
+      "id": "inputs_nested_reuse_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_reuse_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "2"
+            ],
+            [
+              "2",
+              "4"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 107,
+      "group": "original_main_replay",
+      "id": "inputs_nested_reuse_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_reuse_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "2",
+              "7"
+            ],
+            [
+              "2",
+              "4",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 108,
+      "group": "original_main_replay",
+      "id": "inputs_nested_scalar_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_scalar_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 109,
+      "group": "original_main_replay",
+      "id": "inputs_nested_scalar_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nested_scalar_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 110,
+      "group": "original_main_replay",
+      "id": "inputs_nullable_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nullable_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 111,
+      "group": "original_main_replay",
+      "id": "inputs_nullable_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_nullable_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 112,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_live_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_live_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "-3"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 113,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_live_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_live_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              "1",
+              "7",
+              "7"
+            ],
+            [
+              "2",
+              "-3",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 114,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "-3"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 115,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              "1",
+              "7",
+              "7"
+            ],
+            [
+              "2",
+              "-3",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 116,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_dead_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_dead_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 117,
+      "group": "original_main_replay",
+      "id": "inputs_fallible_dead_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_fallible_dead_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 118,
+      "group": "original_main_replay",
+      "id": "inputs_cast_live_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_live_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "-2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 119,
+      "group": "original_main_replay",
+      "id": "inputs_cast_live_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_live_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              "1",
+              "7",
+              "7"
+            ],
+            [
+              "2",
+              "-2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 120,
+      "group": "original_main_replay",
+      "id": "inputs_cast_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "-2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 121,
+      "group": "original_main_replay",
+      "id": "inputs_cast_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_cast_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "7",
+              "7"
+            ],
+            [
+              "2",
+              "-2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 122,
+      "group": "original_main_replay",
+      "id": "inputs_uncorrelated_zero",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_uncorrelated_zero",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              "1",
+              null
+            ],
+            [
+              "2",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 124,
+      "group": "original_main_replay",
+      "id": "inputs_uncorrelated_one",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_uncorrelated_one",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "1"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "1"
+            ],
+            [
+              null,
+              "1"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 126,
+      "group": "original_main_replay",
+      "id": "inputs_uncorrelated_multiple",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_uncorrelated_multiple",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        }
+      }
+    },
+    {
+      "source_index": 129,
+      "group": "original_main_replay",
+      "id": "inputs_projected_exists",
+      "ansi": false,
+      "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+      "original_observation": {
+        "id": "inputs_projected_exists",
+        "ansi": false,
+        "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "boolean",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "2",
+              "true"
+            ],
+            [
+              null,
+              "false"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 130,
+      "group": "original_main_replay",
+      "id": "empty_inputs_plain_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_plain_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 131,
+      "group": "original_main_replay",
+      "id": "empty_inputs_plain_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_plain_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 132,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_alias_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_alias_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 133,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_alias_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_alias_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 134,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_reuse_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_reuse_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 135,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_reuse_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_reuse_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 136,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_scalar_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_scalar_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 137,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nested_scalar_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nested_scalar_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 138,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nullable_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nullable_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 139,
+      "group": "original_main_replay",
+      "id": "empty_inputs_nullable_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_nullable_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 140,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_live_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_live_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 141,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_live_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_live_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 142,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 143,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 144,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_dead_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_dead_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 145,
+      "group": "original_main_replay",
+      "id": "empty_inputs_fallible_dead_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_fallible_dead_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 146,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_live_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_live_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 147,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_live_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_live_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 148,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 149,
+      "group": "original_main_replay",
+      "id": "empty_inputs_cast_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_cast_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 150,
+      "group": "original_main_replay",
+      "id": "empty_inputs_uncorrelated_zero",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_uncorrelated_zero",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 152,
+      "group": "original_main_replay",
+      "id": "empty_inputs_uncorrelated_one",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_uncorrelated_one",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 154,
+      "group": "original_main_replay",
+      "id": "empty_inputs_uncorrelated_multiple",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_uncorrelated_multiple",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        }
+      }
+    },
+    {
+      "source_index": 157,
+      "group": "original_main_replay",
+      "id": "empty_inputs_projected_exists",
+      "ansi": false,
+      "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+      "original_observation": {
+        "id": "empty_inputs_projected_exists",
+        "ansi": false,
+        "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "boolean",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "source_index": 158,
+      "group": "original_main_replay",
+      "id": "null_inputs_plain_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_plain_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 159,
+      "group": "original_main_replay",
+      "id": "null_inputs_plain_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_plain_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT p.id) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 160,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_alias_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_alias_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 161,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_alias_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_alias_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 162,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_reuse_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_reuse_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 163,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_reuse_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_reuse_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT q.x+q.x FROM (SELECT p.id AS x) q) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 164,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_scalar_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_scalar_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 165,
+      "group": "original_main_replay",
+      "id": "null_inputs_nested_scalar_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nested_scalar_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT (SELECT p.id)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"
+        }
+      }
+    },
+    {
+      "source_index": 166,
+      "group": "original_main_replay",
+      "id": "null_inputs_nullable_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nullable_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 167,
+      "group": "original_main_replay",
+      "id": "null_inputs_nullable_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_nullable_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CASE WHEN p.id IS NULL THEN NULL ELSE p.id END) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 168,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_live_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_live_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 169,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_live_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_live_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT 7 DIV p.v) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 170,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 171,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.v=0 THEN NULL ELSE (SELECT 7 DIV p.v) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 172,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_dead_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_dead_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 173,
+      "group": "original_main_replay",
+      "id": "null_inputs_fallible_dead_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_fallible_dead_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN true THEN p.id ELSE (SELECT 7 DIV 0) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "long",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 174,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_live_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_live_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 175,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_live_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_live_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,(SELECT CAST(p.txt AS INT)) AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 176,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 177,
+      "group": "original_main_replay",
+      "id": "null_inputs_cast_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_cast_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS id,CASE WHEN p.txt='bad' THEN p.id ELSE (SELECT CAST(p.txt AS INT)) END AS correlated_id,CAST(7 AS INT) AS incidental FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "correlated_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 178,
+      "group": "original_main_replay",
+      "id": "null_inputs_uncorrelated_zero",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_uncorrelated_zero",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 180,
+      "group": "original_main_replay",
+      "id": "null_inputs_uncorrelated_one",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_uncorrelated_one",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM one_input i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "1"
+            ],
+            [
+              null,
+              "1"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 182,
+      "group": "original_main_replay",
+      "id": "null_inputs_uncorrelated_multiple",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_uncorrelated_multiple",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT i.id FROM inputs i) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "error",
+          "condition": "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        }
+      }
+    },
+    {
+      "source_index": 185,
+      "group": "original_main_replay",
+      "id": "null_inputs_projected_exists",
+      "ansi": false,
+      "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+      "original_observation": {
+        "id": "null_inputs_projected_exists",
+        "ansi": false,
+        "sql": "SELECT p.id,EXISTS(SELECT i.id FROM inputs i WHERE i.id=p.id) AS r FROM (SELECT id,g,v,txt FROM null_inputs) p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "boolean",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "true"
+            ],
+            [
+              null,
+              "false"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "source_index": 198,
+      "group": "original_main_replay",
+      "id": "inputs_volatile_unused_bare",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM inputs p",
+      "original_observation": {
+        "id": "inputs_volatile_unused_bare",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              "2",
+              "2"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 199,
+      "group": "original_main_replay",
+      "id": "inputs_volatile_unused_cast",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM inputs p",
+      "original_observation": {
+        "id": "inputs_volatile_unused_cast",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              "2",
+              "2",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 200,
+      "group": "original_main_replay",
+      "id": "empty_inputs_volatile_unused_bare",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM empty_inputs p",
+      "original_observation": {
+        "id": "empty_inputs_volatile_unused_bare",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r FROM empty_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "source_index": 201,
+      "group": "original_main_replay",
+      "id": "empty_inputs_volatile_unused_cast",
+      "ansi": false,
+      "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM empty_inputs p",
+      "original_observation": {
+        "id": "empty_inputs_volatile_unused_cast",
+        "ansi": false,
+        "sql": "SELECT p.id,(SELECT q.x FROM (SELECT p.id AS x,count_row(p.id) AS unused) q) AS r,CAST(7 AS INT) AS incidental FROM empty_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "r",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    }
+  ],
+  "source_files": [
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_single_row_correlated_spark.py",
+      "bytes": 7107,
+      "sha256": "7a4bfa07246061f207c9c0b0d80cdd2654962d34eef738d7cbfdb10560f600ba"
+    },
+    {
+      "path": "sources/single-row-correlated-spark.jsonl",
+      "bytes": 84477,
+      "sha256": "0d3696b51f73f63ca68fa7cc5fb17143d137920f343e78056fa7b3d30a4718fc"
+    },
+    {
+      "path": "sources/single_row_correlated.rs",
+      "bytes": 37608,
+      "sha256": "50837069f95799cb13e1e98406eeffa27e83a2cc44141f11b4dca7831efb8b55"
+    }
+  ]
+}

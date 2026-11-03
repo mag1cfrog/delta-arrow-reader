@@ -39,7 +39,10 @@ pub(crate) async fn capture_spark_query_observation(
     let resolved = query.logical_plan.schema().fields();
     let public_schema = capture_schema(resolved, Some(&query.column_names))?;
     let physical_schema = capture_schema(schema.fields(), None)?;
-    if let Some(expected) = case.get("executed_schema_after_collect") {
+    if let Some(expected) = case
+        .get("executed_schema_after_collect")
+        .or_else(|| case.get("executed_schema_before_collect"))
+    {
         if physical_schema != *expected {
             return Err(format!(
                 "executed schema: expected {expected}, got {physical_schema}"

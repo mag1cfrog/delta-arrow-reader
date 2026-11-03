@@ -54,16 +54,39 @@ fn scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
     .map(serde_json::from_str)
     .collect::<Result<Vec<Value>, _>>()?;
     assert_eq!(ordering.len() - 1, 8);
-    let inputs = records[0]["inputs"].as_array_mut().ok_or("missing inputs")?;
-    for input in ordering[0]["inputs"].as_array().ok_or("missing ordering inputs")? {
-        if let Some(existing) = inputs.iter().find(|existing| existing["name"] == input["name"]) {
-            assert_eq!(existing, input);
-        } else {
-            inputs.push(input.clone());
+    let boundaries = include_str!(
+        "fixtures/correlated-scalar-metadata-stages/boundaries/boundaries-spark.jsonl"
+    )
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(boundaries.len() - 1, 12);
+    for extra in [ordering, boundaries] {
+        let inputs = records[0]["inputs"].as_array_mut().ok_or("missing inputs")?;
+        for input in extra[0]["inputs"].as_array().ok_or("missing extra inputs")? {
+            if let Some(existing) = inputs.iter().find(|existing| existing["name"] == input["name"]) {
+                assert_eq!(existing, input);
+            } else {
+                inputs.push(input.clone());
+            }
         }
+        records.extend(extra.into_iter().skip(1));
     }
-    records.extend(ordering.into_iter().skip(1));
-    assert_eq!(records.len() - 1, 76);
+    assert_eq!(records.len() - 1, 88);
+    Ok(records)
+}
+
+fn main_scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
+    let records = include_str!(
+        "fixtures/correlated-scalar-metadata-stages/main-replay/main-scalar-stages-spark.jsonl"
+    )
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len() - 1, 152);
+    assert_eq!(records[0]["original_observations"], 202);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
     Ok(records)
 }
 
@@ -73,8 +96,12 @@ fn scalar_metadata_stage_case<'a>(records: &'a [Value], original: &Value) -> Tes
         .find(|case| case.get("original_observation") == Some(original))
         .ok_or("missing original scalar observation")?;
     assert_eq!(case["sql"], original["sql"]);
-    assert_eq!(case["public_schema"], original["expected"]["schema"]);
-    assert_eq!(case["expected"]["rows"], original["expected"]["rows"]);
+    if original["expected"]["status"] == "ok" {
+        assert_eq!(case["public_schema"], original["expected"]["schema"]);
+        assert_eq!(case["expected"]["rows"], original["expected"]["rows"]);
+    } else {
+        assert_eq!(case["error"]["condition"], original["expected"]["condition"]);
+    }
     Ok(case)
 }
 
@@ -191,7 +218,7 @@ async fn scalar_metadata_stages_and_arrow_extension_contract_match() -> TestResu
             comparisons += 1;
         }
     }
-    assert_eq!(comparisons, 152);
+    assert_eq!(comparisons, 176);
     assert_eq!(extension_comparisons, 16);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
@@ -212,6 +239,33 @@ async fn scalar_executed_reference_cannot_hide_a_metadata_mismatch() -> TestResu
     let result = spark_results::capture_spark_query_observation(&session, &case).await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("executed schema"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn scalar_precollection_schema_keeps_required_engine_errors() -> TestResult {
+    let records = main_scalar_metadata_stage_records()?;
+    let case = records[1..]
+        .iter()
+        .find(|case| case["id"] == "inputs_fallible_live_bare" && case["ansi"] == true)
+        .ok_or("missing division-error control")?;
+    assert!(case.get("executed_schema_after_collect").is_none());
+    assert!(case.get("executed_schema_before_collect").is_some());
+    let session = session(32);
+    spark_inputs::register_recorded_inputs(&session, &records[0], 32)?;
+    let error = spark_results::capture_spark_query_observation(&session, case)
+        .await
+        .unwrap_err();
+    assert!(error.downcast_ref::<datafusion::error::DataFusionError>().is_some());
+    assert!(error.to_string().contains("Divide by zero error"));
+    let mut wrong = case.clone();
+    wrong["executed_schema_before_collect"]["fields"][1]["metadata"] =
+        json!({"unrecorded":"metadata"});
+    let error = spark_results::capture_spark_query_observation(&session, &wrong)
+        .await
+        .unwrap_err();
+    assert!(error.downcast_ref::<datafusion::error::DataFusionError>().is_none());
+    assert!(error.to_string().contains("executed schema"));
     Ok(())
 }
 
@@ -263,6 +317,7 @@ fn contains_scalar(plan: &LogicalPlan) -> TestResult<bool> {
 #[tokio::test]
 async fn single_row_projections_match_spark() -> TestResult {
     let records = references()?;
+    let stages = main_scalar_metadata_stage_records()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size);
@@ -281,8 +336,9 @@ async fn single_row_projections_match_spark() -> TestResult {
             {
                 continue;
             }
+            let stage_case = scalar_metadata_stage_case(&stages, case)?;
             calls.store(0, Ordering::SeqCst);
-            let actual = spark_results::capture_spark_query_result(&session, case).await;
+            let actual = spark_results::capture_spark_query_result(&session, stage_case).await;
             let expected = &case["expected"];
             let matches = match &actual {
                 Ok(actual) if expected["status"] == "ok" => {

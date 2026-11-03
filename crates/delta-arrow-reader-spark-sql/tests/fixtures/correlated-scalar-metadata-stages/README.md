@@ -125,3 +125,21 @@ equality and adds only the new plain STRING provider. The two extension records
 without ORDER BY have explicit DAR public extension fields and exact Spark
 executed fields. This brings the declared type-contract cases to eight; all
 other schema properties and result rows remain unchanged.
+
+The independent 12-record boundary capture in
+`boundaries/boundaries-spark.jsonl` covers outer-star STRUCT construction and
+STRUCT selected through the hidden ORDER BY projection, SHA256
+`c661faba1939bf0204b7050f1de1af18b329eb4c48a410f06fe69203dab40cf3`.
+It retains all providers and ANSI modes. The shared supplemental replay now
+visits all 88 records at both batch sizes, for 176 complete comparisons.
+
+`main-replay/main-scalar-stages-spark.jsonl` retains the complete 152-record
+main replay's independent stages, SHA256
+`3fa86a006fe1d8cbaebec4b1c23a107b2bd670f07b9cf4d8b30b62979d5cf6eb`.
+All 202 original raw observations and the unchanged 50-record complement remain
+in the source package. The main test's original selection, public expectations,
+rows, cause checks and unused-volatile counters remain unchanged. Each selected
+case now supplies its exact independent physical schema. If collection fails,
+the completed pre-collection schema is checked before the actual required
+engine error is reached. A focused control rejects incorrect physical metadata
+and separately requires the real division error with the correct declaration.

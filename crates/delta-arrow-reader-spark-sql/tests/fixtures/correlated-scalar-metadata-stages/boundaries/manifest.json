@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "purpose": "Capture two reachable correlated metadata boundaries without assuming Spark accepts an outer star. Preserve unsupported forms as error observations.",
+  "review_head": "3dda18219085af27fdfe796f805594bf2de95fa1",
+  "reference_observations": 12,
+  "dar_comparisons": 24,
+  "source_reference_sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2",
+  "cases": {
+    "outer_star_struct": 6,
+    "struct_hidden_order": 6
+  },
+  "files": [
+    {
+      "path": "capture_metadata_boundaries.py",
+      "bytes": 3625,
+      "sha256": "7149afc9e45c1187389bed61dc5b52636470aa817c4b5478a98cad6c3dc023ab"
+    },
+    {
+      "path": "inputs-and-cases.json",
+      "bytes": 16135,
+      "sha256": "1411ac9543c1d30c61e10a47ae31c0535d719a0b805d7a99194bc3b36bad3b4f"
+    },
+    {
+      "path": "metadata_boundaries_probe.rs",
+      "bytes": 6068,
+      "sha256": "b9ab1472baad572d98718f17fa7e9a57ef7dcc7a7c295edceedb84696a7028bb"
+    },
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/spark_inputs.rs",
+      "bytes": 5746,
+      "sha256": "ebf5352be9f1bfeba0d5ca5da3fe68182eafd51c996a7913a630df2ef365e002"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 9356,
+      "sha256": "ee0b744628c649dca667913fd4ebe3e48da17ab0aa4517f90950a5c594440bc5"
+    }
+  ],
+  "checks": [
+    "Python AST parse passed without importing Spark",
+    "All original provider definitions are byte-equivalent JSON objects",
+    "Exact two-shape by three-provider by two-ANSI Cartesian grid",
+    "All source snapshot length and SHA256 checks passed",
+    "Rust probe traced manually: per-case errors continue; schema mismatches still collect; complete public/physical/batch fields and duplicate-preserving rows compared",
+    "Reviewed repository remains clean at frozen head"
+  ],
+  "execution": "No engine or Rust/Cargo process run by reviewer. Root owns serialized capture and paired execution.",
+  "recipe": {
+    "capture_cwd": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-metadata-boundary-probes",
+    "spark": [
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-metadata-boundary-probes/capture_metadata_boundaries.py",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-metadata-boundary-probes/boundaries-spark.jsonl"
+    ],
+    "dar_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-metadata-boundary-probes/metadata_boundaries_probe.rs",
+    "dar_target": "metadata_boundaries_probe",
+    "dar_args": [
+      "cargo",
+      "+1.96.0",
+      "test",
+      "--locked",
+      "--workspace",
+      "--test",
+      "metadata_boundaries_probe",
+      "--",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "placement": "Root copies the immutable DAR source into its disposable engine checkout at tests/metadata_boundaries_probe.rs. Absolute module paths use these frozen support snapshots.",
+    "required_pair": [
+      "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
+      "3dda18219085af27fdfe796f805594bf2de95fa1"
+    ]
+  }
+}
