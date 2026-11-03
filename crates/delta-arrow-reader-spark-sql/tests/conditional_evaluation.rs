@@ -177,6 +177,18 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                 [6, 2, 0],
                 vec![Some(1), Some(2), Some(3), None],
             ),
+            (
+                "CASE WHEN true THEN COALESCE(count_first(a),CAST(7 AS INT)) ELSE CAST(NULL AS INT) END"
+                    .to_string(),
+                [4, 0, 0],
+                vec![Some(1), Some(7), Some(3), Some(7)],
+            ),
+            (
+                "CASE WHEN true THEN CASE WHEN true THEN COALESCE(count_first(a),CAST(7 AS INT)) ELSE CAST(NULL AS INT) END ELSE CAST(NULL AS INT) END"
+                    .to_string(),
+                [4, 0, 0],
+                vec![Some(1), Some(7), Some(3), Some(7)],
+            ),
         ];
         for function in ["COALESCE", "IFNULL", "NVL", "fallback_alias"] {
             cases.push((
