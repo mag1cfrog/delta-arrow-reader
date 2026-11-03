@@ -83,9 +83,12 @@ fn array_compact_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 }
 
 fn array_compact_generic<O: OffsetSizeTrait>(list: &GenericListArray<O>) -> Result<ArrayRef> {
-    let values = list.values();
-    let values_nulls = values.logical_nulls();
     let offsets = list.offsets();
+    let first = offsets[0].as_usize();
+    let last = offsets[list.len()].as_usize();
+    // A sliced list retains backing values outside its visible offset range.
+    let values = list.values().slice(first, last - first);
+    let values_nulls = values.logical_nulls();
 
     // Build a boolean filter mask for the flattened values array.
     // We keep a value if its parent row is not null AND the value itself is not null.
@@ -96,8 +99,8 @@ fn array_compact_generic<O: OffsetSizeTrait>(list: &GenericListArray<O>) -> Resu
     let mut total_kept: usize = 0;
 
     for i in 0..list.len() {
-        let start = offsets[i].as_usize();
-        let end = offsets[i + 1].as_usize();
+        let start = offsets[i].as_usize() - first;
+        let end = offsets[i + 1].as_usize() - first;
 
         if list.is_null(i) {
             // Null row: mark all values in the range as not kept.
