@@ -571,6 +571,11 @@ mod tests {
                     vec!["", "2", "3"],
                 ),
                 (
+                    "SELECT CASE WHEN true THEN k ELSE 2 END AS value FROM metadata_inputs",
+                    "CASE WHEN true THEN k ELSE 2 END",
+                    vec!["", "2", "3"],
+                ),
+                (
                     "SELECT SUM(k) AS value FROM metadata_inputs",
                     "sum(k)",
                     vec!["5"],

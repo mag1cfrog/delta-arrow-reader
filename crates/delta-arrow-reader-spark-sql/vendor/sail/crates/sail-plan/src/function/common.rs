@@ -2191,6 +2191,10 @@ fn metadata_annotations_keep_null_propagation_and_fields() -> datafusion_common:
         without_metadata_annotations(&annotated_invalid_cast),
         &invalid_null_cast
     );
+    assert_eq!(
+        materialize_metadata_literals(annotated_invalid_cast.clone())?.data,
+        annotated_invalid_cast
+    );
     let bad_cast = cast(lit("bad"), DataType::Int32);
     for (left, right) in [
         (typed_null.clone(), bad_cast.clone()),
