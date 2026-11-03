@@ -2,9 +2,9 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, FixedSizeListArray, StructArray};
-use datafusion::arrow::datatypes::{DataType, Field, Fields};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Fields};
 use datafusion_common::{Result, exec_err};
-use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+use datafusion_expr::{ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
 
 /// Spark-compatible "rename struct fields by position".
 ///
@@ -43,6 +43,13 @@ impl ScalarUDFImpl for SparkStructRename {
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(self.target_type.clone())
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        if args.arg_fields.len() != 1 {
+            return exec_err!("spark_struct_rename expects exactly one argument");
+        }
+        Ok(Arc::new(Field::new(self.name(), self.target_type.clone(), args.arg_fields[0].is_nullable())))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -213,4 +220,131 @@ fn rename_positionally(arr: &ArrayRef, target_type: &DataType) -> Result<ArrayRe
         // the same type), nothing to rename — return as-is.
         _ => Ok(Arc::clone(arr)),
     }
+}
+
+/// Build a target type that has the names from `to` but the data types from
+/// `from`. The result is what `SparkStructRename` produces; the subsequent
+/// regular CAST then handles any leaf-type conversion.
+pub fn build_rename_target_type(from: &DataType, to: &DataType) -> DataType {
+    match (from, to) {
+        (DataType::Struct(src_fields), DataType::Struct(tgt_fields))
+            if src_fields.len() == tgt_fields.len() =>
+        {
+            let fields: Fields = src_fields
+                .iter()
+                .zip(tgt_fields.iter())
+                .map(|(src, tgt)| {
+                    Arc::new(
+                        Field::new(
+                            tgt.name(),
+                            build_rename_target_type(src.data_type(), tgt.data_type()),
+                            src.is_nullable(),
+                        )
+                        .with_metadata(src.metadata().clone()),
+                    )
+                })
+                .collect();
+            DataType::Struct(fields)
+        }
+        (DataType::List(src), DataType::List(tgt)) => DataType::List(Arc::new(
+            Field::new(
+                tgt.name(),
+                build_rename_target_type(src.data_type(), tgt.data_type()),
+                src.is_nullable(),
+            )
+            .with_metadata(src.metadata().clone()),
+        )),
+        (DataType::LargeList(src), DataType::LargeList(tgt)) => DataType::LargeList(Arc::new(
+            Field::new(
+                tgt.name(),
+                build_rename_target_type(src.data_type(), tgt.data_type()),
+                src.is_nullable(),
+            )
+            .with_metadata(src.metadata().clone()),
+        )),
+        (DataType::FixedSizeList(src, sa), DataType::FixedSizeList(tgt, _)) => {
+            DataType::FixedSizeList(
+                Arc::new(
+                    Field::new(
+                        tgt.name(),
+                        build_rename_target_type(src.data_type(), tgt.data_type()),
+                        src.is_nullable(),
+                    )
+                    .with_metadata(src.metadata().clone()),
+                ),
+                *sa,
+            )
+        }
+        (DataType::Map(src, sorted), DataType::Map(tgt, _)) => DataType::Map(
+            Arc::new(
+                Field::new(
+                    tgt.name(),
+                    build_rename_target_type(src.data_type(), tgt.data_type()),
+                    src.is_nullable(),
+                )
+                .with_metadata(src.metadata().clone()),
+            ),
+            *sorted,
+        ),
+        // Leaves: keep the source data type unchanged.
+        _ => from.clone(),
+    }
+}
+
+
+/// Align constructor STRUCT names with Spark's resolver, without coercing values.
+/// Choose spelling from the first non-NULL input at each depth; retain each input's leaf types.
+pub fn align_constructor_struct_field_names(data_types: &[DataType]) -> Result<Vec<DataType>> {
+    fn name_template(data_types: &[&DataType]) -> Result<DataType> {
+        let data_types = data_types.iter().copied().filter(|data_type| !data_type.is_null())
+            .collect::<Vec<_>>();
+        let Some(&first) = data_types.first() else { return Ok(DataType::Null); };
+        match first {
+            DataType::Struct(first_fields) => {
+                let Some(structs) = data_types.iter().map(|data_type| match data_type {
+                    DataType::Struct(fields) => Some(fields),
+                    _ => None,
+                }).collect::<Option<Vec<_>>>() else { return Ok(DataType::Null); };
+                for fields in structs.iter().skip(1) {
+                    if first_fields.len() != fields.len() || !first_fields.iter().zip(fields.iter())
+                        .all(|(left, right)| left.name().eq_ignore_ascii_case(right.name())) {
+                        return exec_err!("Expect same keys for struct type but got mismatched pair {:?} and {:?}",
+                            first_fields.iter().map(|field| field.name()).collect::<Vec<_>>(),
+                            fields.iter().map(|field| field.name()).collect::<Vec<_>>());
+                    }
+                }
+                let fields = first_fields.iter().enumerate().map(|(index, field)| {
+                    let children = structs.iter().map(|fields| fields[index].data_type()).collect::<Vec<_>>();
+                    Ok(Arc::new(field.as_ref().clone().with_data_type(name_template(&children)?)))
+                }).collect::<Result<Vec<_>>>()?;
+                Ok(DataType::Struct(fields.into()))
+            }
+            DataType::List(_) | DataType::LargeList(_) | DataType::FixedSizeList(_, _) => {
+                let children = data_types.iter().filter_map(|data_type| match data_type {
+                    DataType::List(field) | DataType::LargeList(field) | DataType::FixedSizeList(field, _) => Some(field.data_type()),
+                    _ => None,
+                }).collect::<Vec<_>>();
+                if children.len() != data_types.len() { return Ok(DataType::Null); }
+                let child = name_template(&children)?;
+                Ok(match first {
+                    DataType::List(field) => DataType::List(Arc::new(field.as_ref().clone().with_data_type(child))),
+                    DataType::LargeList(field) => DataType::LargeList(Arc::new(field.as_ref().clone().with_data_type(child))),
+                    DataType::FixedSizeList(field, size) => DataType::FixedSizeList(Arc::new(field.as_ref().clone().with_data_type(child)), *size),
+                    _ => DataType::Null,
+                })
+            }
+            DataType::Map(first_field, sorted) => {
+                let children = data_types.iter().filter_map(|data_type| match data_type {
+                    DataType::Map(field, _) => Some(field.data_type()),
+                    _ => None,
+                }).collect::<Vec<_>>();
+                if children.len() != data_types.len() { return Ok(DataType::Null); }
+                Ok(DataType::Map(Arc::new(first_field.as_ref().clone()
+                    .with_data_type(name_template(&children)?)), *sorted))
+            }
+            _ => Ok(DataType::Null),
+        }
+    }
+    let template = name_template(&data_types.iter().collect::<Vec<_>>())?;
+    Ok(data_types.iter().map(|data_type| build_rename_target_type(data_type, &template)).collect())
 }

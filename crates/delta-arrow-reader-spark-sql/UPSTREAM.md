@@ -210,12 +210,21 @@ Shared STRUCT union resolution gives every constructor argument the same child
 declarations before concatenation. Fields combine nullability and clear inherited
 metadata through the existing coercion policy. Identical input declarations keep
 their metadata. Recursive coercion uses child positions when the complete name
-sequence matches, including duplicate names. Spark ARRAY retains STRUCT admission
-failures instead of falling through to ambiguous name lookup. Nested Lists reuse
-native merged declarations only when comparison coercion selects the same storage
-type, nullability and STRUCT names. MAP classifies failures at its STRUCT-value
-admission boundary; both constructor errors retain their underlying cause.
-Native MakeArray retains its primitive coercion and conversion errors. The same
+sequence matches, including duplicate names. One recursive Spark constructor rule
+checks STRUCT names through ARRAY/MAP containers and NULL inputs. It uses the
+existing case-insensitive resolver policy and retains the first non-NULL spelling
+at each depth. Case-only differences reuse the existing positional rename before
+coercion, preserving each input's leaf types, nullability and metadata. Explicit
+CAST shares the same rename target builder. The rename operation retains input
+parent nullability.
+
+Spark ARRAY retains STRUCT admission failures instead of falling through to
+ambiguous name lookup. Nested Lists reuse native merged declarations only when
+comparison coercion selects the same storage type, nullability and STRUCT names.
+MAP adds its error condition at the value admission boundary, retaining the
+underlying cause. Native union keeps its separate name policy and rejects
+ambiguous unequal duplicate layouts before name lookup. Native MakeArray retains
+its primitive coercion and conversion errors. The same
 union resolution also serves native COALESCE and DataFusion Spark IF. The
 [constructor references](tests/fixtures/README.md#array-and-map-struct-declarations)
 check these declarations separately from the value-casting path.

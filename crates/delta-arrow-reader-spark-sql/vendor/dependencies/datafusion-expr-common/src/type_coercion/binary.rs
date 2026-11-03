@@ -38,7 +38,6 @@ use datafusion_common::{
     Diagnostic, Result, Span, Spans, exec_err, internal_err, not_impl_err,
     plan_datafusion_err, plan_err,
 };
-use itertools::Itertools;
 
 /// The type signature of an instantiation of binary operator expression such as
 /// `lhs + rhs`
@@ -741,6 +740,10 @@ fn type_union_resolution_coercion(
                 return coerce_struct_by_position(lhs, rhs, type_union_resolution_coercion);
             }
 
+            if !fields_have_unique_names(lhs) || !fields_have_unique_names(rhs) {
+                return None;
+            }
+
             // Search the field in the right hand side with the SAME field name
             fn search_corresponding_coerced_type(
                 lhs_field: &FieldRef,
@@ -1269,9 +1272,7 @@ fn struct_coercion(
                 return coerce_struct_by_position(lhs_fields, rhs_fields, coerce_fn);
             }
 
-            if lhs_fields.iter().map(|field| field.name()).collect::<HashSet<_>>().len() != lhs_fields.len()
-                || rhs_fields.iter().map(|field| field.name()).collect::<HashSet<_>>().len() != rhs_fields.len()
-            {
+            if !fields_have_unique_names(lhs_fields) || !fields_have_unique_names(rhs_fields) {
                 return None;
             }
 
@@ -1296,6 +1297,10 @@ fn struct_coercion(
         }
         _ => None,
     }
+}
+
+fn fields_have_unique_names(fields: &Fields) -> bool {
+    fields.iter().map(|field| field.name()).collect::<HashSet<_>>().len() == fields.len()
 }
 
 /// Return true if every left-field name exists in the equally sized right fields.

@@ -20,6 +20,7 @@ use datafusion_expr::{
 };
 
 use crate::functions_nested_utils::make_scalar_function;
+use crate::scalar::spark_struct_rename::align_constructor_struct_field_names;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkArray {
@@ -110,6 +111,8 @@ impl ScalarUDFImpl for SparkArray {
         let first_type = arg_types.first().ok_or_else(|| {
             plan_datafusion_err!("Spark array function requires at least one argument")
         })?;
+        align_constructor_struct_field_names(arg_types).map_err(|error| error.context(
+            "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] ARRAY elements must have compatible STRUCT declarations"))?;
         // Spark non-ANSI semantics: when mixing strings with other (non-null) types,
         // coerce everything to string. DataFusion's `comparison_coercion` prefers
         // numeric types, which would break Spark's string-wins behavior and cause
