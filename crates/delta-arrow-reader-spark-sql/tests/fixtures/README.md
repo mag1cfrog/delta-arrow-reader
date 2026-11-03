@@ -19,9 +19,10 @@ It retains complete schemas at each stage, rows, plans and capture hashes.
 Rows, names, types, physical nullability and errors retain their exact historical
 expectations. Every changed declaration matches Spark; 119 complete rowsets also
 match. The four `context_0_case` / `context_1_case` observations in
-`replay/existing-projected-cases`, in both ANSI modes, retain #142's approved SQL
-three-valued projected-IN policy. Their different raw Spark rows remain in this
-reference. The historical matcher and frozen corpus are unchanged.
+`replay/existing-projected-cases`, in both ANSI modes, retain their pre-existing
+SQL three-valued projected-IN rows. They remain historical differences under
+#142; their different raw Spark rows remain in this reference. The historical
+matcher and frozen corpus are unchanged.
 
 Recapture with Python 3.12, PySpark 4.2.0 and Java 21 from this crate. Select only
 ID, SQL and ANSI from the reference; the script checks each against the original
