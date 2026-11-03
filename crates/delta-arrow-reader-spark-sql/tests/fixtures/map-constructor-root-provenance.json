@@ -23,6 +23,32 @@
       "path": "folded-map-lambda-816-core-spark.jsonl",
       "bytes": 5928,
       "sha256": "a6e1d0d08fe0ae80db67d319c4626bf11cb572612b07703ecc00fafc030adb3b"
+    },
+    {
+      "path": "map-null-sensitive-824-core-spark.jsonl",
+      "bytes": 10403,
+      "sha256": "fdf3f22d86075c19fe1e45d2a5f1288fa44bdc5c349581514cfb1f3447fc4b93"
     }
-  ]
+  ],
+  "null_sensitive_capture": {
+    "full_reference_sha256": "e18215f0c0a5b0c1fec79ec7cd2831e93079c5f95c2c23dabfb54feb17bc8c4b",
+    "capture_script_sha256": "60e8fd6dd1266eaa4253b0d2180e2e68143335b381e50446acbaf5c851860891",
+    "inputs_sha256": "21760f3ba54f2d290aaf1f2a14ee59980207dfffc97830802beb61e3084d372b",
+    "full_observations": 40,
+    "subset_ids": [
+      "provider_duplicate_is_null",
+      "provider_bad_coalesce_good_fallback"
+    ],
+    "subset_observations": 4,
+    "source_files": [
+      {
+        "path": "sources/capture_correlated_scalar_metadata_stages.py",
+        "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+      },
+      {
+        "path": "sources/capture_floating_group_keys_spark.py",
+        "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+      }
+    ]
+  }
 }

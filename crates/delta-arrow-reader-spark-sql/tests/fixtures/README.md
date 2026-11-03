@@ -2434,6 +2434,17 @@ CAST value declarations, empty and multirow scalars, typed duplicate/numeric
 errors and native array schemas/rows. A constructor unit test compares default
 and opt-in fields, including nullable values and duplicate nested STRUCT names.
 
+`map-null-sensitive-824-core-spark.jsonl` retains four unchanged records and
+its original header from a separate 40-record Spark capture. Provider-dependent
+duplicate keys under IS NULL must produce Spark's false results through
+pruning, while selecting the duplicate Map as the first COALESCE argument must
+plan successfully and raise DUPLICATED_MAP_KEY during collection. The test
+checks full public/executed fields and rows for success, plus the required
+execution phase and typed error in both ANSI modes and batches 1/32. Provenance
+pins the full capture and subset hashes. The full external capture preserves
+the remaining consumer controls and four unchanged ANSI constant-cast gaps;
+this regression changes no expected records or production behavior.
+
 The full 102-record reference includes metadata and hidden ORDER BY cases that
 remain owned separately. External paired replay retains every observation;
 this focused target does not claim complete metadata or 92-record lambda

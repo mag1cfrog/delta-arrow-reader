@@ -2,6 +2,7 @@
 
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
+use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
@@ -11,12 +12,13 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_results::{
-    TestResult, capture_native_query_observation, capture_spark_query_observation,
+    TestResult, capture_native_query_observation, capture_schema, capture_spark_query_observation,
     capture_spark_query_result, compare_exact_spark_query_stages,
 };
 
 const MAP: &str = include_str!("fixtures/map-constructor-nullability-spark.jsonl");
 const LAMBDA: &str = include_str!("fixtures/folded-map-lambda-816-core-spark.jsonl");
+const NULL_SENSITIVE: &str = include_str!("fixtures/map-null-sensitive-824-core-spark.jsonl");
 
 fn records(source: &str, count: usize) -> TestResult<Vec<Value>> {
     let records = source
@@ -129,6 +131,43 @@ async fn original_folded_map_lambda_and_null_element_match_spark() -> TestResult
                 actual["matches"], true,
                 "batch={batch_size}: {case}: {actual}"
             );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn null_sensitive_map_consumers_preserve_spark_evaluation() -> TestResult {
+    let records = records(NULL_SENSITIVE, 4)?;
+    // Spark prunes duplicate MAP under IS NULL; a selected COALESCE arm must still fail.
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            if case.get("error").is_some() {
+                assert_eq!(case["error"]["condition"], "DUPLICATED_MAP_KEY");
+                assert_eq!(case["error"]["phase"], "execute");
+                let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions { ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                        session_timezone: "UTC".into(), ..SparkSqlOptions::default() }).await?;
+                assert_eq!(capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?,
+                    case["public_schema"]);
+                let physical = query.create_physical_plan(&session).await?;
+                assert_eq!(capture_schema(physical.schema().fields(), None)?,
+                    case["executed_schema_before_collect"]);
+                let error = collect(physical, session.task_ctx()).await
+                    .expect_err("the selected MAP must reject duplicate keys during collection");
+                assert!(matches!(error.find_root(), DataFusionError::Execution(message)
+                    if message.contains("[DUPLICATED_MAP_KEY]")), "{error}");
+            } else {
+                let stages = json!({"sql":case["sql"],"ansi":case["ansi"],
+                    "expected":case["expected"],"schema_stages":{
+                        "analyzed":case["public_schema"],
+                        "executed_before_collect":case["executed_schema_before_collect"],
+                        "executed":case["executed_schema_after_collect"]}});
+                let actual = compare_exact_spark_query_stages(&session, &stages).await?;
+                assert_eq!(actual["matches"], true, "batch={batch_size}: {case}: {actual}");
+            }
         }
     }
     Ok(())
