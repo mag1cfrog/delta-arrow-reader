@@ -137,3 +137,29 @@ async fn spark_setup_preserves_native_array_constructor() -> TestResult {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn map_constructor_preserves_required_numeric_cast_failures() -> TestResult {
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(configure_spark_sql(
+            SessionStateBuilder::new().with_default_features().with_config(
+                SessionConfig::new().with_batch_size(batch_size)))
+            .build());
+        for (sql, cause) in [
+            ("SELECT MAP('a',1,2,2) AS r", "Cannot cast string 'a' to value of Int32 type"),
+            ("SELECT MAP(1,'invalid',2,2) AS r", "Cannot cast string 'invalid' to value of Int32 type"),
+        ] {
+            let query = plan_query(&session, sql, &SparkSqlOptions {
+                ansi_mode: true, ..SparkSqlOptions::default()
+            }).await?;
+            let error = query.create_physical_plan(&session).await
+                .expect_err("MAP must retain its required numeric cast failure");
+            let DataFusionError::ArrowError(arrow::error::ArrowError::CastError(actual), _) =
+                error.find_root() else {
+                    return Err(format!("{sql}: unexpected failure: {error}").into());
+                };
+            assert_eq!(actual, cause, "{sql}, batch={batch_size}");
+        }
+    }
+    Ok(())
+}
