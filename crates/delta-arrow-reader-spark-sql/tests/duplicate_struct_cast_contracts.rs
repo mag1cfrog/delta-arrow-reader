@@ -276,6 +276,18 @@ fn spark_array_merges_list_struct_metadata_and_validates_names() -> TestResult {
     assert_eq!(array.coerce_types(&[left.clone(), right])?, vec![expected.clone(), expected]);
     assert_eq!(array.coerce_types(&[left.clone(), left.clone()])?, vec![left.clone(), left]);
 
+    for (left, right) in [
+        (list(DataType::Int32), list(DataType::Utf8)),
+        (list(DataType::Float32), list(DataType::Int32)),
+        (list(DataType::Float64), list(DataType::Decimal128(10, 2))),
+        (list(DataType::Decimal128(12, 3)), list(DataType::Decimal128(10, 2))),
+        (list(DataType::Struct(vec![Field::new("x", DataType::Utf8, true)].into())),
+            list(DataType::Struct(vec![Field::new("x", DataType::Int32, true)].into()))),
+    ] {
+        let expected = comparison_coercion(&left, &right).ok_or("missing native List coercion")?;
+        assert_eq!(array.coerce_types(&[left, right])?, vec![expected.clone(), expected]);
+    }
+
     let left = DataType::Struct(vec![
         Field::new("a,b", DataType::Int32, true),
         Field::new("c", DataType::Int32, true),
@@ -290,5 +302,27 @@ fn spark_array_merges_list_struct_metadata_and_validates_names() -> TestResult {
     let error = array.coerce_types(&[left, right])
         .expect_err("ARRAY must reject different complete STRUCT name sequences");
     assert!(error.to_string().contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn spark_map_retains_the_struct_admission_error_cause() -> TestResult {
+    use datafusion::execution::SessionStateBuilder;
+    use datafusion::prelude::SessionContext;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build());
+    let error = plan_query(&session,
+        "SELECT MAP('left',NAMED_STRUCT('a,b',CAST(NULL AS INT),'c',CAST(NULL AS INT),'a',11),'right',NAMED_STRUCT('a',21,'b,c',CAST(NULL AS INT),'a',23)) AS r",
+        &SparkSqlOptions::default()).await.err().ok_or("MAP must reject mismatched STRUCT values")?;
+    assert!(error.to_string().contains("[DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES]"));
+    let mut cause = std::error::Error::source(&error);
+    let mut retained_cause = false;
+    while let Some(current) = cause {
+        retained_cause |= current.to_string().starts_with("Execution error: Expect same keys for struct type");
+        cause = current.source();
+    }
+    assert!(retained_cause, "MAP must retain its STRUCT admission error cause: {error:?}");
     Ok(())
 }
