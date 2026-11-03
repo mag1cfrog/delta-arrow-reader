@@ -137,6 +137,7 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 "missing"
                 | "missing_direct"
                 | "missing_deep"
+                | "lambda_field_missing"
                 | "missing_identifier"
                 | "missing_bracket"
                 | "missing_computed"
@@ -159,6 +160,7 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 | "duplicate_case"
                 | "duplicate_bracket"
                 | "duplicate_computed"
+                | "lambda_field_duplicate"
                 | "array_bracket_duplicate"
                 | "duplicate_array_field" => "item",
                 "numeric_string_index" => "1",
@@ -372,6 +374,15 @@ async fn string_array_fields_match_all_30_independent_references() -> TestResult
     compare_cases(
         include_str!("fixtures/struct-field-strings-spark.jsonl"),
         30,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn typed_lambda_fields_match_all_18_public_sql_references() -> TestResult {
+    compare_cases(
+        include_str!("fixtures/struct-field-lambdas-spark.jsonl"),
+        18,
     )
     .await
 }

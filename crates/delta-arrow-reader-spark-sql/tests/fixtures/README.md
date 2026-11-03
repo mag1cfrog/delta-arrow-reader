@@ -2083,7 +2083,13 @@ observations for valid/missing/duplicate array-STRUCT brackets, computed scalar
 extraction and a numeric string array index. Its SHA256 is
 `bc6aa688ca15a86074afbf8599cb41718bccfe7fad4a8e1bcd4f21673bbb4374`.
 Recollect it with `capture_struct_field_strings_spark.py` and a fresh output path.
-All 414 scoped observations run at batch sizes 1 and 32 without case filtering.
+`struct-field-lambdas-spark.jsonl` preserves another 18 public SQL TRANSFORM
+observations for valid case-varied fields, missing children and duplicate
+children. Its SHA256 is
+`62e55e7a75c756dcb7b6b26e2141b19c46c39a215b30931574d8e737e8e2f667`.
+Use `capture_struct_field_lambdas_spark.py` to recollect those controls. The vendor
+unit also checks that unknown lambda parameter types retain deferred resolution.
+All 432 scoped observations run at batch sizes 1 and 32 without case filtering.
 
 ```sh
 python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl

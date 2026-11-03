@@ -698,6 +698,22 @@ mod tests {
                 );
             }
         }
+        let mut state = PlanResolverState::new();
+        let mut scope = state.enter_lambda_scope(vec![("x".into(), None)]);
+        assert_eq!(
+            resolver
+                .resolve_expression_attribute(
+                    ["x", "item"].into(),
+                    false,
+                    &schema,
+                    scope.state(),
+                )?
+                .expr,
+            get_field().call(vec![
+                expr::Expr::LambdaVariable(LambdaVariable::new("x".into(), None)),
+                lit("item"),
+            ]),
+        );
         Ok(())
     }
 }
