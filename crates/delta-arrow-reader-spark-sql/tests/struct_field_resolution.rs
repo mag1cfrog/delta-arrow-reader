@@ -10,7 +10,9 @@ use datafusion::error::DataFusionError;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::{SparkSqlOptions, SparkSqlQuery, configure_spark_sql, plan_query};
+use delta_arrow_reader_spark_sql::{
+    SparkSqlOptions, SparkSqlQuery, configure_spark_sql, plan_query,
+};
 use sail_plan::error::PlanError;
 use serde_json::{Value, json};
 
@@ -66,7 +68,10 @@ fn assert_partition(
     }
     assert_eq!(pending.len(), pending_count);
     assert_eq!(
-        selected_keys.union(&pending).copied().collect::<BTreeSet<_>>(),
+        selected_keys
+            .union(&pending)
+            .copied()
+            .collect::<BTreeSet<_>>(),
         original_lines.keys().copied().collect::<BTreeSet<_>>()
     );
     Ok(())
@@ -195,7 +200,8 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
         }
         "UNRESOLVED_COLUMN.WITH_SUGGESTION" => {
             id == "missing_qualifier"
-                && message == "attribute ObjectName([Identifier(\"missing\"), Identifier(\"id\")]) is missing from the schema: cannot resolve attribute"
+                && message
+                    == "attribute ObjectName([Identifier(\"missing\"), Identifier(\"id\")]) is missing from the schema: cannot resolve attribute"
         }
         _ => false,
     }
@@ -211,9 +217,9 @@ fn planning_conditions_require_the_resolver_cause_and_requested_child() {
         condition,
     ));
     assert!(!matches_planning_error(
-        &DataFusionError::External(Box::new(PlanError::AnalysisError(
-            format!("unrelated text: {message}"),
-        ))),
+        &DataFusionError::External(Box::new(PlanError::AnalysisError(format!(
+            "unrelated text: {message}"
+        ),))),
         "identifier_consumer",
         condition,
     ));
@@ -263,10 +269,12 @@ fn array_index_condition_requires_the_execution_cause() {
     assert!(matches_array_index_error(
         &DataFusionError::Execution(message.into()).context("collect")
     ));
-    assert!(!matches_array_index_error(&DataFusionError::Plan(message.into())));
-    assert!(!matches_array_index_error(
-        &DataFusionError::External(Box::new(std::io::Error::other(message)))
-    ));
+    assert!(!matches_array_index_error(&DataFusionError::Plan(
+        message.into()
+    )));
+    assert!(!matches_array_index_error(&DataFusionError::External(
+        Box::new(std::io::Error::other(message))
+    )));
     assert!(!matches_array_index_error(
         &DataFusionError::Execution("unrelated failure".into()).context(message)
     ));
@@ -307,9 +315,9 @@ async fn compare_cases(source: &str, count: usize) -> TestResult {
                             .err()
                             .map(|error| error.to_string())
                     }
-                    Err(error) if case["phase"] == "execution" => {
-                        Some(format!("expected execution {condition}, planning failed: {error}"))
-                    }
+                    Err(error) if case["phase"] == "execution" => Some(format!(
+                        "expected execution {condition}, planning failed: {error}"
+                    )),
                     Err(error) if matches_planning_error(&error, id, condition) => None,
                     Err(error) => Some(format!("expected planning {condition}, got {error}")),
                     Ok(_) => Some(format!("expected planning {condition}, got a logical plan")),
@@ -368,11 +376,18 @@ async fn known_struct_rejects_all_six_identifier_consumers_during_planning() -> 
 async fn struct_field_resolution_boundaries_match_all_186_independent_references() -> TestResult {
     let source = include_str!("fixtures/struct-field-resolution-spark.jsonl");
     let captured = records(source)?;
-    assert!(captured[0]["spark_build"].as_str().ok_or("missing Spark build")?
-        .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8"));
+    assert!(
+        captured[0]["spark_build"]
+            .as_str()
+            .ok_or("missing Spark build")?
+            .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
+    );
     for (phase, expected_count) in [("success", 71), ("planning", 114), ("execution", 1)] {
         assert_eq!(
-            captured[1..].iter().filter(|case| case["phase"] == phase).count(),
+            captured[1..]
+                .iter()
+                .filter(|case| case["phase"] == phase)
+                .count(),
             expected_count,
         );
     }
@@ -423,7 +438,9 @@ async fn native_snapshot(
 
 #[tokio::test]
 async fn local_resolution_leaves_native_sql_unchanged() -> TestResult {
-    let records = records(include_str!("fixtures/qualified-column-resolution-spark.jsonl"))?;
+    let records = records(include_str!(
+        "fixtures/qualified-column-resolution-spark.jsonl"
+    ))?;
     let native = SessionContext::new();
     let configured = session(2)?;
     for session in [&native, &configured] {
@@ -455,7 +472,10 @@ async fn local_resolution_leaves_native_sql_unchanged() -> TestResult {
                 "{sql}, after_spark={after_spark}"
             );
         }
-        assert_eq!(configured.sql(missing).await.unwrap_err().to_string(), expected_error);
+        assert_eq!(
+            configured.sql(missing).await.unwrap_err().to_string(),
+            expected_error
+        );
     }
     Ok(())
 }

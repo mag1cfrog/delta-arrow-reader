@@ -41,7 +41,8 @@ impl PlanResolver<'_> {
                 .to_string();
             let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field.clone()));
             if let Some(field) = field {
-                expr = Self::resolve_potentially_nested_field(expr, field.data_type(), rest, schema)?;
+                expr =
+                    Self::resolve_potentially_nested_field(expr, field.data_type(), rest, schema)?;
             } else {
                 for part in rest {
                     expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(
@@ -314,7 +315,8 @@ impl PlanResolver<'_> {
                     DataType::Struct(fields) => {
                         let field = Self::resolve_struct_field(fields, name.as_ref())?;
                         let args = vec![expr, lit(field.name().to_string())];
-                        let expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(get_field(), args));
+                        let expr =
+                            expr::Expr::ScalarFunction(ScalarFunction::new_udf(get_field(), args));
                         let native_type;
                         let result_type = if matches!(data_type, DataType::Dictionary(_, _)) {
                             native_type = expr.get_type(schema)?;
@@ -335,7 +337,8 @@ impl PlanResolver<'_> {
                         let DataType::Struct(fields) = field.data_type() else {
                             return Err(PlanError::analysis(format!(
                                 "cannot resolve attribute: [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] field {:?} requires a STRUCT array element, got {}",
-                                name.as_ref(), field.data_type()
+                                name.as_ref(),
+                                field.data_type()
                             )));
                         };
                         let child = Self::resolve_struct_field(fields, name.as_ref())?;
@@ -348,7 +351,9 @@ impl PlanResolver<'_> {
                         let data_type = match data_type {
                             DataType::List(_) => DataType::List(item),
                             DataType::LargeList(_) => DataType::LargeList(item),
-                            DataType::FixedSizeList(_, size) => DataType::FixedSizeList(item, *size),
+                            DataType::FixedSizeList(_, size) => {
+                                DataType::FixedSizeList(item, *size)
+                            }
                             _ => unreachable!("list data type matched above"),
                         };
                         Self::resolve_potentially_nested_field(expr, &data_type, remaining, schema)
@@ -641,7 +646,10 @@ mod tests {
                 )),
                 Some("[FIELD_NOT_FOUND]"),
             ),
-            (Some(DataType::Int32), Some("[INVALID_EXTRACT_BASE_FIELD_TYPE]")),
+            (
+                Some(DataType::Int32),
+                Some("[INVALID_EXTRACT_BASE_FIELD_TYPE]"),
+            ),
         ] {
             let mut state = PlanResolverState::new();
             let outer_field = Arc::new(Field::new(
@@ -697,15 +705,11 @@ mod tests {
         let schema = Arc::new(DFSchema::empty());
         for (data_type, condition) in [
             (
-                DataType::Struct(
-                    vec![Arc::new(Field::new("Item", DataType::Int32, true))].into(),
-                ),
+                DataType::Struct(vec![Arc::new(Field::new("Item", DataType::Int32, true))].into()),
                 None,
             ),
             (
-                DataType::Struct(
-                    vec![Arc::new(Field::new("other", DataType::Int32, true))].into(),
-                ),
+                DataType::Struct(vec![Arc::new(Field::new("other", DataType::Int32, true))].into()),
                 Some("[FIELD_NOT_FOUND]"),
             ),
             (
@@ -747,12 +751,7 @@ mod tests {
         let mut scope = state.enter_lambda_scope(vec![("x".into(), None)]);
         assert_eq!(
             resolver
-                .resolve_expression_attribute(
-                    ["x", "item"].into(),
-                    false,
-                    &schema,
-                    scope.state(),
-                )?
+                .resolve_expression_attribute(["x", "item"].into(), false, &schema, scope.state(),)?
                 .expr,
             get_field().call(vec![
                 expr::Expr::LambdaVariable(LambdaVariable::new("x".into(), None)),
