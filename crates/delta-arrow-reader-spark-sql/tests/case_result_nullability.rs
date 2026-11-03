@@ -187,6 +187,15 @@ async fn case_common_types_preserve_live_nested_metadata_and_refinement() -> Tes
 }
 
 #[tokio::test]
+async fn case_dynamic_common_fields_and_ordered_references_match_spark() -> TestResult {
+    assert_case_schema_stages_and_rows(
+        include_str!("fixtures/case-result-nullability-dynamic-common-spark.jsonl"),
+        20,
+        "CASE_721_DYNAMIC_COMMON_OBSERVATION",
+    ).await
+}
+
+#[tokio::test]
 async fn case_results_preserve_required_subquery_preparation() -> TestResult {
     assert_case_schema_stages_and_rows(
         include_str!("fixtures/case-result-nullability-true-subquery-spark.jsonl"),
