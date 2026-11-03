@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_KEY};
 use datafusion::arrow::compute::can_cast_types;
-use datafusion::arrow::datatypes::{DataType, FieldRef, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion::prelude::SessionContext;
 use datafusion_common::metadata::FieldMetadata;
@@ -34,6 +34,16 @@ use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Expr {
     set_result_metadata(expression, vec![])
+}
+
+pub(crate) fn clear_inherited_field_metadata(field: &mut Field) {
+    // Spark drops user metadata on derived values; Arrow extensions describe their type.
+    field.metadata_mut().retain(|key, _| {
+        matches!(
+            key.as_str(),
+            EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
+        )
+    });
 }
 
 pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr) -> expr::Expr {
@@ -117,13 +127,7 @@ struct SparkResultMetadata {
 impl SparkResultMetadata {
     fn annotate_field(&self, value: &FieldRef) -> FieldRef {
         let mut field = value.as_ref().clone().with_name(self.name());
-        // Spark drops user metadata on derived values; Arrow extensions describe their type.
-        field.metadata_mut().retain(|key, _| {
-            matches!(
-                key.as_str(),
-                EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
-            )
-        });
+        clear_inherited_field_metadata(&mut field);
         field.metadata_mut().extend(self.metadata.to_hashmap());
         Arc::new(field)
     }
