@@ -1,4 +1,4 @@
-//! Duplicate STRUCT widening preserves exact Spark fields and positional values.
+//! STRUCT casts and constructor declarations preserve exact Spark fields and values.
 
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -25,6 +25,26 @@ async fn duplicate_struct_casts_match_spark() -> TestResult {
             .join("tests/fixtures/duplicate-struct-casts-spark.jsonl"),
         std::path::PathBuf::from,
     );
+    constructor_cases_match_spark(reference,
+        std::env::var_os("DAR_DUPLICATE_STRUCT_CASTS_OUTPUT"), 68).await
+}
+
+#[tokio::test]
+async fn array_struct_declarations_match_spark() -> TestResult {
+    let reference = std::env::var_os("DAR_ARRAY_STRUCT_DECLARATIONS_REFERENCE").map_or_else(
+        || std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/array-struct-declarations-spark.jsonl"),
+        std::path::PathBuf::from,
+    );
+    constructor_cases_match_spark(reference,
+        std::env::var_os("DAR_ARRAY_STRUCT_DECLARATIONS_OUTPUT"), 54).await
+}
+
+async fn constructor_cases_match_spark(
+    reference: std::path::PathBuf,
+    output_path: Option<std::ffi::OsString>,
+    expected_cases: usize,
+) -> TestResult {
     let raw = std::fs::read_to_string(reference)?;
     let records = raw.lines().map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
@@ -32,7 +52,7 @@ async fn duplicate_struct_casts_match_spark() -> TestResult {
     assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
     assert_eq!(records[0]["timezone"], "UTC");
     assert_eq!(records[0]["map_encoding"], "entry_pairs");
-    assert_eq!(records.len() - 1, 68);
+    assert_eq!(records.len() - 1, expected_cases);
     let mut identities = BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((case["id"].as_str().ok_or("missing ID")?,
@@ -40,7 +60,7 @@ async fn duplicate_struct_casts_match_spark() -> TestResult {
             case["ansi"].as_bool().ok_or("missing ANSI")?)));
         assert!(case.get("expected").is_some() ^ case.get("error").is_some());
     }
-    let mut output = std::env::var_os("DAR_DUPLICATE_STRUCT_CASTS_OUTPUT")
+    let mut output = output_path
         .map(|path| std::fs::OpenOptions::new().write(true).create_new(true).open(path))
         .transpose()?;
     let mut differences = Vec::new();
@@ -120,7 +140,7 @@ async fn duplicate_struct_casts_match_spark() -> TestResult {
             comparisons += 1;
         }
     }
-    assert_eq!(comparisons, 136);
+    assert_eq!(comparisons, expected_cases * 2);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
