@@ -31,7 +31,10 @@ fn references() -> TestResult<Vec<Value>> {
     assert_eq!(records.len() - 1, 74);
     for (fixture, count) in [
         (include_str!("fixtures/case-nested-pruning-spark.jsonl"), 22),
-        (include_str!("fixtures/case-nested-numeric-pruning-spark.jsonl"), 2),
+        (
+            include_str!("fixtures/case-nested-numeric-pruning-spark.jsonl"),
+            2,
+        ),
     ] {
         let supplement = fixture
             .lines()

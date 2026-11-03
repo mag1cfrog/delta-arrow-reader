@@ -1693,7 +1693,10 @@ impl Prepare {
                 if empty.produce_one_row
                     && empty.schema.fields().is_empty()
                     && self.props.config_options.as_ref().is_some_and(|options| {
-                        options.extensions.get::<SparkSqlExpressionSemantics>().is_some()
+                        options
+                            .extensions
+                            .get::<SparkSqlExpressionSemantics>()
+                            .is_some()
                     }) =>
             {
                 RecordBatch::try_new_with_options(
