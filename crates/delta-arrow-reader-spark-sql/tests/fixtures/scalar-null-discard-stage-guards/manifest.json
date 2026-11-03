@@ -43,7 +43,7 @@
   "deferred_dependencies": {
     "window_output_names": "fix/spark-window-labels at bccf123e984d37d51841dc59dd307b13f6eec043 (#727)",
     "scalar_subquery_names": "fix/spark-scalar-subquery-names at 963f5d625619622ea7609129005d48f4a850daf2 (#749); root name repair a4325ea4bd29b72887e93c39c16730ff01eb4583",
-    "pivot_single_column_parser": "Separate parser repair needed for generated-alias bare FOR k; original parenthesized pivot tests already exercise resolver behavior.",
+    "pivot_single_column_parser": "fix/spark-pivot-source-alias at 796f6d63d0a3d574087110cf04c123fb969dc7f7; bare FOR k repair 7879f69f28cce9c9debd40ae7b521b4539bfb23b (rebased successor 42dede94). Reuse owner repair; no product edit in this follow-up.",
     "CASE_declarations": "#721 owns nested nullability and hidden-projection declaration failures.",
     "ARRAY_MAP_admission": "#827 owns constructor admission and SparkStructRename."
   }
