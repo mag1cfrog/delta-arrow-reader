@@ -2227,6 +2227,26 @@ fn exact_integer_predicates_match_explicit_double_coercion() -> PlanResult<()> {
 
 #[cfg(test)]
 #[test]
+fn metadata_annotations_preserve_expression_placement() {
+    use datafusion_expr::ExpressionPlacement;
+
+    let annotation = SparkResultMetadata {
+        metadata: FieldMetadata::default(),
+        lifetime: ResultMetadataLifetime::Permanent,
+        metadata_source_type: None,
+    };
+    for placement in [
+        ExpressionPlacement::Literal,
+        ExpressionPlacement::Column,
+        ExpressionPlacement::MoveTowardsLeafNodes,
+        ExpressionPlacement::KeepInPlace,
+    ] {
+        assert_eq!(annotation.placement(&[placement]), placement);
+    }
+}
+
+#[cfg(test)]
+#[test]
 fn metadata_value_analysis_uses_implementation_identity() {
     use datafusion_expr::{col, create_udf};
 

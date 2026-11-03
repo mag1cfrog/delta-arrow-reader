@@ -1288,6 +1288,112 @@ async fn hidden_projection_compatibility_matches_exact_spark_stages() -> TestRes
 }
 
 #[tokio::test]
+async fn hidden_order_columns_preserve_recorded_comparison_rows() -> TestResult {
+    use arrow::array::AsArray;
+    use arrow::datatypes::{DataType, TimestampMicrosecondType};
+
+    let cases = include_str!("fixtures/nullif-types-spark.jsonl")
+        .lines()
+        .chain(include_str!("fixtures/conditional-spark.jsonl").lines())
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|case| {
+            matches!(
+                case["id"].as_str(),
+                Some("int_double_columns" | "ifnull_timestamp_column" | "nvl_date_column")
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 10);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        for case in &cases {
+            let sql = case["sql"].as_str().ok_or("missing SQL")?;
+            assert!(sql.ends_with("ORDER BY k"));
+            let query = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: case["timezone"].as_str().unwrap_or("UTC").into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let public = capture_schema(
+                query.logical_plan.schema().fields(),
+                Some(&query.column_names),
+            )?;
+            let physical = query.create_physical_plan(&session).await?;
+            let schema = physical.schema();
+            let executed = capture_schema(schema.fields(), None)?;
+            for field in schema.fields() {
+                if let DataType::Timestamp(_, Some(timezone)) = field.data_type() {
+                    assert_eq!(
+                        timezone.as_ref(),
+                        case["timezone"].as_str().unwrap_or("UTC")
+                    );
+                }
+            }
+            let mut rows = Vec::new();
+            for batch in collect(physical, session.task_ctx()).await? {
+                validate_batch(schema.as_ref(), &batch)?;
+                for row in 0..batch.num_rows() {
+                    rows.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|column| {
+                                if !column.is_null(row)
+                                    && matches!(column.data_type(), DataType::Timestamp(..))
+                                {
+                                    Ok(json!(
+                                        column
+                                            .as_primitive::<TimestampMicrosecondType>()
+                                            .value(row)
+                                            .to_string()
+                                    ))
+                                } else {
+                                    encode_value(column.as_ref(), row)
+                                }
+                            })
+                            .collect::<TestResult<Vec<_>>>()?,
+                    );
+                }
+            }
+            if public != case["expected"]["schema"]
+                || executed != case["expected"]["schema"]
+                || json!(rows) != case["expected"]["rows"]
+            {
+                differences.push(format!(
+                    "{} ANSI={} timezone={} batch={batch_size}: expected {}, got {}",
+                    case["id"],
+                    case["ansi"],
+                    case["timezone"],
+                    case["expected"],
+                    json!({"public_schema":public,"physical_schema":executed,"rows":rows})
+                ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn case_comparison_matches_exact_spark_stages() -> TestResult {
     replay_alias_schema_stages(
         include_str!("fixtures/correlated-scalar-metadata-stages/case-comparison/case-equal-spark.jsonl"),
