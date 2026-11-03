@@ -268,6 +268,7 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Int32 => json!("integer"),
         DataType::Int64 => json!("long"),
         DataType::Boolean => json!("boolean"),
+        DataType::Date32 => json!("date"),
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
         DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
