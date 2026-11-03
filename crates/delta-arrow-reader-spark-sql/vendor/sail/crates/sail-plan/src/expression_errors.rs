@@ -35,12 +35,10 @@ use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
 };
-use sail_function::scalar::spark_decimal_cast::{
-    DecimalCastMode, SparkDecimalCast,
-};
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
+use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 
 /// Preserve early expression errors before NULL and empty-result rewrites.
 #[derive(Debug)]

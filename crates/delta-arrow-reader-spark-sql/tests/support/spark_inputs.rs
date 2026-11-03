@@ -79,8 +79,12 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
         }
         DataType::Int64 => ScalarValue::Int64(Some(value.as_str().ok_or("missing long")?.parse()?)),
         DataType::Decimal128(precision, scale) => ScalarValue::Decimal128(
-            Some(arrow::compute::kernels::cast_utils::parse_decimal::<Decimal128Type>(
-                value.as_str().ok_or("missing Decimal value")?, *precision, *scale,
+            Some(arrow::compute::kernels::cast_utils::parse_decimal::<
+                Decimal128Type,
+            >(
+                value.as_str().ok_or("missing Decimal value")?,
+                *precision,
+                *scale,
             )?),
             *precision,
             *scale,

@@ -14,7 +14,10 @@ use serde_json::{Value, json};
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 /// Observe native schemas, rows and the exact failure phase, including expected errors.
-#[allow(dead_code, reason = "Integration tests select individual shared observers.")]
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared observers."
+)]
 pub(crate) async fn capture_native_query_observation(
     session: &SessionContext,
     sql: &str,
@@ -42,17 +45,24 @@ pub(crate) async fn capture_native_query_observation(
         for batch in batches {
             validate_batch(schema.as_ref(), &batch)?;
             for row in 0..batch.num_rows() {
-                rows.push(batch.columns().iter().map(|column|
-                    encode_value(column.as_ref(), row)
-                ).collect::<TestResult<Vec<_>>>()?);
+                rows.push(
+                    batch
+                        .columns()
+                        .iter()
+                        .map(|column| encode_value(column.as_ref(), row))
+                        .collect::<TestResult<Vec<_>>>()?,
+                );
             }
         }
         rows.sort_by_key(|row| json!(row).to_string());
         Ok(rows)
-    }.await;
-    Ok(json!({"public_schema":public,"before_collect":before,"physical_schema":executed,
+    }
+    .await;
+    Ok(
+        json!({"public_schema":public,"before_collect":before,"physical_schema":executed,
         "rows":result.as_ref().ok(),"error":result.as_ref().err().map(ToString::to_string),
-        "phase":phase}))
+        "phase":phase}),
+    )
 }
 
 pub(crate) async fn capture_spark_query_result(
@@ -101,7 +111,10 @@ pub(crate) async fn capture_spark_query_observation(
 }
 
 /// Compare exact recorded stages, complete rows, and the required engine error phase.
-#[allow(dead_code, reason = "Integration tests select individual shared observers.")]
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared observers."
+)]
 pub(crate) async fn compare_exact_spark_query_stages(
     session: &SessionContext,
     case: &Value,
@@ -132,9 +145,7 @@ pub(crate) async fn compare_exact_spark_query_stages(
         phase = "create_physical_plan";
         let physical = query.create_physical_plan(session).await?;
         phase = "physical_schema";
-        before = Some(capture_schema(
-            physical.schema().fields(), None,
-        )?);
+        before = Some(capture_schema(physical.schema().fields(), None)?);
         let batches = collect(physical.clone(), session.task_ctx()).await;
         phase = "executed_schema";
         let schema = physical.schema();
@@ -157,14 +168,19 @@ pub(crate) async fn compare_exact_spark_query_stages(
         }
         rows.sort_by_key(|row| json!(row).to_string());
         Ok(rows)
-    }.await;
-    let public_matches = case["schema_stages"].get("analyzed")
+    }
+    .await;
+    let public_matches = case["schema_stages"]
+        .get("analyzed")
         .is_none_or(|expected| public.as_ref() == Some(expected));
-    let before_matches = case["schema_stages"].get("executed_before_collect")
+    let before_matches = case["schema_stages"]
+        .get("executed_before_collect")
         .is_none_or(|expected| before.as_ref() == Some(expected));
-    let executed_matches = case["schema_stages"].get("executed")
+    let executed_matches = case["schema_stages"]
+        .get("executed")
         .is_none_or(|expected| executed.as_ref() == Some(expected));
-    let rows_match = case["expected"].get("rows")
+    let rows_match = case["expected"]
+        .get("rows")
         .is_none_or(|expected| actual.as_ref().is_ok_and(|rows| json!(rows) == *expected));
     let error_matches = if let Some(condition) = case["expected"]["condition"].as_str() {
         let expected_phase = match case["spark_error_phase"].as_str() {
@@ -174,14 +190,16 @@ pub(crate) async fn compare_exact_spark_query_stages(
             Some("collect") => "collect",
             other => return Err(format!("unsupported reference error phase: {other:?}").into()),
         };
-        phase == expected_phase && actual.as_ref().err().is_some_and(|error| {
-            error.to_string().contains(&format!("[{condition}]"))
-        })
+        phase == expected_phase
+            && actual
+                .as_ref()
+                .err()
+                .is_some_and(|error| error.to_string().contains(&format!("[{condition}]")))
     } else {
         actual.is_ok()
     };
-    let matches = public_matches && before_matches && executed_matches
-        && rows_match && error_matches;
+    let matches =
+        public_matches && before_matches && executed_matches && rows_match && error_matches;
     Ok(json!({
         "public_schema":public, "before_collect":before, "physical_schema":executed,
         "rows":actual.as_ref().ok(), "native_phase":phase,

@@ -13,14 +13,14 @@ use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
-use sail_function::scalar::spark_decimal_cast::{
-    DecimalCastMode, SparkDecimalCast, decimal_cast_can_overflow,
-};
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
+};
+use sail_function::scalar::spark_decimal_cast::{
+    DecimalCastMode, SparkDecimalCast, decimal_cast_can_overflow,
 };
 use sail_function::scalar::spark_struct_rename::SparkStructRename;
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
@@ -297,9 +297,13 @@ impl PlanResolver<'_> {
             (DataType::Decimal128(_, _) | DataType::Decimal256(_, _), to, is_try)
                 if to.is_signed_integer() =>
             {
-                let mode = if is_try { DecimalCastMode::Try }
-                    else if self.config.ansi_mode { DecimalCastMode::Ansi }
-                    else { DecimalCastMode::Legacy };
+                let mode = if is_try {
+                    DecimalCastMode::Try
+                } else if self.config.ansi_mode {
+                    DecimalCastMode::Ansi
+                } else {
+                    DecimalCastMode::Legacy
+                };
                 ScalarUDF::from(SparkDecimalCast::to_integer(to, mode)?).call(vec![expr])
             }
             (_, to, true) => try_cast(expr, to),
