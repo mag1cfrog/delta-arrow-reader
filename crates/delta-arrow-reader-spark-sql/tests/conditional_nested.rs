@@ -14,7 +14,7 @@ use spark_results::TestResult;
 
 #[tokio::test]
 async fn nested_conditional_results_match_spark() -> TestResult {
-    let records = include_str!("fixtures/conditional-nested-spark.jsonl")
+    let mut records = include_str!("fixtures/conditional-nested-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
@@ -24,6 +24,14 @@ async fn nested_conditional_results_match_spark() -> TestResult {
         "32f7299601108917fb01920a54e084595b7b3bf8"
     );
     assert_eq!(records.len() - 1, 12);
+    let supplement = include_str!("fixtures/conditional-nested-supplement-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(supplement.len() - 1, 110);
+    assert_eq!(supplement[0]["spark_revision"], records[0]["spark_revision"]);
+    assert_eq!(supplement[0]["inputs"], records[0]["inputs"]);
+    records.extend(supplement.into_iter().skip(1));
     let mut identities = std::collections::BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -69,6 +77,12 @@ async fn nested_conditional_results_match_spark() -> TestResult {
                             .contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]") => {}
                     Err(error) => failures.push(format!("{label}: wrong analysis error: {error}")),
                     Ok(_) => failures.push(format!("{label}: incompatible fields passed analysis")),
+                }
+            } else if case["expected"]["condition"] == "CAST_INVALID_INPUT" {
+                match spark_results::capture_spark_query_observation(&session, case).await {
+                    Err(error) if error.to_string().contains("[CAST_INVALID_INPUT]") => {}
+                    Err(error) => failures.push(format!("{label}: wrong conversion error: {error}")),
+                    Ok(actual) => failures.push(format!("{label}: invalid conversion returned {actual}")),
                 }
             } else {
                 match spark_results::capture_spark_query_observation(&session, case).await {
