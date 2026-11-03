@@ -1,0 +1,79 @@
+{
+  "group": "case-nested-pruned-numeric-coercion-721",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "case_nested_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-1"
+        ],
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "case_nested_null",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "case_nested_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "case_count": 1,
+  "observations": 2,
+  "cases": [
+    {
+      "id": "array_numeric_pruned_value_coercion",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN FALSE THEN ARRAY(CAST(2 AS BIGINT)) ELSE ARRAY(id) END AS r FROM case_nested_mixed"
+    }
+  ]
+}

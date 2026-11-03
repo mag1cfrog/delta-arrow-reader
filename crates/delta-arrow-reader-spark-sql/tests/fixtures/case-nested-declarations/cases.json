@@ -1,0 +1,259 @@
+{
+  "group": "case-nested-result-fields-721",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "case_nested_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-1"
+        ],
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "case_nested_null",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "case_nested_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "case_count": 37,
+  "observations": 74,
+  "cases": [
+    {
+      "id": "array_bool_true",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(CAST(NULL AS BOOLEAN)) ELSE ARRAY(TRUE) END AS r"
+    },
+    {
+      "id": "array_bool_false",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN ARRAY(CAST(NULL AS BOOLEAN)) ELSE ARRAY(TRUE) END AS r"
+    },
+    {
+      "id": "array_bool_null",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN ARRAY(CAST(NULL AS BOOLEAN)) ELSE ARRAY(TRUE) END AS r"
+    },
+    {
+      "id": "array_bool_column",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(TRUE) ELSE ARRAY(CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_mixed"
+    },
+    {
+      "id": "array_bool_column",
+      "input": "case_nested_null",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(TRUE) ELSE ARRAY(CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_null"
+    },
+    {
+      "id": "array_bool_column",
+      "input": "case_nested_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(TRUE) ELSE ARRAY(CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_empty"
+    },
+    {
+      "id": "array_date_true",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(CAST(NULL AS DATE)) ELSE ARRAY(DATE '2024-02-29') END AS r"
+    },
+    {
+      "id": "array_date_false",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN ARRAY(CAST(NULL AS DATE)) ELSE ARRAY(DATE '2024-02-29') END AS r"
+    },
+    {
+      "id": "array_date_null",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN ARRAY(CAST(NULL AS DATE)) ELSE ARRAY(DATE '2024-02-29') END AS r"
+    },
+    {
+      "id": "array_date_column",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(DATE '2024-02-29') ELSE ARRAY(CAST(NULL AS DATE)) END AS r FROM case_nested_mixed"
+    },
+    {
+      "id": "array_date_column",
+      "input": "case_nested_null",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(DATE '2024-02-29') ELSE ARRAY(CAST(NULL AS DATE)) END AS r FROM case_nested_null"
+    },
+    {
+      "id": "array_date_column",
+      "input": "case_nested_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(DATE '2024-02-29') ELSE ARRAY(CAST(NULL AS DATE)) END AS r FROM case_nested_empty"
+    },
+    {
+      "id": "struct_bool_true",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) ELSE NAMED_STRUCT('leaf', TRUE) END AS r"
+    },
+    {
+      "id": "struct_bool_false",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) ELSE NAMED_STRUCT('leaf', TRUE) END AS r"
+    },
+    {
+      "id": "struct_bool_null",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) ELSE NAMED_STRUCT('leaf', TRUE) END AS r"
+    },
+    {
+      "id": "struct_bool_column",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('leaf', TRUE) ELSE NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_mixed"
+    },
+    {
+      "id": "struct_bool_column",
+      "input": "case_nested_null",
+      "sql": "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('leaf', TRUE) ELSE NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_null"
+    },
+    {
+      "id": "struct_bool_column",
+      "input": "case_nested_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('leaf', TRUE) ELSE NAMED_STRUCT('leaf', CAST(NULL AS BOOLEAN)) END AS r FROM case_nested_empty"
+    },
+    {
+      "id": "nested_array_bool_true",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN NAMED_STRUCT('items', ARRAY(ARRAY(CAST(NULL AS BOOLEAN)))) ELSE NAMED_STRUCT('items', ARRAY(ARRAY(TRUE))) END AS r"
+    },
+    {
+      "id": "nested_array_bool_false",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN NAMED_STRUCT('items', ARRAY(ARRAY(CAST(NULL AS BOOLEAN)))) ELSE NAMED_STRUCT('items', ARRAY(ARRAY(TRUE))) END AS r"
+    },
+    {
+      "id": "nested_array_bool_null",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN NAMED_STRUCT('items', ARRAY(ARRAY(CAST(NULL AS BOOLEAN)))) ELSE NAMED_STRUCT('items', ARRAY(ARRAY(TRUE))) END AS r"
+    },
+    {
+      "id": "nested_array_bool_column",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('items', ARRAY(ARRAY(TRUE))) ELSE NAMED_STRUCT('items', ARRAY(ARRAY(CAST(NULL AS BOOLEAN)))) END AS r FROM case_nested_mixed"
+    },
+    {
+      "id": "nested_array_bool_column",
+      "input": "case_nested_null",
+      "sql": "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('items', ARRAY(ARRAY(TRUE))) ELSE NAMED_STRUCT('items', ARRAY(ARRAY(CAST(NULL AS BOOLEAN)))) END AS r FROM case_nested_null"
+    },
+    {
+      "id": "nested_array_bool_column",
+      "input": "case_nested_empty",
+      "sql": "SELECT CASE WHEN id=0 THEN NAMED_STRUCT('items', ARRAY(ARRAY(TRUE))) ELSE NAMED_STRUCT('items', ARRAY(ARRAY(CAST(NULL AS BOOLEAN)))) END AS r FROM case_nested_empty"
+    },
+    {
+      "id": "array_bool_missing_else_true",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(TRUE) END AS r"
+    },
+    {
+      "id": "array_bool_missing_else_false",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN ARRAY(TRUE) END AS r"
+    },
+    {
+      "id": "array_bool_missing_else_null",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN ARRAY(TRUE) END AS r"
+    },
+    {
+      "id": "array_date_missing_else_true",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(DATE '2024-02-29') END AS r"
+    },
+    {
+      "id": "array_date_missing_else_false",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN ARRAY(DATE '2024-02-29') END AS r"
+    },
+    {
+      "id": "array_date_missing_else_null",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN ARRAY(DATE '2024-02-29') END AS r"
+    },
+    {
+      "id": "array_bool_required_then",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(TRUE) ELSE ARRAY(CAST(NULL AS BOOLEAN)) END AS r"
+    },
+    {
+      "id": "array_date_required_then",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(DATE '2024-02-29') ELSE ARRAY(CAST(NULL AS DATE)) END AS r"
+    },
+    {
+      "id": "array_bool_nested_case",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN CASE WHEN id IS NULL THEN ARRAY(CAST(NULL AS BOOLEAN)) ELSE ARRAY(TRUE) END ELSE ARRAY(FALSE) END AS r FROM case_nested_mixed"
+    },
+    {
+      "id": "array_numeric_value_coercion",
+      "input": "case_nested_mixed",
+      "sql": "SELECT CASE WHEN id=0 THEN ARRAY(1) ELSE ARRAY(CAST(2 AS BIGINT)) END AS r FROM case_nested_mixed"
+    },
+    {
+      "id": "required_condition_error",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN CAST('bad' AS BOOLEAN) THEN ARRAY(TRUE) ELSE ARRAY(FALSE) END AS r"
+    },
+    {
+      "id": "required_result_error",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN TRUE THEN ARRAY(CAST('bad' AS INT)) ELSE ARRAY(1) END AS r"
+    },
+    {
+      "id": "dead_result_error",
+      "input": "literal",
+      "sql": "SELECT CASE WHEN FALSE THEN ARRAY(CAST('bad' AS INT)) ELSE ARRAY(1) END AS r"
+    }
+  ]
+}
