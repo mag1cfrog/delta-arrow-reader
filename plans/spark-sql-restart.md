@@ -7,23 +7,47 @@ has been reviewed. Publish the final support contract separately.
 
 ## Current slice
 
-### Parallel execution and review
+### Core delivery order
 
-The current batch completes window output names (#727) and floating MIN/MAX
-(#730), with the remaining dependencies recorded below. Sol/xhigh implementers
-own isolated worktrees. Available agent slots take independent implementation,
-analysis or review tasks; a task need not occupy an entire issue. The coordinator
-schedules all Rust builds and Spark captures serially, reconciles integration,
-and owns this plan. New clean-context Sol/xhigh agents independently review each
-completed change. Review findings return to the implementation owner. Each issue
-keeps its own staging PR.
+The current delivery sequence is #824, #816, #710, then #818. The staging base
+for this rescope is `c3eb810caca0e7b378ae0464953f225f6b0dfc58`.
 
-The current session permits three active workers plus the coordinator. Fill a
-free slot when useful independent work is ready; do not start duplicate builds
-or overlapping edits to keep workers busy. Remove owned worktrees, merged
-branches and temporary output after integration. Keep required reference and
-review evidence, and check build artifacts separately because they dominate
-disk use.
+| Issue | Merge contract | Remaining code prerequisite |
+| --- | --- | --- |
+| #824 | SQL MAP container nullability, including direct/scalar/lambda consumers; preserve nullable values, constructor errors, explicit casts and other MAP constructors. | None. Port the constructor-only override to current staging. |
+| #816 | Original folded MAP lambda and NULL-element control, provider inputs and binding guards, delivered by the constructor root repair. | #824. No general lambda simplifier is planned. |
+| #710 | Ordinary projection/aggregate generated metadata and its existing consumers; preserve fields, values and error/evaluation behavior. | None. #803 is already merged through #817. |
+| #818 | Original correlated scalar metadata stages plus containment of its introduced MAP, CASE and hidden ORDER BY regressions. | #710's annotation and projection implementation. |
+
+Each slice must satisfy its original contract and pass the full existing
+standalone workspace regression suite, formatting and package Clippy on the
+final source. New failures, lost values/fields, invalid declarations, changed
+required errors or output reordering block delivery. A broader compatibility
+capture remains useful evidence, but an unchanged failure owned by another
+issue is not automatically a prerequisite. Retain complete Spark, baseline and
+candidate records, including the failure and its owner. Do not change fixtures,
+weaken assertions or call a partial comparison complete parity.
+
+#721, #828 and #836/#840/#843 remain unfinished and their source/evidence is
+preserved. Do not expand them during this core sequence unless a paired result
+shows a necessary dependency or a regression introduced by the current slice.
+C06 Strings/binary (#174/#151) remains assigned to the other Mac.
+
+Sol/xhigh authors work in isolated worktrees. The coordinator serializes Rust
+builds and Spark captures through one shared target, reconciles integration and
+maintains current state. A fresh clean-context Sol/xhigh reviewer applies the
+latest Bulletproof Review to each completed slice. Each issue keeps a focused
+PR into `feat/spark-sql-staging`; local Linux validation is required, while hosted
+three-platform checks remain periodic checkpoints. Remove merged worktrees,
+branches and temporary execution overlays, preserving necessary evidence and
+unfinished work.
+
+The last successful three-platform checkpoint is `fea63565`, run 41671391571.
+The current staging base has four later merges, so that checkpoint is not
+validation of the current head. Reports should identify which core dependency
+was removed, what original acceptance remains, and the next blocking action.
+
+### Earlier deliveries and retained evidence
 
 ### Completed S04 nested windows, ordering and metadata
 

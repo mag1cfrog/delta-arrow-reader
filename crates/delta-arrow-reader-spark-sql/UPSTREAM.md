@@ -594,8 +594,20 @@ resolution. The [field-resolution references](tests/fixtures/README.md#struct-fi
 check these boundaries, complete public results, actual physical/batch validity
 and native SQL isolation through 442 Spark observations and 32 dictionary
 provider configurations. The broader #762 qualification/PIVOT and #757 naming
-acceptances remain open. Ordinary NULL extraction remains under #815; the
-nonnullable literal Map lambda's physical-planning mismatch remains under #816.
+acceptances remain open. Ordinary NULL extraction has its separate #815 tests.
+
+### MAP constructor declarations
+
+SQL MAP opts into a nonnullable result container in SparkMapFromArrays because
+it constructs both temporary arrays. The adapter clones the delegate field and
+changes only outer nullability. Native array coercion, value-nullability casts,
+duplicate-key errors and runtime validation retain their existing behavior.
+MAP_FROM_ARRAYS and map_concat use the default nullable-input contract;
+MAP_FROM_ENTRIES and explicit SQL CAST keep their separate declarations.
+The [constructor references](tests/fixtures/README.md#map-constructor-root)
+cover the original folded-Map lambda from #816 and its NULL-element control.
+Generated names, metadata stages and nested capture positions retain their
+separate issue ownership.
 
 ### FLATTEN declarations
 

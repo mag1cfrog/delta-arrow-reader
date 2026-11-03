@@ -2195,7 +2195,9 @@ four ordinary NULL extraction records owned by #815 and two nonnullable literal
 Map records owned by #816. The latter baseline fails physical planning; it is
 not a passing runtime control. Both issues remain children of #156. The partition
 assertion retains every raw line. The #815 suite below actively replays its four
-records; the two Map observations remain a separate pending #816 obligation.
+records; the two Map observations retain separate #816 ownership. The
+[MAP constructor root replay](#map-constructor-root) checks their original
+constant-Map query and the actual NULL-element control.
 Use `capture_struct_extraction_boundaries_review_v3_spark.py` to recollect the
 complete reference, including those pending cases.
 
@@ -2252,7 +2254,7 @@ column uses the NULL-tolerant path in
 
 `struct-extraction-boundaries-815-spark.jsonl` copies the original header and all
 four ordinary NULL record lines unchanged. The partition assertion preserves
-the original ten #803 records, four #815 records and two pending #816 Map
+the original ten #803 records, four #815 records and two #816 Map
 records. The full original capture and existing #803 partition remain intact.
 Native SQL controls compare complete logical/physical declarations, returned
 batches and failure causes before Spark configuration and before/after a Spark
@@ -2405,3 +2407,40 @@ ListView and LargeListView, full arrays, nonzero slices and zero-length slices.
 It checks every outer, inner and element nullability combination, exact leaf
 metadata, actual NULL representation and values. Constant STRUCT parent fields
 depend on the separate #849 prerequisite described above.
+
+
+## MAP constructor root
+
+`map-constructor-nullability-spark.jsonl` preserves all 102 original Spark
+4.2.0 records, including both ANSI modes and mixed, NULL-only and empty
+providers. Its SHA256 is
+`a884ad1e932b9419ce2ffacd2e8969588d0843bc1129665e621cab6de1c4c468`.
+`folded-map-lambda-816-core-spark.jsonl` preserves the four exact original and
+NULL-element records, with their original header, from the 92-record #816
+capture. Its SHA256 is
+`a6e1d0d08fe0ae80db67d319c4626bf11cb572612b07703ecc00fafc030adb3b`.
+`map-constructor-root-provenance.json` pins the Spark revision, source commits,
+capture sources and unchanged reference hashes. The original captures remain
+available at those commits; no expected field or row was rewritten.
+
+`map_constructor_root.rs` checks complete direct-constructor, ARRAY/STRUCT,
+Map-value, provider TRANSFORM and MAP_FROM_ARRAYS/ENTRIES fields and rows at
+batch sizes 1 and 32. It also checks complete fields and exact `[1]` and
+`[1,NULL]` results for the original #816 queries. The scalar test checks public
+fields, rows, executed type and outer nullability after the one-row proof;
+complete executed metadata remains recorded in the full external replay under
+#710/#818. Separate controls preserve actual NULL input constructors, explicit
+CAST value declarations, empty and multirow scalars, typed duplicate/numeric
+errors and native array schemas/rows. A constructor unit test compares default
+and opt-in fields, including nullable values and duplicate nested STRUCT names.
+
+The full 102-record reference includes metadata and hidden ORDER BY cases that
+remain owned separately. External paired replay retains every observation;
+this focused target does not claim complete metadata or 92-record lambda
+parity. Nested capture positions, collection-size fields and generated Map-key
+names remain owned by #821, #822 and #823.
+
+```sh
+cargo test --locked --workspace --test map_constructor_root
+cargo test --locked --workspace -p sail-function --lib constructed_map_refines_only_outer_nullability
+```
