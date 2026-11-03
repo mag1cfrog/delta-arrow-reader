@@ -9,6 +9,9 @@ use arrow::datatypes::{DataType, Field, Fields};
 use datafusion::common::ScalarValue;
 use datafusion::common::nested_struct::{cast_column, validate_data_type_compatibility};
 use datafusion::logical_expr::ColumnarValue;
+use datafusion::logical_expr::type_coercion::binary::{
+    comparison_coercion, try_type_union_resolution_with_struct,
+};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -193,5 +196,45 @@ async fn native_make_array_keeps_duplicate_widening_positions() -> TestResult {
             assert_eq!(values.column(1).as_primitive::<Int32Type>().values().as_ref(), &[2, 4]);
         }
     }
+    Ok(())
+}
+
+#[test]
+fn constructor_struct_declarations_share_nullable_positional_fields() -> TestResult {
+    let left = DataType::Struct(vec![
+        Field::new("item", DataType::Int32, false)
+            .with_metadata([("source".to_owned(), "left".to_owned())].into()),
+        Field::new("item", DataType::Utf8, true),
+    ].into());
+    let right = DataType::Struct(vec![
+        Field::new("item", DataType::Int64, true),
+        Field::new("item", DataType::Utf8, false),
+    ].into());
+    let expected = DataType::Struct(vec![
+        Field::new("item", DataType::Int64, true),
+        Field::new("item", DataType::Utf8, true),
+    ].into());
+    assert_eq!(try_type_union_resolution_with_struct(&[left.clone(), right.clone()])?,
+        vec![expected.clone(), expected.clone()]);
+
+    let wrappers: [fn(DataType) -> DataType; 2] = [
+        |value| DataType::Struct(vec![Field::new("child", value, true)].into()),
+        |value| DataType::List(Arc::new(Field::new_list_field(value, true))),
+    ];
+    for wrap in wrappers {
+        let nested_left = wrap(left.clone());
+        let nested_right = wrap(right.clone());
+        let nested_expected = wrap(expected.clone());
+        assert_eq!(comparison_coercion(&nested_left, &nested_right), Some(nested_expected));
+        let outer_left = DataType::Struct(vec![Field::new("nested", nested_left, false)].into());
+        let outer_right = DataType::Struct(vec![Field::new("nested", nested_right, true)].into());
+        let outer_expected = DataType::Struct(vec![Field::new("nested", wrap(expected.clone()), true)].into());
+        assert_eq!(try_type_union_resolution_with_struct(&[outer_left, outer_right])?,
+            vec![outer_expected.clone(), outer_expected]);
+    }
+    assert!(try_type_union_resolution_with_struct(&[
+        DataType::Struct(vec![Field::new("left", DataType::Int32, false)].into()),
+        DataType::Struct(vec![Field::new("right", DataType::Int32, false)].into()),
+    ]).is_err());
     Ok(())
 }
