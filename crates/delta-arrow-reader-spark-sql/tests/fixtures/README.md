@@ -2344,3 +2344,37 @@ Their concatenated raw lines, including newlines, have SHA256
 They keep their nonnullable `contains_value` field. The isolated membership
 reference above tests that declaration without changing the original combined
 CASE query or importing its other pending repairs.
+
+## FLATTEN inner list views
+
+`flatten_inner_views.rs` covers the Arrow host-storage gap #853 through public
+Spark SQL planning. Inner ListView values use a canonical List control; inner
+LargeListView values use LargeList. Both share independently specified logical
+values and expected flat rows. Complete public, before-collect and executed
+Arrow fields, including storage width and metadata, must match the canonical
+control. This storage repair keeps canonical declaration inference under #835;
+it does not substitute weaker expected fields for that separate acceptance.
+
+The three required contiguous, gapped and overlapping ranges retain the frozen
+v3 independent probe's backing values and selected logical values. Added prefix
+and suffix rows expose nonzero outer slices and sentinel leakage. A fourth
+layout contains actual NULL outer/inner arrays and leaf elements, empty inner
+and outer arrays, and unused backing values. The inputs validate their Arrow
+data and compare their full logical rows before query execution.
+
+Four layouts, both inner and outer offset widths, full/middle/empty slices,
+batches 1 and 32 and both ANSI modes yield 192 unique Spark comparisons. The
+same configurations retain 192 native-session/configured-session comparisons
+across the view and canonical providers. Returned batches use the shared batch
+validator and recursive NULL/row checks. No Spark fixture or native kernel is
+changed; native queries keep their existing results, including unsupported
+inner-view flattening behavior.
+
+The source normalization clones the immediate inner field and retains its leaf
+field reference. Only ListView-to-List and LargeListView-to-LargeList change;
+Arrow 58.4.0's checked view cast supplies range gathering and offset overflow
+checks. The frozen external v3 probe has SHA256
+`f31e402c6def1c3484dc04709be2d96f773bf7579074b55fefee98ea36c8a97e`.
+It retains 24 absolute Spark field/row identities for the later composed
+#835/#853 check. The standalone storage controls compare complete canonical
+fields while that declaration repair remains separate.
