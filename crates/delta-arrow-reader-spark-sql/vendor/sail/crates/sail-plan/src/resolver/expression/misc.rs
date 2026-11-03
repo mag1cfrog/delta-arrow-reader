@@ -18,6 +18,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{
     drop_inherited_column_metadata, drop_inherited_column_metadata_for_analysis,
+    is_scalar_subquery_metadata_boundary,
 };
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::{NamedExpr, inherits_alias_metadata, needs_projection_expansion};
@@ -59,7 +60,9 @@ impl PlanResolver<'_> {
     ) -> PlanResult<NamedExpr> {
         let name = name.into_iter().map(|x| x.into()).collect::<Vec<String>>();
         if !needs_projection_expansion(&named_expr.expr)
-            && (metadata.is_some() || !inherits_alias_metadata(&named_expr.expr))
+            && (metadata.is_some()
+                || (!inherits_alias_metadata(&named_expr.expr)
+                    && !is_scalar_subquery_metadata_boundary(&named_expr.expr)))
         {
             named_expr.expr = drop_inherited_column_metadata(named_expr.expr);
             named_expr.metadata.retain(|(key, _)| {

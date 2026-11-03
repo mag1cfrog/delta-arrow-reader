@@ -23,7 +23,7 @@ use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator,
 use crate::function::SparkStringTemporalComparisonCast;
 use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, SparkComparisonFloat, materialize_metadata_literals,
-    without_metadata_annotations,
+    restore_inlined_scalar_metadata, without_metadata_annotations,
 };
 use crate::function::float_keys::NormalizeNestedFloatKeys;
 use crate::function::scalar::conditional::SparkNullIf;
@@ -479,7 +479,11 @@ impl PreserveSparkExpressionErrors {
                                 return Ok(Transformed::yes(Expr::ScalarSubquery(subquery)));
                             }
                             if check_cast {
-                                guard_cast_arithmetic(expr, &schema)
+                                let restored = restore_inlined_scalar_metadata(expr);
+                                if restored.transformed {
+                                    return Ok(restored);
+                                }
+                                guard_cast_arithmetic(restored.data, &schema)
                             } else {
                                 Ok(Transformed::no(expr))
                             }
@@ -510,7 +514,7 @@ impl PreserveSparkExpressionErrors {
                         {
                             return Ok(Transformed::yes(expressions.remove(0)));
                         }
-                        Ok(Transformed::no(expr))
+                        Ok(restore_inlined_scalar_metadata(expr))
                     })?.update_data(|expr| name.restore(expr)))
                 })
             })?.data

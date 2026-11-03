@@ -49,9 +49,45 @@ pub(crate) fn clear_inherited_field_metadata(field: &mut Field) {
 pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr) -> expr::Expr {
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::default(),
-        analysis_only: true,
+        lifetime: ResultMetadataLifetime::AnalysisOnly,
     })
     .call(vec![expression])
+}
+
+pub(crate) fn drop_scalar_subquery_metadata(
+    expression: expr::Expr,
+    output_field: &FieldRef,
+) -> expr::Expr {
+    let mut field = output_field.as_ref().clone();
+    clear_inherited_field_metadata(&mut field);
+    ScalarUDF::from(SparkResultMetadata {
+        metadata: FieldMetadata::from(&field),
+        lifetime: ResultMetadataLifetime::UntilScalarInlining,
+    })
+    .call(vec![expression])
+}
+
+pub(crate) fn is_scalar_subquery_metadata_boundary(expression: &expr::Expr) -> bool {
+    if let expr::Expr::ScalarFunction(function) = expression
+        && let Some(annotation) = function.func.inner().downcast_ref::<SparkResultMetadata>()
+    {
+        annotation.lifetime == ResultMetadataLifetime::UntilScalarInlining
+    } else {
+        false
+    }
+}
+
+// Only the guarded one-row inliner may end a scalar metadata boundary.
+pub(crate) fn restore_inlined_scalar_metadata(expression: expr::Expr) -> Transformed<expr::Expr> {
+    if is_scalar_subquery_metadata_boundary(&expression)
+        && let expr::Expr::ScalarFunction(mut function) = expression
+    {
+        if function.args.len() == 1 && !matches!(function.args[0], expr::Expr::ScalarSubquery(_)) {
+            return Transformed::yes(function.args.remove(0));
+        }
+        return Transformed::no(expr::Expr::ScalarFunction(function));
+    }
+    Transformed::no(expression)
 }
 
 pub(crate) fn set_result_metadata(
@@ -60,7 +96,7 @@ pub(crate) fn set_result_metadata(
 ) -> expr::Expr {
     ScalarUDF::from(SparkResultMetadata {
         metadata: metadata.into_iter().collect::<HashMap<_, _>>().into(),
-        analysis_only: false,
+        lifetime: ResultMetadataLifetime::Permanent,
     })
     .call(vec![expression])
 }
@@ -77,7 +113,7 @@ pub(crate) fn materialize_metadata_literals(
             && let Some(value) = literal_metadata_value(argument)
             && let Ok((_, field)) = argument.to_field(&DFSchema::empty())
         {
-            if annotation.analysis_only {
+            if annotation.lifetime == ResultMetadataLifetime::AnalysisOnly {
                 return Ok(Transformed::yes(argument.clone()));
             }
             let field = annotation.annotate_field(&field);
@@ -119,9 +155,16 @@ pub(crate) fn without_metadata_annotations(mut expression: &expr::Expr) -> &expr
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+enum ResultMetadataLifetime {
+    Permanent,
+    AnalysisOnly,
+    UntilScalarInlining,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
 struct SparkResultMetadata {
     metadata: FieldMetadata,
-    analysis_only: bool,
+    lifetime: ResultMetadataLifetime,
 }
 
 impl SparkResultMetadata {
@@ -161,7 +204,7 @@ impl ScalarUDFImpl for SparkResultMetadata {
         _: &datafusion_expr::simplify::SimplifyContext,
     ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
         use datafusion_expr::simplify::ExprSimplifyResult;
-        if self.analysis_only {
+        if self.lifetime == ResultMetadataLifetime::AnalysisOnly {
             let [value] = datafusion_common::utils::take_function_args(self.name(), args)?;
             Ok(ExprSimplifyResult::Simplified(value))
         } else {
@@ -2137,6 +2180,64 @@ fn analysis_metadata_annotations_restore_the_original_value() -> datafusion_comm
         ExprSimplifier::new(info).simplify(permanent.clone())?,
         permanent
     );
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn scalar_metadata_boundary_expires_only_after_inlining() -> datafusion_common::Result<()> {
+    use datafusion::arrow::datatypes::Schema;
+    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+    use datafusion_expr::LogicalPlanBuilder;
+    use datafusion_expr::simplify::SimplifyContext;
+
+    let extensions = HashMap::from([
+        (EXTENSION_TYPE_NAME_KEY.into(), "arrow.json".into()),
+        (EXTENSION_TYPE_METADATA_KEY.into(), "".into()),
+    ]);
+    let mut source = extensions.clone();
+    source.insert("origin".into(), "outer".into());
+    let field = Arc::new(Field::new("k", DataType::Utf8, true).with_metadata(source.clone()));
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![Arc::clone(&field)]))?);
+    let subquery = LogicalPlanBuilder::empty(true)
+        .project(vec![lit("value").alias("k")])?
+        .build()?;
+    let scalar = datafusion_expr::expr_fn::scalar_subquery(Arc::new(subquery));
+    let boundary = drop_scalar_subquery_metadata(scalar.clone(), &field);
+    assert_eq!(boundary.to_field(schema.as_ref())?.1.metadata(), &extensions);
+    assert_ne!(boundary, drop_inherited_column_metadata(scalar));
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::clone(&schema))
+        .build();
+    assert_eq!(
+        ExprSimplifier::new(info).simplify(boundary.clone())?,
+        boundary
+    );
+    let unchanged = restore_inlined_scalar_metadata(boundary.clone());
+    assert!(!unchanged.transformed);
+    assert_eq!(unchanged.data, boundary);
+
+    // Simulate the child returned by successful guarded one-row substitution.
+    let mut inlined = boundary;
+    let expr::Expr::ScalarFunction(function) = &mut inlined else {
+        return datafusion_common::internal_err!("expected scalar metadata boundary");
+    };
+    function.args[0] = datafusion_expr::col("k");
+    let restored = restore_inlined_scalar_metadata(inlined.clone());
+    assert!(restored.transformed);
+    assert_eq!(restored.data, datafusion_expr::col("k"));
+    assert_eq!(restored.data.to_field(schema.as_ref())?.1.metadata(), &source);
+    for supplied in [vec![], vec![("unit".into(), "reading".into())]] {
+        let permanent = set_result_metadata(inlined.clone(), supplied.clone());
+        let retained = permanent
+            .transform_up(|expression| Ok(restore_inlined_scalar_metadata(expression)))?
+            .data;
+        let mut expected = extensions.clone();
+        expected.extend(supplied);
+        assert_eq!(retained.to_field(schema.as_ref())?.1.metadata(), &expected);
+        assert!(!is_scalar_subquery_metadata_boundary(&retained));
+        assert!(!restore_inlined_scalar_metadata(retained).transformed);
+    }
     Ok(())
 }
 
