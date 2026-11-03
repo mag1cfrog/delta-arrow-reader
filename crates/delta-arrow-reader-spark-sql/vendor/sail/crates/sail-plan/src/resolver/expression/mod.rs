@@ -419,6 +419,138 @@ mod tests {
     use crate::resolver::expression::NamedExpr;
     use crate::resolver::state::PlanResolverState;
 
+    #[tokio::test]
+    async fn supplied_alias_metadata_survives_projection_and_aggregate_planning() -> PlanResult<()>
+    {
+        use arrow::array::Int32Array;
+        use arrow::datatypes::{DataType, Field, Schema};
+        use arrow::record_batch::RecordBatch;
+        use arrow::util::display::array_value_to_string;
+
+        use crate::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
+        use crate::physical_plan::SparkQueryPlanner;
+        use datafusion::dataframe::DataFrame;
+        use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
+
+        let ctx = SessionContext::new_with_state(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_query_planner(Arc::new(SparkQueryPlanner))
+                .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
+                .build(),
+        );
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, true)
+                .with_metadata(HashMap::from([("source".into(), "provider".into())])),
+        ]));
+        ctx.register_batch(
+            "metadata_inputs",
+            RecordBatch::try_new(
+                schema,
+                vec![Arc::new(Int32Array::from(vec![Some(2), None, Some(3)]))],
+            )?,
+        )?;
+        for ansi_mode in [true, false] {
+            let resolver = PlanResolver::new(
+                &ctx,
+                Arc::new(PlanConfig {
+                    ansi_mode,
+                    ..PlanConfig::default()
+                }),
+            );
+            for (sql, unaliased_name, expected_values) in [
+                (
+                    "SELECT k AS value FROM metadata_inputs",
+                    "k",
+                    vec!["", "2", "3"],
+                ),
+                (
+                    "SELECT CAST(k AS BIGINT) AS value FROM metadata_inputs",
+                    "k",
+                    vec!["", "2", "3"],
+                ),
+                (
+                    "SELECT SUM(k) AS value FROM metadata_inputs",
+                    "sum(k)",
+                    vec!["5"],
+                ),
+                (
+                    "SELECT NULL + (SELECT 1) AS value",
+                    "(NULL + subquery)",
+                    vec![""],
+                ),
+                (
+                    "SELECT ROUND((SELECT 1),NULL) AS value",
+                    "round(subquery, NULL)",
+                    vec![""],
+                ),
+            ] {
+                for supplied in [
+                    vec![],
+                    vec![("unit".to_owned(), "reading".to_owned())],
+                    vec![(String::new(), "empty-key".to_owned())],
+                    vec![
+                        ("unit".to_owned(), "reading".to_owned()),
+                        (String::new(), "empty-key".to_owned()),
+                        ("ARROW:extension:name".to_owned(), "test.reading".to_owned()),
+                        ("ARROW:extension:metadata".to_owned(), String::new()),
+                    ],
+                ] {
+                    for rename in [true, false] {
+                        let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+                        let mut query = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+                        let spec::QueryNode::Project { expressions, .. } = &mut query.node else {
+                            return Err(crate::error::PlanError::internal(
+                                "expected SELECT projection",
+                            ));
+                        };
+                        let spec::Expr::Alias { name, metadata, .. } = &mut expressions[0] else {
+                            return Err(crate::error::PlanError::internal(
+                                "expected supplied alias",
+                            ));
+                        };
+                        if !rename {
+                            name.clear();
+                        }
+                        *metadata = Some(supplied.clone());
+                        let expected = supplied.iter().cloned().collect::<HashMap<_, _>>();
+                        let named = resolver.resolve_named_plan(query).await?;
+                        let expected_name = if rename { "value" } else { unaliased_name };
+                        assert_eq!(named.fields, [expected_name]);
+                        assert_eq!(named.plan.schema().field(0).metadata(), &expected);
+                        let mut state = ctx.state();
+                        let extensions = &mut state.config_mut().options_mut().extensions;
+                        extensions.insert(SparkSqlExpressionSemantics::default());
+                        extensions.insert(PreserveAggregateStatisticsSchema::default());
+                        let physical = DataFrame::new(state, named.plan)
+                            .create_physical_plan()
+                            .await?;
+                        assert_eq!(physical.schema().field(0).metadata(), &expected);
+                        let schema = physical.schema();
+                        let batches =
+                            datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
+                        let mut values = Vec::new();
+                        for batch in batches {
+                            assert_eq!(batch.schema(), schema);
+                            for (field, column) in schema.fields().iter().zip(batch.columns()) {
+                                if !field.is_nullable() {
+                                    assert_eq!(column.logical_null_count(), 0);
+                                }
+                                column.to_data().validate_full()?;
+                            }
+                            for row in 0..batch.num_rows() {
+                                values.push(array_value_to_string(batch.column(0).as_ref(), row)?);
+                            }
+                        }
+                        values.sort();
+                        assert_eq!(values, expected_values);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn create_session() -> PlanResult<SessionContext> {
         let state = SessionStateBuilder::new().build();
         Ok(SessionContext::new_with_state(state))
