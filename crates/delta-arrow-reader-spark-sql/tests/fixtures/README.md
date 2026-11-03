@@ -2044,3 +2044,75 @@ reviewing any reference update:
 python tests/fixtures/capture_named_struct_fields_spark.py /tmp/named-struct-fields-spark.jsonl
 cargo test --locked --workspace --test named_struct_declarations
 ```
+
+## STRUCT field resolution
+
+The #803 field-resolution target retains 198 original observations: 174 from
+`qualified-column-precedence-spark.jsonl`, all 18 namespace-overlap observations,
+and the six `identifier_consumer` records from `struct-identifier-names-spark.jsonl`.
+The two scoped fixtures copy complete original lines and their headers. A
+partition test checks unique identities, raw-line equality and exhaustive
+coverage with the pending parent records.
+
+The 12 original `using_hidden` and `using_stars` records remain under #767 for
+hidden-key metadata; #762 also retains its PIVOT collision acceptance. The other
+42 IDENTIFIER records remain under #757/#710. Their original fixtures and capture
+scripts are retained unchanged. This target does not establish parity for those
+pending records or close either parent issue.
+
+`capture_struct_field_resolution_spark.py` adds independent controls for local
+and outer binding, absent local bases, multipart qualification, valid extraction,
+missing and duplicate children, computed/bracket expressions and scalar/array
+distinctions. It records the error phase and complete successful public,
+analyzed, optimized and executed schemas. Populated, NULL-only and empty providers
+run in both ANSI modes. Capture to a fresh path using the pinned PySpark 4.2.0
+build and Java 21.
+
+The unchanged `struct-field-resolution-spark.jsonl` contains all 186 captured
+observations: 71 successes, 114 planning errors and one ANSI array-index execution
+error. Its SHA256 is
+`ecb58b66ab66a1d298c4d413ecf3b51b89762700c18da10035e3815a9ec317d3`.
+The replay compares successful public fields and complete rows, validates actual
+physical fields and returned batches, and requires each planning or execution
+error in its recorded phase. Spark's optimized/executed schemas remain separate
+observations: matching optimizer nullability refinement is not required. Actual
+physical fields may only narrow top-level nullability; nested declarations and
+metadata remain exact, and nonnullable arrays must contain no logical NULLs.
+The supplemental `struct-field-strings-spark.jsonl` preserves 30 independent
+observations for valid/missing/duplicate array-STRUCT brackets, computed scalar
+extraction and a numeric string array index. Its SHA256 is
+`bc6aa688ca15a86074afbf8599cb41718bccfe7fad4a8e1bcd4f21673bbb4374`.
+Recollect it with `capture_struct_field_strings_spark.py` and a fresh output path.
+`struct-field-lambdas-spark.jsonl` preserves another 18 public SQL TRANSFORM
+observations for valid case-varied fields, missing children and duplicate
+children. Its SHA256 is
+`62e55e7a75c756dcb7b6b26e2141b19c46c39a215b30931574d8e737e8e2f667`.
+Use `capture_struct_field_lambdas_spark.py` to recollect those controls. The vendor
+unit also checks that unknown lambda parameter types retain deferred resolution.
+Those original 432 observations remain unchanged. The complete 16-record
+`struct-extraction-boundaries-review-v3-spark.jsonl` adds reviewed Map/NULL
+boundaries, with SHA256
+`f99b87e705d4fd619877ab18aa3e74caa9e997629c8e2ee0dc34d1a71b578bfe`.
+Its ten-record scoped copy retains NULL-lambda rejection, nullable Map lookup
+and Map-to-STRUCT case-varied/missing/duplicate checks. The exact complement is
+four ordinary NULL extraction records owned by #815 and two nonnullable literal
+Map records owned by #816. The latter baseline fails physical planning; it is
+not a passing runtime control. Both issues remain children of #156. The partition
+assertion retains every raw line and assigns no parity credit to these six gaps.
+Use `capture_struct_extraction_boundaries_review_v3_spark.py` to recollect the
+complete reference, including those pending cases.
+
+All 442 scoped Spark observations run at batch sizes 1 and 32 without filtering.
+`struct_dictionary_fields.rs` adds 32 provider-backed comparisons for direct and
+nested dictionary-encoded STRUCT parameters, case-insensitive field selection,
+missing and duplicate children. It preserves Dictionary<Int32,Int32> output,
+complete field metadata and actual logical/physical/batch compatibility. The
+explicit decoded rows `[[7,null],[7],[],[null],null]` follow the provider's literal
+keys/values and JSON sorting; NULL and empty lists remain distinct. This is an
+Arrow representation preservation contract, since Spark's schema does not encode
+dictionary storage.
+
+```sh
+python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl
+cargo test --locked --workspace --test struct_field_resolution --test struct_dictionary_fields
+```

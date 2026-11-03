@@ -541,3 +541,26 @@ The [declaration references](tests/fixtures/README.md#named-struct-declarations)
 check explicitly named results, planning errors and native SQL preservation.
 Generated SELECT labels remain under #766/#710. Parent #766 also retains its
 wider qualification and wildcard controls.
+
+### STRUCT field resolution
+
+Attribute resolution selects the first matching catalog/schema/table,
+schema/table, table or unqualified base tier before checking duplicates or
+extracting children. A selected local base shadows outer columns even when its
+nested access is invalid; only an absent local base can continue outer lookup.
+STRUCT children match case-insensitively and must be unique. Missing children,
+duplicate children, scalar extraction and invalid scalar-array selectors retain
+distinct planning conditions. Computed and bracket field selectors use the same
+extraction path. Map access in the shared nested-field resolver delegates one
+key to native get_field, then resumes shared validation using the native result
+type. Computed/bracket Map lookup retains its existing map_extract path.
+Dictionary-encoded STRUCTs keep
+their native dictionary result type and share case-insensitive, unique child
+selection. Numeric array indexing retains its existing path. Typed lambda
+parameters use the same child validation; untyped parameters retain deferred
+resolution. The [field-resolution references](tests/fixtures/README.md#struct-field-resolution)
+check these boundaries, complete public results, actual physical/batch validity
+and native SQL isolation through 442 Spark observations and 32 dictionary
+provider configurations. The broader #762 qualification/PIVOT and #757 naming
+acceptances remain open. Ordinary NULL extraction remains under #815; the
+nonnullable literal Map lambda's physical-planning mismatch remains under #816.

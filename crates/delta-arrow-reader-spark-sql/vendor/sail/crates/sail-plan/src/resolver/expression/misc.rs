@@ -6,7 +6,6 @@ use arrow::datatypes::DataType;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::FieldMetadata;
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
-use datafusion_functions::core::expr_ext::FieldAccessor;
 use datafusion_functions::expr_fn as datafusion_fn;
 use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extract};
 use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
@@ -194,6 +193,15 @@ impl PlanResolver<'_> {
                 format!("{}[{}]", name, extraction_name)
             }
         };
+        if let ScalarValue::Utf8(Some(field_name)) = &extraction {
+            let expr = Self::resolve_potentially_nested_field(
+                expr,
+                &data_type,
+                std::slice::from_ref(field_name),
+                schema,
+            )?;
+            return Ok(NamedExpr::new(vec![name], expr));
+        }
         let expr = match data_type {
             DataType::List(field)
             | DataType::LargeList(field)
@@ -235,24 +243,10 @@ impl PlanResolver<'_> {
                     element
                 }
             }
-            DataType::Struct(fields) => {
-                let ScalarValue::Utf8(Some(name)) = extraction else {
-                    return Err(PlanError::AnalysisError(format!(
-                        "invalid extraction value for struct: {extraction}"
-                    )));
-                };
-                let Ok(name) = fields
-                    .iter()
-                    .filter(|x| x.name().eq_ignore_ascii_case(&name))
-                    .map(|x| x.name().to_string())
-                    .collect::<Vec<_>>()
-                    .one()
-                else {
-                    return Err(PlanError::AnalysisError(format!(
-                        "missing or ambiguous field: {name}"
-                    )));
-                };
-                expr.field(name)
+            DataType::Struct(_) => {
+                return Err(PlanError::AnalysisError(format!(
+                    "invalid extraction value for struct: {extraction}"
+                )));
             }
             _ => {
                 return Err(PlanError::AnalysisError(format!(
