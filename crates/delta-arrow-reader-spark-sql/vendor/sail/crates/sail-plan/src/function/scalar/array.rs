@@ -31,13 +31,13 @@ use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
-    SparkComparisonFloat, prepare_constructor_struct_fields,
+    SparkComparisonFloat, align_constructor_struct_arguments,
 };
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-    let arguments = prepare_constructor_struct_fields(input.arguments, input.function_context.schema.as_ref(),
+    let arguments = align_constructor_struct_arguments(input.arguments, input.function_context.schema.as_ref(),
         "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] ARRAY elements must have compatible STRUCT declarations")?;
     Ok(ScalarUDF::from(SparkArray::new()).call(arguments))
 }
