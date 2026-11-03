@@ -6,6 +6,7 @@ use datafusion::functions::expr_fn;
 use datafusion::functions::math::iszero::IsZeroFunc;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, expr, lit};
+use datafusion_expr::type_coercion::other::get_coerce_type_for_case_expression;
 use sail_common_datafusion::utils::items::ItemTaker;
 
 use crate::error::{PlanError, PlanResult};
@@ -46,6 +47,15 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         }
     }
     let mut branch_values = coerce_result_values(branch_values, &function_context)?;
+    let result_types = branch_values.iter()
+        .map(|value| value.get_type(function_context.schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    let (then_types, else_types) = result_types.split_at(result_types.len() - usize::from(has_else));
+    if get_coerce_type_for_case_expression(then_types, else_types.first()).is_none() {
+        return Err(PlanError::InvalidArgument(format!(
+            "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] CASE result types are incompatible: {result_types:?}"
+        )));
+    }
     let mut else_expr = if has_else {
         branch_values.pop().map(Box::new)
     } else {
