@@ -285,7 +285,7 @@ impl PreserveSparkExpressionErrors {
             }
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
-                has_case |= is_spark_query && expr.exists(|expr| Ok(matches!(expr, Expr::Case(_))))?;
+                has_case |= expr.exists(|expr| Ok(matches!(expr, Expr::Case(case) if case.is_spark_searched())))?;
                 check_cast |= has_cast(expr)?;
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
@@ -297,7 +297,7 @@ impl PreserveSparkExpressionErrors {
                 Ok(TreeNodeRecursion::Continue)
             })?;
             Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison
-                && (!is_spark_query || has_case)
+                && has_case
             {
                 TreeNodeRecursion::Stop
             } else {
@@ -572,11 +572,6 @@ impl PreserveSparkExpressionErrors {
         } else if has_null_sensitive_comparison {
             let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
             prepare.prune_projections(plan, &config, false)?
-        } else {
-            plan
-        };
-        let plan = if has_case {
-            prepare.prune_spark_case_conditions(plan)?
         } else {
             plan
         };
@@ -1413,61 +1408,6 @@ impl Prepare {
             .data)
     }
 
-    fn prune_spark_case_conditions(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
-        Ok(plan.transform_up_with_subqueries(|node| {
-            let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
-            let info = datafusion_expr::simplify::SimplifyContext::builder()
-                .with_schema(Arc::clone(&schema))
-                .with_config_options(Arc::clone(self.props.config_options.as_ref().unwrap()))
-                .build();
-            let simplifier = ExprSimplifier::new(info).with_left_to_right_comparison_errors();
-            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
-            node.map_expressions(|expr| {
-                let name = names.save(&expr);
-                Ok(expr.transform_up(|expr| {
-                    let Expr::Case(mut case) = expr else { return Ok(Transformed::no(expr)); };
-                    if !matches!(case.expr.as_deref(), Some(Expr::Literal(ScalarValue::Boolean(Some(true)), _))) {
-                        return Ok(Transformed::no(Expr::Case(case)));
-                    }
-                    let data_type = Expr::Case(case.clone()).get_type(&schema)?;
-                    let mut changed = false;
-                    let mut remaining = Vec::new();
-                    for (when, then) in case.when_then_expr {
-                        let when = match simplifier.simplify(*when.clone()) {
-                            Ok(folded) => {
-                                changed |= folded != *when;
-                                Box::new(folded)
-                            }
-                            Err(_) => when,
-                        };
-                        match when.as_ref() {
-                            Expr::Literal(ScalarValue::Boolean(Some(true)), _) => {
-                                case.else_expr = Some(then);
-                                changed = true;
-                                break;
-                            }
-                            Expr::Literal(value, _) if value.is_null() || value == &ScalarValue::Boolean(Some(false)) => {
-                                changed = true;
-                            }
-                            _ => remaining.push((when, then)),
-                        }
-                    }
-                    // Keep the Boolean base for surviving dynamic guards, whose values stay nullable in Spark.
-                    case.when_then_expr = remaining;
-                    let result = if case.when_then_expr.is_empty() {
-                        match case.else_expr {
-                            Some(value) => *value,
-                            None => lit(ScalarValue::try_new_null(&data_type)?),
-                        }
-                    } else {
-                        Expr::Case(case)
-                    };
-                    Ok(Transformed::new_transformed(result, changed))
-                })?.update_data(|expr| name.restore(expr)))
-            })
-        })?.data)
-    }
-
     fn fold_constant_structs_with_spark_case(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         Ok(plan.transform_up_with_subqueries(|node| {
             let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
@@ -1476,8 +1416,7 @@ impl Prepare {
                 Ok(expr.transform_down(|expr| {
                     if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
                         || !row_expression(&expr, false)?
-                        || !expr.exists(|child| Ok(matches!(child, Expr::Case(case)
-                            if matches!(case.expr.as_deref(), Some(Expr::Literal(ScalarValue::Boolean(Some(true)), _))))))?
+                        || !expr.exists(|child| Ok(matches!(child, Expr::Case(case) if case.is_spark_searched())))?
                     {
                         return Ok(Transformed::no(expr));
                     }

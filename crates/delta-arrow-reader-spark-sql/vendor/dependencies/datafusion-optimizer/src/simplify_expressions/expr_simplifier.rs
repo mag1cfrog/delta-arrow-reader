@@ -1616,14 +1616,11 @@ impl TreeNodeRewriter for Simplifier<'_> {
             // CASE WHEN false THEN A END --> NULL
             // CASE WHEN false THEN A ELSE B END --> B
             // CASE WHEN X THEN A WHEN false THEN B END --> CASE WHEN X THEN A ELSE B END
-            Expr::Case(Case {
-                expr: None,
-                when_then_expr,
-                mut else_expr,
-            }) if when_then_expr
-                .iter()
-                .any(|(when, _)| is_true(when.as_ref()) || is_false(when.as_ref()) || is_null(when.as_ref())) =>
+            Expr::Case(case) if (case.expr.is_none() || case.is_spark_searched())
+                && case.when_then_expr.iter()
+                    .any(|(when, _)| is_true(when.as_ref()) || is_false(when.as_ref()) || is_null(when.as_ref())) =>
             {
+                let Case { expr, when_then_expr, mut else_expr } = case;
                 let out_type = info.get_data_type(&when_then_expr[0].1)?;
                 let mut new_when_then_expr = Vec::with_capacity(when_then_expr.len());
 
@@ -1653,7 +1650,7 @@ impl TreeNodeRewriter for Simplifier<'_> {
                 }
 
                 Transformed::yes(Expr::Case(Case {
-                    expr: None,
+                    expr,
                     when_then_expr: new_when_then_expr,
                     else_expr,
                 }))

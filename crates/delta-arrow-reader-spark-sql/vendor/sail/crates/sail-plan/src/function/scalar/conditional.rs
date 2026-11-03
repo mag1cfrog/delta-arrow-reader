@@ -60,29 +60,16 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             if source_type == result_type { value } else { cast(value, result_type.clone()) }
         })
         .collect();
-    let mut else_expr = if has_else {
+    let else_expr = if has_else {
         branch_values.pop().map(Box::new)
     } else {
         None
     };
-    let mut when_then_expr = Vec::new();
-    for (condition, value) in conditions.into_iter().zip(branch_values) {
-        let unconditional = matches!(condition, expr::Expr::Literal(ScalarValue::Boolean(Some(true)), _));
-        if unconditional {
-            // Keep the native CASE metadata boundary until the optimizer selects this value.
-            else_expr = Some(Box::new(value.clone()));
-        }
-        when_then_expr.push((Box::new(condition), Box::new(value)));
-        if unconditional {
-            break;
-        }
-    }
-    // The Boolean base counts result declarations without predicate-based nullability inference.
-    Ok(expr::Expr::Case(expr::Case {
-        expr: Some(Box::new(lit(true))),
-        when_then_expr,
-        else_expr,
-    }))
+    let when_then_expr = conditions.into_iter().zip(branch_values)
+        .map(|(condition, value)| (Box::new(condition), Box::new(value)))
+        .collect();
+    // Retain every branch until required subquery preparation precedes native pruning.
+    Ok(expr::Expr::Case(expr::Case::new_spark_searched(when_then_expr, else_expr)))
 }
 
 fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
