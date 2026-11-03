@@ -16,11 +16,20 @@ use spark_results::TestResult;
 async fn capture_nested_observation(
     observation: impl std::future::Future<Output = TestResult<Value>>,
 ) -> TestResult<Value> {
-    match std::panic::AssertUnwindSafe(observation).catch_unwind().await {
+    match std::panic::AssertUnwindSafe(observation)
+        .catch_unwind()
+        .await
+    {
         Ok(observation) => observation,
         Err(payload) => {
-            let panic = payload.downcast_ref::<String>().cloned()
-                .or_else(|| payload.downcast_ref::<&str>().map(|message| (*message).to_owned()))
+            let panic = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| {
+                    payload
+                        .downcast_ref::<&str>()
+                        .map(|message| (*message).to_owned())
+                })
                 .unwrap_or_else(|| "non-string panic payload".into());
             Ok(json!({"status":"FAIL","matches":false,"panic":panic,
                 "public_schema":null,"before_collect":null,"physical_schema":null,
@@ -35,7 +44,8 @@ async fn capture_nested_observation(
 async fn query_panics_are_failed_observations_without_an_invented_sql_error() -> TestResult {
     let observation = capture_nested_observation(async {
         std::panic::resume_unwind(Box::new("nested observer panic sentinel"))
-    }).await?;
+    })
+    .await?;
     assert_eq!(observation["status"], "FAIL");
     assert_eq!(observation["matches"], false);
     assert_eq!(observation["panic"], "nested observer panic sentinel");
@@ -54,7 +64,10 @@ async fn replay_nested_references(fixtures: &[(&str, usize)], marker: &str) -> T
             .collect::<Result<Vec<_>, _>>()?;
         let header = fixture.first().ok_or("missing capture header")?;
         assert_eq!(header["spark_version"], "4.2.0");
-        assert_eq!(header["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+        assert_eq!(
+            header["spark_revision"],
+            "32f7299601108917fb01920a54e084595b7b3bf8"
+        );
         assert_eq!(fixture.len() - 1, *count);
         if let Some(first) = records.first() {
             assert_eq!(header["inputs"], first["inputs"]);
@@ -73,7 +86,10 @@ async fn replay_nested_references(fixtures: &[(&str, usize)], marker: &str) -> T
             case["ansi"].as_bool().ok_or("missing ANSI")?,
         )));
         if case["expected"]["condition"].is_null() {
-            assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
+            assert_eq!(
+                case["expected"]["schema"],
+                case["schema_stages"]["analyzed"]
+            );
         }
     }
     let mut failures = Vec::new();
@@ -88,14 +104,16 @@ async fn replay_nested_references(fixtures: &[(&str, usize)], marker: &str) -> T
                             .with_batch_size(batch_size)
                             .with_target_partitions(2),
                     ),
-            ).build(),
+            )
+            .build(),
         );
         spark_inputs::register_recorded_inputs(&session, header, batch_size)?;
         for case in cases {
             comparisons += 1;
             let mut comparison = capture_nested_observation(
                 spark_results::compare_exact_spark_query_stages(&session, case),
-            ).await?;
+            )
+            .await?;
             comparison["id"] = case["id"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch_size);
@@ -112,43 +130,89 @@ async fn replay_nested_references(fixtures: &[(&str, usize)], marker: &str) -> T
 
 #[tokio::test]
 async fn nested_conditional_results_match_spark() -> TestResult {
-    replay_nested_references(&[
-        (include_str!("fixtures/conditional-nested-spark.jsonl"), 12),
-        (include_str!("fixtures/conditional-nested-supplement-spark.jsonl"), 110),
-        (include_str!("fixtures/conditional-nested-order-spark.jsonl"), 16),
-        (include_str!("fixtures/conditional-nested-boundaries-spark.jsonl"), 10),
-        (include_str!("fixtures/conditional-nested-set-operations-spark.jsonl"), 10),
-    ], "NESTED_CONDITIONAL_OBSERVATION").await
+    replay_nested_references(
+        &[
+            (include_str!("fixtures/conditional-nested-spark.jsonl"), 12),
+            (
+                include_str!("fixtures/conditional-nested-supplement-spark.jsonl"),
+                110,
+            ),
+            (
+                include_str!("fixtures/conditional-nested-order-spark.jsonl"),
+                16,
+            ),
+            (
+                include_str!("fixtures/conditional-nested-boundaries-spark.jsonl"),
+                10,
+            ),
+            (
+                include_str!("fixtures/conditional-nested-set-operations-spark.jsonl"),
+                10,
+            ),
+        ],
+        "NESTED_CONDITIONAL_OBSERVATION",
+    )
+    .await
 }
 
 #[tokio::test]
 async fn nested_null_children_match_spark() -> TestResult {
-    replay_nested_references(&[(include_str!("fixtures/conditional-nested-null-children-spark.jsonl"), 4)],
-        "NESTED_NULL_CHILD_OBSERVATION").await
+    replay_nested_references(
+        &[(
+            include_str!("fixtures/conditional-nested-null-children-spark.jsonl"),
+            4,
+        )],
+        "NESTED_NULL_CHILD_OBSERVATION",
+    )
+    .await
 }
 
 #[tokio::test]
 async fn nested_coalesce_controls_match_spark() -> TestResult {
-    replay_nested_references(&[(include_str!("fixtures/conditional-nested-coalesce-controls-spark.jsonl"), 16)],
-        "NESTED_COALESCE_CONTROL_OBSERVATION").await
+    replay_nested_references(
+        &[(
+            include_str!("fixtures/conditional-nested-coalesce-controls-spark.jsonl"),
+            16,
+        )],
+        "NESTED_COALESCE_CONTROL_OBSERVATION",
+    )
+    .await
 }
 
 #[tokio::test]
 async fn nested_if_declarations_match_spark() -> TestResult {
-    replay_nested_references(&[(include_str!("fixtures/conditional-nested-if-spark.jsonl"), 4)],
-        "NESTED_IF_OBSERVATION").await
+    replay_nested_references(
+        &[(
+            include_str!("fixtures/conditional-nested-if-spark.jsonl"),
+            4,
+        )],
+        "NESTED_IF_OBSERVATION",
+    )
+    .await
 }
 
 #[tokio::test]
 async fn nested_if_declarations_survive_outer_coalesce() -> TestResult {
-    replay_nested_references(&[(include_str!("fixtures/conditional-nested-if-coalesce-spark.jsonl"), 4)],
-        "NESTED_IF_COALESCE_OBSERVATION").await
+    replay_nested_references(
+        &[(
+            include_str!("fixtures/conditional-nested-if-coalesce-spark.jsonl"),
+            4,
+        )],
+        "NESTED_IF_COALESCE_OBSERVATION",
+    )
+    .await
 }
 
 #[tokio::test]
 async fn nested_unicode_field_names_match_spark() -> TestResult {
-    replay_nested_references(&[(include_str!("fixtures/conditional-nested-unicode-spark.jsonl"), 66)],
-        "NESTED_UNICODE_OBSERVATION").await
+    replay_nested_references(
+        &[(
+            include_str!("fixtures/conditional-nested-unicode-spark.jsonl"),
+            66,
+        )],
+        "NESTED_UNICODE_OBSERVATION",
+    )
+    .await
 }
 
 #[tokio::test]
@@ -172,25 +236,44 @@ async fn spark_configuration_preserves_native_nested_conditionals() -> TestResul
     for session in [&native, &configured] {
         spark_inputs::register_recorded_inputs(session, &inputs, 1)?;
     }
-    let array_rows = json!([[["1",null]],[null]]);
-    let struct_rows = json!([[["1"]],[null]]);
+    let array_rows = json!([[["1", null]], [null]]);
+    let struct_rows = json!([[["1"]], [null]]);
     let empty_rows = json!([]);
     let queries = [
-        ("SELECT CASE WHEN TRUE THEN a ELSE NULL END AS r FROM native_nested", &array_rows),
-        ("SELECT CASE WHEN id = 0 THEN a ELSE NULL END AS r FROM native_nested", &array_rows),
-        ("SELECT CASE WHEN FALSE THEN s ELSE s END AS r FROM native_nested", &struct_rows),
-        ("SELECT CASE WHEN id = 0 THEN s ELSE NULL END AS r FROM native_nested", &struct_rows),
+        (
+            "SELECT CASE WHEN TRUE THEN a ELSE NULL END AS r FROM native_nested",
+            &array_rows,
+        ),
+        (
+            "SELECT CASE WHEN id = 0 THEN a ELSE NULL END AS r FROM native_nested",
+            &array_rows,
+        ),
+        (
+            "SELECT CASE WHEN FALSE THEN s ELSE s END AS r FROM native_nested",
+            &struct_rows,
+        ),
+        (
+            "SELECT CASE WHEN id = 0 THEN s ELSE NULL END AS r FROM native_nested",
+            &struct_rows,
+        ),
         ("SELECT COALESCE(a,a) AS r FROM native_nested", &array_rows),
         ("SELECT COALESCE(s,s) AS r FROM native_nested", &struct_rows),
-        ("SELECT COALESCE(a,a) AS r FROM native_nested WHERE FALSE", &empty_rows),
-        ("SELECT COALESCE(s,s) AS r FROM native_nested WHERE FALSE", &empty_rows),
+        (
+            "SELECT COALESCE(a,a) AS r FROM native_nested WHERE FALSE",
+            &empty_rows,
+        ),
+        (
+            "SELECT COALESCE(s,s) AS r FROM native_nested WHERE FALSE",
+            &empty_rows,
+        ),
     ];
     for after_spark in [false, true] {
         if after_spark {
             spark_results::capture_spark_query_result(
                 &configured,
                 &json!({"sql":"SELECT id AS r FROM native_nested", "ansi":true}),
-            ).await?;
+            )
+            .await?;
         }
         for (sql, expected_rows) in queries {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
@@ -200,8 +283,14 @@ async fn spark_configuration_preserves_native_nested_conditionals() -> TestResul
             eprintln!("NESTED_NATIVE_OBSERVATION {observation}");
             assert!(observation["native"]["error"].is_null(), "{observation}");
             assert_eq!(observation["native"]["phase"], "encode", "{observation}");
-            assert_eq!(&observation["native"]["rows"], expected_rows, "{observation}");
-            assert_eq!(observation["configured"], observation["native"], "{observation}");
+            assert_eq!(
+                &observation["native"]["rows"], expected_rows,
+                "{observation}"
+            );
+            assert_eq!(
+                observation["configured"], observation["native"],
+                "{observation}"
+            );
         }
         let sql = "SELECT CASE WHEN TRUE THEN a ELSE s END AS r FROM native_nested";
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
@@ -210,7 +299,10 @@ async fn spark_configuration_preserves_native_nested_conditionals() -> TestResul
             "native":expected,"configured":actual});
         eprintln!("NESTED_NATIVE_OBSERVATION {observation}");
         assert!(observation["native"]["error"].is_string(), "{observation}");
-        assert_eq!(observation["configured"], observation["native"], "{observation}");
+        assert_eq!(
+            observation["configured"], observation["native"],
+            "{observation}"
+        );
     }
     Ok(())
 }

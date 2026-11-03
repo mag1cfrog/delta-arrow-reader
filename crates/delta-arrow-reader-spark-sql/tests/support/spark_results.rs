@@ -390,7 +390,11 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
                 .ok_or("recorded TIMESTAMP_NTZ is outside the datetime encoding range")?;
             let text = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
             let micros = datetime.and_utc().timestamp_subsec_micros();
-            json!(if micros == 0 { text } else { format!("{text}.{micros:06}") })
+            json!(if micros == 0 {
+                text
+            } else {
+                format!("{text}.{micros:06}")
+            })
         }
         DataType::List(field) => {
             let values = column
@@ -483,7 +487,8 @@ fn timestamp_ntz_values_use_recorded_datetime_encoding() -> TestResult {
         spark_schema_type(&DataType::Timestamp(TimeUnit::Microsecond, None))?,
         json!("timestamp_ntz")
     );
-    let values = TimestampMicrosecondArray::from(vec![Some(0), Some(1), Some(123000), Some(-1), None]);
+    let values =
+        TimestampMicrosecondArray::from(vec![Some(0), Some(1), Some(123000), Some(-1), None]);
     for (row, expected) in [
         json!("1970-01-01 00:00:00"),
         json!("1970-01-01 00:00:00.000001"),

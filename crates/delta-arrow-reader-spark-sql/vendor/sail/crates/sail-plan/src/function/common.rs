@@ -2291,7 +2291,10 @@ fn metadata_value_analysis_uses_implementation_identity() {
     )
     .call(vec![value]);
     assert_eq!(without_metadata_annotations(&user_function), &user_function);
-    assert_eq!(without_inherited_column_metadata(&user_function), &user_function);
+    assert_eq!(
+        without_inherited_column_metadata(&user_function),
+        &user_function
+    );
 }
 
 #[cfg(test)]
