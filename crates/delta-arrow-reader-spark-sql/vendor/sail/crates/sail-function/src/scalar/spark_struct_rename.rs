@@ -246,7 +246,7 @@ pub fn build_rename_target_type(from: &DataType, to: &DataType) -> DataType {
                 .collect();
             DataType::Struct(fields)
         }
-        (DataType::List(src), DataType::List(tgt)) => DataType::List(Arc::new(
+        (DataType::List(src), DataType::List(tgt) | DataType::LargeList(tgt) | DataType::FixedSizeList(tgt, _)) => DataType::List(Arc::new(
             Field::new(
                 tgt.name(),
                 build_rename_target_type(src.data_type(), tgt.data_type()),
@@ -254,7 +254,7 @@ pub fn build_rename_target_type(from: &DataType, to: &DataType) -> DataType {
             )
             .with_metadata(src.metadata().clone()),
         )),
-        (DataType::LargeList(src), DataType::LargeList(tgt)) => DataType::LargeList(Arc::new(
+        (DataType::LargeList(src), DataType::List(tgt) | DataType::LargeList(tgt) | DataType::FixedSizeList(tgt, _)) => DataType::LargeList(Arc::new(
             Field::new(
                 tgt.name(),
                 build_rename_target_type(src.data_type(), tgt.data_type()),
@@ -262,7 +262,7 @@ pub fn build_rename_target_type(from: &DataType, to: &DataType) -> DataType {
             )
             .with_metadata(src.metadata().clone()),
         )),
-        (DataType::FixedSizeList(src, sa), DataType::FixedSizeList(tgt, _)) => {
+        (DataType::FixedSizeList(src, sa), DataType::List(tgt) | DataType::LargeList(tgt) | DataType::FixedSizeList(tgt, _)) => {
             DataType::FixedSizeList(
                 Arc::new(
                     Field::new(
