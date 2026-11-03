@@ -4,7 +4,7 @@ use std::sync::Arc;
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
 use datafusion_common::{Column, DFSchemaRef, TableReference};
 use datafusion_expr::expr::{LambdaVariable, ScalarFunction};
-use datafusion_expr::{ScalarUDF, col, expr, lit};
+use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
 use sail_common::spec;
 use sail_function::scalar::array_struct_field::ArrayStructField;
@@ -41,7 +41,7 @@ impl PlanResolver<'_> {
                 .to_string();
             let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field.clone()));
             if let Some(field) = field {
-                expr = Self::resolve_potentially_nested_field(expr, field.data_type(), rest)?;
+                expr = Self::resolve_potentially_nested_field(expr, field.data_type(), rest, schema)?;
             } else {
                 for part in rest {
                     expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(
@@ -149,6 +149,7 @@ impl PlanResolver<'_> {
             col((qualifier, field)),
             field.data_type(),
             inner,
+            schema,
         )?;
         let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
         let named = NamedExpr::new(vec![projection_name], expr);
@@ -296,45 +297,68 @@ impl PlanResolver<'_> {
         expr: expr::Expr,
         data_type: &DataType,
         inner: &[T],
+        schema: &DFSchemaRef,
     ) -> PlanResult<expr::Expr> {
         match inner {
             [] => Ok(expr),
-            [name, remaining @ ..] => match data_type {
-                DataType::Struct(fields) => {
-                    let field = Self::resolve_struct_field(fields, name.as_ref())?;
-                    let args = vec![expr, lit(field.name().to_string())];
-                    let expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(get_field(), args));
-                    Self::resolve_potentially_nested_field(expr, field.data_type(), remaining)
+            [name, remaining @ ..] => {
+                let lookup_type = match data_type {
+                    DataType::Dictionary(_, value_type)
+                        if matches!(value_type.as_ref(), DataType::Struct(_)) =>
+                    {
+                        value_type.as_ref()
+                    }
+                    _ => data_type,
+                };
+                match lookup_type {
+                    DataType::Struct(fields) => {
+                        let field = Self::resolve_struct_field(fields, name.as_ref())?;
+                        let args = vec![expr, lit(field.name().to_string())];
+                        let expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(get_field(), args));
+                        let native_type;
+                        let result_type = if matches!(data_type, DataType::Dictionary(_, _)) {
+                            native_type = expr.get_type(schema)?;
+                            &native_type
+                        } else {
+                            field.data_type()
+                        };
+                        Self::resolve_potentially_nested_field(expr, result_type, remaining, schema)
+                    }
+                    DataType::Map(_, _) => {
+                        let expr = get_field().call(vec![expr, lit(name.as_ref().to_string())]);
+                        let data_type = expr.get_type(schema)?;
+                        Self::resolve_potentially_nested_field(expr, &data_type, remaining, schema)
+                    }
+                    DataType::List(field)
+                    | DataType::LargeList(field)
+                    | DataType::FixedSizeList(field, _) => {
+                        let DataType::Struct(fields) = field.data_type() else {
+                            return Err(PlanError::analysis(format!(
+                                "cannot resolve attribute: [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] field {:?} requires a STRUCT array element, got {}",
+                                name.as_ref(), field.data_type()
+                            )));
+                        };
+                        let child = Self::resolve_struct_field(fields, name.as_ref())?;
+                        let expr = ScalarUDF::from(ArrayStructField::new())
+                            .call(vec![expr, lit(child.name().to_string())]);
+                        let item = Arc::new(Field::new_list_field(
+                            child.data_type().clone(),
+                            field.is_nullable() || child.is_nullable(),
+                        ));
+                        let data_type = match data_type {
+                            DataType::List(_) => DataType::List(item),
+                            DataType::LargeList(_) => DataType::LargeList(item),
+                            DataType::FixedSizeList(_, size) => DataType::FixedSizeList(item, *size),
+                            _ => unreachable!("list data type matched above"),
+                        };
+                        Self::resolve_potentially_nested_field(expr, &data_type, remaining, schema)
+                    }
+                    _ => Err(PlanError::analysis(format!(
+                        "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field {:?} cannot be extracted from {data_type}",
+                        name.as_ref()
+                    ))),
                 }
-                DataType::List(field)
-                | DataType::LargeList(field)
-                | DataType::FixedSizeList(field, _) => {
-                    let DataType::Struct(fields) = field.data_type() else {
-                        return Err(PlanError::analysis(format!(
-                            "cannot resolve attribute: [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] field {:?} requires a STRUCT array element, got {}",
-                            name.as_ref(), field.data_type()
-                        )));
-                    };
-                    let child = Self::resolve_struct_field(fields, name.as_ref())?;
-                    let expr = ScalarUDF::from(ArrayStructField::new())
-                        .call(vec![expr, lit(child.name().to_string())]);
-                    let item = Arc::new(Field::new_list_field(
-                        child.data_type().clone(),
-                        field.is_nullable() || child.is_nullable(),
-                    ));
-                    let data_type = match data_type {
-                        DataType::List(_) => DataType::List(item),
-                        DataType::LargeList(_) => DataType::LargeList(item),
-                        DataType::FixedSizeList(_, size) => DataType::FixedSizeList(item, *size),
-                        _ => unreachable!("list data type matched above"),
-                    };
-                    Self::resolve_potentially_nested_field(expr, &data_type, remaining)
-                }
-                _ => Err(PlanError::analysis(format!(
-                    "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field {:?} cannot be extracted from {data_type}",
-                    name.as_ref()
-                ))),
-            },
+            }
         }
     }
 

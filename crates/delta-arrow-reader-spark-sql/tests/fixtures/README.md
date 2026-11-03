@@ -2089,9 +2089,30 @@ children. Its SHA256 is
 `62e55e7a75c756dcb7b6b26e2141b19c46c39a215b30931574d8e737e8e2f667`.
 Use `capture_struct_field_lambdas_spark.py` to recollect those controls. The vendor
 unit also checks that unknown lambda parameter types retain deferred resolution.
-All 432 scoped observations run at batch sizes 1 and 32 without case filtering.
+Those original 432 observations remain unchanged. The complete 16-record
+`struct-extraction-boundaries-review-v3-spark.jsonl` adds reviewed Map/NULL
+boundaries, with SHA256
+`f99b87e705d4fd619877ab18aa3e74caa9e997629c8e2ee0dc34d1a71b578bfe`.
+Its ten-record scoped copy retains NULL-lambda rejection, nullable Map lookup
+and Map-to-STRUCT case-varied/missing/duplicate checks. The exact complement is
+four ordinary NULL extraction records owned by #815 and two nonnullable literal
+Map records owned by #816. The latter baseline fails physical planning; it is
+not a passing runtime control. Both issues remain children of #156. The partition
+assertion retains every raw line and assigns no parity credit to these six gaps.
+Use `capture_struct_extraction_boundaries_review_v3_spark.py` to recollect the
+complete reference, including those pending cases.
+
+All 442 scoped Spark observations run at batch sizes 1 and 32 without filtering.
+`struct_dictionary_fields.rs` adds 32 provider-backed comparisons for direct and
+nested dictionary-encoded STRUCT parameters, case-insensitive field selection,
+missing and duplicate children. It preserves Dictionary<Int32,Int32> output,
+complete field metadata and actual logical/physical/batch compatibility. The
+explicit decoded rows `[[7,null],[7],[],[null],null]` follow the provider's literal
+keys/values and JSON sorting; NULL and empty lists remain distinct. This is an
+Arrow representation preservation contract, since Spark's schema does not encode
+dictionary storage.
 
 ```sh
 python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl
-cargo test --locked --workspace --test struct_field_resolution
+cargo test --locked --workspace --test struct_field_resolution --test struct_dictionary_fields
 ```
