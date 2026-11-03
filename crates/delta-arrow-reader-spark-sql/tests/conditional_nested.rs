@@ -138,15 +138,18 @@ async fn spark_configuration_preserves_native_nested_conditionals() -> TestResul
     for session in [&native, &configured] {
         spark_inputs::register_recorded_inputs(session, &inputs, 1)?;
     }
+    let array_rows = json!([[["1",null]],[null]]);
+    let struct_rows = json!([[["1"]],[null]]);
+    let empty_rows = json!([]);
     let queries = [
-        "SELECT CASE WHEN TRUE THEN a ELSE NULL END AS r FROM native_nested",
-        "SELECT CASE WHEN id = 0 THEN a ELSE NULL END AS r FROM native_nested",
-        "SELECT CASE WHEN FALSE THEN s ELSE s END AS r FROM native_nested",
-        "SELECT CASE WHEN id = 0 THEN s ELSE NULL END AS r FROM native_nested",
-        "SELECT COALESCE(a,a) AS r FROM native_nested",
-        "SELECT COALESCE(s,s) AS r FROM native_nested",
-        "SELECT COALESCE(a,a) AS r FROM native_nested WHERE FALSE",
-        "SELECT COALESCE(s,s) AS r FROM native_nested WHERE FALSE",
+        ("SELECT CASE WHEN TRUE THEN a ELSE NULL END AS r FROM native_nested", &array_rows),
+        ("SELECT CASE WHEN id = 0 THEN a ELSE NULL END AS r FROM native_nested", &array_rows),
+        ("SELECT CASE WHEN FALSE THEN s ELSE s END AS r FROM native_nested", &struct_rows),
+        ("SELECT CASE WHEN id = 0 THEN s ELSE NULL END AS r FROM native_nested", &struct_rows),
+        ("SELECT COALESCE(a,a) AS r FROM native_nested", &array_rows),
+        ("SELECT COALESCE(s,s) AS r FROM native_nested", &struct_rows),
+        ("SELECT COALESCE(a,a) AS r FROM native_nested WHERE FALSE", &empty_rows),
+        ("SELECT COALESCE(s,s) AS r FROM native_nested WHERE FALSE", &empty_rows),
     ];
     for after_spark in [false, true] {
         if after_spark {
@@ -155,24 +158,25 @@ async fn spark_configuration_preserves_native_nested_conditionals() -> TestResul
                 &json!({"sql":"SELECT id AS r FROM native_nested", "ansi":true}),
             ).await?;
         }
-        for sql in queries {
+        for (sql, expected_rows) in queries {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
-            assert!(expected["error"].is_null(), "{sql}: {expected}");
-            assert!(expected["rows"].is_array(), "{sql}: {expected}");
-            assert_eq!(
-                spark_results::capture_native_query_observation(&configured, sql).await?,
-                expected,
-                "{sql}"
-            );
+            let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+            let observation = json!({"sql":sql,"after_spark":after_spark,
+                "native":expected,"configured":actual});
+            eprintln!("NESTED_NATIVE_OBSERVATION {observation}");
+            assert!(observation["native"]["error"].is_null(), "{observation}");
+            assert_eq!(observation["native"]["phase"], "encode", "{observation}");
+            assert_eq!(&observation["native"]["rows"], expected_rows, "{observation}");
+            assert_eq!(observation["configured"], observation["native"], "{observation}");
         }
         let sql = "SELECT CASE WHEN TRUE THEN a ELSE s END AS r FROM native_nested";
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
-        assert!(expected["error"].is_string());
-        assert_eq!(
-            spark_results::capture_native_query_observation(&configured, sql).await?,
-            expected,
-            "{sql}"
-        );
+        let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        let observation = json!({"sql":sql,"after_spark":after_spark,
+            "native":expected,"configured":actual});
+        eprintln!("NESTED_NATIVE_OBSERVATION {observation}");
+        assert!(observation["native"]["error"].is_string(), "{observation}");
+        assert_eq!(observation["configured"], observation["native"], "{observation}");
     }
     Ok(())
 }
