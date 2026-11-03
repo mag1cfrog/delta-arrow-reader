@@ -146,13 +146,9 @@ async fn map_constructor_preserves_null_cast_native_and_cardinality_guards() -> 
                 "SELECT (SELECT MAP('key',v) FROM (VALUES (1)) q(v) WHERE false) AS r",
             ] {
                 let actual =
-                    capture_spark_query_result(&session, &json!({"sql":sql,"ansi":ansi}))
-                        .await?;
+                    capture_spark_query_result(&session, &json!({"sql":sql,"ansi":ansi})).await?;
                 assert_eq!(actual["rows"], json!([[null]]), "{sql}");
-                assert_eq!(
-                    actual["schema"]["fields"][0]["nullable"], true,
-                    "{sql}"
-                );
+                assert_eq!(actual["schema"]["fields"][0]["nullable"], true, "{sql}");
             }
             let cast = capture_spark_query_observation(
                 &session,
