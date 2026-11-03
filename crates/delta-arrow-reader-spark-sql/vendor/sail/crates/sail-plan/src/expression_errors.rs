@@ -270,7 +270,7 @@ impl PreserveSparkExpressionErrors {
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
-        let mut has_case_results = false;
+        let mut has_case = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
                 && !aggregate
@@ -285,7 +285,7 @@ impl PreserveSparkExpressionErrors {
             }
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
-                has_case_results |= is_spark_query && expr.exists(|expr| Ok(matches!(expr, Expr::Case(_))))?;
+                has_case |= is_spark_query && expr.exists(|expr| Ok(matches!(expr, Expr::Case(_))))?;
                 check_cast |= has_cast(expr)?;
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
@@ -296,7 +296,9 @@ impl PreserveSparkExpressionErrors {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison
+                && (!is_spark_query || has_case)
+            {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -308,7 +310,7 @@ impl PreserveSparkExpressionErrors {
             && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
-            && !has_case_results
+            && !has_case
         {
             return Ok(plan);
         }
@@ -319,8 +321,8 @@ impl PreserveSparkExpressionErrors {
             has_groups,
             has_null_sensitive_comparison,
         };
-        let plan = if has_case_results {
-            prepare.fold_constant_case_structs(plan)?
+        let plan = if has_case {
+            prepare.fold_constant_structs_with_case(plan)?
         } else {
             plan
         };
@@ -1396,7 +1398,7 @@ impl Prepare {
             .data)
     }
 
-    fn fold_constant_case_structs(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn fold_constant_structs_with_case(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         Ok(plan.transform_up_with_subqueries(|node| {
             let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
             node.map_expressions(|expr| {
