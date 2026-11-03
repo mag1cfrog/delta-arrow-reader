@@ -38,7 +38,9 @@ use datafusion_common::{
     Column, DataFusionError, ExprSchema, Result, ScalarValue, Spans, TableReference,
     not_impl_err, plan_datafusion_err, plan_err,
 };
-use datafusion_expr_common::type_coercion::binary::BinaryTypeCoercer;
+use datafusion_expr_common::type_coercion::binary::{
+    BinaryTypeCoercer, type_union_resolution,
+};
 use datafusion_functions_window_common::field::WindowUDFFieldArgs;
 use std::sync::Arc;
 
@@ -151,7 +153,15 @@ impl ExprSchemable for Expr {
                     .collect::<Result<Vec<_>>>()?;
                 let else_type = case.else_expr.as_ref()
                     .map(|value| value.get_type(schema)).transpose()?;
-                get_coerce_type_for_case_expression(&then_types, else_type.as_ref())
+                let result_type =
+                    get_coerce_type_for_case_expression(&then_types, else_type.as_ref());
+                // Value coercion has aligned leaves; merge complete nested declarations.
+                let result_type = if result_type.as_ref().is_some_and(DataType::is_nested) {
+                    let result_types = then_types.iter().chain(else_type.iter())
+                        .cloned().collect::<Vec<_>>();
+                    type_union_resolution(&result_types)
+                } else { result_type };
+                result_type
                     .ok_or_else(|| plan_datafusion_err!(
                         "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] CASE result types are incompatible: {then_types:?}, {else_type:?}"
                     ))
