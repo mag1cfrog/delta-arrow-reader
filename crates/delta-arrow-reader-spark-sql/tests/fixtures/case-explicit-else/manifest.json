@@ -1,0 +1,181 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "case_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-1",
+          null
+        ],
+        [
+          "0",
+          "5"
+        ],
+        [
+          "1",
+          "9"
+        ]
+      ]
+    },
+    {
+      "name": "case_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "n",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "direct_required",
+      "sql": "SELECT CASE WHEN false THEN 1 ELSE 7 END AS r"
+    },
+    {
+      "id": "direct_missing_else",
+      "sql": "SELECT CASE WHEN false THEN 1 END AS r"
+    },
+    {
+      "id": "direct_multiple_when",
+      "sql": "SELECT CASE WHEN false THEN 1 WHEN true THEN 2 ELSE 3 END AS r"
+    },
+    {
+      "id": "values_required",
+      "sql": "SELECT CASE WHEN i>0 THEN i ELSE 7 END AS r FROM VALUES (-1),(0),(1) t(i)"
+    },
+    {
+      "id": "values_missing_else",
+      "sql": "SELECT CASE WHEN i>0 THEN i END AS r FROM VALUES (-1),(0),(1) t(i)"
+    },
+    {
+      "id": "values_empty",
+      "sql": "SELECT CASE WHEN i>0 THEN i ELSE 7 END AS r FROM VALUES (-1),(0),(1) t(i) WHERE false"
+    },
+    {
+      "id": "required_then",
+      "sql": "SELECT CASE WHEN i>0 THEN i ELSE 7 END AS r FROM case_inputs"
+    },
+    {
+      "id": "required_else",
+      "sql": "SELECT CASE WHEN i>0 THEN 7 ELSE i END AS r FROM case_inputs"
+    },
+    {
+      "id": "nullable_then",
+      "sql": "SELECT CASE WHEN i>0 THEN n ELSE 7 END AS r FROM case_inputs"
+    },
+    {
+      "id": "nullable_else",
+      "sql": "SELECT CASE WHEN i>0 THEN 7 ELSE n END AS r FROM case_inputs"
+    },
+    {
+      "id": "nullable_guard",
+      "sql": "SELECT CASE WHEN n IS NOT NULL THEN n ELSE 0 END AS r FROM case_inputs"
+    },
+    {
+      "id": "typed_null_then",
+      "sql": "SELECT CASE WHEN i>0 THEN CAST(NULL AS INT) ELSE 7 END AS r FROM case_inputs"
+    },
+    {
+      "id": "typed_null_else",
+      "sql": "SELECT CASE WHEN i>0 THEN 7 ELSE CAST(NULL AS INT) END AS r FROM case_inputs"
+    },
+    {
+      "id": "missing_else",
+      "sql": "SELECT CASE WHEN i>0 THEN i END AS r FROM case_inputs"
+    },
+    {
+      "id": "multiple_when",
+      "sql": "SELECT CASE WHEN i<0 THEN 1 WHEN i=0 THEN 2 ELSE 3 END AS r FROM case_inputs"
+    },
+    {
+      "id": "simple_required",
+      "sql": "SELECT CASE i WHEN -1 THEN 1 WHEN 0 THEN 2 ELSE 3 END AS r FROM case_inputs"
+    },
+    {
+      "id": "simple_missing_else",
+      "sql": "SELECT CASE i WHEN 0 THEN 2 END AS r FROM case_inputs"
+    },
+    {
+      "id": "simple_nullable_operand",
+      "sql": "SELECT CASE n WHEN 5 THEN 1 ELSE 2 END AS r FROM case_inputs"
+    },
+    {
+      "id": "numeric_coercion",
+      "sql": "SELECT CASE WHEN i>0 THEN CAST(i AS SMALLINT) ELSE CAST(7 AS BIGINT) END AS r FROM case_inputs"
+    },
+    {
+      "id": "string_coercion",
+      "sql": "SELECT CASE WHEN i>0 THEN i ELSE '7' END AS r FROM case_inputs"
+    },
+    {
+      "id": "dead_then_cast",
+      "sql": "SELECT CASE WHEN i < -100 THEN CAST('bad' AS INT) ELSE 7 END AS r FROM case_inputs"
+    },
+    {
+      "id": "dead_else_cast",
+      "sql": "SELECT CASE WHEN i<100 THEN 7 ELSE CAST('bad' AS INT) END AS r FROM case_inputs"
+    },
+    {
+      "id": "live_then_cast",
+      "sql": "SELECT CASE WHEN i=0 THEN CAST('bad' AS INT) ELSE 7 END AS r FROM case_inputs"
+    },
+    {
+      "id": "live_else_cast",
+      "sql": "SELECT CASE WHEN i<0 THEN 7 ELSE CAST('bad' AS INT) END AS r FROM case_inputs"
+    },
+    {
+      "id": "dead_later_condition",
+      "sql": "SELECT CASE WHEN i<100 THEN 7 WHEN CAST('bad' AS INT)=0 THEN 8 ELSE 9 END AS r FROM case_inputs"
+    },
+    {
+      "id": "empty_required",
+      "sql": "SELECT CASE WHEN i>0 THEN i ELSE 7 END AS r FROM case_empty"
+    },
+    {
+      "id": "empty_nullable",
+      "sql": "SELECT CASE WHEN i>0 THEN n ELSE 7 END AS r FROM case_empty"
+    },
+    {
+      "id": "empty_nullable_guard",
+      "sql": "SELECT CASE WHEN n IS NOT NULL THEN n ELSE 0 END AS r FROM case_empty"
+    },
+    {
+      "id": "empty_missing_else",
+      "sql": "SELECT CASE WHEN i>0 THEN i END AS r FROM case_empty"
+    }
+  ],
+  "observations": 58
+}
