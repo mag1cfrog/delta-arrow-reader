@@ -1,0 +1,50 @@
+{
+  "purpose": "Unchanged independent Spark 4.2.0 schema stages for the eight original native-target Spark guards in both ANSI modes. The original SQL, public schemas, NULL rows and required CAST failures stay separate from physical metadata assertions.",
+  "source_directory": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/scalar-null-discard-stage-guards-v2",
+  "baseline": "d178f9e21e1dbe8cd96dae10dea0e34ed6060cf6",
+  "observations": 16,
+  "files": [
+    {
+      "path": "null-discard-spark.jsonl",
+      "bytes": 22942,
+      "sha256": "264462427a5a00df0f570034a860dd5fe849a14725bd17dac870e04e24f077f4"
+    },
+    {
+      "path": "capture_null_discard_stages.py",
+      "bytes": 4909,
+      "sha256": "65c63953073148065e2db49a74f871e26b762cd1a49e47dd6422d329177d5919"
+    },
+    {
+      "path": "inputs-and-cases.json",
+      "bytes": 9470,
+      "sha256": "c2d8a9376453e83a3875b0e64eea2bcc8e3ff8e13cf6905e294429a03cc4d0ec"
+    },
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/native_scalar_subqueries.rs",
+      "bytes": 5258,
+      "sha256": "da501692157c64f587d94e870211ab6988f2cc4457dd048ba581150dc8bb265e"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 10878,
+      "sha256": "fe0b557144938cd306e48e3ec9976ad4cc95c99be309b0a2a78e79aec9f7181f"
+    }
+  ],
+  "deferred_dependencies": {
+    "window_output_names": "fix/spark-window-labels at bccf123e984d37d51841dc59dd307b13f6eec043 (#727)",
+    "scalar_subquery_names": "fix/spark-scalar-subquery-names at 963f5d625619622ea7609129005d48f4a850daf2 (#749); root name repair a4325ea4bd29b72887e93c39c16730ff01eb4583",
+    "pivot_single_column_parser": "Separate parser repair needed for generated-alias bare FOR k; original parenthesized pivot tests already exercise resolver behavior.",
+    "CASE_declarations": "#721 owns nested nullability and hidden-projection declaration failures.",
+    "ARRAY_MAP_admission": "#827 owns constructor admission and SparkStructRename."
+  }
+}

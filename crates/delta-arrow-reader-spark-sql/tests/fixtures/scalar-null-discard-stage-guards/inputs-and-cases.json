@@ -1,0 +1,398 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "review_head": "af83ed7606f00a8f4d766c7bf2964d1fd295fe9c",
+  "comparison_base": "d1885226f91ccc2bf326e4d9276f2ac8153a0a04",
+  "observations": 16,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 32,
+  "inputs": [],
+  "source_files": [
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/native_scalar_subqueries.rs",
+      "bytes": 5258,
+      "sha256": "da501692157c64f587d94e870211ab6988f2cc4457dd048ba581150dc8bb265e"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 10878,
+      "sha256": "fe0b557144938cd306e48e3ec9976ad4cc95c99be309b0a2a78e79aec9f7181f"
+    }
+  ],
+  "original_test_source_sha256": "da501692157c64f587d94e870211ab6988f2cc4457dd048ba581150dc8bb265e",
+  "test_source_identical_on_both_heads": true,
+  "cases": [
+    {
+      "group": "null_discard_stage_guards",
+      "id": "null_before_one",
+      "ansi": true,
+      "sql": "SELECT NULL + (SELECT 1) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "one_before_null",
+      "ansi": true,
+      "sql": "SELECT (SELECT 1) + NULL AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "null_before_bad_cast",
+      "ansi": true,
+      "sql": "SELECT NULL + (SELECT CAST('bad' AS INT)) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "bad_cast_before_null",
+      "ansi": true,
+      "sql": "SELECT (SELECT CAST('bad' AS INT)) + NULL AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "typed_null_scalar",
+      "ansi": true,
+      "sql": "SELECT (SELECT CAST(NULL AS INT)) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "limit_zero_bad_cast",
+      "ansi": true,
+      "sql": "SELECT (SELECT CAST(v AS INT) FROM VALUES ('bad') t(v) LIMIT 0) AS r",
+      "guard_expected": {
+        "status": "error",
+        "condition": "CAST_INVALID_INPUT",
+        "dar_cause": "Cannot cast string 'bad' to value of Int32 type"
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "null_before_limit_zero_bad_cast",
+      "ansi": true,
+      "sql": "SELECT NULL + (SELECT CAST(v AS INT) FROM VALUES ('bad') t(v) LIMIT 0) AS r",
+      "guard_expected": {
+        "status": "error",
+        "condition": "CAST_INVALID_INPUT",
+        "dar_cause": "Cannot cast string 'bad' to value of Int32 type"
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "limit_zero_bad_cast_before_null",
+      "ansi": true,
+      "sql": "SELECT (SELECT CAST(v AS INT) FROM VALUES ('bad') t(v) LIMIT 0) + NULL AS r",
+      "guard_expected": {
+        "status": "error",
+        "condition": "CAST_INVALID_INPUT",
+        "dar_cause": "Cannot cast string 'bad' to value of Int32 type"
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "null_before_one",
+      "ansi": false,
+      "sql": "SELECT NULL + (SELECT 1) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "one_before_null",
+      "ansi": false,
+      "sql": "SELECT (SELECT 1) + NULL AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "null_before_bad_cast",
+      "ansi": false,
+      "sql": "SELECT NULL + (SELECT CAST('bad' AS INT)) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "bad_cast_before_null",
+      "ansi": false,
+      "sql": "SELECT (SELECT CAST('bad' AS INT)) + NULL AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "typed_null_scalar",
+      "ansi": false,
+      "sql": "SELECT (SELECT CAST(NULL AS INT)) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "limit_zero_bad_cast",
+      "ansi": false,
+      "sql": "SELECT (SELECT CAST(v AS INT) FROM VALUES ('bad') t(v) LIMIT 0) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "null_before_limit_zero_bad_cast",
+      "ansi": false,
+      "sql": "SELECT NULL + (SELECT CAST(v AS INT) FROM VALUES ('bad') t(v) LIMIT 0) AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "group": "null_discard_stage_guards",
+      "id": "limit_zero_bad_cast_before_null",
+      "ansi": false,
+      "sql": "SELECT (SELECT CAST(v AS INT) FROM VALUES ('bad') t(v) LIMIT 0) + NULL AS r",
+      "guard_expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    }
+  ]
+}
