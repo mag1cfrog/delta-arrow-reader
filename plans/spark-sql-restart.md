@@ -10,15 +10,16 @@ has been reviewed. Publish the final support contract separately.
 ### Core delivery order
 
 The SQL MAP constructor repair for #824 also completes the original #816
-lambda contract in this branch. The next delivery sequence is #710, then #818.
-The staging base for this rescope is `c3eb810caca0e7b378ae0464953f225f6b0dfc58`.
+lambda contract. The basic projection metadata repair for #710 is now included
+in this branch; the next core delivery is #818. This projection slice starts
+from staging `4848ff1f058c0b023a2394d66e9ff59d2454ecf0`.
 
 | Issue | Merge contract | Remaining code prerequisite |
 | --- | --- | --- |
 | #824 | SQL MAP container nullability, including direct/scalar/lambda consumers; preserve nullable values, constructor errors, explicit casts and other MAP constructors. | Constructor-only repair included. |
 | #816 | Original folded MAP lambda and NULL-element control, provider inputs and binding guards, delivered by the constructor root repair. | Satisfied by the included #824 repair. No general lambda simplifier is needed. |
-| #710 | Ordinary projection/aggregate generated metadata and its existing consumers; preserve fields, values and error/evaluation behavior. | None. #803 is already merged through #817. |
-| #818 | Original correlated scalar metadata stages plus containment of its introduced MAP, CASE and hidden ORDER BY regressions. | #710's annotation and projection implementation. |
+| #710 | Ordinary projection/aggregate generated metadata and its existing consumers; preserve fields, values and error/evaluation behavior. | Basic repair included. #803 was already merged through #817. |
+| #818 | Original correlated scalar metadata stages plus containment of its introduced MAP, CASE and hidden ORDER BY regressions. | Uses the included #710 annotation and projection implementation. |
 
 The constructor source at `b7ac26e8` passes 723 workspace tests with zero
 failures and three inherited ignored tests, formatting and package Clippy.
@@ -26,6 +27,16 @@ Complete paired observations preserve the metadata/name/capture gaps with
 their owners. The existing malformed programmatic lambda-binding gap is #856;
 the unchanged constant-cast NULL-predicate error timing is recorded under #173.
 Neither is a dependency of the constructor repair.
+
+The projection source at `313b5703` passes 745 workspace tests with zero
+failures and three inherited ignored tests, formatting and package Clippy.
+Review found and fixed two introduced regressions: suppressing source metadata
+after CASE simplification, and checking GROUPING_ID placeholders before their
+aggregate rewrite. Existing assertions remain unchanged. All 608 paired
+observations preserve values, ordering, errors and unrelated fields. Sixteen IF
+historical expectations now use independently captured public nullability;
+their physical fields and values are unchanged. The same 72 broader naming and
+grammar differences remain with #757, #727, #744 and #790, outside this repair.
 
 Each slice must satisfy its original contract and pass the full existing
 standalone workspace regression suite, formatting and package Clippy on the
@@ -51,7 +62,7 @@ branches and temporary execution overlays, preserving necessary evidence and
 unfinished work.
 
 The last successful three-platform checkpoint is `fea63565`, run 41671391571.
-The current staging base has four later merges, so that checkpoint is not
+The staging base above has five later merges, so that checkpoint is not
 validation of the current head. Reports should identify which core dependency
 was removed, what original acceptance remains, and the next blocking action.
 
