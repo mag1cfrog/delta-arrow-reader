@@ -9,7 +9,7 @@ use datafusion::physical_optimizer::output_requirements::OutputRequirementExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::tree_node::TreeNodeRecursion;
 use datafusion_common::{Result, internal_err};
 use datafusion_expr::{LogicalPlan, UserDefinedLogicalNode};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;

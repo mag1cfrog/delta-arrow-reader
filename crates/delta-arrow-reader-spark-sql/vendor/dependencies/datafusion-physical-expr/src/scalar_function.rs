@@ -48,6 +48,7 @@ use datafusion_expr::{
     ColumnarValue, ExpressionPlacement, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
     ScalarUDFImpl, Volatility, expr_vec_fmt,
 };
+use parking_lot::Mutex;
 
 /// Physical expression of a scalar function
 pub struct ScalarFunctionExpr {
@@ -55,6 +56,8 @@ pub struct ScalarFunctionExpr {
     name: String,
     args: Vec<Arc<dyn PhysicalExpr>>,
     return_field: FieldRef,
+    // Bound repeated type/nullability walks to one successful schema per opted-in expression.
+    physical_return_field_cache: Option<Box<Mutex<Option<(Schema, FieldRef)>>>>,
     config_options: Arc<ConfigOptions>,
     // Fixed by the UDF instance at planning time, avoiding a per-batch trait call.
     short_circuit_null: bool,
@@ -110,16 +113,12 @@ impl ScalarFunctionExpr {
         batch: &RecordBatch,
         args: Vec<ColumnarValue>,
     ) -> Result<ColumnarValue> {
+        let return_field = self.return_field(batch.schema_ref())?;
         let arg_fields = self
             .args
             .iter()
             .map(|e| e.return_field(batch.schema_ref()))
             .collect::<Result<Vec<_>>>()?;
-        let return_field = if self.fun.inner().return_field_uses_physical_input_schema() {
-            Self::derive_return_field(self.fun.as_ref(), &self.args, &arg_fields)?
-        } else {
-            Arc::clone(&self.return_field)
-        };
 
         let input_empty = args.is_empty();
         let input_all_scalar = args
@@ -166,6 +165,8 @@ impl ScalarFunctionExpr {
         Self {
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
             short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
+            physical_return_field_cache: fun.inner().return_field_uses_physical_input_schema()
+                .then(|| Box::new(Mutex::new(None))),
             fun,
             name: name.to_owned(),
             args,
@@ -187,15 +188,11 @@ impl ScalarFunctionExpr {
             .map(|e| e.return_field(schema))
             .collect::<Result<Vec<_>>>()?;
         let return_field = Self::derive_return_field(fun.as_ref(), &args, &arg_fields)?;
-        Ok(Self {
-            returns_first_non_null: fun.inner().returns_first_non_null_argument(),
-            short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
-            fun,
-            name,
-            args,
-            return_field,
-            config_options,
-        })
+        let mut expression = Self::new(&name, fun, args, return_field, config_options);
+        if let Some(cache) = &mut expression.physical_return_field_cache {
+            *cache.get_mut() = Some((schema.clone(), Arc::clone(&expression.return_field)));
+        }
+        Ok(expression)
     }
 
     fn derive_return_field(
@@ -287,6 +284,7 @@ impl PartialEq for ScalarFunctionExpr {
             name,
             args,
             return_field,
+            physical_return_field_cache: _, // memoization only
             config_options,
             short_circuit_null: _,     // derived from fun
             returns_first_non_null: _, // derived from fun
@@ -308,6 +306,7 @@ impl Hash for ScalarFunctionExpr {
             name,
             args,
             return_field,
+            physical_return_field_cache: _, // memoization only
             config_options: _,         // expensive to hash, and often equal
             short_circuit_null: _,     // derived from fun
             returns_first_non_null: _, // derived from fun
@@ -403,16 +402,22 @@ impl PhysicalExpr for ScalarFunctionExpr {
     }
 
     fn return_field(&self, input_schema: &Schema) -> Result<FieldRef> {
-        if self.fun.inner().return_field_uses_physical_input_schema() {
-            let arg_fields = self
-                .args
-                .iter()
-                .map(|e| e.return_field(input_schema))
-                .collect::<Result<Vec<_>>>()?;
-            Self::derive_return_field(self.fun.as_ref(), &self.args, &arg_fields)
-        } else {
-            Ok(Arc::clone(&self.return_field))
+        let Some(cache) = &self.physical_return_field_cache else {
+            return Ok(Arc::clone(&self.return_field));
+        };
+        if let Some((schema, field)) = cache.lock().as_ref()
+            && schema == input_schema
+        {
+            return Ok(Arc::clone(field));
         }
+        let arg_fields = self
+            .args
+            .iter()
+            .map(|e| e.return_field(input_schema))
+            .collect::<Result<Vec<_>>>()?;
+        let field = Self::derive_return_field(self.fun.as_ref(), &self.args, &arg_fields)?;
+        *cache.lock() = Some((input_schema.clone(), Arc::clone(&field)));
+        Ok(field)
     }
 
     fn children(&self) -> Vec<&Arc<dyn PhysicalExpr>> {
