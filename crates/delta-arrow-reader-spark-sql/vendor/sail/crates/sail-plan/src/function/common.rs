@@ -258,7 +258,7 @@ enum ResultMetadataLifetime {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkResultMetadata {
+pub(crate) struct SparkResultMetadata {
     metadata: FieldMetadata,
     lifetime: ResultMetadataLifetime,
     metadata_source_type: Option<DataType>,
