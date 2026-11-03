@@ -1,0 +1,356 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "union_meta_left",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "left",
+              "shared": "keep"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "1"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "union_meta_right",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "right",
+              "shared": "keep"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ]
+    },
+    {
+      "name": "union_meta_bare",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "explicit_left_generated_right_union",
+      "sql": "SELECT ABS(1) AS r UNION SELECT ABS(2)"
+    },
+    {
+      "id": "generated_left_explicit_right_union",
+      "sql": "SELECT ABS(1) UNION SELECT ABS(2) AS r"
+    },
+    {
+      "id": "generated_left_generated_right_union",
+      "sql": "SELECT ABS(1) UNION SELECT ABS(2)"
+    },
+    {
+      "id": "explicit_left_explicit_right_union",
+      "sql": "SELECT ABS(1) AS r UNION SELECT ABS(2) AS other"
+    },
+    {
+      "id": "metadata_left_empty_right_union",
+      "sql": "SELECT v AS r FROM union_meta_left UNION SELECT v FROM union_meta_bare"
+    },
+    {
+      "id": "empty_left_metadata_right_union",
+      "sql": "SELECT v AS r FROM union_meta_bare UNION SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "conflicting_metadata_union",
+      "sql": "SELECT v AS r FROM union_meta_left UNION SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_widened_union",
+      "sql": "SELECT v AS r FROM union_meta_left UNION SELECT CAST(v AS BIGINT) FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_already_wide_union",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM union_meta_left UNION SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "generated_left_widened_union",
+      "sql": "SELECT ABS(1) UNION SELECT CAST(ABS(2) AS BIGINT) AS r"
+    },
+    {
+      "id": "explicit_left_generated_right_union_all",
+      "sql": "SELECT ABS(1) AS r UNION ALL SELECT ABS(2)"
+    },
+    {
+      "id": "generated_left_explicit_right_union_all",
+      "sql": "SELECT ABS(1) UNION ALL SELECT ABS(2) AS r"
+    },
+    {
+      "id": "generated_left_generated_right_union_all",
+      "sql": "SELECT ABS(1) UNION ALL SELECT ABS(2)"
+    },
+    {
+      "id": "explicit_left_explicit_right_union_all",
+      "sql": "SELECT ABS(1) AS r UNION ALL SELECT ABS(2) AS other"
+    },
+    {
+      "id": "metadata_left_empty_right_union_all",
+      "sql": "SELECT v AS r FROM union_meta_left UNION ALL SELECT v FROM union_meta_bare"
+    },
+    {
+      "id": "empty_left_metadata_right_union_all",
+      "sql": "SELECT v AS r FROM union_meta_bare UNION ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "conflicting_metadata_union_all",
+      "sql": "SELECT v AS r FROM union_meta_left UNION ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_widened_union_all",
+      "sql": "SELECT v AS r FROM union_meta_left UNION ALL SELECT CAST(v AS BIGINT) FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_already_wide_union_all",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM union_meta_left UNION ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "generated_left_widened_union_all",
+      "sql": "SELECT ABS(1) UNION ALL SELECT CAST(ABS(2) AS BIGINT) AS r"
+    },
+    {
+      "id": "explicit_left_generated_right_intersect",
+      "sql": "SELECT ABS(1) AS r INTERSECT SELECT ABS(2)"
+    },
+    {
+      "id": "generated_left_explicit_right_intersect",
+      "sql": "SELECT ABS(1) INTERSECT SELECT ABS(2) AS r"
+    },
+    {
+      "id": "generated_left_generated_right_intersect",
+      "sql": "SELECT ABS(1) INTERSECT SELECT ABS(2)"
+    },
+    {
+      "id": "explicit_left_explicit_right_intersect",
+      "sql": "SELECT ABS(1) AS r INTERSECT SELECT ABS(2) AS other"
+    },
+    {
+      "id": "metadata_left_empty_right_intersect",
+      "sql": "SELECT v AS r FROM union_meta_left INTERSECT SELECT v FROM union_meta_bare"
+    },
+    {
+      "id": "empty_left_metadata_right_intersect",
+      "sql": "SELECT v AS r FROM union_meta_bare INTERSECT SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "conflicting_metadata_intersect",
+      "sql": "SELECT v AS r FROM union_meta_left INTERSECT SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_widened_intersect",
+      "sql": "SELECT v AS r FROM union_meta_left INTERSECT SELECT CAST(v AS BIGINT) FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_already_wide_intersect",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM union_meta_left INTERSECT SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "generated_left_widened_intersect",
+      "sql": "SELECT ABS(1) INTERSECT SELECT CAST(ABS(2) AS BIGINT) AS r"
+    },
+    {
+      "id": "explicit_left_generated_right_intersect_all",
+      "sql": "SELECT ABS(1) AS r INTERSECT ALL SELECT ABS(2)"
+    },
+    {
+      "id": "generated_left_explicit_right_intersect_all",
+      "sql": "SELECT ABS(1) INTERSECT ALL SELECT ABS(2) AS r"
+    },
+    {
+      "id": "generated_left_generated_right_intersect_all",
+      "sql": "SELECT ABS(1) INTERSECT ALL SELECT ABS(2)"
+    },
+    {
+      "id": "explicit_left_explicit_right_intersect_all",
+      "sql": "SELECT ABS(1) AS r INTERSECT ALL SELECT ABS(2) AS other"
+    },
+    {
+      "id": "metadata_left_empty_right_intersect_all",
+      "sql": "SELECT v AS r FROM union_meta_left INTERSECT ALL SELECT v FROM union_meta_bare"
+    },
+    {
+      "id": "empty_left_metadata_right_intersect_all",
+      "sql": "SELECT v AS r FROM union_meta_bare INTERSECT ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "conflicting_metadata_intersect_all",
+      "sql": "SELECT v AS r FROM union_meta_left INTERSECT ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_widened_intersect_all",
+      "sql": "SELECT v AS r FROM union_meta_left INTERSECT ALL SELECT CAST(v AS BIGINT) FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_already_wide_intersect_all",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM union_meta_left INTERSECT ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "generated_left_widened_intersect_all",
+      "sql": "SELECT ABS(1) INTERSECT ALL SELECT CAST(ABS(2) AS BIGINT) AS r"
+    },
+    {
+      "id": "explicit_left_generated_right_except",
+      "sql": "SELECT ABS(1) AS r EXCEPT SELECT ABS(2)"
+    },
+    {
+      "id": "generated_left_explicit_right_except",
+      "sql": "SELECT ABS(1) EXCEPT SELECT ABS(2) AS r"
+    },
+    {
+      "id": "generated_left_generated_right_except",
+      "sql": "SELECT ABS(1) EXCEPT SELECT ABS(2)"
+    },
+    {
+      "id": "explicit_left_explicit_right_except",
+      "sql": "SELECT ABS(1) AS r EXCEPT SELECT ABS(2) AS other"
+    },
+    {
+      "id": "metadata_left_empty_right_except",
+      "sql": "SELECT v AS r FROM union_meta_left EXCEPT SELECT v FROM union_meta_bare"
+    },
+    {
+      "id": "empty_left_metadata_right_except",
+      "sql": "SELECT v AS r FROM union_meta_bare EXCEPT SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "conflicting_metadata_except",
+      "sql": "SELECT v AS r FROM union_meta_left EXCEPT SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_widened_except",
+      "sql": "SELECT v AS r FROM union_meta_left EXCEPT SELECT CAST(v AS BIGINT) FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_already_wide_except",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM union_meta_left EXCEPT SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "generated_left_widened_except",
+      "sql": "SELECT ABS(1) EXCEPT SELECT CAST(ABS(2) AS BIGINT) AS r"
+    },
+    {
+      "id": "explicit_left_generated_right_except_all",
+      "sql": "SELECT ABS(1) AS r EXCEPT ALL SELECT ABS(2)"
+    },
+    {
+      "id": "generated_left_explicit_right_except_all",
+      "sql": "SELECT ABS(1) EXCEPT ALL SELECT ABS(2) AS r"
+    },
+    {
+      "id": "generated_left_generated_right_except_all",
+      "sql": "SELECT ABS(1) EXCEPT ALL SELECT ABS(2)"
+    },
+    {
+      "id": "explicit_left_explicit_right_except_all",
+      "sql": "SELECT ABS(1) AS r EXCEPT ALL SELECT ABS(2) AS other"
+    },
+    {
+      "id": "metadata_left_empty_right_except_all",
+      "sql": "SELECT v AS r FROM union_meta_left EXCEPT ALL SELECT v FROM union_meta_bare"
+    },
+    {
+      "id": "empty_left_metadata_right_except_all",
+      "sql": "SELECT v AS r FROM union_meta_bare EXCEPT ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "conflicting_metadata_except_all",
+      "sql": "SELECT v AS r FROM union_meta_left EXCEPT ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_widened_except_all",
+      "sql": "SELECT v AS r FROM union_meta_left EXCEPT ALL SELECT CAST(v AS BIGINT) FROM union_meta_right"
+    },
+    {
+      "id": "metadata_left_already_wide_except_all",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM union_meta_left EXCEPT ALL SELECT v FROM union_meta_right"
+    },
+    {
+      "id": "generated_left_widened_except_all",
+      "sql": "SELECT ABS(1) EXCEPT ALL SELECT CAST(ABS(2) AS BIGINT) AS r"
+    },
+    {
+      "id": "struct_reordered_names_union",
+      "sql": "SELECT NAMED_STRUCT('x',1,'y',2) AS r UNION SELECT NAMED_STRUCT('y',3,'x',4)"
+    },
+    {
+      "id": "struct_different_names_union",
+      "sql": "SELECT NAMED_STRUCT('x',1) AS r UNION SELECT NAMED_STRUCT('y',2)"
+    },
+    {
+      "id": "struct_same_names_numeric_union",
+      "sql": "SELECT NAMED_STRUCT('x',1,'y',2) AS r UNION SELECT NAMED_STRUCT('x',CAST(3 AS BIGINT),'y',4)"
+    },
+    {
+      "id": "struct_reordered_names_union_all",
+      "sql": "SELECT NAMED_STRUCT('x',1,'y',2) AS r UNION ALL SELECT NAMED_STRUCT('y',3,'x',4)"
+    },
+    {
+      "id": "struct_different_names_union_all",
+      "sql": "SELECT NAMED_STRUCT('x',1) AS r UNION ALL SELECT NAMED_STRUCT('y',2)"
+    },
+    {
+      "id": "struct_same_names_numeric_union_all",
+      "sql": "SELECT NAMED_STRUCT('x',1,'y',2) AS r UNION ALL SELECT NAMED_STRUCT('x',CAST(3 AS BIGINT),'y',4)"
+    },
+    {
+      "id": "three_input_left_alias",
+      "sql": "SELECT ABS(1) AS r UNION ALL SELECT ABS(2) UNION ALL SELECT ABS(3)"
+    },
+    {
+      "id": "three_input_left_generated",
+      "sql": "SELECT ABS(1) UNION SELECT ABS(2) AS r UNION SELECT ABS(3) AS other"
+    }
+  ]
+}
