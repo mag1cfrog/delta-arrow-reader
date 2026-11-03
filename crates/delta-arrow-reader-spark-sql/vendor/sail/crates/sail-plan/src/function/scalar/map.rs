@@ -39,11 +39,12 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let values = cast_list_value_nullability(values, schema, true)?;
     let last_value_wins =
         input.function_context.plan_config.map_key_dedup_policy == MapKeyDedupPolicy::LastWin;
-    let expr = F::udf(SparkMapFromArrays::new(last_value_wins))(ScalarFunctionInput {
-        arguments: vec![keys, values],
-        function_context: input.function_context,
-    })?;
-    cast_map_value_nullability(expr, schema, value_contains_null)
+    F::udf(SparkMapFromArrays::new(last_value_wins).with_value_contains_null(value_contains_null))(
+        ScalarFunctionInput {
+            arguments: vec![keys, values],
+            function_context: input.function_context,
+        },
+    )
 }
 
 fn map_from_arrays(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {

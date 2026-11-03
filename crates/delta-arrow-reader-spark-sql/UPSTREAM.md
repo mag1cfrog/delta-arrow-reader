@@ -186,6 +186,10 @@ current nested type, retaining valid nonnull refinements while requiring the
 same field names, order and storage types. A guarded positional Arrow cast keeps
 duplicate STRUCT child values in place. Arrow extension keys remain part
 of the result type, including when the physical scalar expression omits them.
+MAP construction records its resolved value nullability in the existing
+map-from-arrays function, whose nested return type follows the live arguments.
+The returned Arrow declaration enforces that nullability after the existing
+duplicate-key handling. Explicit SQL CAST keeps its separate declared type.
 The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
 retain independent public and executed fields, the original scalar guards and
 the explicit Arrow type-contract difference from Spark. Native DataFusion

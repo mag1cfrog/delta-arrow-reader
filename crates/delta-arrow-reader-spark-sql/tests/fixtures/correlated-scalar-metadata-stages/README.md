@@ -159,7 +159,12 @@ that invariant; it does not define Spark's CASE nullability policy. Literal
 `WHEN true` has a nonnullable Spark child in both stages, while `WHEN 1=1` has a
 nullable Spark child in both stages. The baseline DAR public/executed differences
 remain strict references for #721 and its constructor follow-up. MAP's inherited
-top-level scalar nullability gap remains separate from the introduced loss of
-its no-order nested `source=plain` metadata. Root owns attribution of the former;
-the latter remains a required #818 repair. No expectation is changed to make
-either gap appear compatible.
+top-level scalar nullability gap is tracked by #824. Its no-order nested
+`source=plain` metadata is a separate #818 contract. MAP construction records
+only its resolved value nullability; nested types follow the live arguments.
+The focused control checks duplicate field values, scalar and array results,
+duplicate-key policy, and rejection of actual NULLs in required values. The
+default MAP_FROM_ARRAYS/MAP_FROM_ENTRIES paths and explicit SQL CAST retain their
+existing implementations; their interactions with scalar inlining require
+independent reference checks. No expectation is changed to make a gap appear
+compatible.

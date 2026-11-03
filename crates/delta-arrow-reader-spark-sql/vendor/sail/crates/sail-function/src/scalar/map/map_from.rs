@@ -1,10 +1,12 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::Arc;
+
 use datafusion::arrow::array::{Array, ArrayRef, NullArray, NullBufferBuilder, StructArray};
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion_common::utils::take_function_args;
-use datafusion_common::{Result, exec_err};
+use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
 };
@@ -21,6 +23,7 @@ use crate::scalar::map::utils::{
 pub struct SparkMapFromArrays {
     delegate: MapFromArrays,
     last_value_wins: bool,
+    value_contains_null: Option<bool>,
 }
 
 impl SparkMapFromArrays {
@@ -28,7 +31,14 @@ impl SparkMapFromArrays {
         Self {
             delegate: MapFromArrays::new(),
             last_value_wins,
+            value_contains_null: None,
         }
+    }
+
+    /// Keep MAP's resolved value nullability while deriving nested types from live arguments.
+    pub fn with_value_contains_null(mut self, value_contains_null: bool) -> Self {
+        self.value_contains_null = Some(value_contains_null);
+        self
     }
 }
 
@@ -46,15 +56,46 @@ impl ScalarUDFImpl for SparkMapFromArrays {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
-        self.delegate.return_field_from_args(args)
+        let field = self.delegate.return_field_from_args(args)?;
+        let Some(nullable) = self.value_contains_null else {
+            return Ok(field);
+        };
+        let DataType::Map(entries, sorted) = field.data_type() else {
+            return internal_err!("expected MAP return type");
+        };
+        let DataType::Struct(fields) = entries.data_type() else {
+            return internal_err!("expected MAP entries");
+        };
+        let [key, value] = fields.as_ref() else {
+            return internal_err!("expected MAP key/value fields");
+        };
+        let value = Arc::new(value.as_ref().clone().with_nullable(nullable));
+        let entries = Arc::new(entries.as_ref().clone().with_data_type(
+            DataType::Struct(vec![Arc::clone(key), value].into()),
+        ));
+        Ok(Arc::new(field.as_ref().clone().with_data_type(
+            DataType::Map(entries, *sorted),
+        )))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let last_value_wins = self.last_value_wins;
-        make_scalar_function(
+        let value = make_scalar_function(
             move |args| map_from_arrays_inner(args, last_value_wins),
             vec![],
-        )(&args.args)
+        )(&args.args)?;
+        if self.value_contains_null.is_none() || value.data_type() == *args.return_type() {
+            return Ok(value);
+        }
+        match value {
+            ColumnarValue::Array(array) => {
+                Ok(ColumnarValue::Array(cast(array.as_ref(), args.return_type())?))
+            }
+            ColumnarValue::Scalar(value) => {
+                let array = cast(value.to_array()?.as_ref(), args.return_type())?;
+                Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(array.as_ref(), 0)?))
+            }
+        }
     }
 }
 
@@ -167,4 +208,168 @@ fn map_from_entries_inner(args: &[ArrayRef], last_value_wins: bool) -> Result<Ar
         result_nulls.as_ref(),
         last_value_wins,
     )
+}
+
+#[cfg(test)]
+#[test]
+fn constructor_nullability_keeps_live_nested_metadata() -> Result<()> {
+    use datafusion::arrow::array::{AsArray, Int32Array, ListArray, StringArray};
+    use datafusion::arrow::buffer::OffsetBuffer;
+    use datafusion::arrow::datatypes::Field;
+    use std::collections::HashMap;
+
+    let constructor = SparkMapFromArrays::new(false).with_value_contains_null(false);
+    for metadata in [HashMap::new(), HashMap::from([("source".into(), "plain".into())])] {
+        let child = Arc::new(Field::new("item", DataType::Int32, true).with_metadata(metadata));
+        let values: ArrayRef = Arc::new(StructArray::try_new(
+            vec![Arc::clone(&child), child].into(),
+            vec![
+                Arc::new(Int32Array::from(vec![Some(1), None])),
+                Arc::new(Int32Array::from(vec![Some(10), Some(20)])),
+            ],
+            None,
+        )?);
+        let keys: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new("item", DataType::Utf8, true)),
+            OffsetBuffer::new(vec![0, 1, 2].into()),
+            Arc::new(StringArray::from(vec!["k", "k"])),
+            None,
+        )?);
+        let value_lists: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new("item", values.data_type().clone(), true)),
+            OffsetBuffer::new(vec![0, 1, 2].into()),
+            Arc::clone(&values),
+            None,
+        )?);
+        let arg_fields = vec![
+            Arc::new(Field::new("keys", keys.data_type().clone(), true)),
+            Arc::new(Field::new("values", value_lists.data_type().clone(), true)),
+        ];
+        let returned = constructor.return_field_from_args(ReturnFieldArgs {
+            arg_fields: &arg_fields,
+            scalar_arguments: &[None, None],
+        })?;
+        assert!(returned.is_nullable());
+        let DataType::Map(entries, _) = returned.data_type() else {
+            return internal_err!("expected MAP declaration");
+        };
+        let DataType::Struct(fields) = entries.data_type() else {
+            return internal_err!("expected MAP entries");
+        };
+        assert!(!fields[1].is_nullable());
+        assert_eq!(fields[1].data_type(), values.data_type());
+        let default = SparkMapFromArrays::new(false).return_field_from_args(ReturnFieldArgs {
+            arg_fields: &arg_fields,
+            scalar_arguments: &[None, None],
+        })?;
+        let DataType::Map(entries, _) = default.data_type() else {
+            return internal_err!("expected default MAP declaration");
+        };
+        let DataType::Struct(fields) = entries.data_type() else {
+            return internal_err!("expected default MAP entries");
+        };
+        assert!(fields[1].is_nullable());
+        for scalar in [false, true] {
+            let rows = if scalar { 1 } else { 2 };
+            let args = if scalar {
+                vec![
+                    ColumnarValue::Scalar(ScalarValue::try_from_array(keys.as_ref(), 0)?),
+                    ColumnarValue::Scalar(ScalarValue::try_from_array(value_lists.as_ref(), 0)?),
+                ]
+            } else {
+                vec![ColumnarValue::Array(Arc::clone(&keys)),
+                    ColumnarValue::Array(Arc::clone(&value_lists))]
+            };
+            let result = constructor.invoke_with_args(ScalarFunctionArgs {
+                args,
+                arg_fields: arg_fields.clone(),
+                number_rows: rows,
+                return_field: Arc::clone(&returned),
+                config_options: Arc::new(Default::default()),
+            })?.into_array(rows)?;
+            assert_eq!(result.data_type(), returned.data_type());
+            result.to_data().validate_full()?;
+            assert!(result.nulls().is_none());
+            assert_eq!(result.as_map().offsets().as_ref(), &[0, 1, 2][..=rows]);
+            assert_eq!(result.as_map().keys().to_data(),
+                StringArray::from(vec!["k", "k"]).slice(0, rows).to_data());
+            assert_eq!(
+                result.as_map().entries().column(1).to_data(),
+                values.slice(0, rows).to_data()
+            );
+        }
+        let duplicate_keys: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new("item", DataType::Utf8, true)),
+            OffsetBuffer::new(vec![0, 2].into()),
+            Arc::new(StringArray::from(vec!["k", "k"])),
+            None,
+        )?);
+        let duplicate_values: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new("item", values.data_type().clone(), true)),
+            OffsetBuffer::new(vec![0, 2].into()),
+            Arc::clone(&values),
+            None,
+        )?);
+        let error = constructor.invoke_with_args(ScalarFunctionArgs {
+            args: vec![ColumnarValue::Array(Arc::clone(&duplicate_keys)),
+                ColumnarValue::Array(Arc::clone(&duplicate_values))],
+            arg_fields: arg_fields.clone(),
+            number_rows: 1,
+            return_field: Arc::clone(&returned),
+            config_options: Arc::new(Default::default()),
+        }).expect_err("duplicate keys must retain their original error");
+        assert!(error.to_string().contains("[DUPLICATED_MAP_KEY]"));
+        let last_wins = SparkMapFromArrays::new(true).with_value_contains_null(false)
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![ColumnarValue::Array(duplicate_keys),
+                    ColumnarValue::Array(duplicate_values)],
+                arg_fields: arg_fields.clone(),
+                number_rows: 1,
+                return_field: Arc::clone(&returned),
+                config_options: Arc::new(Default::default()),
+            })?.into_array(1)?;
+        last_wins.to_data().validate_full()?;
+        assert_eq!(last_wins.data_type(), returned.data_type());
+        assert_eq!(last_wins.as_map().offsets().as_ref(), &[0, 1]);
+        assert_eq!(last_wins.as_map().keys().to_data(), StringArray::from(vec!["k"]).to_data());
+        assert_eq!(last_wins.as_map().values().to_data(), values.slice(1, 1).to_data());
+
+        let null_values: ArrayRef = Arc::new(StructArray::try_new(
+            values.as_struct().fields().clone(),
+            values.as_struct().columns().to_vec(),
+            Some(NullBuffer::from(vec![true, false])),
+        )?);
+        let bad_values: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new("item", null_values.data_type().clone(), true)),
+            OffsetBuffer::new(vec![0, 1, 2].into()),
+            Arc::clone(&null_values),
+            None,
+        )?);
+        let error = constructor.invoke_with_args(ScalarFunctionArgs {
+            args: vec![ColumnarValue::Array(Arc::clone(&keys)),
+                ColumnarValue::Array(Arc::clone(&bad_values))],
+            arg_fields: arg_fields.clone(),
+            number_rows: 2,
+            return_field: Arc::clone(&returned),
+            config_options: Arc::new(Default::default()),
+        }).expect_err("required MAP values must reject actual NULLs");
+        assert!(error.to_string().contains("Found unmasked nulls for non-nullable StructArray field"));
+        let nullable = SparkMapFromArrays::new(false).with_value_contains_null(true);
+        let nullable_field = nullable.return_field_from_args(ReturnFieldArgs {
+            arg_fields: &arg_fields,
+            scalar_arguments: &[None, None],
+        })?;
+        let nullable_result = nullable.invoke_with_args(ScalarFunctionArgs {
+            args: vec![ColumnarValue::Array(keys), ColumnarValue::Array(bad_values)],
+            arg_fields,
+            number_rows: 2,
+            return_field: Arc::clone(&nullable_field),
+            config_options: Arc::new(Default::default()),
+        })?.into_array(2)?;
+        nullable_result.to_data().validate_full()?;
+        assert_eq!(nullable_result.data_type(), nullable_field.data_type());
+        assert_eq!(nullable_result.as_map().offsets().as_ref(), &[0, 1, 2]);
+        assert_eq!(nullable_result.as_map().values().to_data(), null_values.to_data());
+    }
+    Ok(())
 }
