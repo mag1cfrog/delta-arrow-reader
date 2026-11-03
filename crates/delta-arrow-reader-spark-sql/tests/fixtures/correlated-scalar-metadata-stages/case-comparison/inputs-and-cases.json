@@ -1,0 +1,297 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "review_head": "8f8f53e988b9d8523b3f9bd5b487edcb02a2c270",
+  "comparison_base": "d1885226f91ccc2bf326e4d9276f2ac8153a0a04",
+  "source_reference_sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2",
+  "observations": 4,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 8,
+  "inputs": [
+    {
+      "name": "struct_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2",
+          [
+            "-3",
+            [
+              "-4"
+            ]
+          ],
+          [
+            "-5",
+            "-6",
+            "-7"
+          ],
+          [
+            [
+              "-8"
+            ],
+            null
+          ],
+          [
+            "9"
+          ]
+        ],
+        [
+          "1",
+          "2",
+          [
+            "3",
+            [
+              "4"
+            ]
+          ],
+          [
+            "5",
+            "6",
+            "7"
+          ],
+          [
+            [
+              "8"
+            ]
+          ],
+          [
+            "10"
+          ]
+        ],
+        [
+          "2",
+          null,
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            [
+              null
+            ]
+          ],
+          [
+            "11"
+          ]
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          [
+            "12"
+          ]
+        ]
+      ]
+    }
+  ],
+  "source_files": [
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/original-eight-spark.jsonl",
+      "bytes": 25175,
+      "sha256": "90002192e6381674a7914bd7fef4301d086c8dcd203a6f75c1bdcb35e71158fb"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/spark_inputs.rs",
+      "bytes": 5746,
+      "sha256": "ebf5352be9f1bfeba0d5ca5da3fe68182eafd51c996a7913a630df2ef365e002"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 9421,
+      "sha256": "f876f433b600b86fff322feafadd89932d737408439892d78812621fd2737d7c"
+    }
+  ],
+  "cases": [
+    {
+      "group": "declaration_comparison_probe",
+      "id": "case_equal_hidden_order",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q ORDER BY q.id"
+    },
+    {
+      "group": "declaration_comparison_probe",
+      "id": "case_equal_no_order",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q"
+    },
+    {
+      "group": "declaration_comparison_probe",
+      "id": "case_equal_hidden_order",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q ORDER BY q.id"
+    },
+    {
+      "group": "declaration_comparison_probe",
+      "id": "case_equal_no_order",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q"
+    }
+  ],
+  "original_eight_reference_sha256": "90002192e6381674a7914bd7fef4301d086c8dcd203a6f75c1bdcb35e71158fb"
+}

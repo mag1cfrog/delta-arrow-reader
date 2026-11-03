@@ -1286,3 +1286,12 @@ async fn hidden_projection_compatibility_matches_exact_spark_stages() -> TestRes
     )
     .await
 }
+
+#[tokio::test]
+async fn case_comparison_matches_exact_spark_stages() -> TestResult {
+    replay_alias_schema_stages(
+        include_str!("fixtures/correlated-scalar-metadata-stages/case-comparison/case-equal-spark.jsonl"),
+        4,
+    )
+    .await
+}

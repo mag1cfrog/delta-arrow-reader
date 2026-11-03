@@ -143,3 +143,23 @@ case now supplies its exact independent physical schema. If collection fails,
 the completed pre-collection schema is checked before the actual required
 engine error is reached. A focused control rejects incorrect physical metadata
 and separately requires the real division error with the correct declaration.
+
+The eight raw `compatibility/compatibility-spark.jsonl` records, SHA256
+`90002192e6381674a7914bd7fef4301d086c8dcd203a6f75c1bdcb35e71158fb`, cover literal
+CASE and correlated MAP with and without hidden ORDER BY. Four additive
+`CASE WHEN 1=1` records remain in `case-comparison/case-equal-spark.jsonl`, SHA256
+`fcd1037b0866637ffb9a095c28b788008a55eef160c5d97cfde847b430905b8f`.
+Both files replay complete public/executed fields and rows without normalizing
+their nullability or metadata. MAP encoding retains entry order and duplicates.
+
+These records expose separate facts. A hidden-output metadata annotation must
+allow the optimizer's valid nested nonnull refinement without changing the
+underlying values or storage type. The metadata-only wrapper control protects
+that invariant; it does not define Spark's CASE nullability policy. Literal
+`WHEN true` has a nonnullable Spark child in both stages, while `WHEN 1=1` has a
+nullable Spark child in both stages. The baseline DAR public/executed differences
+remain strict references for #721 and its constructor follow-up. MAP's inherited
+top-level scalar nullability gap remains separate from the introduced loss of
+its no-order nested `source=plain` metadata. Root owns attribution of the former;
+the latter remains a required #818 repair. No expectation is changed to make
+either gap appear compatible.
