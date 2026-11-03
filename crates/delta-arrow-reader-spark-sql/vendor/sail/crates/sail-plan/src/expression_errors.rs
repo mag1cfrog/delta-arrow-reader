@@ -46,7 +46,7 @@ use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecima
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::struct_function::StructFunction;
 
-/// Preserve early expression errors before NULL and empty-result rewrites.
+/// Preserve early expression errors and Spark CASE declarations before optimization.
 #[derive(Debug)]
 pub struct PreserveSparkExpressionErrors;
 
@@ -322,7 +322,7 @@ impl PreserveSparkExpressionErrors {
             has_null_sensitive_comparison,
         };
         let plan = if has_case {
-            prepare.fold_constant_structs_with_case(plan)?
+            prepare.fold_constant_structs_with_spark_case(plan)?
         } else {
             plan
         };
@@ -576,7 +576,7 @@ impl PreserveSparkExpressionErrors {
             plan
         };
         let plan = if has_case {
-            prepare.prune_case_conditions(plan)?
+            prepare.prune_spark_case_conditions(plan)?
         } else {
             plan
         };
@@ -1413,7 +1413,7 @@ impl Prepare {
             .data)
     }
 
-    fn prune_case_conditions(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn prune_spark_case_conditions(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         Ok(plan.transform_up_with_subqueries(|node| {
             let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
             let info = datafusion_expr::simplify::SimplifyContext::builder()
@@ -1468,7 +1468,7 @@ impl Prepare {
         })?.data)
     }
 
-    fn fold_constant_structs_with_case(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn fold_constant_structs_with_spark_case(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         Ok(plan.transform_up_with_subqueries(|node| {
             let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
             node.map_expressions(|expr| {
