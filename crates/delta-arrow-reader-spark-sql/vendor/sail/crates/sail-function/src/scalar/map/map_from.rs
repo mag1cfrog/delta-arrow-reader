@@ -1,4 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::Arc;
+
 use datafusion::arrow::array::{Array, ArrayRef, NullArray, NullBufferBuilder, StructArray};
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::cast;
@@ -21,6 +23,7 @@ use crate::scalar::map::utils::{
 pub struct SparkMapFromArrays {
     delegate: MapFromArrays,
     last_value_wins: bool,
+    non_nullable_result: bool,
 }
 
 impl SparkMapFromArrays {
@@ -28,7 +31,14 @@ impl SparkMapFromArrays {
         Self {
             delegate: MapFromArrays::new(),
             last_value_wins,
+            non_nullable_result: false,
         }
+    }
+
+    /// SQL MAP constructs both arrays, so its result container cannot be NULL.
+    pub fn with_non_nullable_result(mut self) -> Self {
+        self.non_nullable_result = true;
+        self
     }
 }
 
@@ -46,7 +56,12 @@ impl ScalarUDFImpl for SparkMapFromArrays {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
-        self.delegate.return_field_from_args(args)
+        let field = self.delegate.return_field_from_args(args)?;
+        if self.non_nullable_result {
+            Ok(Arc::new(field.as_ref().clone().with_nullable(false)))
+        } else {
+            Ok(field)
+        }
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
@@ -167,4 +182,62 @@ fn map_from_entries_inner(args: &[ArrayRef], last_value_wins: bool) -> Result<Ar
         result_nulls.as_ref(),
         last_value_wins,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::datatypes::Field;
+
+    use super::*;
+
+    #[test]
+    fn constructed_map_refines_only_outer_nullability() -> Result<()> {
+        let value_type = DataType::Struct(
+            vec![
+                Field::new("item", DataType::Int32, true)
+                    .with_metadata([("source".into(), "nullable".into())].into()),
+                Field::new("item", DataType::Int64, false),
+            ]
+            .into(),
+        );
+        let default = SparkMapFromArrays::new(false);
+        let constructed = SparkMapFromArrays::new(false).with_non_nullable_result();
+        assert_ne!(default, constructed);
+        for (keys_nullable, values_nullable) in [(false, false), (true, false), (false, true)] {
+            let fields = [
+                Arc::new(Field::new(
+                    "keys",
+                    DataType::new_list(DataType::Utf8, false),
+                    keys_nullable,
+                )),
+                Arc::new(Field::new(
+                    "values",
+                    DataType::new_list(value_type.clone(), true),
+                    values_nullable,
+                )),
+            ];
+            let field = default.return_field_from_args(ReturnFieldArgs {
+                arg_fields: &fields,
+                scalar_arguments: &[],
+            })?;
+            assert_eq!(field.is_nullable(), keys_nullable || values_nullable);
+            let result = constructed.return_field_from_args(ReturnFieldArgs {
+                arg_fields: &fields,
+                scalar_arguments: &[],
+            })?;
+            assert_eq!(
+                result.as_ref(),
+                &field.as_ref().clone().with_nullable(false)
+            );
+            let DataType::Map(entries, _) = result.data_type() else {
+                panic!("expected Map");
+            };
+            let DataType::Struct(children) = entries.data_type() else {
+                panic!("expected entry STRUCT");
+            };
+            assert_eq!(children[1].data_type(), &value_type);
+            assert!(children[1].is_nullable());
+        }
+        Ok(())
+    }
 }
