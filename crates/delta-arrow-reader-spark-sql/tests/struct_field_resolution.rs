@@ -142,8 +142,10 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 | "missing_computed"
                 | "missing_qualified"
                 | "missing_array_field"
+                | "array_bracket_missing"
                 | "missing_multipart"
                 | "scalar_tail"
+                | "computed_scalar_tail"
                 | "scalar_array_field"
                 | "scalar_array_bracket" => "missing",
                 "missing_qualified_nested"
@@ -157,7 +159,9 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 | "duplicate_case"
                 | "duplicate_bracket"
                 | "duplicate_computed"
+                | "array_bracket_duplicate"
                 | "duplicate_array_field" => "item",
+                "numeric_string_index" => "1",
                 _ => return false,
             };
             message.starts_with(&format!(
@@ -224,7 +228,7 @@ async fn check_execution_error(
         schema.fields(),
     )?;
     match collect(physical, session.task_ctx()).await {
-        Err(error) if error.to_string().contains("[INVALID_ARRAY_INDEX]") => Ok(()),
+        Err(error) if matches_array_index_error(&error) => Ok(()),
         Err(error) => Err(format!("expected execution {condition}, got {error}").into()),
         Ok(batches) => {
             for batch in batches {
@@ -233,6 +237,27 @@ async fn check_execution_error(
             Err(format!("expected execution {condition}, collection succeeded").into())
         }
     }
+}
+
+fn matches_array_index_error(error: &DataFusionError) -> bool {
+    matches!(error.find_root(), DataFusionError::Execution(message)
+        if message.starts_with("[INVALID_ARRAY_INDEX] The index ")
+            && message.contains(" is out of bounds. The array has "))
+}
+
+#[test]
+fn array_index_condition_requires_the_execution_cause() {
+    let message = "[INVALID_ARRAY_INDEX] The index 9 is out of bounds. The array has 2 elements.";
+    assert!(matches_array_index_error(
+        &DataFusionError::Execution(message.into()).context("collect")
+    ));
+    assert!(!matches_array_index_error(&DataFusionError::Plan(message.into())));
+    assert!(!matches_array_index_error(
+        &DataFusionError::External(Box::new(std::io::Error::other(message)))
+    ));
+    assert!(!matches_array_index_error(
+        &DataFusionError::Execution("unrelated failure".into()).context(message)
+    ));
 }
 
 async fn compare_cases(source: &str, count: usize) -> TestResult {
@@ -282,15 +307,6 @@ async fn compare_cases(source: &str, count: usize) -> TestResult {
                     assert_eq!(case["expected"]["schema"], stages["analyzed"]);
                 }
                 match capture_spark_query_observation(&session, case).await {
-                    Ok(actual)
-                        if case.get("schema_stages").is_some()
-                            && actual["physical_schema"] != case["schema_stages"]["executed"] =>
-                    {
-                        Some(format!(
-                            "expected executed schema {}, got {}",
-                            case["schema_stages"]["executed"], actual["physical_schema"]
-                        ))
-                    }
                     Ok(actual) if actual["result"] == case["expected"] => None,
                     Ok(actual) => Some(format!("expected {}, got {actual}", case["expected"])),
                     Err(error) => Some(error.to_string()),
@@ -351,6 +367,15 @@ async fn struct_field_resolution_boundaries_match_all_186_independent_references
     compare_cases(source, 186).await
 }
 
+#[tokio::test]
+async fn string_array_fields_match_all_30_independent_references() -> TestResult {
+    compare_cases(
+        include_str!("fixtures/struct-field-strings-spark.jsonl"),
+        30,
+    )
+    .await
+}
+
 async fn native_snapshot(
     session: &SessionContext,
     sql: &str,
@@ -378,6 +403,7 @@ async fn local_resolution_leaves_native_sql_unchanged() -> TestResult {
     for sql in [
         "SELECT p.id AS selected_id,p.p.id AS nested_id FROM (SELECT id,named_struct('id',99) AS p FROM inputs) p WHERE p.id<3",
         "SELECT p.id AS selected_id FROM (SELECT id,named_struct('id',99) AS p FROM empty_inputs) p",
+        "SELECT (ARRAY[NAMED_STRUCT('item',id)])[1]['item'] AS item,(ARRAY[id,NULL])[1] AS number FROM inputs",
     ] {
         expected.push((sql, native_snapshot(&native, sql).await?));
     }

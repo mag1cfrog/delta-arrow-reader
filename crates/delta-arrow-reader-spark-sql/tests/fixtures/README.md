@@ -2072,10 +2072,18 @@ The unchanged `struct-field-resolution-spark.jsonl` contains all 186 captured
 observations: 71 successes, 114 planning errors and one ANSI array-index execution
 error. Its SHA256 is
 `ecb58b66ab66a1d298c4d413ecf3b51b89762700c18da10035e3815a9ec317d3`.
-The replay compares successful public fields and complete rows, separately
-compares physical fields to Spark's executed fields, validates returned batches,
-and requires each planning or execution error in its recorded phase. All 384
-scoped observations run at batch sizes 1 and 32 without case filtering.
+The replay compares successful public fields and complete rows, validates actual
+physical fields and returned batches, and requires each planning or execution
+error in its recorded phase. Spark's optimized/executed schemas remain separate
+observations: matching optimizer nullability refinement is not required. Actual
+physical fields may only narrow top-level nullability; nested declarations and
+metadata remain exact, and nonnullable arrays must contain no logical NULLs.
+The supplemental `struct-field-strings-spark.jsonl` preserves 30 independent
+observations for valid/missing/duplicate array-STRUCT brackets, computed scalar
+extraction and a numeric string array index. Its SHA256 is
+`bc6aa688ca15a86074afbf8599cb41718bccfe7fad4a8e1bcd4f21673bbb4374`.
+Recollect it with `capture_struct_field_strings_spark.py` and a fresh output path.
+All 414 scoped observations run at batch sizes 1 and 32 without case filtering.
 
 ```sh
 python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl
