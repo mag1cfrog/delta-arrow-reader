@@ -12,6 +12,14 @@ from zipfile import ZipFile
 ROOT = Path(__file__).resolve().parent
 
 
+def decode_input_rows(provider):
+    fields = provider["schema"]["fields"]
+    assert all(field["type"] in ["integer", "string"] for field in fields)
+    return [tuple(None if value is None else
+                  int(value) if field["type"] == "integer" else value
+                  for value, field in zip(row, fields)) for row in provider["rows"]]
+
+
 def cases_from_manifest(manifest):
     cases = []
     for source in manifest["sources"]:
@@ -22,6 +30,10 @@ def cases_from_manifest(manifest):
         assert len(records) - 1 == source["observations"]
         assert records[0]["spark_version"] == manifest["spark_version"]
         assert records[0]["timezone"] == manifest["timezone"]
+        for provider in records[0].get("inputs", []):
+            decoded = decode_input_rows(provider)
+            assert len(decoded) == len(provider["rows"])
+            assert all(len(row) == len(provider["schema"]["fields"]) for row in decoded)
         for case in records[1:]:
             cases.append((source["path"], records[0], case))
     assert len(cases) == manifest["observations"] == 68
@@ -39,6 +51,12 @@ def main():
     manifest = json.loads(manifest_path.read_text())
     cases = cases_from_manifest(manifest)
     if args.check:
+        _, header, _ = cases[0]
+        providers = {provider["name"]: provider for provider in header["inputs"]}
+        assert decode_input_rows(providers["date_day_outer_text"]) == [
+            (None, "bad"), (0, None), (0, " 1 "), (1, "-1")]
+        assert decode_input_rows(providers["date_day_outer_int"]) == [
+            (None, 1), (0, None), (0, 2147483647), (1, -1)]
         print(json.dumps({"observations": len(cases), "source_hashes_match": True}))
         return
 
@@ -69,9 +87,7 @@ def main():
                 if provider["name"] in registered:
                     continue
                 schema = types.StructType.fromJson(provider["schema"])
-                rows = [tuple(None if value is None else
-                              int(value) if isinstance(field.dataType, types.IntegerType()) else value
-                              for value, field in zip(row, schema)) for row in provider["rows"]]
+                rows = decode_input_rows(provider)
                 spark.createDataFrame(rows, schema).createOrReplaceTempView(provider["name"])
                 registered.add(provider["name"])
             spark.conf.set("spark.sql.ansi.enabled", str(case["ansi"]).lower())
