@@ -15,7 +15,7 @@ use datafusion::optimizer::AnalyzerRule;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
-use sail_plan::expression_errors::{PreserveSparkExpressionErrors, SparkSqlErrorSemantics};
+use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -300,7 +300,7 @@ async fn single_row_scalars_preserve_resolved_schema_and_null_safety() -> TestRe
                 .config_mut()
                 .options_mut()
                 .extensions
-                .insert(SparkSqlErrorSemantics::default());
+                .insert(SparkSqlExpressionSemantics::default());
             let analyzed = state.analyzer().execute_and_check(
                 query.logical_plan.clone(),
                 state.config_options(),
@@ -621,7 +621,9 @@ async fn real_relations_and_volatile_aliases_are_not_inlined() -> TestResult {
     spark_inputs::register_recorded_inputs(&session, &records[0], 1)?;
     let calls = register_counter(&session);
     let mut options = session.state().config_options().as_ref().clone();
-    options.extensions.insert(SparkSqlErrorSemantics::default());
+    options
+        .extensions
+        .insert(SparkSqlExpressionSemantics::default());
     let mut checked = 0;
     for case in &records[1..] {
         let id = case["id"].as_str().ok_or("missing ID")?;
@@ -640,7 +642,7 @@ async fn real_relations_and_volatile_aliases_are_not_inlined() -> TestResult {
             },
         )
         .await?;
-        let prepared = PreserveSparkExpressionErrors.analyze(query.logical_plan, &options)?;
+        let prepared = PrepareSparkExpressions.analyze(query.logical_plan, &options)?;
         assert!(
             contains_scalar(&prepared)?,
             "{id}: lost the retained scalar execution boundary"
@@ -680,7 +682,7 @@ async fn single_row_scalar_plan_route() -> TestResult {
             .config_mut()
             .options_mut()
             .extensions
-            .insert(SparkSqlErrorSemantics::default());
+            .insert(SparkSqlExpressionSemantics::default());
         eprintln!(
             "SQL: {sql}\nRESOLVED:\n{}",
             query.logical_plan.display_indent_schema()

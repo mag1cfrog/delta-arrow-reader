@@ -551,6 +551,13 @@ check explicitly named results, planning errors and native SQL preservation.
 Generated SELECT labels remain under #766/#710. Parent #766 also retains its
 wider qualification and wildcard controls.
 
+Constant Spark STRUCTs fold as a whole before their children can refine field
+nullability. The result is cast back to the original declared type. Required
+evaluation errors retain the existing preparation order; volatile calls,
+columns and subqueries remain ineligible for this constant fold. The
+[constant STRUCT references](tests/fixtures/README.md#constant-struct-result-fields)
+cover non-array leaves, required errors and native DataFusion isolation.
+
 ### STRUCT field resolution
 
 Attribute resolution selects the first matching catalog/schema/table,

@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::AsArray;
-use datafusion::arrow::compute::filter_record_batch;
+use datafusion::arrow::compute::{cast as arrow_cast, filter_record_batch};
 use datafusion::arrow::datatypes::{DataType, Schema};
 use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
 use datafusion::datasource::memory::MemorySourceConfig;
@@ -40,17 +40,19 @@ use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolea
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::struct_function::StructFunction;
 
-/// Preserve early expression errors before NULL and empty-result rewrites.
+/// Prepare Spark expressions while preserving constant STRUCT declarations and early errors.
 #[derive(Debug)]
-pub struct PreserveSparkExpressionErrors;
+pub struct PrepareSparkExpressions;
 
 datafusion_common::extensions_options! {
-    /// Query-local marker for Spark error ordering, absent from native SQL queries.
-    pub struct SparkSqlErrorSemantics {}
+    /// Query-local Spark declaration and error semantics, absent from native SQL queries.
+    pub struct SparkSqlExpressionSemantics {}
 }
 
-impl ConfigExtension for SparkSqlErrorSemantics {
+impl ConfigExtension for SparkSqlExpressionSemantics {
+    // Preserve the legacy prefix for configuration and diagnostic compatibility.
     const PREFIX: &'static str = "dar_spark_sql_errors";
 }
 
@@ -225,14 +227,18 @@ fn simplify_correlated_exists_filters(expr: Expr) -> Result<Transformed<Expr>> {
     ))
 }
 
-impl AnalyzerRule for PreserveSparkExpressionErrors {
+impl AnalyzerRule for PrepareSparkExpressions {
     fn name(&self) -> &str {
+        // Historical error normalization depends on this rule label.
         "preserve_spark_expression_errors"
     }
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
         // Borrow first: ordinary queries require no rewritten plan or batch allocation.
-        let is_spark_query = options.extensions.get::<SparkSqlErrorSemantics>().is_some();
+        let is_spark_query = options
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some();
         let mut found = false;
         let mut check_arithmetic = false;
         let mut check_cast = false;
@@ -240,6 +246,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
+        let mut has_constant_struct = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
                 && !aggregate
@@ -254,6 +261,10 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             }
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
+                has_constant_struct |= is_spark_query && expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
+                        && row_expression(expr, false)?)
+                })?;
                 check_cast |= has_cast(expr)?;
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
@@ -264,7 +275,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -276,6 +287,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
+            && !has_constant_struct
         {
             return Ok(plan);
         }
@@ -285,6 +297,11 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             props,
             has_groups,
             has_null_sensitive_comparison,
+        };
+        let plan = if has_constant_struct {
+            prepare.fold_constant_structs(plan)?
+        } else {
+            plan
         };
         let plan = if check_groups {
             plan.transform_up_with_subqueries(|plan| prepare_foldable_groups(plan, options))?
@@ -677,7 +694,11 @@ fn prepare_foldable_groups(
     options: &ConfigOptions,
 ) -> Result<Transformed<LogicalPlan>> {
     use datafusion_expr::{Aggregate, Projection};
-    if options.extensions.get::<SparkSqlErrorSemantics>().is_none() {
+    if options
+        .extensions
+        .get::<SparkSqlExpressionSemantics>()
+        .is_none()
+    {
         return Ok(Transformed::no(plan));
     }
     let LogicalPlan::Aggregate(aggregate) = plan else {
@@ -1217,7 +1238,10 @@ impl Prepare {
         exists: bool,
     ) -> Result<LogicalPlan> {
         use datafusion_expr::logical_plan::EmptyRelation;
-        let spark_comparison_errors = options.extensions.get::<SparkSqlErrorSemantics>().is_some();
+        let spark_comparison_errors = options
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some();
         // Local VALUES conversion precedes pruning. Empty local inputs never
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
@@ -1349,6 +1373,32 @@ impl Prepare {
                 Ok(Transformed::new_transformed(node, prepared.transformed))
             })?
             .data)
+    }
+
+    fn fold_constant_structs(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+        Ok(plan.transform_up_with_subqueries(|node| {
+            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+            node.map_expressions(|expr| {
+                let name = names.save(&expr);
+                Ok(expr.transform_down(|expr| {
+                    if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
+                        || !row_expression(&expr, false)?
+                    {
+                        return Ok(Transformed::no(expr));
+                    }
+                    // Spark folds the whole constant STRUCT with its original child declarations.
+                    let declared_type = expr.get_type(&DFSchema::empty())?;
+                    let value = match self.eval_constant(&expr) {
+                        Ok(ColumnarValue::Scalar(value)) => value.to_array()?,
+                        Ok(ColumnarValue::Array(array)) if array.len() == 1 => array,
+                        // Required errors and discarded branches keep the existing preparation order.
+                        _ => return Ok(Transformed::no(expr)),
+                    };
+                    let value = arrow_cast(value.as_ref(), &declared_type)?;
+                    Ok(Transformed::yes(lit(ScalarValue::try_from_array(value.as_ref(), 0)?)))
+                })?.update_data(|expr| name.restore(expr)))
+            })
+        })?.data)
     }
 
     fn eval_constant(&self, expr: &Expr) -> Result<ColumnarValue> {
@@ -1778,7 +1828,7 @@ fn spark_test_frame(
         .config_mut()
         .options_mut()
         .extensions
-        .insert(SparkSqlErrorSemantics::default());
+        .insert(SparkSqlExpressionSemantics::default());
     datafusion::dataframe::DataFrame::new(state, plan)
 }
 
@@ -1792,7 +1842,7 @@ async fn integer_divide_evaluation_order()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -1956,7 +2006,7 @@ async fn null_integer_divide_checks_local_column_casts()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2035,7 +2085,7 @@ async fn null_integer_divide_checks_numeric_casts()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2098,7 +2148,7 @@ async fn cast_reachability_preserves_early_local_errors()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2317,7 +2367,7 @@ async fn null_scale_retains_subquery_execution_without_dead_scalar_work()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2440,7 +2490,7 @@ async fn scalar_subquery_arithmetic_precedes_outer_pruning()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2597,7 +2647,7 @@ async fn scalar_cast_preparation_respects_parent_and_empty_input()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2741,7 +2791,7 @@ async fn predicate_preparation_preserves_live_errors_and_unused_outputs()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -2885,7 +2935,7 @@ async fn exists_distinct_keeps_preparation_boundaries()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -3048,7 +3098,7 @@ async fn distinct_limit_keeps_preparation_boundaries()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -3227,7 +3277,7 @@ async fn projection_limit_keeps_preparation_boundaries()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -3448,7 +3498,7 @@ async fn foldable_grouping_keeps_empty_and_live_boundaries()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -3683,7 +3733,7 @@ async fn group_only_limit_preserves_live_and_local_errors()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -3963,7 +4013,7 @@ async fn correlated_exists_prunes_unused_cast()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -4028,7 +4078,7 @@ async fn correlation_free_exists_prepares_output()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -4118,7 +4168,7 @@ async fn empty_local_projection_precedes_scalar_preparation()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -4219,7 +4269,7 @@ async fn empty_group_preparation_preserves_grand_totals()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -4356,7 +4406,7 @@ async fn empty_operators_precede_scalar_children()
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .with_query_planner(Arc::new(SparkQueryPlanner))
             .build(),
     );
@@ -4501,7 +4551,7 @@ async fn local_decimal_cast_preserves_source_error_order()
                         .with_target_partitions(2),
                 )
                 .with_default_features()
-                .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+                .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
                 .with_query_planner(Arc::new(SparkQueryPlanner))
                 .build(),
         );
