@@ -12,9 +12,9 @@ use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams, WindowFunctionParams};
 use datafusion_expr::{
-    AggregateUDF, BinaryExpr, ColumnarValue, ExprSchemable, Operator, ReturnFieldArgs,
-    ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility, WindowFrame,
-    WindowFunctionDefinition, WindowUDF, cast, expr, lit,
+    AggregateUDF, BinaryExpr, ColumnarValue, ExprSchemable, ExpressionPlacement, Operator,
+    ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    WindowFrame, WindowFunctionDefinition, WindowUDF, cast, expr, lit,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::spark_cast_numeric_to_decimal::{
@@ -301,6 +301,11 @@ impl ScalarUDFImpl for SparkResultMetadata {
         } else {
             Ok(ExprSimplifyResult::Original(args))
         }
+    }
+
+    fn placement(&self, args: &[ExpressionPlacement]) -> ExpressionPlacement {
+        // A metadata-only output projection must not repartition a globally sorted input.
+        args[0]
     }
 
     fn invoke_with_args(

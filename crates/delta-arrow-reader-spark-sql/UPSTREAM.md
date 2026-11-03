@@ -185,7 +185,9 @@ private metadata boundary ends only after the existing guarded one-row
 substitution, allowing executed fields to inherit the inner source metadata or
 generated-alias marker. The output projection added for hidden ORDER BY columns
 preserves its analyzed metadata declaration, including nested fields and the
-returned Arrow array declarations. Captured field metadata is overlaid on the
+returned Arrow array declarations. Metadata annotations retain their value
+expression's placement, so removing hidden ORDER BY columns does not introduce
+parallelism above the global sort. Captured field metadata is overlaid on the
 current nested type, retaining valid nonnull refinements while requiring the
 same field names, order and storage types. A guarded positional Arrow cast keeps
 duplicate STRUCT child values in place. Arrow extension keys remain part
