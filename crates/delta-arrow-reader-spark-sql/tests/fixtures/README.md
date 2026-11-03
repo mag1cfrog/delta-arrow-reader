@@ -2044,3 +2044,40 @@ reviewing any reference update:
 python tests/fixtures/capture_named_struct_fields_spark.py /tmp/named-struct-fields-spark.jsonl
 cargo test --locked --workspace --test named_struct_declarations
 ```
+
+## STRUCT field resolution
+
+The #803 field-resolution target retains 198 original observations: 174 from
+`qualified-column-precedence-spark.jsonl`, all 18 namespace-overlap observations,
+and the six `identifier_consumer` records from `struct-identifier-names-spark.jsonl`.
+The two scoped fixtures copy complete original lines and their headers. A
+partition test checks unique identities, raw-line equality and exhaustive
+coverage with the pending parent records.
+
+The 12 original `using_hidden` and `using_stars` records remain under #767 for
+hidden-key metadata; #762 also retains its PIVOT collision acceptance. The other
+42 IDENTIFIER records remain under #757/#710. Their original fixtures and capture
+scripts are retained unchanged. This target does not establish parity for those
+pending records or close either parent issue.
+
+`capture_struct_field_resolution_spark.py` adds independent controls for local
+and outer binding, absent local bases, multipart qualification, valid extraction,
+missing and duplicate children, computed/bracket expressions and scalar/array
+distinctions. It records the error phase and complete successful public,
+analyzed, optimized and executed schemas. Populated, NULL-only and empty providers
+run in both ANSI modes. Capture to a fresh path using the pinned PySpark 4.2.0
+build and Java 21.
+
+The unchanged `struct-field-resolution-spark.jsonl` contains all 186 captured
+observations: 71 successes, 114 planning errors and one ANSI array-index execution
+error. Its SHA256 is
+`ecb58b66ab66a1d298c4d413ecf3b51b89762700c18da10035e3815a9ec317d3`.
+The replay compares successful public fields and complete rows, separately
+compares physical fields to Spark's executed fields, validates returned batches,
+and requires each planning or execution error in its recorded phase. All 384
+scoped observations run at batch sizes 1 and 32 without case filtering.
+
+```sh
+python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl
+cargo test --locked --workspace --test struct_field_resolution
+```

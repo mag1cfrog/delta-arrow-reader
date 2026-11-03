@@ -395,3 +395,253 @@ pub(super) fn qualifier_matches(
         None => true,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use datafusion::prelude::SessionContext;
+    use datafusion_common::DFSchema;
+
+    use super::*;
+    use crate::config::PlanConfig;
+
+    #[test]
+    fn qualified_columns_win_without_hiding_ambiguity() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        for reversed in [false, true] {
+            let mut state = PlanResolverState::new();
+            let id = Arc::new(Field::new(
+                state.register_field_name("id"),
+                DataType::Int32,
+                true,
+            ));
+            let nested = Arc::new(Field::new(
+                state.register_field_name("p"),
+                DataType::Struct(vec![Arc::new(Field::new("id", DataType::Int32, true))].into()),
+                true,
+            ));
+            let qualifier = TableReference::full("catalog", "schema", "p");
+            let mut fields = vec![
+                (Some(qualifier.clone()), id.clone()),
+                (Some(qualifier.clone()), nested.clone()),
+            ];
+            if reversed {
+                fields.reverse();
+            }
+            let schema = Arc::new(DFSchema::new_with_metadata(
+                fields.clone(),
+                Default::default(),
+            )?);
+            for parts in [
+                vec!["p", "id"],
+                vec!["schema", "p", "id"],
+                vec!["catalog", "schema", "p", "id"],
+            ] {
+                assert_eq!(
+                    resolver.resolve_field_or_nested_field(&parts.into(), &schema, &mut state)?,
+                    Some(NamedExpr::new(
+                        vec!["id".into()],
+                        col((Some(&qualifier), &id)),
+                    )),
+                );
+            }
+            assert_eq!(
+                resolver.resolve_field_or_nested_field(
+                    &["p", "p", "id"].into(),
+                    &schema,
+                    &mut state,
+                )?,
+                Some(
+                    NamedExpr::new(
+                        vec!["id".into()],
+                        get_field().call(vec![col((Some(&qualifier), &nested)), lit("id")]),
+                    )
+                    .with_expression_name("p.id".into()),
+                ),
+            );
+            let struct_only = Arc::new(DFSchema::new_with_metadata(
+                vec![(Some(qualifier.clone()), nested.clone())],
+                Default::default(),
+            )?);
+            assert_eq!(
+                resolver.resolve_field_or_nested_field(
+                    &["p", "id"].into(),
+                    &struct_only,
+                    &mut state,
+                )?,
+                Some(
+                    NamedExpr::new(
+                        vec!["id".into()],
+                        get_field().call(vec![col((Some(&qualifier), &nested)), lit("id")]),
+                    )
+                    .with_expression_name("p.id".into()),
+                ),
+            );
+            fields.push((
+                Some(qualifier),
+                Arc::new(Field::new(
+                    state.register_field_name("id"),
+                    DataType::Int32,
+                    true,
+                )),
+            ));
+            let duplicate_schema =
+                Arc::new(DFSchema::new_with_metadata(fields, Default::default())?);
+            assert!(matches!(
+                resolver.resolve_field_or_nested_field(
+                    &["p", "id"].into(),
+                    &duplicate_schema,
+                    &mut state,
+                ),
+                Err(PlanError::AnalysisError(message)) if message.starts_with("ambiguous attribute")
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn namespace_tiers_bind_before_nested_access_and_duplicate_checks() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        for qualifier in [
+            TableReference::partial("p", "p"),
+            TableReference::full("spark_catalog", "p", "p"),
+            TableReference::full("p", "p", "p"),
+        ] {
+            for reversed in [false, true] {
+                let mut state = PlanResolverState::new();
+                let id = Arc::new(Field::new(
+                    state.register_field_name("id"),
+                    DataType::Int32,
+                    true,
+                ));
+                let nested = Arc::new(Field::new(
+                    state.register_field_name("p"),
+                    DataType::Struct(
+                        vec![Arc::new(Field::new("id", DataType::Int32, true))].into(),
+                    ),
+                    true,
+                ));
+                let mut fields = vec![
+                    (Some(qualifier.clone()), id.clone()),
+                    (Some(qualifier.clone()), nested),
+                ];
+                if reversed {
+                    fields.reverse();
+                }
+                let schema = Arc::new(DFSchema::new_with_metadata(
+                    fields.clone(),
+                    Default::default(),
+                )?);
+                let mut names = vec![spec::ObjectName::from(["p", "p", "id"])];
+                if let Some(catalog) = qualifier.catalog() {
+                    names.push([catalog, "p", "p", "id"].into());
+                }
+                for name in &names {
+                    assert_eq!(
+                        resolver.resolve_field_or_nested_field(name, &schema, &mut state)?,
+                        Some(NamedExpr::new(
+                            vec!["id".into()],
+                            col((Some(&qualifier), &id)),
+                        )),
+                    );
+                }
+                fields.push((
+                    Some(qualifier.clone()),
+                    Arc::new(Field::new(
+                        state.register_field_name("id"),
+                        DataType::Int32,
+                        true,
+                    )),
+                ));
+                let duplicates = Arc::new(DFSchema::new_with_metadata(fields, Default::default())?);
+                for name in &names {
+                    assert!(matches!(
+                        resolver.resolve_field_or_nested_field(name, &duplicates, &mut state),
+                        Err(PlanError::AnalysisError(message))
+                            if message == format!("ambiguous attribute: {name:?}")
+                    ));
+                }
+            }
+        }
+        let mut state = PlanResolverState::new();
+        let scalar = Arc::new(Field::new(
+            state.register_field_name("p"),
+            DataType::Int32,
+            true,
+        ));
+        let schema = Arc::new(DFSchema::new_with_metadata(
+            vec![(Some(TableReference::bare("p")), scalar)],
+            Default::default(),
+        )?);
+        let name = spec::ObjectName::from(["p", "p", "id"]);
+        assert!(matches!(
+            resolver.resolve_expression_attribute(name.clone(), false, &schema, &mut state),
+            Err(PlanError::AnalysisError(message))
+                if message.contains("[INVALID_EXTRACT_BASE_FIELD_TYPE]")
+                    && message.contains("cannot resolve attribute")
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn selected_local_base_errors_do_not_reach_outer_scope() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        for (local_type, condition) in [
+            (None, None),
+            (
+                Some(DataType::Struct(
+                    vec![Arc::new(Field::new("other", DataType::Int32, true))].into(),
+                )),
+                Some("[FIELD_NOT_FOUND]"),
+            ),
+            (Some(DataType::Int32), Some("[INVALID_EXTRACT_BASE_FIELD_TYPE]")),
+        ] {
+            let mut state = PlanResolverState::new();
+            let outer_field = Arc::new(Field::new(
+                state.register_field_name("id"),
+                DataType::Int32,
+                true,
+            ));
+            let qualifier = TableReference::bare("p");
+            let outer = Arc::new(DFSchema::new_with_metadata(
+                vec![(Some(qualifier.clone()), outer_field.clone())],
+                Default::default(),
+            )?);
+            let fields = local_type
+                .map(|data_type| {
+                    vec![(
+                        Some(TableReference::bare("q")),
+                        Arc::new(Field::new(state.register_field_name("p"), data_type, true)),
+                    )]
+                })
+                .unwrap_or_default();
+            let local = Arc::new(DFSchema::new_with_metadata(fields, Default::default())?);
+            let mut scope = state.enter_query_scope(outer);
+            let resolved = resolver.resolve_expression_attribute(
+                ["p", "id"].into(),
+                false,
+                &local,
+                scope.state(),
+            );
+            if let Some(condition) = condition {
+                assert!(matches!(resolved,
+                    Err(PlanError::AnalysisError(message))
+                        if message.contains(condition) && message.contains("id")));
+            } else {
+                assert_eq!(
+                    resolved?,
+                    NamedExpr::new(
+                        vec!["id".into()],
+                        expr::Expr::OuterReferenceColumn(
+                            outer_field.clone(),
+                            Column::new(Some(qualifier), outer_field.name()),
+                        ),
+                    ),
+                );
+            }
+        }
+        Ok(())
+    }
+}
