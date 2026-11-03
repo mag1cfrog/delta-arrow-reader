@@ -967,9 +967,9 @@
     "note": "Accepted hashes identify the original selected sources. Consolidated hashes include notice/link updates, formatting and the explicit review fixes below.",
     "analyzer_rename": {
       "module": "decimal_null -> expression_errors",
-      "type": "SparkDecimalNullPropagation -> PreserveSparkExpressionErrors",
+      "type": "SparkDecimalNullPropagation -> PrepareSparkExpressions",
       "rule": "spark_decimal_null_propagation -> preserve_spark_expression_errors",
-      "reason": "The rule preserves early expression errors across arithmetic, casts, NULL branches and subqueries, not only Decimal NULL propagation."
+      "reason": "The single PrepareSparkExpressions pass preserves constant STRUCT declarations and early expression errors. SparkSqlExpressionSemantics marks the query-local Spark semantics for both. The legacy rule label and extension prefix remain stable for historical diagnostics."
     },
     "workspace": {
       "members": "Eight retained Sail crates now share the independent DAR Spark SQL workspace and its dependency overrides; vendor/sail/Cargo.toml settings moved to the root crate manifest.",

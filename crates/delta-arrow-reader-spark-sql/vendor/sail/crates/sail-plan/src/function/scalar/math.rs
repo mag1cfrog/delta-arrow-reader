@@ -2887,9 +2887,7 @@ mod checked_integer_tests {
         let ctx = SessionContext::new_with_state(
             datafusion::execution::SessionStateBuilder::new()
                 .with_default_features()
-                .with_analyzer_rule(Arc::new(
-                    crate::expression_errors::PreserveSparkExpressionErrors,
-                ))
+                .with_analyzer_rule(Arc::new(crate::expression_errors::PrepareSparkExpressions))
                 .build(),
         );
         let host_ansi = ctx.state().config_options().execution.enable_ansi_mode;
@@ -3430,7 +3428,7 @@ fn modulo_one_simplifies_only_integer_operands() -> datafusion_common::Result<()
 #[tokio::test]
 async fn string_modulo_reuses_spark_coercion_and_null_ordering() -> PlanResult<()> {
     use crate::{
-        config::PlanConfig, expression_errors::PreserveSparkExpressionErrors,
+        config::PlanConfig, expression_errors::PrepareSparkExpressions,
         physical_plan::SparkQueryPlanner, resolver::PlanResolver,
     };
     use datafusion::{execution::SessionStateBuilder, prelude::SessionContext};
@@ -3438,7 +3436,7 @@ async fn string_modulo_reuses_spark_coercion_and_null_ordering() -> PlanResult<(
         SessionStateBuilder::new()
             .with_default_features()
             .with_query_planner(Arc::new(SparkQueryPlanner))
-            .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+            .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
             .build(),
     );
     for ansi in [true, false, true] {

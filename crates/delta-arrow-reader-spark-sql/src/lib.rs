@@ -32,7 +32,7 @@ use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStati
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
-use sail_plan::expression_errors::{PreserveSparkExpressionErrors, SparkSqlErrorSemantics};
+use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::resolver::PlanResolver;
 
@@ -51,7 +51,7 @@ pub use sail_plan::config::PlanConfig as SparkSqlOptions;
 pub fn configure_spark_sql(builder: SessionStateBuilder) -> SessionStateBuilder {
     builder
         .with_query_planner(Arc::new(SparkQueryPlanner))
-        .with_analyzer_rule(Arc::new(PreserveSparkExpressionErrors))
+        .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
 }
 
 /// A resolved Spark query with its output names before optimizer renaming.
@@ -76,7 +76,7 @@ impl SparkSqlQuery {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let mut state = session.state();
         let extensions = &mut state.config_mut().options_mut().extensions;
-        extensions.insert(SparkSqlErrorSemantics::default());
+        extensions.insert(SparkSqlExpressionSemantics::default());
         extensions.insert(PreserveAggregateStatisticsSchema::default());
         let frame = DataFrame::new(state, self.logical_plan.clone());
         let physical = frame.create_physical_plan().await?;
