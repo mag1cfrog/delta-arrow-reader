@@ -23,6 +23,7 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         arguments,
         function_context,
     } = input;
+    let has_else = !arguments.len().is_multiple_of(2);
     let mut conditions = Vec::new();
     let mut branch_values = Vec::new();
     let mut iter = arguments.into_iter();
@@ -39,23 +40,51 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
                 branch_values.push(result);
             }
             _ => {
-                conditions.push(lit(true));
                 branch_values.push(condition);
                 break;
             }
         }
     }
-    let branch_values = coerce_result_values(branch_values, &function_context)?;
-    let when_then_expr = conditions
-        .into_iter()
-        .zip(branch_values)
-        .map(|(condition, value)| (Box::new(condition), Box::new(value)))
-        .collect();
-    Ok(expr::Expr::Case(expr::Case {
-        expr: None, // Expr::Case in from_ast_expression incorporates into when_then_expr
+    let mut branch_values = coerce_result_values(branch_values, &function_context)?;
+    let mut else_expr = if has_else {
+        branch_values.pop().map(Box::new)
+    } else {
+        None
+    };
+    let mut when_then_expr = Vec::new();
+    let mut nullable = false;
+    let mut unconditional = false;
+    for (condition, value) in conditions.into_iter().zip(branch_values) {
+        nullable |= value.nullable(function_context.schema)?;
+        unconditional = matches!(condition, expr::Expr::Literal(ScalarValue::Boolean(Some(true)), _));
+        if unconditional {
+            // Keep the native CASE metadata boundary until the optimizer selects this value.
+            else_expr = Some(Box::new(value.clone()));
+        }
+        when_then_expr.push((Box::new(condition), Box::new(value)));
+        if unconditional {
+            break;
+        }
+    }
+    if !unconditional {
+        nullable |= else_expr
+            .as_ref()
+            .map(|value| value.nullable(function_context.schema))
+            .transpose()?
+            .unwrap_or(true);
+    }
+    let mut result = expr::Expr::Case(expr::Case {
+        expr: None,
         when_then_expr,
-        else_expr: None,
-    }))
+        else_expr,
+    });
+    // Spark counts nullable results even when their conditions prove those values nonnull.
+    if nullable && !result.nullable(function_context.schema)?
+        && let expr::Expr::Case(case) = &mut result
+    {
+        case.expr = Some(Box::new(lit(true)));
+    }
+    Ok(result)
 }
 
 fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
