@@ -18,7 +18,7 @@
 //! Logical Expressions: [`Expr`]
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
 use std::mem;
@@ -852,6 +852,30 @@ pub struct Case {
 }
 
 impl Case {
+    const SPARK_SEARCHED_CASE: &str = "delta_arrow_reader.spark_searched_case";
+
+    /// Create a Spark searched CASE with declared result nullability.
+    pub fn new_spark_searched(
+        when_then_expr: Vec<(Box<Expr>, Box<Expr>)>,
+        else_expr: Option<Box<Expr>>,
+    ) -> Self {
+        let metadata = FieldMetadata::from(BTreeMap::from([
+            (Self::SPARK_SEARCHED_CASE.to_owned(), "true".to_owned()),
+        ]));
+        // A true base preserves Boolean guards without native predicate-based nullability inference.
+        Self::new(
+            Some(Box::new(Expr::Literal(ScalarValue::Boolean(Some(true)), Some(metadata)))),
+            when_then_expr,
+            else_expr,
+        )
+    }
+
+    /// Whether this CASE uses the Spark SQL adapter's declaration rules.
+    pub fn is_spark_searched(&self) -> bool {
+        matches!(self.expr.as_deref(), Some(Expr::Literal(ScalarValue::Boolean(Some(true)), Some(metadata)))
+            if metadata.inner().get(Self::SPARK_SEARCHED_CASE).is_some_and(|value| value == "true"))
+    }
+
     /// Create a new Case expression
     pub fn new(
         expr: Option<Box<Expr>>,
