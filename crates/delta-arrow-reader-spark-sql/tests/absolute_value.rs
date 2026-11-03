@@ -141,28 +141,56 @@ async fn abs_admitted_numeric_providers_keep_declared_fields() -> TestResult {
         DataType::Decimal128(20, 2),
         DataType::Decimal256(38, 2),
     ];
-    let names = (0..data_types.len()).map(|i| format!("r{i}")).collect::<Vec<_>>();
+    let names = (0..data_types.len())
+        .map(|i| format!("r{i}"))
+        .collect::<Vec<_>>();
     let sql = format!(
         "SELECT {} FROM admitted_abs",
-        (0..data_types.len()).map(|i| format!("abs(v{i}) AS r{i}")).collect::<Vec<_>>().join(",")
+        (0..data_types.len())
+            .map(|i| format!("abs(v{i}) AS r{i}"))
+            .collect::<Vec<_>>()
+            .join(",")
     );
     for nullable in [false, true] {
         let values = Float32Array::from(vec![Some(-1.25), (!nullable).then_some(0.0), Some(1.25)]);
-        let absolute_values = Float32Array::from(vec![Some(1.25), (!nullable).then_some(0.0), Some(1.25)]);
-        let fields = data_types.iter().enumerate().map(|(i, data_type)| {
-            Field::new(format!("v{i}"), data_type.clone(), nullable)
-                .with_metadata([("source".into(), "discard".into())].into())
-        }).collect::<Vec<_>>();
-        let columns = data_types.iter().map(|data_type| {
-            cast(if data_type.is_unsigned_integer() { &absolute_values } else { &values }, data_type)
-        }).collect::<Result<Vec<_>, _>>()?;
+        let absolute_values =
+            Float32Array::from(vec![Some(1.25), (!nullable).then_some(0.0), Some(1.25)]);
+        let fields = data_types
+            .iter()
+            .enumerate()
+            .map(|(i, data_type)| {
+                Field::new(format!("v{i}"), data_type.clone(), nullable)
+                    .with_metadata([("source".into(), "discard".into())].into())
+            })
+            .collect::<Vec<_>>();
+        let columns = data_types
+            .iter()
+            .map(|data_type| {
+                cast(
+                    if data_type.is_unsigned_integer() {
+                        &absolute_values
+                    } else {
+                        &values
+                    },
+                    data_type,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let input = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns)?;
-        let expected_schema = Arc::new(Schema::new(data_types.iter().zip(&names)
-            .map(|(data_type, name)| Field::new(name, data_type.clone(), nullable))
-            .collect::<Vec<_>>()));
-        let expected = RecordBatch::try_new(expected_schema.clone(), data_types.iter()
-            .map(|data_type| cast(&absolute_values, data_type))
-            .collect::<Result<Vec<_>, _>>()?)?;
+        let expected_schema = Arc::new(Schema::new(
+            data_types
+                .iter()
+                .zip(&names)
+                .map(|(data_type, name)| Field::new(name, data_type.clone(), nullable))
+                .collect::<Vec<_>>(),
+        ));
+        let expected = RecordBatch::try_new(
+            expected_schema.clone(),
+            data_types
+                .iter()
+                .map(|data_type| cast(&absolute_values, data_type))
+                .collect::<Result<Vec<_>, _>>()?,
+        )?;
         for empty in [false, true] {
             let session = SessionContext::new_with_state(
                 configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
@@ -173,14 +201,29 @@ async fn abs_admitted_numeric_providers_keep_declared_fields() -> TestResult {
                 context.register_batch("admitted_abs", input.slice(0, rows))?;
             }
             for ansi_mode in [false, true] {
-                let query = plan_query(&session, &sql, &SparkSqlOptions {
-                    ansi_mode,
-                    ..SparkSqlOptions::default()
-                }).await?;
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
                 assert_eq!(query.column_names, names);
-                for (actual, expected) in query.logical_plan.schema().fields().iter().zip(expected_schema.fields()) {
+                for (actual, expected) in query
+                    .logical_plan
+                    .schema()
+                    .fields()
+                    .iter()
+                    .zip(expected_schema.fields())
+                {
                     assert_eq!(actual.data_type(), expected.data_type());
-                    assert_eq!(actual.is_nullable(), nullable, "{actual:?}, ANSI={ansi_mode}, empty={empty}");
+                    assert_eq!(
+                        actual.is_nullable(),
+                        nullable,
+                        "{actual:?}, ANSI={ansi_mode}, empty={empty}"
+                    );
                     assert!(actual.metadata().is_empty());
                 }
                 let physical = query.create_physical_plan(&session).await?;
@@ -193,7 +236,10 @@ async fn abs_admitted_numeric_providers_keep_declared_fields() -> TestResult {
                         column.to_data().validate_full()?;
                     }
                 }
-                assert_eq!(concat_batches(&expected_schema, &batches)?, expected.slice(0, rows));
+                assert_eq!(
+                    concat_batches(&expected_schema, &batches)?,
+                    expected.slice(0, rows)
+                );
             }
             let plain = native.sql(&sql).await?;
             let configured = session.sql(&sql).await?;
