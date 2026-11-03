@@ -52,6 +52,23 @@ pub(super) fn lower_union<'a>(
     };
     let under_limit_one = !set.is_all && context.has_single_row_limit()?;
     let build_union = |inputs: Vec<Arc<LogicalPlan>>| -> Result<LogicalPlan> {
+        let inputs = inputs
+            .into_iter()
+            .map(|input| {
+                if input
+                    .schema()
+                    .fields()
+                    .iter()
+                    .zip(plan.schema().fields())
+                    .any(|(source, output)| source.metadata() != output.metadata())
+                {
+                    // Metadata above UNION would freeze its conservative nullability.
+                    project_union_output(Arc::unwrap_or_clone(input), plan.schema()).map(Arc::new)
+                } else {
+                    Ok(input)
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
         let mut union = Union::try_new(inputs)?;
         // Native UNION keeps its schema when simplification removes nonnull constant markers.
         union.schema = allow_nullable_float_results(&union.schema)?;
