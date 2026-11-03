@@ -223,7 +223,6 @@ fn make_array_inner_with_nullable(arrays: &[ArrayRef], value_nullable: bool) -> 
                     .build_list_array(),
             ))
         }
-        DataType::LargeList(..) => array_array::<i64>(arrays, data_type, value_nullable),
         _ => array_array::<i32>(arrays, data_type, value_nullable),
     }
 }
