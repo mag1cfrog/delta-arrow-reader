@@ -57,7 +57,7 @@ impl PlanResolver<'_> {
         let (left, right) = if matches!(set_op_type, SetOpType::Union) {
             (left, right)
         } else {
-            self.coerce_set_operation_inputs(left, right)?
+            self.coerce_set_operation_inputs(left, right, &set_op_type)?
         };
         match set_op_type {
             SetOpType::Union => {
@@ -132,7 +132,7 @@ impl PlanResolver<'_> {
                 } else {
                     (left, right)
                 };
-                let (left, right) = self.coerce_set_operation_inputs(left, right)?;
+                let (left, right) = self.coerce_set_operation_inputs(left, right, &set_op_type)?;
                 Ok(LogicalPlan::Extension(datafusion_expr::Extension {
                     node: Arc::new(PendingSetOperation::new(left, right, set_op_type, is_all)?),
                 }))
@@ -149,6 +149,7 @@ impl PlanResolver<'_> {
         &self,
         left: LogicalPlan,
         right: LogicalPlan,
+        set_op_type: &spec::SetOpType,
     ) -> PlanResult<(LogicalPlan, LogicalPlan)> {
         let left_len = left.schema().fields().len();
         let right_len = right.schema().fields().len();
@@ -171,7 +172,7 @@ impl PlanResolver<'_> {
                 .into_iter()
                 .map(|input| Expr::from(input.schema().qualified_field(index)))
                 .collect();
-            let columns = coerce_set_operation_result_values(columns, &context)?;
+            let columns = coerce_set_operation_result_values(columns, &context, set_op_type)?;
             let types = columns
                 .iter()
                 .map(|column| column.get_type(&schema))

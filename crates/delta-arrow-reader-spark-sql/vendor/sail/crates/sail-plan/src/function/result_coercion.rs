@@ -3,6 +3,7 @@
 
 use arrow::datatypes::{DataType, TimeUnit};
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr};
+use sail_common::spec::SetOpType;
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
@@ -24,27 +25,28 @@ pub(crate) fn coerce_result_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
 ) -> PlanResult<Vec<expr::Expr>> {
-    coerce_values(arguments, function_context, nested::StructFieldNames::RequireMatching)
+    coerce_values(arguments, function_context, None)
 }
 
 pub(crate) fn coerce_set_operation_result_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
+    set_op_type: &SetOpType,
 ) -> PlanResult<Vec<expr::Expr>> {
-    coerce_values(arguments, function_context, nested::StructFieldNames::AllowPositionalRename)
+    coerce_values(arguments, function_context, Some(set_op_type))
 }
 
 fn coerce_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
-    struct_field_names: nested::StructFieldNames,
+    set_op_type: Option<&SetOpType>,
 ) -> PlanResult<Vec<expr::Expr>> {
     let data_types = arguments
         .iter()
         .map(|arg| arg.get_type(function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
     if data_types.iter().any(is_nested_result_type) {
-        return nested::coerce_nested_result_values(arguments, &data_types, function_context, struct_field_names);
+        return nested::coerce_nested_result_values(arguments, &data_types, function_context, set_op_type);
     }
     if let Some(target) = common_numeric_type(&data_types, function_context.plan_config.ansi_mode) {
         return Ok(arguments

@@ -33,6 +33,7 @@ use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     Volatility, col, expr,
 };
+use sail_common::spec::SetOpType;
 use sail_function::scalar::spark_cast_numeric_to_decimal::decimal_cast_can_overflow;
 
 use super::{
@@ -58,8 +59,8 @@ pub(crate) fn is_nested_result_type(data_type: &DataType) -> bool {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-// Both callers align fields by position; conditionals also require matching names.
-pub(super) enum StructFieldNames {
+// Positional rename is reserved for UNION inputs whose leaf types already match.
+enum StructFieldNames {
     RequireMatching,
     AllowPositionalRename,
 }
@@ -171,12 +172,38 @@ fn same_value_type(source: &DataType, target: &DataType) -> bool {
     source == target
 }
 
+fn structurally_equal(left: &DataType, right: &DataType) -> bool {
+    if let (Some(left), Some(right)) = (list_field(left), list_field(right)) {
+        return structurally_equal(left.data_type(), right.data_type());
+    }
+    if let (DataType::Struct(left), DataType::Struct(right)) = (left, right) {
+        return left.len() == right.len()
+            && left.iter().zip(right).all(|(left, right)| {
+                structurally_equal(left.data_type(), right.data_type())
+            });
+    }
+    left == right || (is_string_type(left) && is_string_type(right))
+}
+
 pub(super) fn coerce_nested_result_values(
     arguments: Vec<expr::Expr>,
     data_types: &[DataType],
     context: &FunctionContextInput<'_>,
-    struct_field_names: StructFieldNames,
+    set_op_type: Option<&SetOpType>,
 ) -> PlanResult<Vec<expr::Expr>> {
+    // Spark UNION validates current structural equality; widening still requires matching names.
+    let struct_field_names = if matches!(set_op_type, Some(SetOpType::Union))
+        && data_types.windows(2).all(|pair| structurally_equal(&pair[0], &pair[1]))
+    {
+        StructFieldNames::AllowPositionalRename
+    } else {
+        StructFieldNames::RequireMatching
+    };
+    let error_condition = if set_op_type.is_some() {
+        "INCOMPATIBLE_COLUMN_TYPE"
+    } else {
+        "DATATYPE_MISMATCH.DATA_DIFF_TYPES"
+    };
     let mut types = data_types.iter().collect::<Vec<_>>();
     if !context.plan_config.ansi_mode {
         // Spark's legacy common-type fold puts STRING and ARRAY<STRING> first.
@@ -186,11 +213,11 @@ pub(super) fn coerce_nested_result_values(
     for source in types {
         target = common_type(&target, source, context, struct_field_names).map_err(|cause| {
             PlanError::invalid(format!(
-                "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] Incompatible nested result types: {data_types:?}: {cause}"
+                "[{error_condition}] Incompatible nested result types: {data_types:?}: {cause}"
             ))
         })?.ok_or_else(|| {
             PlanError::invalid(format!(
-                "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] Incompatible nested result types: {data_types:?}"
+                "[{error_condition}] Incompatible nested result types: {data_types:?}"
             ))
         })?;
     }
@@ -341,11 +368,72 @@ impl ScalarUDFImpl for NestedResultCast {
 mod tests {
     use super::*;
 
-    use arrow::array::StringArray;
+    use arrow::array::{StringArray, StringViewArray};
     use arrow::buffer::OffsetBuffer;
     use arrow::datatypes::Int64Type;
     use datafusion::prelude::SessionContext;
     use datafusion_common::config::ConfigOptions;
+    use datafusion_expr::ExprSchemable;
+
+    #[test]
+    fn names_only_union_keeps_logical_string_and_list_storage_compatibility() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let config = Arc::new(crate::config::PlanConfig::default());
+        let view: ArrayRef = Arc::new(StringViewArray::from(vec!["1"]));
+        let text: ArrayRef = Arc::new(StringArray::from(vec!["2"]));
+        let string_element = Arc::new(Field::new_list_field(DataType::Utf8, false));
+        let pairs = [
+            (DataType::Utf8, view.clone(), text.clone()),
+            (
+                DataType::LargeList(string_element.clone()),
+                Arc::new(ListArray::try_new(
+                    Arc::new(Field::new_list_field(DataType::Utf8View, false)),
+                    OffsetBuffer::from_lengths([1]), view, None,
+                )?) as ArrayRef,
+                Arc::new(LargeListArray::try_new(
+                    string_element, OffsetBuffer::from_lengths([1]), text, None,
+                )?) as ArrayRef,
+            ),
+        ];
+        for (target_child, left, right) in pairs {
+            let left: ArrayRef = Arc::new(StructArray::try_new(
+                vec![Field::new("x", left.data_type().clone(), false)].into(), vec![left], None,
+            )?);
+            let right: ArrayRef = Arc::new(StructArray::try_new(
+                vec![Field::new("y", right.data_type().clone(), false)].into(), vec![right], None,
+            )?);
+            let schema = Arc::new(DFSchema::from_unqualified_fields(vec![
+                Field::new("left", left.data_type().clone(), false),
+                Field::new("right", right.data_type().clone(), false),
+            ].into(), Default::default())?);
+            let context = FunctionContextInput {
+                argument_display_names: &[], plan_config: &config,
+                session_context: &session, schema: &schema,
+            };
+            let arguments = vec![col("left"), col("right")];
+            assert!(super::super::coerce_result_values(arguments.clone(), &context)
+                .err().is_some_and(|error| error.to_string().contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]")));
+            let converted = super::super::coerce_set_operation_result_values(
+                arguments, &context, &SetOpType::Union,
+            )?;
+            let target = DataType::Struct(vec![Field::new("x", target_child, false)].into());
+            let batch = RecordBatch::try_new(Arc::clone(schema.inner()), vec![left, right])?;
+            for (expression, expected) in converted.into_iter().zip(["1", "2"]) {
+                assert_eq!(expression.get_type(&schema)?, target);
+                let result = session.create_physical_expr(expression, &schema)?
+                    .evaluate(&batch)?.into_array(1)?;
+                result.to_data().validate_full()?;
+                let child = result.as_struct().column(0);
+                let values = if matches!(child.data_type(), DataType::LargeList(_)) {
+                    child.as_list::<i64>().value(0)
+                } else {
+                    child.clone()
+                };
+                assert_eq!(ScalarValue::try_from_array(&values, 0)?, ScalarValue::Utf8(Some(expected.into())));
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn nested_casts_skip_hidden_values_and_keep_slices_scalars_and_empty_arrays() -> PlanResult<()> {
