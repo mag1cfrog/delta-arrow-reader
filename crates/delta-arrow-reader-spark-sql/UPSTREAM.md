@@ -541,3 +541,19 @@ The [declaration references](tests/fixtures/README.md#named-struct-declarations)
 check explicitly named results, planning errors and native SQL preservation.
 Generated SELECT labels remain under #766/#710. Parent #766 also retains its
 wider qualification and wildcard controls.
+
+### STRUCT field resolution
+
+Attribute resolution selects the first matching catalog/schema/table,
+schema/table, table or unqualified base tier before checking duplicates or
+extracting children. A selected local base shadows outer columns even when its
+nested access is invalid; only an absent local base can continue outer lookup.
+STRUCT children match case-insensitively and must be unique. Missing children,
+duplicate children, scalar extraction and invalid scalar-array selectors retain
+distinct planning conditions. Computed and bracket field selectors use the same
+extraction path, while map lookup and numeric array indexing retain their
+existing paths. Typed lambda parameters use the same child validation; untyped
+parameters retain deferred resolution. The [field-resolution references](tests/fixtures/README.md#struct-field-resolution)
+check these boundaries, complete public results, actual physical/batch validity
+and native SQL isolation. The broader #762 qualification/PIVOT and #757 naming
+acceptances remain open.

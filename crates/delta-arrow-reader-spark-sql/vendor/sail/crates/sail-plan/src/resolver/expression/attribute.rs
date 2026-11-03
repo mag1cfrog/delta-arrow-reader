@@ -1,7 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use arrow::datatypes::{DataType, Field};
+use arrow::datatypes::{DataType, Field, FieldRef, Fields};
 use datafusion_common::{Column, DFSchemaRef, TableReference};
 use datafusion_expr::expr::{LambdaVariable, ScalarFunction};
 use datafusion_expr::{ScalarUDF, col, expr, lit};
@@ -39,12 +39,16 @@ impl PlanResolver<'_> {
                 .map(|x| x.as_ref())
                 .unwrap_or(declared.as_str())
                 .to_string();
-            let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field));
-            for part in rest {
-                expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(
-                    get_field(),
-                    vec![expr, lit(part.as_ref().to_string())],
-                ));
+            let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field.clone()));
+            if let Some(field) = field {
+                expr = Self::resolve_potentially_nested_field(expr, field.data_type(), rest)?;
+            } else {
+                for part in rest {
+                    expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(
+                        get_field(),
+                        vec![expr, lit(part.as_ref().to_string())],
+                    ));
+                }
             }
             let expression_name = std::iter::once(LAMBDA_VARIABLE_EXPRESSION_NAME)
                 .chain(rest.iter().map(|part| part.as_ref()))
@@ -112,51 +116,53 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<Option<NamedExpr>> {
-        let candidates = Self::generate_qualified_nested_field_candidates(name.parts());
-        let mut candidates = schema
-            .iter()
-            .flat_map(|(qualifier, field)| {
+        let mut candidates = vec![];
+        // Spark tries catalog/schema/table, schema/table, table, then unqualified columns.
+        for (q, column_name, inner) in
+            Self::generate_qualified_nested_field_candidates(name.parts())
+        {
+            for (qualifier, field) in schema.iter() {
                 let Ok(info) = state.get_field_info(field.name()) else {
-                    return vec![];
+                    continue;
                 };
-                candidates
-                    .iter()
-                    .filter_map(|(q, name, inner)| {
-                        if (!info.is_hidden() || q.is_some())
-                            && qualifier_matches(q.as_ref(), qualifier)
-                            && info.name().eq_ignore_ascii_case(name.as_ref())
-                        {
-                            let expr = Self::resolve_potentially_nested_field(
-                                col((qualifier, field)),
-                                field.data_type(),
-                                inner,
-                            )?;
-                            let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
-                            let named = NamedExpr::new(vec![projection_name], expr);
-                            Some(if inner.is_empty() {
-                                named
-                            } else {
-                                named.with_expression_name(
-                                    std::iter::once(*name)
-                                        .chain(inner.iter())
-                                        .map(|part| part.as_ref())
-                                        .collect::<Vec<_>>()
-                                        .join("."),
-                                )
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-            .collect::<Vec<_>>();
+                if (!info.is_hidden() || q.is_some())
+                    && qualifier_matches(q.as_ref(), qualifier)
+                    && info.name().eq_ignore_ascii_case(column_name.as_ref())
+                {
+                    candidates.push((qualifier, field, column_name, inner));
+                }
+            }
+            if !candidates.is_empty() {
+                break;
+            }
+        }
         if candidates.len() > 1 {
             return Err(PlanError::AnalysisError(format!(
                 "ambiguous attribute: {name:?}"
             )));
         }
-        Ok(candidates.pop())
+        let Some((qualifier, field, name, inner)) = candidates.pop() else {
+            return Ok(None);
+        };
+        // A bound local base shadows outer columns even when its nested tail is invalid.
+        let expr = Self::resolve_potentially_nested_field(
+            col((qualifier, field)),
+            field.data_type(),
+            inner,
+        )?;
+        let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
+        let named = NamedExpr::new(vec![projection_name], expr);
+        Ok(Some(if inner.is_empty() {
+            named
+        } else {
+            named.with_expression_name(
+                std::iter::once(name)
+                    .chain(inner.iter())
+                    .map(|part| part.as_ref())
+                    .collect::<Vec<_>>()
+                    .join("."),
+            )
+        }))
     }
 
     fn resolve_aggregate_field(
@@ -268,51 +274,66 @@ impl PlanResolver<'_> {
         Ok(candidates.pop())
     }
 
-    fn resolve_potentially_nested_field<T: AsRef<str>>(
+    fn resolve_struct_field<'a>(fields: &'a Fields, name: &str) -> PlanResult<&'a FieldRef> {
+        let mut matching = fields
+            .iter()
+            .filter(|field| field.name().eq_ignore_ascii_case(name));
+        let Some(field) = matching.next() else {
+            return Err(PlanError::analysis(format!(
+                "cannot resolve attribute: [FIELD_NOT_FOUND] field {name:?} is absent from STRUCT fields {:?}",
+                fields.iter().map(|field| field.name()).collect::<Vec<_>>()
+            )));
+        };
+        if matching.next().is_some() {
+            return Err(PlanError::analysis(format!(
+                "cannot resolve attribute: [AMBIGUOUS_REFERENCE_TO_FIELDS] field {name:?} matches multiple STRUCT children"
+            )));
+        }
+        Ok(field)
+    }
+
+    pub(super) fn resolve_potentially_nested_field<T: AsRef<str>>(
         expr: expr::Expr,
         data_type: &DataType,
         inner: &[T],
-    ) -> Option<expr::Expr> {
+    ) -> PlanResult<expr::Expr> {
         match inner {
-            [] => Some(expr),
+            [] => Ok(expr),
             [name, remaining @ ..] => match data_type {
-                DataType::Struct(fields) => fields
-                    .iter()
-                    .find(|x| x.name().eq_ignore_ascii_case(name.as_ref()))
-                    .and_then(|field| {
-                        let args = vec![expr, lit(field.name().to_string())];
-                        let expr =
-                            expr::Expr::ScalarFunction(ScalarFunction::new_udf(get_field(), args));
-                        Self::resolve_potentially_nested_field(expr, field.data_type(), remaining)
-                    }),
+                DataType::Struct(fields) => {
+                    let field = Self::resolve_struct_field(fields, name.as_ref())?;
+                    let args = vec![expr, lit(field.name().to_string())];
+                    let expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(get_field(), args));
+                    Self::resolve_potentially_nested_field(expr, field.data_type(), remaining)
+                }
                 DataType::List(field)
                 | DataType::LargeList(field)
                 | DataType::FixedSizeList(field, _) => {
                     let DataType::Struct(fields) = field.data_type() else {
-                        return None;
+                        return Err(PlanError::analysis(format!(
+                            "cannot resolve attribute: [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] field {:?} requires a STRUCT array element, got {}",
+                            name.as_ref(), field.data_type()
+                        )));
                     };
-                    fields
-                        .iter()
-                        .find(|x| x.name().eq_ignore_ascii_case(name.as_ref()))
-                        .and_then(|child| {
-                            let expr = ScalarUDF::from(ArrayStructField::new())
-                                .call(vec![expr, lit(child.name().to_string())]);
-                            let item = Arc::new(Field::new_list_field(
-                                child.data_type().clone(),
-                                field.is_nullable() || child.is_nullable(),
-                            ));
-                            let data_type = match data_type {
-                                DataType::List(_) => DataType::List(item),
-                                DataType::LargeList(_) => DataType::LargeList(item),
-                                DataType::FixedSizeList(_, size) => {
-                                    DataType::FixedSizeList(item, *size)
-                                }
-                                _ => unreachable!("list data type matched above"),
-                            };
-                            Self::resolve_potentially_nested_field(expr, &data_type, remaining)
-                        })
+                    let child = Self::resolve_struct_field(fields, name.as_ref())?;
+                    let expr = ScalarUDF::from(ArrayStructField::new())
+                        .call(vec![expr, lit(child.name().to_string())]);
+                    let item = Arc::new(Field::new_list_field(
+                        child.data_type().clone(),
+                        field.is_nullable() || child.is_nullable(),
+                    ));
+                    let data_type = match data_type {
+                        DataType::List(_) => DataType::List(item),
+                        DataType::LargeList(_) => DataType::LargeList(item),
+                        DataType::FixedSizeList(_, size) => DataType::FixedSizeList(item, *size),
+                        _ => unreachable!("list data type matched above"),
+                    };
+                    Self::resolve_potentially_nested_field(expr, &data_type, remaining)
                 }
-                _ => None,
+                _ => Err(PlanError::analysis(format!(
+                    "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field {:?} cannot be extracted from {data_type}",
+                    name.as_ref()
+                ))),
             },
         }
     }
@@ -336,11 +357,12 @@ impl PlanResolver<'_> {
         name: &[T],
     ) -> Vec<(Option<TableReference>, &T, &[T])> {
         let mut out = vec![];
-        if let [n1, x @ ..] = name {
-            out.push((None, n1, x));
-        }
-        if let [n1, n2, x @ ..] = name {
-            out.push((Some(TableReference::bare(n1.as_ref())), n2, x));
+        if let [n1, n2, n3, n4, x @ ..] = name {
+            out.push((
+                Some(TableReference::full(n1.as_ref(), n2.as_ref(), n3.as_ref())),
+                n4,
+                x,
+            ));
         }
         if let [n1, n2, n3, x @ ..] = name {
             out.push((
@@ -349,12 +371,11 @@ impl PlanResolver<'_> {
                 x,
             ));
         }
-        if let [n1, n2, n3, n4, x @ ..] = name {
-            out.push((
-                Some(TableReference::full(n1.as_ref(), n2.as_ref(), n3.as_ref())),
-                n4,
-                x,
-            ));
+        if let [n1, n2, x @ ..] = name {
+            out.push((Some(TableReference::bare(n1.as_ref())), n2, x));
+        }
+        if let [n1, x @ ..] = name {
+            out.push((None, n1, x));
         }
         out
     }
