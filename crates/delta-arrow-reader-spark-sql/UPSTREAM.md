@@ -369,6 +369,11 @@ fields, rows, required errors and ordered references independently. The
 [evaluation controls](tests/conditional_evaluation.rs) also count nested and
 volatile result evaluations.
 
+Hidden ORDER BY output references retain the declared nested type of directly
+projected CASE results. Their outer nullability follows the live value, with
+metadata supplied by the existing reference annotation. This type declaration
+belongs to the output projection above Sort.
+
 Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
 ARRAY_SIZE always preserves NULL. The [size references](tests/fixtures/README.md#collection-sizes)
