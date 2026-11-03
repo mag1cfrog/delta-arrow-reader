@@ -35,8 +35,8 @@ use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
 };
-use sail_function::scalar::spark_cast_numeric_to_decimal::{
-    DecimalCastMode, SparkCastNumericToDecimal,
+use sail_function::scalar::spark_decimal_cast::{
+    DecimalCastMode, SparkDecimalCast,
 };
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
@@ -63,7 +63,7 @@ fn null_literal(expr: &Expr) -> bool {
         Expr::Alias(alias) => null_literal(&alias.expr),
         Expr::ScalarFunction(f)
             if (f.func.inner().is::<SparkNullIfZero>()
-                || f.func.inner().is::<SparkCastNumericToDecimal>()
+                || f.func.inner().is::<SparkDecimalCast>()
                 || f.func.inner().is::<SparkNullIf>()
                 || f.func
                     .inner()
@@ -83,7 +83,7 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
         Expr::ScalarFunction(f)
             if f.func.inner().is::<NormalizeFloatArrayForSparkComparison>()
                 || f.func.inner().is::<NormalizeNestedFloatKeys>()
-                || f.func.inner().is::<SparkCastNumericToDecimal>()
+                || f.func.inner().is::<SparkDecimalCast>()
                 || f.func.inner().is::<SparkComparisonFloat>() =>
         {
             match f.args.as_slice() {
@@ -157,7 +157,7 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
             if f.func.inner().is::<SparkCheckedArithmetic>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
-                || f.func.inner().downcast_ref::<SparkCastNumericToDecimal>()
+                || f.func.inner().downcast_ref::<SparkDecimalCast>()
                     .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi)
                 || f.func.inner().is::<FusedDecimalDivide>())
     ))
@@ -831,7 +831,7 @@ fn has_cast(expr: &Expr) -> Result<bool> {
     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
-            || f.func.inner().is::<SparkCastNumericToDecimal>()
+            || f.func.inner().is::<SparkDecimalCast>()
             || f.func.inner().is::<SparkCastStringToBoolean>()
                 || f.func.inner().is::<SparkCastStringToInteger>()
                 || f.func.inner().is::<SparkStringTemporalComparisonCast>()
@@ -859,7 +859,7 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) 
                     (DataType::Decimal128(_, _), DataType::Decimal128(_, _))))
         }
         Expr::ScalarFunction(f)
-            if f.func.inner().downcast_ref::<SparkCastNumericToDecimal>()
+            if f.func.inner().downcast_ref::<SparkDecimalCast>()
                 .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi) =>
         {
             Ok(matches!(f.args.as_slice(), [expr]

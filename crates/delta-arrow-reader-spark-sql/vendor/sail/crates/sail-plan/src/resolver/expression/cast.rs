@@ -13,8 +13,8 @@ use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
-use sail_function::scalar::spark_cast_numeric_to_decimal::{
-    DecimalCastMode, SparkCastNumericToDecimal, decimal_cast_can_overflow,
+use sail_function::scalar::spark_decimal_cast::{
+    DecimalCastMode, SparkDecimalCast, decimal_cast_can_overflow,
 };
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
@@ -165,7 +165,7 @@ impl PlanResolver<'_> {
                 } else {
                     DecimalCastMode::Legacy
                 };
-                ScalarUDF::new_from_impl(SparkCastNumericToDecimal::new(precision, scale, mode))
+                ScalarUDF::new_from_impl(SparkDecimalCast::to_decimal(precision, scale, mode))
                     .call(vec![expr])
             }
             (

@@ -18,14 +18,14 @@ pub enum DecimalCastMode {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct SparkCastNumericToDecimal {
+pub struct SparkDecimalCast {
     target: DataType,
     signature: Signature,
     mode: DecimalCastMode,
 }
 
-impl SparkCastNumericToDecimal {
-    pub fn new(precision: u8, scale: i8, mode: DecimalCastMode) -> Self {
+impl SparkDecimalCast {
+    pub fn to_decimal(precision: u8, scale: i8, mode: DecimalCastMode) -> Self {
         Self {
             target: DataType::Decimal128(precision, scale),
             signature: Signature::numeric(1, Volatility::Immutable),
@@ -74,7 +74,7 @@ impl SparkCastNumericToDecimal {
     }
 }
 
-impl ScalarUDFImpl for SparkCastNumericToDecimal {
+impl ScalarUDFImpl for SparkDecimalCast {
     fn name(&self) -> &str {
         "spark_cast_numeric_to_decimal"
     }
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn nonfinite_float_cast_preserves_finite_overflow_and_nulls() -> Result<()> {
-        let udf = SparkCastNumericToDecimal::new(10, 2, DecimalCastMode::Ansi);
+        let udf = SparkDecimalCast::to_decimal(10, 2, DecimalCastMode::Ansi);
         let values = [
             Some(1.25),
             Some(f64::NAN),
