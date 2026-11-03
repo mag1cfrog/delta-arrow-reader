@@ -1,0 +1,102 @@
+{
+  "format": "dar_case_721_hidden_sort_packages_v1",
+  "records": 86,
+  "observations": 172,
+  "batch_sizes": [
+    1,
+    32
+  ],
+  "target_partitions": 2,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "provenance": "Independent Spark captures. Complete raw files retain their original capture headers; fixture names below identify the historical sources.",
+  "packages": [
+    {
+      "package": "original-parents",
+      "fixture": "case-result-nullability-parents-spark.jsonl",
+      "path": "references/original-parents.jsonl",
+      "source_records": 128,
+      "records": 48,
+      "bytes": 174701,
+      "sha256": "d856c4702eeb6363fca199acbddb30af62b4eb55871792124a6bf4e7d63d4661",
+      "select_ids": [
+        "struct_required_struct_literal_true",
+        "struct_required_struct_literal_true_hidden_order",
+        "struct_required_struct_folded_true",
+        "struct_required_struct_folded_true_hidden_order",
+        "struct_scalar_literal_true",
+        "struct_scalar_literal_true_hidden_order",
+        "struct_scalar_folded_true",
+        "struct_scalar_folded_true_hidden_order",
+        "direct_required_struct_literal_true",
+        "direct_required_struct_literal_true_hidden_order",
+        "struct_required_struct_column",
+        "struct_required_struct_column_hidden_order"
+      ]
+    },
+    {
+      "package": "scalar-case-literal",
+      "fixture": "compatibility.jsonl",
+      "path": "references/scalar-case-literal.jsonl",
+      "source_records": 8,
+      "records": 4,
+      "bytes": 25175,
+      "sha256": "90002192e6381674a7914bd7fef4301d086c8dcd203a6f75c1bdcb35e71158fb",
+      "select_ids": [
+        "case_hidden_order",
+        "case_no_order"
+      ]
+    },
+    {
+      "package": "scalar-case-folded",
+      "fixture": "case-equal.jsonl",
+      "path": "references/scalar-case-folded.jsonl",
+      "source_records": 4,
+      "records": 4,
+      "bytes": 12891,
+      "sha256": "fcd1037b0866637ffb9a095c28b788008a55eef160c5d97cfde847b430905b8f",
+      "select_ids": null
+    },
+    {
+      "package": "absent-scalar-original",
+      "fixture": "main.jsonl",
+      "path": "references/absent-scalar-original.jsonl",
+      "source_records": 152,
+      "records": 4,
+      "bytes": 464703,
+      "sha256": "3fa86a006fe1d8cbaebec4b1c23a107b2bd670f07b9cf4d8b30b62979d5cf6eb",
+      "select_ids": [
+        "inputs_uncorrelated_zero",
+        "empty_inputs_uncorrelated_zero"
+      ]
+    },
+    {
+      "package": "numeric-pruning-original",
+      "fixture": "numeric-pruning-spark.jsonl",
+      "path": "references/numeric-pruning-original.jsonl",
+      "source_records": 2,
+      "records": 2,
+      "bytes": 3146,
+      "sha256": "71e6c66aa31123954e0638bf6d09746178db9ccd8cdc0230220dcce2e55eb745",
+      "select_ids": null
+    },
+    {
+      "package": "new-boundaries",
+      "fixture": "spark.jsonl",
+      "path": "references/new-boundaries.jsonl",
+      "source_records": 24,
+      "records": 24,
+      "bytes": 42065,
+      "sha256": "9445afefef5d3d1237760350e14d365d20072cea7af97a5e59f5e95a3377518e",
+      "select_ids": null
+    }
+  ],
+  "new_capture": {
+    "reference": "references/new-boundaries.jsonl",
+    "script": "capture_spark.py",
+    "script_sha256": "c1d730a9f9c84e82a1ac2fc30b2ddd36738c55ddb7f7288a124b01781269752e",
+    "manifest": "cases.json",
+    "manifest_sha256": "81588717f439925cb9db1384f4c62b641df8cd649ffa3504e8090aeefe27f860"
+  }
+}
