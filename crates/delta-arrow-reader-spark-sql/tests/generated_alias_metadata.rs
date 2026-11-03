@@ -209,9 +209,8 @@ async fn projection_metadata_categories_match_spark() -> TestResult {
                         None => result.err().map(|error| error.to_string()),
                     };
                     if let Some(difference) = difference {
-                        differences.push(format!(
-                            "{id} ANSI={ansi} batch={batch_size}: {difference}"
-                        ));
+                        differences
+                            .push(format!("{id} ANSI={ansi} batch={batch_size}: {difference}"));
                     }
                 }
             }
