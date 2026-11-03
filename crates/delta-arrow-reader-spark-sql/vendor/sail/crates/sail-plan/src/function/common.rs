@@ -1,12 +1,15 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use arrow_schema::extension::{EXTENSION_TYPE_METADATA_KEY, EXTENSION_TYPE_NAME_KEY};
+use datafusion::arrow::compute::can_cast_types;
 use datafusion::arrow::datatypes::{DataType, FieldRef, TimeUnit};
 use datafusion::logical_expr::expr::NullTreatment;
 use datafusion::prelude::SessionContext;
-use datafusion_common::tree_node::TreeNode;
-use datafusion_common::{DFSchemaRef, ScalarValue};
+use datafusion_common::metadata::FieldMetadata;
+use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::{DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams, WindowFunctionParams};
 use datafusion_expr::{
     AggregateUDF, BinaryExpr, ColumnarValue, ExprSchemable, Operator, ReturnFieldArgs,
@@ -28,15 +31,105 @@ use crate::function::comparison::{
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Expr {
-    ScalarUDF::from(DropInheritedColumnMetadata).call(vec![expression])
+    set_result_metadata(expression, vec![])
+}
+
+pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr) -> expr::Expr {
+    ScalarUDF::from(SparkResultMetadata {
+        metadata: FieldMetadata::default(),
+        analysis_only: true,
+    })
+    .call(vec![expression])
+}
+
+pub(crate) fn set_result_metadata(
+    expression: expr::Expr,
+    metadata: Vec<(String, String)>,
+) -> expr::Expr {
+    ScalarUDF::from(SparkResultMetadata {
+        metadata: metadata.into_iter().collect::<HashMap<_, _>>().into(),
+        analysis_only: false,
+    })
+    .call(vec![expression])
+}
+
+// Call after semantic preparation, or on a preparation-only expression copy.
+// Resolution must retain CAST nodes for discovery and grouping value identity.
+pub(crate) fn materialize_metadata_literals(
+    expression: expr::Expr,
+) -> datafusion_common::Result<Transformed<expr::Expr>> {
+    expression.transform_up(|expression| {
+        if let expr::Expr::ScalarFunction(function) = &expression
+            && let Some(annotation) = function.func.inner().downcast_ref::<SparkResultMetadata>()
+            && let [argument] = function.args.as_slice()
+            && let Some(value) = literal_metadata_value(argument)
+            && let Ok((_, field)) = argument.to_field(&DFSchema::empty())
+        {
+            if annotation.analysis_only {
+                return Ok(Transformed::yes(argument.clone()));
+            }
+            let field = annotation.annotate_field(&field);
+            return Ok(Transformed::yes(expr::Expr::Literal(
+                value,
+                (!field.metadata().is_empty()).then(|| FieldMetadata::from(field.as_ref())),
+            )));
+        }
+        Ok(Transformed::no(expression))
+    })
+}
+
+fn literal_metadata_value(expression: &expr::Expr) -> Option<ScalarValue> {
+    match without_metadata_annotations(expression) {
+        expr::Expr::Literal(value, _) => Some(value.clone()),
+        expr::Expr::Alias(alias) => literal_metadata_value(&alias.expr),
+        expr::Expr::Cast(expr::Cast { expr, field })
+        | expr::Expr::TryCast(expr::TryCast { expr, field }) => {
+            let value = literal_metadata_value(expr)?;
+            // Keep invalid casts for the normal analyzer/planner to reject.
+            if value.is_null() && can_cast_types(&value.data_type(), field.data_type()) {
+                ScalarValue::try_new_null(field.data_type()).ok()
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn without_metadata_annotations(mut expression: &expr::Expr) -> &expr::Expr {
+    while let expr::Expr::ScalarFunction(function) = expression
+        && function.func.inner().is::<SparkResultMetadata>()
+        && let [value] = function.args.as_slice()
+    {
+        expression = value;
+    }
+    expression
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct DropInheritedColumnMetadata;
+struct SparkResultMetadata {
+    metadata: FieldMetadata,
+    analysis_only: bool,
+}
 
-impl ScalarUDFImpl for DropInheritedColumnMetadata {
+impl SparkResultMetadata {
+    fn annotate_field(&self, value: &FieldRef) -> FieldRef {
+        let mut field = value.as_ref().clone().with_name(self.name());
+        // Spark drops user metadata on derived values; Arrow extensions describe their type.
+        field.metadata_mut().retain(|key, _| {
+            matches!(
+                key.as_str(),
+                EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
+            )
+        });
+        field.metadata_mut().extend(self.metadata.to_hashmap());
+        Arc::new(field)
+    }
+}
+
+impl ScalarUDFImpl for SparkResultMetadata {
     fn name(&self) -> &str {
-        "drop_inherited_column_metadata"
+        "spark_result_metadata"
     }
 
     fn signature(&self) -> &Signature {
@@ -53,15 +146,21 @@ impl ScalarUDFImpl for DropInheritedColumnMetadata {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
-        let mut field = args.arg_fields[0].as_ref().clone().with_name(self.name());
-        // Spark drops user metadata on derived values; Arrow extensions describe their type.
-        field.metadata_mut().retain(|key, _| {
-            matches!(
-                key.as_str(),
-                EXTENSION_TYPE_NAME_KEY | EXTENSION_TYPE_METADATA_KEY
-            )
-        });
-        Ok(Arc::new(field))
+        Ok(self.annotate_field(&args.arg_fields[0]))
+    }
+
+    fn simplify(
+        &self,
+        args: Vec<expr::Expr>,
+        _: &datafusion_expr::simplify::SimplifyContext,
+    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
+        use datafusion_expr::simplify::ExprSimplifyResult;
+        if self.analysis_only {
+            let [value] = datafusion_common::utils::take_function_args(self.name(), args)?;
+            Ok(ExprSimplifyResult::Simplified(value))
+        } else {
+            Ok(ExprSimplifyResult::Original(args))
+        }
     }
 
     fn invoke_with_args(
@@ -268,10 +367,10 @@ impl ScalarFunctionBuilder {
 }
 
 fn numeric_literal(value: &expr::Expr) -> Option<ScalarValue> {
-    match value {
+    match without_metadata_annotations(value) {
         expr::Expr::Literal(value, _) => Some(value.clone()),
         expr::Expr::Cast(expr::Cast { expr, field })
-        | expr::Expr::TryCast(expr::TryCast { expr, field }) => expr
+        | expr::Expr::TryCast(expr::TryCast { expr, field }) => without_metadata_annotations(expr)
             .as_literal()
             .filter(|value| value.data_type().is_numeric() || value.is_null())
             .and_then(|value| value.cast_to(field.data_type()).ok()),
@@ -935,7 +1034,7 @@ impl ScalarUDFImpl for SparkComparisonFloat {
         info: &datafusion_expr::simplify::SimplifyContext,
     ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
         use datafusion_expr::simplify::ExprSimplifyResult;
-        let canonical = match &args[0] {
+        let canonical = match without_metadata_annotations(&args[0]) {
             expr::Expr::ScalarFunction(f) => f.func.inner().is::<Self>(),
             expr::Expr::Cast(expr::Cast { expr, field })
             | expr::Expr::TryCast(expr::TryCast { expr, field }) => {
@@ -1969,5 +2068,161 @@ fn exact_integer_predicates_match_explicit_double_coercion() -> PlanResult<()> {
             }
         }
     }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn metadata_value_analysis_uses_implementation_identity() {
+    use datafusion_expr::{col, create_udf};
+
+    let value = col("k");
+    let annotated = set_result_metadata(
+        drop_inherited_column_metadata(value.clone()),
+        vec![(String::new(), "empty-key".into())],
+    );
+    assert_eq!(without_metadata_annotations(&annotated), &value);
+    let user_function = create_udf(
+        "spark_result_metadata",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(|arguments| Ok(arguments[0].clone())),
+    )
+    .call(vec![value]);
+    assert_eq!(without_metadata_annotations(&user_function), &user_function);
+}
+
+#[cfg(test)]
+#[test]
+fn analysis_metadata_annotations_restore_the_original_value() -> datafusion_common::Result<()> {
+    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+    use datafusion_expr::simplify::SimplifyContext;
+
+    let source = HashMap::from([("source".into(), "provider".into())]);
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        Field::new("k", DataType::Int32, false).with_metadata(source.clone()),
+    ]))?);
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::clone(&schema))
+        .build();
+    let column = datafusion_expr::col("k");
+    for value in [
+        column.clone(),
+        expr::Expr::Literal(ScalarValue::Int32(None), Some(source.into())),
+    ] {
+        let annotated = drop_inherited_column_metadata_for_analysis(value.clone());
+        let field = annotated.to_field(schema.as_ref())?.1;
+        assert!(field.metadata().is_empty());
+        assert_eq!(field.data_type(), &value.get_type(schema.as_ref())?);
+        assert_eq!(field.is_nullable(), value.nullable(schema.as_ref())?);
+        assert_eq!(without_metadata_annotations(&annotated), &value);
+        let prepared = materialize_metadata_literals(annotated.clone())?.data;
+        if matches!(value, expr::Expr::Literal(..)) {
+            assert_eq!(prepared, value);
+        } else {
+            assert_eq!(prepared, annotated);
+        }
+        assert_eq!(ExprSimplifier::new(info.clone()).simplify(prepared)?, value);
+    }
+    let permanent = drop_inherited_column_metadata(column);
+    assert_eq!(
+        ExprSimplifier::new(info).simplify(permanent.clone())?,
+        permanent
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn metadata_annotations_keep_null_propagation_and_fields() -> datafusion_common::Result<()> {
+    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+    use datafusion_expr::create_udf;
+    use datafusion_expr::simplify::SimplifyContext;
+
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::new(DFSchema::empty()))
+        .build();
+    let source_metadata = HashMap::from([
+        (EXTENSION_TYPE_NAME_KEY.into(), "arrow.json".into()),
+        (EXTENSION_TYPE_METADATA_KEY.into(), String::new()),
+        ("source".into(), "provider".into()),
+    ]);
+    let null = expr::Expr::Literal(ScalarValue::Utf8(None), Some(source_metadata.into()));
+    let annotated = set_result_metadata(
+        drop_inherited_column_metadata(cast(null, DataType::Utf8)),
+        vec![
+            ("__autoGeneratedAlias".into(), "true".into()),
+            (String::new(), "empty-key".into()),
+        ],
+    );
+    let prepared = materialize_metadata_literals(annotated)?.data;
+    let simplified = ExprSimplifier::new(info.clone()).simplify(prepared)?;
+    let expr::Expr::Literal(value, Some(metadata)) = simplified else {
+        return datafusion_common::internal_err!("expected annotated NULL literal");
+    };
+    assert_eq!(value, ScalarValue::Utf8(None));
+    assert_eq!(
+        metadata.to_hashmap(),
+        HashMap::from([
+            (EXTENSION_TYPE_NAME_KEY.into(), "arrow.json".into()),
+            (EXTENSION_TYPE_METADATA_KEY.into(), String::new()),
+            ("__autoGeneratedAlias".into(), "true".into()),
+            (String::new(), "empty-key".into()),
+        ])
+    );
+
+    let typed_null = drop_inherited_column_metadata(cast(lit(ScalarValue::Null), DataType::Int32));
+    assert!(matches!(
+        without_metadata_annotations(&typed_null),
+        expr::Expr::Cast(_)
+    ));
+    assert!(matches!(
+        materialize_metadata_literals(typed_null.clone())?.data,
+        expr::Expr::Literal(ScalarValue::Int32(None), _)
+    ));
+    let invalid_null_cast = cast(
+        lit(ScalarValue::Int32(None)),
+        DataType::Struct(Default::default()),
+    );
+    let annotated_invalid_cast = drop_inherited_column_metadata(invalid_null_cast.clone());
+    assert_eq!(
+        without_metadata_annotations(&annotated_invalid_cast),
+        &invalid_null_cast
+    );
+    assert_eq!(
+        materialize_metadata_literals(annotated_invalid_cast.clone())?.data,
+        annotated_invalid_cast
+    );
+    let bad_cast = cast(lit("bad"), DataType::Int32);
+    for (left, right) in [
+        (typed_null.clone(), bad_cast.clone()),
+        (bad_cast, typed_null.clone()),
+    ] {
+        let expression = left + right;
+        let expression = materialize_metadata_literals(expression)?.data;
+        let simplified = ExprSimplifier::new(info.clone()).simplify(expression)?;
+        assert!(matches!(
+            simplified,
+            expr::Expr::Literal(ScalarValue::Int32(None), _)
+        ));
+    }
+    let user_function = create_udf(
+        "spark_result_metadata",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(|_| Ok(ColumnarValue::Scalar(ScalarValue::Int32(Some(7))))),
+    )
+    .call(vec![typed_null]);
+    let annotated_user_function = set_result_metadata(
+        user_function.clone(),
+        vec![("__autoGeneratedAlias".into(), "true".into())],
+    );
+    assert_eq!(
+        without_metadata_annotations(&annotated_user_function),
+        &user_function
+    );
     Ok(())
 }

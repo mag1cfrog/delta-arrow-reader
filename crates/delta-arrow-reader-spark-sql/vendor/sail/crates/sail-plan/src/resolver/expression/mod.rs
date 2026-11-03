@@ -4,10 +4,14 @@ use std::fmt::Debug;
 use async_recursion::async_recursion;
 use datafusion_common::DFSchemaRef;
 use datafusion_expr::expr;
+use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::explode::Explode;
+use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::{drop_inherited_column_metadata, set_result_metadata};
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -87,6 +91,15 @@ impl NamedExpr {
         }
     }
 
+    pub fn into_alias(self, field_id: String) -> expr::Expr {
+        let expression = if self.metadata.is_empty() {
+            self.expr
+        } else {
+            set_result_metadata(self.expr, self.metadata)
+        };
+        expression.alias(field_id)
+    }
+
     pub fn with_metadata(mut self, metadata: Vec<(String, String)>) -> Self {
         self.metadata = metadata;
         self
@@ -102,6 +115,34 @@ impl NamedExpr {
             Some(name) => Ok(name.clone()),
             None => Ok(self.name.clone().one()?),
         }
+    }
+}
+
+fn is_extraction_only(expression: &spec::Expr) -> bool {
+    match expression {
+        spec::Expr::UnresolvedAttribute { .. }
+        | spec::Expr::IdentifierClause { .. }
+        | spec::Expr::Literal(_) => true,
+        spec::Expr::UnresolvedExtractValue { child, extraction } => {
+            is_extraction_only(child) && is_extraction_only(extraction)
+        }
+        _ => false,
+    }
+}
+
+fn needs_projection_expansion(expression: &expr::Expr) -> bool {
+    matches!(expression, expr::Expr::ScalarFunction(function)
+        if function.func.inner().is::<Explode>() || function.func.inner().is::<MultiExpr>())
+}
+
+fn inherits_alias_metadata(expression: &expr::Expr) -> bool {
+    match expression {
+        expr::Expr::Alias(_)
+        | expr::Expr::Column(_)
+        | expr::Expr::OuterReferenceColumn(..)
+        | expr::Expr::Literal(..) => true,
+        expr::Expr::ScalarFunction(function) => function.func.inner().is::<GetFieldFunc>(),
+        _ => false,
     }
 }
 
@@ -158,10 +199,10 @@ impl PlanResolver<'_> {
                 cast_to_type,
                 rename: _,
                 is_try,
-            } => {
-                self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
-                    .await
-            }
+            } => self
+                .resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                .await
+                .map(|(named, _)| named),
             Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => {
                 Err(PlanError::unsupported("DataFrame column expressions"))
             }
@@ -351,6 +392,66 @@ impl PlanResolver<'_> {
         Ok(results)
     }
 
+    pub(super) async fn resolve_projection_expressions(
+        &self,
+        expressions: Vec<spec::Expr>,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<Vec<NamedExpr>> {
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = false;
+        let mut results = Vec::with_capacity(expressions.len());
+        for expression in expressions {
+            let extraction_only = is_extraction_only(&expression);
+            let named_source = matches!(
+                &expression,
+                spec::Expr::Literal(_)
+                    | spec::Expr::UnresolvedAttribute { .. }
+                    | spec::Expr::Alias { .. }
+                    | spec::Expr::UnresolvedStar { .. }
+                    | spec::Expr::IdentifierClause { .. }
+                    | spec::Expr::UnresolvedDate { .. }
+                    | spec::Expr::UnresolvedTime { .. }
+                    | spec::Expr::UnresolvedTimestamp { .. }
+            );
+            let (mut named, direct_named_cast) = match expression {
+                spec::Expr::Cast {
+                    expr,
+                    cast_to_type,
+                    is_try,
+                    ..
+                } => {
+                    self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                        .await?
+                }
+                expression => (
+                    self.resolve_named_expression(expression, schema, state)
+                        .await?,
+                    false,
+                ),
+            };
+            if !named_source && !needs_projection_expansion(&named.expr) {
+                if !direct_named_cast && !extraction_only {
+                    // Output metadata must not participate in grouping expression identity.
+                    named.metadata.retain(|(key, _)| {
+                        matches!(
+                            key.as_str(),
+                            "ARROW:extension:name" | "ARROW:extension:metadata"
+                        )
+                    });
+                    named
+                        .metadata
+                        .push(("__autoGeneratedAlias".into(), "true".into()));
+                } else if !inherits_alias_metadata(&named.expr) {
+                    named.expr = drop_inherited_column_metadata(named.expr);
+                }
+            }
+            results.push(named);
+        }
+        Ok(results)
+    }
+
     pub(super) async fn resolve_expression(
         &self,
         expressions: spec::Expr,
@@ -418,6 +519,143 @@ mod tests {
     use crate::resolver::PlanResolver;
     use crate::resolver::expression::NamedExpr;
     use crate::resolver::state::PlanResolverState;
+
+    #[tokio::test]
+    async fn supplied_alias_metadata_survives_projection_and_aggregate_planning() -> PlanResult<()>
+    {
+        use arrow::array::Int32Array;
+        use arrow::datatypes::{DataType, Field, Schema};
+        use arrow::record_batch::RecordBatch;
+        use arrow::util::display::array_value_to_string;
+
+        use crate::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
+        use crate::physical_plan::SparkQueryPlanner;
+        use datafusion::dataframe::DataFrame;
+        use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
+
+        let ctx = SessionContext::new_with_state(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_query_planner(Arc::new(SparkQueryPlanner))
+                .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
+                .build(),
+        );
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("k", DataType::Int32, true)
+                .with_metadata(HashMap::from([("source".into(), "provider".into())])),
+        ]));
+        ctx.register_batch(
+            "metadata_inputs",
+            RecordBatch::try_new(
+                schema,
+                vec![Arc::new(Int32Array::from(vec![Some(2), None, Some(3)]))],
+            )?,
+        )?;
+        for ansi_mode in [true, false] {
+            let resolver = PlanResolver::new(
+                &ctx,
+                Arc::new(PlanConfig {
+                    ansi_mode,
+                    ..PlanConfig::default()
+                }),
+            );
+            for (sql, unaliased_name, expected_values) in [
+                (
+                    "SELECT k AS value FROM metadata_inputs",
+                    "k",
+                    vec!["", "2", "3"],
+                ),
+                (
+                    "SELECT CAST(k AS BIGINT) AS value FROM metadata_inputs",
+                    "k",
+                    vec!["", "2", "3"],
+                ),
+                (
+                    "SELECT CASE WHEN true THEN k ELSE 2 END AS value FROM metadata_inputs",
+                    "CASE WHEN true THEN k ELSE 2 END",
+                    vec!["", "2", "3"],
+                ),
+                (
+                    "SELECT SUM(k) AS value FROM metadata_inputs",
+                    "sum(k)",
+                    vec!["5"],
+                ),
+                (
+                    "SELECT NULL + (SELECT 1) AS value",
+                    "(NULL + subquery)",
+                    vec![""],
+                ),
+                (
+                    "SELECT ROUND((SELECT 1),NULL) AS value",
+                    "round(subquery, NULL)",
+                    vec![""],
+                ),
+            ] {
+                for supplied in [
+                    vec![],
+                    vec![("unit".to_owned(), "reading".to_owned())],
+                    vec![(String::new(), "empty-key".to_owned())],
+                    vec![
+                        ("unit".to_owned(), "reading".to_owned()),
+                        (String::new(), "empty-key".to_owned()),
+                        ("ARROW:extension:name".to_owned(), "test.reading".to_owned()),
+                        ("ARROW:extension:metadata".to_owned(), String::new()),
+                    ],
+                ] {
+                    for rename in [true, false] {
+                        let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+                        let mut query = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+                        let spec::QueryNode::Project { expressions, .. } = &mut query.node else {
+                            return Err(crate::error::PlanError::internal(
+                                "expected SELECT projection",
+                            ));
+                        };
+                        let spec::Expr::Alias { name, metadata, .. } = &mut expressions[0] else {
+                            return Err(crate::error::PlanError::internal(
+                                "expected supplied alias",
+                            ));
+                        };
+                        if !rename {
+                            name.clear();
+                        }
+                        *metadata = Some(supplied.clone());
+                        let expected = supplied.iter().cloned().collect::<HashMap<_, _>>();
+                        let named = resolver.resolve_named_plan(query).await?;
+                        let expected_name = if rename { "value" } else { unaliased_name };
+                        assert_eq!(named.fields, [expected_name]);
+                        assert_eq!(named.plan.schema().field(0).metadata(), &expected);
+                        let mut state = ctx.state();
+                        let extensions = &mut state.config_mut().options_mut().extensions;
+                        extensions.insert(SparkSqlExpressionSemantics::default());
+                        extensions.insert(PreserveAggregateStatisticsSchema::default());
+                        let physical = DataFrame::new(state, named.plan)
+                            .create_physical_plan()
+                            .await?;
+                        assert_eq!(physical.schema().field(0).metadata(), &expected);
+                        let schema = physical.schema();
+                        let batches =
+                            datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
+                        let mut values = Vec::new();
+                        for batch in batches {
+                            assert_eq!(batch.schema(), schema);
+                            for (field, column) in schema.fields().iter().zip(batch.columns()) {
+                                if !field.is_nullable() {
+                                    assert_eq!(column.logical_null_count(), 0);
+                                }
+                                column.to_data().validate_full()?;
+                            }
+                            for row in 0..batch.num_rows() {
+                                values.push(array_value_to_string(batch.column(0).as_ref(), row)?);
+                            }
+                        }
+                        values.sort();
+                        assert_eq!(values, expected_values);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     fn create_session() -> PlanResult<SessionContext> {
         let state = SessionStateBuilder::new().build();

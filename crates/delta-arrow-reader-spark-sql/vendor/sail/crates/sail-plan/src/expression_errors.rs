@@ -21,7 +21,10 @@ use datafusion_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, lit};
 
 use crate::function::SparkStringTemporalComparisonCast;
-use crate::function::common::{NormalizeFloatArrayForSparkComparison, SparkComparisonFloat};
+use crate::function::common::{
+    NormalizeFloatArrayForSparkComparison, SparkComparisonFloat, materialize_metadata_literals,
+    without_metadata_annotations,
+};
 use crate::function::float_keys::NormalizeNestedFloatKeys;
 use crate::function::scalar::conditional::SparkNullIf;
 use crate::function::scalar::math::{
@@ -57,6 +60,7 @@ impl ConfigExtension for SparkSqlExpressionSemantics {
 }
 
 fn null_literal(expr: &Expr) -> bool {
+    let expr = without_metadata_annotations(expr);
     match expr {
         Expr::Literal(value, _) => value.is_null(),
         Expr::Cast(cast) => null_literal(&cast.expr),
@@ -77,6 +81,7 @@ fn null_literal(expr: &Expr) -> bool {
 }
 
 fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
+    let expr = without_metadata_annotations(expr);
     match expr {
         Expr::Alias(alias) => projected_null(&alias.expr, input),
         Expr::Cast(cast) => projected_null(&cast.expr, input),
@@ -124,6 +129,7 @@ fn null_round(expr: &Expr) -> bool {
             .is_some_and(SparkIntegerRound::is_null_scale)
 }
 
+// Classify the value node itself so rewrites retain any enclosing annotations.
 fn null_discarded(expr: &Expr) -> bool {
     match expr {
         Expr::BinaryExpr(binary) => {
@@ -234,6 +240,29 @@ impl AnalyzerRule for PrepareSparkExpressions {
     }
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
+        let plan = self.prepare(plan, options)?;
+        Ok(plan
+            .transform_up_with_subqueries(|node| {
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                let mut materialize = |expr: Expr| {
+                    let name = names.save(&expr);
+                    materialize_metadata_literals(expr)
+                        .map(|expr| expr.update_data(|expr| name.restore(expr)))
+                };
+                node.map_expressions(|expr| {
+                    if matches!(expr, Expr::GroupingSet(_)) {
+                        expr.map_children(&mut materialize)
+                    } else {
+                        materialize(expr)
+                    }
+                })
+            })?
+            .data)
+    }
+}
+
+impl PrepareSparkExpressions {
+    fn prepare(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
         // Borrow first: ordinary queries require no rewritten plan or batch allocation.
         let is_spark_query = options
             .extensions
@@ -600,6 +629,7 @@ fn round_subqueries(
     prepare: &Prepare,
     schema: &DFSchemaRef,
 ) -> Result<()> {
+    let expr = without_metadata_annotations(expr);
     if null_discarded(expr) && !null_round(expr) {
         return Ok(());
     }
@@ -1293,6 +1323,7 @@ impl Prepare {
                                     Ok(Transformed::no(expr))
                                 })?
                                 .data;
+                            let expr = materialize_metadata_literals(expr)?.data;
                             let expr = simplifier.simplify(expr)?;
                             create_physical_expr(&expr, project.input.schema(), &self.props)?
                                 .evaluate(&batch)?;
@@ -1430,6 +1461,13 @@ impl Prepare {
     // Local relation conversion evaluates the divisor first; later constant
     // folding follows NULL propagation on either operand.
     fn precheck_expression(&self, expr: Expr, schema: &DFSchemaRef, local: bool) -> Result<Expr> {
+        // Local VALUES must consume their original arithmetic/CAST operands
+        // before the later NULL fold can discard a nested live failure.
+        let expr = if local {
+            expr
+        } else {
+            materialize_metadata_literals(expr)?.data
+        };
         let info = datafusion_expr::simplify::SimplifyContext::builder()
             .with_schema(Arc::clone(schema))
             .with_config_options(Arc::clone(self.props.config_options.as_ref().unwrap()))
@@ -1628,6 +1666,7 @@ impl Prepare {
     }
 
     fn check_expr(&self, expr: &Expr, constants: bool) -> Result<()> {
+        let expr = without_metadata_annotations(expr);
         if let Expr::ScalarSubquery(subquery) = expr {
             if let Some(expressions) = one_row_exprs(&subquery.subquery)? {
                 return self.check_expr(&expressions[0], constants);

@@ -27,7 +27,7 @@ use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::SparkComparisonFloat;
+use crate::function::common::{SparkComparisonFloat, without_metadata_annotations};
 use crate::function::float_keys::{NormalizeNestedFloatKeys, normalize_spark_float_key};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -330,14 +330,9 @@ impl PlanResolver<'_> {
             self.rewrite_projection::<WindowRewriter>(plan, projections, state)?;
         let projections = projections
             .into_iter()
-            .map(|x| {
-                let NamedExpr {
-                    name,
-                    expr,
-                    metadata: _,
-                    ..
-                } = x;
-                Ok(expr.alias(state.register_field_name(name.one()?)))
+            .map(|named| {
+                let field_id = state.register_field_name(named.name.clone().one()?);
+                Ok(named.into_alias(field_id))
             })
             .collect::<PlanResult<Vec<_>>>()?;
         Ok(LogicalPlanBuilder::from(plan)
@@ -735,15 +730,14 @@ impl PlanResolver<'_> {
         let grouping = grouping
             .into_iter()
             .map(|expr| {
-                expr.transform_down(|mut expr| {
+                expr.transform_down(|expr| {
                     if matches!(expr, Expr::GroupingSet(_)) {
                         return Ok(Transformed::no(expr));
                     }
-                    let aliased = matches!(expr, Expr::Alias(_));
-                    while matches!(expr, Expr::Alias(_)) {
-                        expr = expr.unalias();
-                    }
-                    Ok(Transformed::new(expr, aliased, TreeNodeRecursion::Jump))
+                    let value = Self::unalias_grouping_expr(&expr);
+                    let annotated = value != &expr;
+                    let value = value.clone();
+                    Ok(Transformed::new(value, annotated, TreeNodeRecursion::Jump))
                 })
                 .data()
             })
@@ -840,9 +834,10 @@ impl PlanResolver<'_> {
         Ok(order)
     }
 
-    fn unalias_grouping_expr(mut expr: &Expr) -> &Expr {
+    fn unalias_grouping_expr(expr: &Expr) -> &Expr {
+        let mut expr = without_metadata_annotations(expr);
         while let Expr::Alias(alias) = expr {
-            expr = alias.expr.as_ref();
+            expr = without_metadata_annotations(&alias.expr);
         }
         expr
     }
@@ -924,7 +919,7 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<ResolvedProjections> {
         if let Ok(resolved) = self
-            .resolve_named_output_expressions(projections.to_vec(), schema, state)
+            .resolve_projection_expressions(projections.to_vec(), schema, state)
             .await
         {
             return Ok((resolved.into_iter().map(Some).collect(), vec![]));
@@ -933,7 +928,7 @@ impl PlanResolver<'_> {
         let mut deferred = vec![];
         for (index, projection) in projections.iter().enumerate() {
             match self
-                .resolve_named_output_expressions(vec![projection.clone()], schema, state)
+                .resolve_projection_expressions(vec![projection.clone()], schema, state)
                 .await
             {
                 Ok(named) => resolved.push(Some(named.one()?)),
@@ -959,7 +954,7 @@ impl PlanResolver<'_> {
     ) -> PlanResult<Vec<NamedExpr>> {
         for index in deferred {
             resolved[index] = Some(
-                self.resolve_named_output_expressions(
+                self.resolve_projection_expressions(
                     vec![projections[index].clone()],
                     schema,
                     state,

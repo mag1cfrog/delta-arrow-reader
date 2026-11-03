@@ -2455,3 +2455,49 @@ names remain owned by #821, #822 and #823.
 cargo test --locked --workspace --test map_constructor_root
 cargo test --locked --workspace -p sail-function --lib constructed_map_refines_only_outer_nullability
 ```
+
+## Projection metadata
+
+`generated-alias-metadata-spark.jsonl` preserves the original 210-observation
+metadata capture. `generated-alias-metadata-spark-v2.jsonl` retains all 240
+observations, including the additional valid-cast, renamed-window and admitted
+PIVOT controls. Both capture scripts are retained unchanged. The permanent core
+test lists 35 expression/consumer categories across mixed, NULL-only and empty
+providers, both ANSI modes and batch sizes 1/32: 420 complete comparisons.
+Renamed consumers exercise generated fields without requiring unrelated label
+repairs. The complete references and full external replay retain the remaining
+STRUCT/window labels and bare PIVOT grammar cases; this target does not establish
+whole-category schema parity.
+
+The unchanged `generated-alias-metadata-boundaries-spark.jsonl` capture supplies
+28 original-syntax, IDENTIFIER and computed-grouping observations. The three
+`review-710-*-positive-alias*-spark.jsonl` captures retain 60 bare, nested,
+bracket and constructed-field observations. Their stage tests compare public
+fields to analyzed fields and executed fields to their corresponding recorded
+stage, with exact values and returned-batch validation. Direct extraction
+controls distinguish source inheritance from computed identity aliases.
+
+The identifier/extraction, literal-grouping, conditional-schema, cast-visibility,
+historical-error and IF captures retain the original independent declarations
+and values. The full 48-observation metadata-semantics reference also remains
+unchanged for external comparison, including its scalar-subquery naming gaps.
+Native controls, Arrow extension fields, supplied alias metadata, typed NULL
+behavior, bad-CAST errors and volatile evaluation counts protect the connected
+annotation paths. Existing expected-error and physical-schema negative controls
+must reject successful queries and schema mismatches before any later error.
+Every reused capture script and raw reference is byte-identical to its source
+at commit `1df41b7a1b4eaad3843b9f14fc6d12c68bed2e1c`.
+
+`generated-alias-metadata-reviewed-contracts.json` records sixteen exact IF
+corrections with complete old/new outcomes, SQL, ANSI mode and capture hashes.
+Their independent Spark public fields are nullable; optimized/executed fields
+are nonnullable. Paired observations at both batch sizes confirm that only the
+public logical-nullability flag changes. The correction map adds these sixteen
+entries without altering existing entries, rows, types, names, execution state
+or physical declarations. The historical accepted-runtime archive remains
+byte-identical to the SHA256 pinned in that manifest.
+
+```sh
+cargo test --locked --workspace --test generated_alias_metadata
+cargo test --locked --workspace supplied_alias_metadata_survives_projection_and_aggregate_planning
+```

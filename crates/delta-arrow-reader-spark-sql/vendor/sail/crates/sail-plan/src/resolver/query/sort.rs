@@ -39,8 +39,28 @@ impl PlanResolver<'_> {
                 let LogicalPlan::Sort(mut sort) = plan else {
                     return Ok(Transformed::no(plan));
                 };
+                let output = sort
+                    .input
+                    .schema()
+                    .columns()
+                    .into_iter()
+                    .map(Expr::Column)
+                    .collect::<Vec<_>>();
+                let mut projected = output.clone();
                 for expression in &mut sort.expr {
                     expression.expr = spark_sort_key(expression.expr.clone(), sort.input.schema())?;
+                    if expression.expr.is_volatile() {
+                        // A distinct ORDER BY value is evaluated once, then reused by sort/merge.
+                        let field = state.register_hidden_field_name("__sort_value");
+                        projected.push(expression.expr.clone().alias(&field));
+                        expression.expr = Expr::Column(Column::from_name(field));
+                    }
+                }
+                let materialized = projected.len() != output.len();
+                if materialized {
+                    sort.input = Arc::new(LogicalPlan::Projection(Projection::try_new(
+                        projected, sort.input,
+                    )?));
                 }
                 let plan = if is_global {
                     LogicalPlan::Sort(sort)
@@ -50,6 +70,11 @@ impl PlanResolver<'_> {
                             sort.input, sort.expr, sort.fetch,
                         )),
                     })
+                };
+                let plan = if materialized {
+                    LogicalPlan::Projection(Projection::try_new(output, Arc::new(plan))?)
+                } else {
+                    plan
                 };
                 // The builder adds only this sort and an optional projection above it.
                 Ok(Transformed::new(plan, true, TreeNodeRecursion::Jump))

@@ -47,6 +47,7 @@ use sail_sql_analyzer::parser::parse_interval;
 use super::lambda::lambda_with_fresh_parameter;
 use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::without_metadata_annotations;
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
@@ -661,7 +662,7 @@ fn timestamp_null(input: &ScalarFunctionInput, timestamp_ntz: bool) -> Expr {
 }
 
 fn is_null_literal(expr: &Expr) -> bool {
-    matches!(expr, Expr::Literal(value, _) if value.is_null())
+    matches!(without_metadata_annotations(expr), Expr::Literal(value, _) if value.is_null())
 }
 
 fn to_timestamp(input: ScalarFunctionInput, timestamp_ntz: bool) -> PlanResult<Expr> {
