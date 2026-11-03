@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::AsArray;
-use datafusion::arrow::compute::filter_record_batch;
+use datafusion::arrow::compute::{cast as arrow_cast, filter_record_batch};
 use datafusion::arrow::datatypes::{DataType, Schema};
 use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
 use datafusion::datasource::memory::MemorySourceConfig;
@@ -39,9 +39,10 @@ use sail_function::scalar::math::{
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
+use sail_function::scalar::struct_function::StructFunction;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 
-/// Preserve early expression errors before NULL and empty-result rewrites.
+/// Preserve Spark constant STRUCT declarations and early expression errors.
 #[derive(Debug)]
 pub struct PreserveSparkExpressionErrors;
 
@@ -240,6 +241,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
+        let mut has_constant_struct = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
                 && !aggregate
@@ -254,6 +256,10 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             }
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
+                has_constant_struct |= is_spark_query && expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
+                        && row_expression(expr, false)?)
+                })?;
                 check_cast |= has_cast(expr)?;
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
@@ -264,7 +270,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -276,6 +282,7 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
+            && !has_constant_struct
         {
             return Ok(plan);
         }
@@ -285,6 +292,11 @@ impl AnalyzerRule for PreserveSparkExpressionErrors {
             props,
             has_groups,
             has_null_sensitive_comparison,
+        };
+        let plan = if has_constant_struct {
+            prepare.fold_constant_structs(plan)?
+        } else {
+            plan
         };
         let plan = if check_groups {
             plan.transform_up_with_subqueries(|plan| prepare_foldable_groups(plan, options))?
@@ -1349,6 +1361,32 @@ impl Prepare {
                 Ok(Transformed::new_transformed(node, prepared.transformed))
             })?
             .data)
+    }
+
+    fn fold_constant_structs(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+        Ok(plan.transform_up_with_subqueries(|node| {
+            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+            node.map_expressions(|expr| {
+                let name = names.save(&expr);
+                Ok(expr.transform_down(|expr| {
+                    if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
+                        || !row_expression(&expr, false)?
+                    {
+                        return Ok(Transformed::no(expr));
+                    }
+                    // Spark folds the whole constant STRUCT with its original child declarations.
+                    let declared_type = expr.get_type(&DFSchema::empty())?;
+                    let value = match self.eval_constant(&expr) {
+                        Ok(ColumnarValue::Scalar(value)) => value.to_array()?,
+                        Ok(ColumnarValue::Array(array)) if array.len() == 1 => array,
+                        // Required errors and discarded branches keep the existing preparation order.
+                        _ => return Ok(Transformed::no(expr)),
+                    };
+                    let value = arrow_cast(value.as_ref(), &declared_type)?;
+                    Ok(Transformed::yes(lit(ScalarValue::try_from_array(value.as_ref(), 0)?)))
+                })?.update_data(|expr| name.restore(expr)))
+            })
+        })?.data)
     }
 
     fn eval_constant(&self, expr: &Expr) -> Result<ColumnarValue> {

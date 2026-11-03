@@ -2123,6 +2123,24 @@ python tests/fixtures/capture_named_struct_fields_spark.py /tmp/named-struct-fie
 cargo test --locked --workspace --test named_struct_declarations
 ```
 
+## Constant STRUCT result fields
+
+`constant-struct-result-fields-spark.jsonl` preserves all 10 raw observations
+from the independent `constant-struct-fields-835-837-reference-v1.jsonl` capture.
+The header pins Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8` in UTC. Both ANSI modes cover successful
+and required failing casts, COALESCE, nested NAMED_STRUCT and a discarded CASE
+cast error. The fixture SHA256 is
+`816399b07d0e8a9ae477971f20fab819fc865931c1eb7a8ea2dfe97ad2b947e0`.
+
+`constant_struct_fields.rs` replays complete analyzed, before-collect and
+executed fields, rows and required error phases at batch sizes 1 and 32 through
+the existing strict stage comparator and current provider loader. Negative
+controls reject a wrong analyzed field and a wrong required error phase.
+Native SQL controls compare configured and unconfigured STRUCT schemas and
+batches. This fixture supplies the constant parent-declaration prerequisite
+shared by FLATTEN #835 and ARRAY_CONTAINS #837; its leaves contain no arrays.
+
 ## STRUCT field resolution
 
 The #803 field-resolution target retains 198 original observations: 174 from
