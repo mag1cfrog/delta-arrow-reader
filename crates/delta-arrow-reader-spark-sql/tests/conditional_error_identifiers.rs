@@ -292,3 +292,44 @@ fn internal_raise_error_retains_original_causes_for_supported_strings() -> TestR
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn public_assertions_keep_null_conditions_messages_and_empty_inputs() -> TestResult {
+    let records = include_str!(
+        "fixtures/conditional-error-identifiers/assertion-and-internal-controls-spark.jsonl"
+    )
+    .lines()
+    .map(serde_json::from_str::<Value>)
+    .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 76);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        // One populated partition preserves the mixed provider's first required error.
+        spark_inputs::register_recorded_inputs(&session, &records[0], 32)?;
+        for case in &records[1..] {
+            let actual = spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            eprintln!("ASSERTION_ERROR_OBSERVATION {}", json!({
+                "id":case["id"], "input":case["input"], "ansi":case["ansi"],
+                "batch":batch_size, "observation":actual,
+            }));
+            // The two internal SQL probes are retained as raw diagnostics for separate owners.
+            if case["id"].as_str().ok_or("missing ID")?.starts_with("assert_") {
+                if actual["matches"] != true {
+                    differences.push(format!("batch={batch_size}, expected={case}, actual={actual}"));
+                }
+                if case["expected"]["condition"] == "USER_RAISED_EXCEPTION" {
+                    let (body, _) = case["spark_error"].as_str()
+                        .ok_or("missing independent error body")?.split_once(" SQLSTATE:")
+                        .ok_or("missing independent SQLSTATE boundary")?;
+                    if !actual["error"].as_str().is_some_and(|error| error.ends_with(body)) {
+                        differences.push(format!("expected body={body:?}, actual={actual}"));
+                    }
+                }
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
