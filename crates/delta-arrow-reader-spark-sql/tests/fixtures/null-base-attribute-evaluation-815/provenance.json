@@ -1,0 +1,23 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "observations": 10,
+  "success": 10,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "confirmed_failure_head": "d47540091693c44b3719b073d26cb99e21005cc0",
+  "confirmed_failure_observations_sha256": "3c6edb8ca8add0aece110cfddfb6927b0d413af95deb86ca30def4d325896b5a",
+  "confirmed_failure_comparisons": {
+    "collect_errors": 12,
+    "matches": 8
+  },
+  "sha256": {
+    "attribute-evaluation-spark.jsonl": "19f8ec5b5ea95fa03f811880b95510ee26ab190643d81cb87db345f6fddc3137",
+    "capture_attribute_evaluation.py": "9874c96de55f1bec23dcb8a917a148c9138e18006c20f3f7516393d4f9a406bd",
+    "original-inputs.json": "d09094c91e4bd0caa875b02066f5dcdf5f87689ba088233f6a789d951aaaeb0a",
+    "../capture_null_base_extraction_spark.py": "167b90bc7f723cb6f9b33e25abc7e2d9f79e1ba5f68d41fda1379dbbf455b7c5",
+    "../capture_floating_group_keys_spark.py": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+  }
+}

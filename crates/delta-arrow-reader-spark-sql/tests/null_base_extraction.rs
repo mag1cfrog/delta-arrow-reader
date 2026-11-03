@@ -252,6 +252,13 @@ async fn null_provenance_matches_all_130_independent_records() -> TestResult {
     compare_cases(REFERENCE, 130).await
 }
 
+#[tokio::test]
+async fn projected_null_bases_match_all_10_independent_records() -> TestResult {
+    let source = include_str!("fixtures/null-base-attribute-evaluation-815/attribute-evaluation-spark.jsonl");
+    assert_eq!(records(source)?[0], records(REFERENCE)?[0]);
+    compare_cases(source, 10).await
+}
+
 async fn native_snapshot(session: &SessionContext, sql: &str) -> TestResult<(String, Vec<RecordBatch>)> {
     let frame = match session.sql(sql).await {
         Ok(frame) => frame,

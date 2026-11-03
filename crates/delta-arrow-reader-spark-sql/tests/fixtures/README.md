@@ -2172,3 +2172,22 @@ Recollect to a fresh path using the existing pinned PySpark 4.2.0/Java 21 setup:
 python tests/fixtures/capture_null_base_extraction_spark.py /tmp/null-base-extraction-815-spark.jsonl
 cargo test --locked --workspace --test null_base_extraction
 ```
+
+`null-base-attribute-evaluation-815/attribute-evaluation-spark.jsonl` adds ten
+independent Spark successes for NULL-typed ordinary attributes whose upstream
+projection contains RAISE_ERROR. Its SHA256 is
+`19f8ec5b5ea95fa03f811880b95510ee26ab190643d81cb87db345f6fddc3137`.
+The original 130 records and four parent records remain unchanged. Direct
+projection, a live CASE projection on each provider, and a projected STRUCT's
+NULL child all suppress the unused fallible work. The shared observer replays
+every supplemental record at batches 1 and 32 with complete fields and rows,
+bringing the focused suite to 144 records and 288 comparisons.
+
+The supplemental provenance file pins the unchanged capture source, input
+snapshot and shared capture/encoding dependencies. Its capture reuses those
+modules from the parent fixture directory:
+
+```sh
+PYTHONPATH=tests/fixtures python tests/fixtures/null-base-attribute-evaluation-815/capture_attribute_evaluation.py /tmp/null-base-attribute-evaluation-815-spark.jsonl
+cargo test --locked --workspace --test null_base_extraction
+```
