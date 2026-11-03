@@ -623,6 +623,16 @@ impl PreserveSparkExpressionErrors {
     }
 }
 
+fn searched_case_for_preparation(mut expr: Expr) -> Expr {
+    if let Expr::Case(case) = &mut expr
+        && matches!(case.expr.as_deref(), Some(Expr::Literal(ScalarValue::Boolean(Some(true)), _)))
+    {
+        // Preparation copies need native searched-CASE reachability.
+        case.expr = None;
+    }
+    expr
+}
+
 // ROUND's NULL scale skips its value expression, but Spark still executes any
 // remaining scalar subqueries. Keep only those arguments for the native scalar
 // subquery executor; one-row subqueries have already become scalar expressions.
@@ -658,7 +668,7 @@ fn round_subqueries(
             .with_config_options(Arc::clone(prepare.props.config_options.as_ref().unwrap()))
             .build();
         let simplifier = ExprSimplifier::new(info);
-        let mut conditional = expr.clone();
+        let mut conditional = searched_case_for_preparation(expr.clone());
         if let Expr::Case(case) = &mut conditional {
             for condition in case
                 .expr
@@ -1576,7 +1586,7 @@ impl Prepare {
                 if !local
                     && matches!(expr, Expr::Case(_))
                     && !arithmetic_candidate(&expr, schema)?
-                    && let Ok(simplified) = ExprSimplifier::new(info.clone()).simplify(expr.clone())
+                    && let Ok(simplified) = ExprSimplifier::new(info.clone()).simplify(searched_case_for_preparation(expr.clone()))
                 {
                     return Ok(Transformed::yes(simplified));
                 }
