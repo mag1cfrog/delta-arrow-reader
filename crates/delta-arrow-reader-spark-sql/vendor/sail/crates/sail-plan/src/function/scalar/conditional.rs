@@ -32,7 +32,7 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
                 let condition_type = condition.get_type(function_context.schema)?;
                 if condition_type != DataType::Boolean {
                     return Err(PlanError::InvalidArgument(format!(
-                        "CASE WHEN condition must be BOOLEAN, got {condition_type:?}"
+                        "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] CASE WHEN condition must be BOOLEAN, got {condition_type:?}"
                     )));
                 }
                 conditions.push(condition);

@@ -26,14 +26,18 @@ use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 
 fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-    let ScalarFunctionInput { arguments, .. } = input;
+    let ScalarFunctionInput {
+        arguments,
+        function_context,
+    } = input;
     let (err_msg, col) = if arguments.len() == 1 {
         let col = arguments.one()?;
-        (
-            // Need to do this order to avoid the "value used after being moved" error.
-            lit(ScalarValue::Utf8(Some(format!("'{}' is not true!", col)))),
-            col,
-        )
+        let name = function_context
+            .argument_display_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| col.to_string());
+        (lit(format!("'{name}' is not true!")), col)
     } else if arguments.len() == 2 {
         let (col, err_msg) = arguments.two()?;
         (err_msg, col)
@@ -49,9 +53,9 @@ fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![(
-            Box::new(expr::Expr::Not(Box::new(col.clone()))),
+            Box::new(expr::Expr::IsNotTrue(Box::new(col))),
             Box::new(expr::Expr::ScalarFunction(expr::ScalarFunction {
-                func: Arc::new(ScalarUDF::from(RaiseError::new())),
+                func: Arc::new(ScalarUDF::from(RaiseError::new_user_error())),
                 args: vec![err_msg],
             })),
         )],
@@ -286,7 +290,7 @@ pub(super) fn list_built_in_misc_functions() -> Vec<(&'static str, ScalarFunctio
             "monotonically_increasing_id",
             F::udf(SparkMonotonicallyIncreasingId::new()),
         ),
-        ("raise_error", F::udf(RaiseError::new())),
+        ("raise_error", F::udf(RaiseError::new_user_error())),
         ("reflect", F::unknown("reflect")),
         ("schema_of_avro", F::unknown("schema_of_avro")),
         ("session_user", F::custom(current_user)),

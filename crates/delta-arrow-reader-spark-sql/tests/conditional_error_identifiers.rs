@@ -333,3 +333,45 @@ async fn public_assertions_keep_null_conditions_messages_and_empty_inputs() -> T
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[test]
+fn user_raise_error_uses_the_first_null_and_accepts_zero_rows() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::StringArray;
+    use arrow::compute::cast;
+    use arrow::datatypes::{DataType, Field};
+    use datafusion::common::ScalarValue;
+    use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl};
+    use sail_function::scalar::misc::raise_error::RaiseError;
+
+    let function = RaiseError::new_user_error();
+    for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+        let array = cast(&StringArray::from(vec![None, Some("after-null")]), &data_type)?;
+        let scalar = ScalarValue::Utf8(None).cast_to(&data_type)?;
+        for (value, rows) in [
+            (ColumnarValue::Array(array.clone()), 2),
+            (ColumnarValue::Scalar(scalar.clone()), 1),
+            (ColumnarValue::Array(array.slice(0, 0)), 0),
+            (ColumnarValue::Scalar(scalar), 0),
+        ] {
+            let actual = function.invoke_with_args(ScalarFunctionArgs {
+                args: vec![value],
+                arg_fields: vec![Arc::new(Field::new("message", data_type.clone(), true))],
+                number_rows: rows,
+                return_field: Arc::new(Field::new("raise_error", DataType::Null, true)),
+                config_options: Default::default(),
+            });
+            if rows == 0 {
+                let empty = actual?.into_array(0)?;
+                assert_eq!(empty.data_type(), &DataType::Null);
+                assert!(empty.is_empty());
+                empty.to_data().validate_full()?;
+            } else {
+                let error = actual.err().ok_or("required NULL message did not raise")?;
+                assert_eq!(error.to_string(), "Execution error: [USER_RAISED_EXCEPTION] null");
+            }
+        }
+    }
+    Ok(())
+}
