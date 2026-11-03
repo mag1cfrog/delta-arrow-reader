@@ -44,6 +44,7 @@ use sail_function::scalar::spark_cast_numeric_to_decimal::{
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
+use sail_function::scalar::struct_function::StructFunction;
 
 /// Preserve early expression errors before NULL and empty-result rewrites.
 #[derive(Debug)]
@@ -269,6 +270,7 @@ impl PreserveSparkExpressionErrors {
         let mut check_groups = false;
         let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
+        let mut has_case_results = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
                 && !aggregate
@@ -283,6 +285,7 @@ impl PreserveSparkExpressionErrors {
             }
             node.apply_expressions(|expr| {
                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
+                has_case_results |= is_spark_query && expr.exists(|expr| Ok(matches!(expr, Expr::Case(_))))?;
                 check_cast |= has_cast(expr)?;
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
@@ -305,6 +308,7 @@ impl PreserveSparkExpressionErrors {
             && !has_correlated_scalar
             && !check_groups
             && !has_null_sensitive_comparison
+            && !has_case_results
         {
             return Ok(plan);
         }
@@ -314,6 +318,11 @@ impl PreserveSparkExpressionErrors {
             props,
             has_groups,
             has_null_sensitive_comparison,
+        };
+        let plan = if has_case_results {
+            prepare.fold_constant_case_structs(plan)?
+        } else {
+            plan
         };
         let plan = if check_groups {
             plan.transform_up_with_subqueries(|plan| prepare_foldable_groups(plan, options))?
@@ -1385,6 +1394,33 @@ impl Prepare {
                 Ok(Transformed::new_transformed(node, prepared.transformed))
             })?
             .data)
+    }
+
+    fn fold_constant_case_structs(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+        Ok(plan.transform_up_with_subqueries(|node| {
+            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+            node.map_expressions(|expr| {
+                let name = names.save(&expr);
+                Ok(expr.transform_down(|expr| {
+                    if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
+                        || !row_expression(&expr, false)?
+                        || !expr.exists(|child| Ok(matches!(child, Expr::Case(_))))?
+                    {
+                        return Ok(Transformed::no(expr));
+                    }
+                    // Spark folds the whole constant STRUCT with its original child declarations.
+                    let value = match self.eval_constant(&expr) {
+                        Ok(ColumnarValue::Scalar(value)) => value,
+                        Ok(ColumnarValue::Array(array)) if array.len() == 1 => {
+                            ScalarValue::try_from_array(array.as_ref(), 0)?
+                        }
+                        // Required errors and discarded branches keep the existing preparation order.
+                        _ => return Ok(Transformed::no(expr)),
+                    };
+                    Ok(Transformed::yes(lit(value)))
+                })?.update_data(|expr| name.restore(expr)))
+            })
+        })?.data)
     }
 
     fn eval_constant(&self, expr: &Expr) -> Result<ColumnarValue> {
