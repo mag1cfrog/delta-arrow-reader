@@ -68,7 +68,7 @@ async fn check_result(session: &SessionContext, query: SparkSqlQuery) -> TestRes
     );
     assert_eq!(query.column_names, ["result"]);
     assert_eq!(query.logical_plan.schema().fields().len(), 1);
-    assert_eq!(query.logical_plan.schema().field(0).clone().with_name("result"), expected);
+    assert_eq!(query.logical_plan.schema().field(0).as_ref().clone().with_name("result"), expected);
     let physical = query.create_physical_plan(session).await?;
     let schema = physical.schema();
     assert_eq!(schema.as_ref(), &Schema::new(vec![expected]));
