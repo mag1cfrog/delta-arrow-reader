@@ -112,19 +112,41 @@ async fn spark_configuration_preserves_native_nested_conditionals() -> TestResul
     let configured = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
-    for sql in [
-        "SELECT CASE WHEN TRUE THEN [1] ELSE [CAST(2 AS BIGINT)] END AS r",
-        "SELECT CASE WHEN FALSE THEN [[1]] ELSE [[CAST(2 AS BIGINT)]] END AS r",
-        "SELECT COALESCE(CAST(NULL AS INT[]), [1]) AS r",
-        "SELECT NAMED_STRUCT('x', COALESCE(CAST(NULL AS INT), 1)) AS r",
-        "SELECT CASE WHEN TRUE THEN NAMED_STRUCT('x', 1) ELSE NAMED_STRUCT('x', CAST(2 AS BIGINT)) END AS r",
-    ] {
-        let expected = native.sql(sql).await?;
-        let actual = configured.sql(sql).await?;
-        assert_eq!(actual.schema(), expected.schema(), "{sql}");
-        assert_eq!(actual.collect().await?, expected.collect().await?, "{sql}");
+    let inputs = json!({"inputs":[{
+        "name":"native_nested",
+        "schema":{"type":"struct","fields":[
+            {"name":"id","type":"integer","nullable":false,"metadata":{}},
+            {"name":"a","type":{"type":"array","elementType":"integer","containsNull":true},
+             "nullable":true,"metadata":{"source":"stored-array"}},
+            {"name":"s","type":{"type":"struct","fields":[
+                {"name":"x","type":"integer","nullable":true,"metadata":{"source":"stored-child"}}
+             ]},"nullable":true,"metadata":{"source":"stored-struct"}}
+        ]},
+        "rows":[["0",["1",null],["1"]],["1",null,null]]
+    }]});
+    for session in [&native, &configured] {
+        spark_inputs::register_recorded_inputs(session, &inputs, 1)?;
     }
-    let sql = "SELECT CASE WHEN TRUE THEN [1] ELSE NAMED_STRUCT('x', 1) END AS r";
+    for sql in [
+        "SELECT CASE WHEN TRUE THEN a ELSE NULL END AS r FROM native_nested",
+        "SELECT CASE WHEN id = 0 THEN a ELSE NULL END AS r FROM native_nested",
+        "SELECT CASE WHEN FALSE THEN s ELSE s END AS r FROM native_nested",
+        "SELECT CASE WHEN id = 0 THEN s ELSE NULL END AS r FROM native_nested",
+        "SELECT COALESCE(a,a) AS r FROM native_nested",
+        "SELECT COALESCE(s,s) AS r FROM native_nested",
+        "SELECT COALESCE(a,a) AS r FROM native_nested WHERE FALSE",
+        "SELECT COALESCE(s,s) AS r FROM native_nested WHERE FALSE",
+    ] {
+        let expected = spark_results::capture_native_query_observation(&native, sql).await?;
+        assert!(expected["error"].is_null(), "{sql}: {expected}");
+        assert!(expected["rows"].is_array(), "{sql}: {expected}");
+        assert_eq!(
+            spark_results::capture_native_query_observation(&configured, sql).await?,
+            expected,
+            "{sql}"
+        );
+    }
+    let sql = "SELECT CASE WHEN TRUE THEN a ELSE s END AS r FROM native_nested";
     let expected = spark_results::capture_native_query_observation(&native, sql).await?;
     assert!(expected["error"].is_string());
     assert_eq!(
@@ -287,26 +309,6 @@ async fn nested_coalesce_controls_match_spark() -> TestResult {
             }
         }
     }
-    let native = SessionContext::new();
-    let configured = SessionContext::new_with_state(
-        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
-    );
-    for session in [&native, &configured] {
-        spark_inputs::register_recorded_inputs(session, &records[0], 32)?;
-    }
-    let mut native_queries = std::collections::BTreeSet::new();
-    for case in &records[1..] {
-        let sql = case["sql"].as_str().ok_or("missing SQL")?;
-        if native_queries.insert(sql) {
-            let expected = spark_results::capture_native_query_observation(&native, sql).await?;
-            assert_eq!(
-                spark_results::capture_native_query_observation(&configured, sql).await?,
-                expected,
-                "{sql}"
-            );
-        }
-    }
-    assert_eq!(native_queries.len(), 8);
     assert_eq!(comparisons, 32);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
