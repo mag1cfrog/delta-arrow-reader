@@ -199,6 +199,7 @@ impl PlanResolver<'_> {
                 &data_type,
                 std::slice::from_ref(field_name),
                 schema,
+                true,
             )?;
             return Ok(NamedExpr::new(vec![name], expr));
         }

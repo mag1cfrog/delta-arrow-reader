@@ -1,0 +1,27 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "baseline": "995e9a7955b599a422efababcb082aba9ab19e8b",
+  "timezone": "UTC",
+  "case_sensitive": false,
+  "observations": 130,
+  "success": 102,
+  "planning": 28,
+  "original_815_records": 4,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "input_rows": {
+    "null_mixed": 3,
+    "null_nulls": 1,
+    "null_empty": 0
+  },
+  "sha256": {
+    "capture_null_base_extraction_spark.py": "167b90bc7f723cb6f9b33e25abc7e2d9f79e1ba5f68d41fda1379dbbf455b7c5",
+    "capture_floating_group_keys_spark.py": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911",
+    "null-base-extraction-815-spark.jsonl": "26005c02480656adabda46e6568993cd3a736e88910deba3210e870a459197e6",
+    "struct-extraction-boundaries-review-v3-spark.jsonl": "f99b87e705d4fd619877ab18aa3e74caa9e997629c8e2ee0dc34d1a71b578bfe",
+    "struct-extraction-boundaries-815-spark.jsonl": "a1f1387d7bd3e89761fd116da8cd9cc585aa0cb9f0dedf1736da2078f6cc69f6"
+  }
+}

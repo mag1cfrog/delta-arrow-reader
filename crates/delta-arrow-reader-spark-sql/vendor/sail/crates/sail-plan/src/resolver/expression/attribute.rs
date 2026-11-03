@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
-use datafusion_common::{Column, DFSchemaRef, TableReference};
+use datafusion_common::{Column, DFSchemaRef, ScalarValue, TableReference};
 use datafusion_expr::expr::{LambdaVariable, ScalarFunction};
 use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
@@ -41,8 +41,14 @@ impl PlanResolver<'_> {
                 .to_string();
             let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field.clone()));
             if let Some(field) = field {
-                expr =
-                    Self::resolve_potentially_nested_field(expr, field.data_type(), rest, schema)?;
+                // Spark resolves dotted lambda tails with strict NULL-base validation.
+                expr = Self::resolve_potentially_nested_field(
+                    expr,
+                    field.data_type(),
+                    rest,
+                    schema,
+                    false,
+                )?;
             } else {
                 for part in rest {
                     expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(
@@ -151,6 +157,7 @@ impl PlanResolver<'_> {
             field.data_type(),
             inner,
             schema,
+            true,
         )?;
         let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
         let named = NamedExpr::new(vec![projection_name], expr);
@@ -299,6 +306,7 @@ impl PlanResolver<'_> {
         data_type: &DataType,
         inner: &[T],
         schema: &DFSchemaRef,
+        allow_null_base: bool,
     ) -> PlanResult<expr::Expr> {
         match inner {
             [] => Ok(expr),
@@ -312,6 +320,8 @@ impl PlanResolver<'_> {
                     _ => data_type,
                 };
                 match lookup_type {
+                    // Spark folds NULL extraction before evaluating even a projected base.
+                    DataType::Null if allow_null_base => Ok(lit(ScalarValue::Null)),
                     DataType::Struct(fields) => {
                         let field = Self::resolve_struct_field(fields, name.as_ref())?;
                         let args = vec![expr, lit(field.name().to_string())];
@@ -324,12 +334,24 @@ impl PlanResolver<'_> {
                         } else {
                             field.data_type()
                         };
-                        Self::resolve_potentially_nested_field(expr, result_type, remaining, schema)
+                        Self::resolve_potentially_nested_field(
+                            expr,
+                            result_type,
+                            remaining,
+                            schema,
+                            allow_null_base,
+                        )
                     }
                     DataType::Map(_, _) => {
                         let expr = get_field().call(vec![expr, lit(name.as_ref().to_string())]);
                         let data_type = expr.get_type(schema)?;
-                        Self::resolve_potentially_nested_field(expr, &data_type, remaining, schema)
+                        Self::resolve_potentially_nested_field(
+                            expr,
+                            &data_type,
+                            remaining,
+                            schema,
+                            allow_null_base,
+                        )
                     }
                     DataType::List(field)
                     | DataType::LargeList(field)
@@ -356,7 +378,13 @@ impl PlanResolver<'_> {
                             }
                             _ => unreachable!("list data type matched above"),
                         };
-                        Self::resolve_potentially_nested_field(expr, &data_type, remaining, schema)
+                        Self::resolve_potentially_nested_field(
+                            expr,
+                            &data_type,
+                            remaining,
+                            schema,
+                            allow_null_base,
+                        )
                     }
                     _ => Err(PlanError::analysis(format!(
                         "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field {:?} cannot be extracted from {data_type}",
