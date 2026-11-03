@@ -196,6 +196,15 @@ async fn case_common_metadata_only_differences_match_spark() -> TestResult {
 }
 
 #[tokio::test]
+async fn case_metadata_merger_preserves_native_admission() -> TestResult {
+    assert_case_schema_stages_and_rows(
+        include_str!("fixtures/case-result-nullability-merger-admission-spark.jsonl"),
+        12,
+        "CASE_721_MERGER_ADMISSION_OBSERVATION",
+    ).await
+}
+
+#[tokio::test]
 async fn case_dynamic_common_fields_and_ordered_references_match_spark() -> TestResult {
     assert_case_schema_stages_and_rows(
         include_str!("fixtures/case-result-nullability-dynamic-common-spark.jsonl"),
