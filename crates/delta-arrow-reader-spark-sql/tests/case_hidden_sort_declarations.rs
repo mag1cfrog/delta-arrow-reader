@@ -21,7 +21,9 @@ const REFERENCES: &[&str] = &[
     include_str!("fixtures/case-hidden-sort-declarations/references/scalar-case-literal.jsonl"),
     include_str!("fixtures/case-hidden-sort-declarations/references/scalar-case-folded.jsonl"),
     include_str!("fixtures/case-hidden-sort-declarations/references/absent-scalar-original.jsonl"),
-    include_str!("fixtures/case-hidden-sort-declarations/references/numeric-pruning-original.jsonl"),
+    include_str!(
+        "fixtures/case-hidden-sort-declarations/references/numeric-pruning-original.jsonl"
+    ),
     include_str!("fixtures/case-hidden-sort-declarations/references/new-boundaries.jsonl"),
 ];
 const INHERITED_CASES: &[(&str, &str, &str, u64)] = &[
@@ -181,7 +183,12 @@ async fn hidden_sort_output_declarations_match_spark() -> TestResult {
                     })
                     .map(|(_, _, _, issue)| *issue);
                 for (stage, alias, actual_key, match_key) in [
-                    ("analyzed", "analyzed_schema", "public_schema", "public_matches"),
+                    (
+                        "analyzed",
+                        "analyzed_schema",
+                        "public_schema",
+                        "public_matches",
+                    ),
                     (
                         "executed_before_collect",
                         "executed_schema_before_collect",
@@ -202,8 +209,12 @@ async fn hidden_sort_output_declarations_match_spark() -> TestResult {
                         // The name is the sole #790 difference; nested nullability stays exact.
                         (Some(790), _) => vec![(
                             "/fields/0/name".to_owned(),
-                            Some(json!("struct(CASE WHEN true THEN scalarsubquery(required) ELSE NULL END AS x)")),
-                            Some(json!("struct(CASE WHEN true THEN subquery ELSE NULL END AS x)")),
+                            Some(json!(
+                                "struct(CASE WHEN true THEN scalarsubquery(required) ELSE NULL END AS x)"
+                            )),
+                            Some(json!(
+                                "struct(CASE WHEN true THEN subquery ELSE NULL END AS x)"
+                            )),
                         )],
                         (Some(828), "analyzed") => vec![(
                             "/fields/0/type/containsNull".to_owned(),
@@ -261,7 +272,13 @@ async fn hidden_sort_output_declarations_match_spark() -> TestResult {
         .flat_map(|(package, id, input, _)| {
             [true, false].into_iter().flat_map(move |ansi| {
                 [1, 32].into_iter().map(move |batch| {
-                    (package.to_string(), id.to_string(), input.to_string(), ansi, batch)
+                    (
+                        package.to_string(),
+                        id.to_string(),
+                        input.to_string(),
+                        ansi,
+                        batch,
+                    )
                 })
             })
         })

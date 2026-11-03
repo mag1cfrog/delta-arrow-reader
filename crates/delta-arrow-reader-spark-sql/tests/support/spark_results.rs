@@ -192,17 +192,17 @@ pub(crate) async fn compare_exact_spark_query_stages(
         if let (Some(nested), Some(flat)) = (nested, flat)
             && nested != flat
         {
-            return Err(format!(
-                "conflicting recorded schema stage {stage}: {nested} != {flat}"
-            )
-            .into());
+            return Err(
+                format!("conflicting recorded schema stage {stage}: {nested} != {flat}").into(),
+            );
         }
         Ok(nested.or(flat))
     };
     let public_matches = recorded_stage("analyzed", "analyzed_schema")?
         .is_none_or(|expected| public.as_ref() == Some(expected));
-    let before_matches = recorded_stage("executed_before_collect", "executed_schema_before_collect")?
-        .is_none_or(|expected| before.as_ref() == Some(expected));
+    let before_matches =
+        recorded_stage("executed_before_collect", "executed_schema_before_collect")?
+            .is_none_or(|expected| before.as_ref() == Some(expected));
     let executed_matches = recorded_stage("executed", "executed_schema_after_collect")?
         .is_none_or(|expected| executed.as_ref() == Some(expected));
     let rows_match = if let Some(expected) = case["expected"].get("rows") {
@@ -404,7 +404,12 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
             )
         }
         DataType::Interval(IntervalUnit::YearMonth) => {
-            json!(column.as_primitive::<IntervalYearMonthType>().value(row).to_string())
+            json!(
+                column
+                    .as_primitive::<IntervalYearMonthType>()
+                    .value(row)
+                    .to_string()
+            )
         }
         DataType::Float32 => {
             let value = column.as_primitive::<Float32Type>().value(row);
