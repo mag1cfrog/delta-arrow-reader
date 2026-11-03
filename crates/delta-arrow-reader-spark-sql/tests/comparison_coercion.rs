@@ -1,6 +1,7 @@
 //! Spark comparisons share coercion while NULLIF retains its first input type and value.
 
 use std::error::Error;
+use std::io::Write;
 
 use arrow::array::{
     Array, ArrayRef, AsArray, Date32Array, Int32Array, StringArray, TimestampMicrosecondArray,
@@ -214,6 +215,9 @@ async fn match_spark_comparison_coercion() -> TestResult {
     let local_null_input: Vec<Option<String>> =
         serde_json::from_value(local_null[0]["external_input"].clone())?;
     records.extend(local_null.into_iter().skip(1));
+    let mut output = std::env::var_os("DAR_COMPARISON_COERCION_OUTPUT")
+        .map(|path| std::fs::OpenOptions::new().write(true).create_new(true).open(path))
+        .transpose()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -251,7 +255,7 @@ async fn match_spark_comparison_coercion() -> TestResult {
                 ("b", Arc::new(Int32Array::from(vec![None; 3])) as ArrayRef),
             ])?,
         )?;
-        for case in &records[1..] {
+        for (case_index, case) in records[1..].iter().enumerate() {
             let expected = &case["expected"];
             let actual = execute_comparison_query(&session, case).await;
             let matches = match &actual {
@@ -296,6 +300,15 @@ async fn match_spark_comparison_coercion() -> TestResult {
                 }
                 _ => false,
             };
+            if let Some(output) = &mut output {
+                let observed = match &actual {
+                    Ok(value) => json!({"status":"ok", "result":value}),
+                    Err(error) => json!({"status":"error", "message":error.to_string(),
+                        "debug":format!("{error:?}")}),
+                };
+                writeln!(output, "{}", json!({"case_index":case_index, "batch_size":batch_size,
+                    "case":case, "matches":matches, "actual":observed}))?;
+            }
             if !matches {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: expected {expected}, got {actual:?}",

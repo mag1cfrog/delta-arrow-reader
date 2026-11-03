@@ -1,6 +1,7 @@
 //! Spark references for conditional result types, chosen values and input errors.
 
 use std::error::Error;
+use std::io::Write;
 
 use arrow::array::{Array, ArrayRef, AsArray, Int32Array, StringArray};
 use arrow::datatypes::{DataType, Float32Type, Float64Type, TimeUnit, TimestampMicrosecondType};
@@ -166,6 +167,9 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
             .clone(),
     );
     records.extend(strings.into_iter().skip(1));
+    let mut output = std::env::var_os("DAR_CONDITIONAL_SEMANTICS_OUTPUT")
+        .map(|path| std::fs::OpenOptions::new().write(true).create_new(true).open(path))
+        .transpose()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -229,7 +233,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                 .await?;
             session.register_table(name, frame.into_view())?;
         }
-        for case in &records[1..] {
+        for (case_index, case) in records[1..].iter().enumerate() {
             let actual = execute_reference_query(&session, case).await;
             let expected = &case["expected"];
             let matches = match &actual {
@@ -287,6 +291,15 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                 }
                 _ => false,
             };
+            if let Some(output) = &mut output {
+                let observed = match &actual {
+                    Ok(value) => json!({"status":"ok", "result":value}),
+                    Err(error) => json!({"status":"error", "message":error.to_string(),
+                        "debug":format!("{error:?}")}),
+                };
+                writeln!(output, "{}", json!({"case_index":case_index, "batch_size":batch_size,
+                    "case":case, "matches":matches, "actual":observed}))?;
+            }
             if !matches {
                 differences.push(format!("{} ANSI={} timezone={} batch={batch_size}: expected {expected}, got {actual:?}", case["id"], case["ansi"], case["timezone"]));
             }
