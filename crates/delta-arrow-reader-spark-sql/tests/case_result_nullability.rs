@@ -99,6 +99,25 @@ async fn spark_configuration_preserves_native_case_semantics() -> TestResult {
         assert_eq!(actual.schema(), expected.schema(), "{sql}");
         assert_eq!(actual.collect().await?, expected.collect().await?, "{sql}");
     }
+    let sql = "SELECT CASE true WHEN false THEN v ELSE 1 END AS r FROM native_case_input";
+    for session in [&native, &configured] {
+        session.register_batch("native_case_input", arrow::record_batch::RecordBatch::try_from_iter([
+            ("v", std::sync::Arc::new(arrow::array::Int32Array::from(vec![Some(1), None]))
+                as arrow::array::ArrayRef),
+        ])?)?;
+        let frame = session.sql(sql).await?;
+        assert!(frame.schema().field(0).is_nullable(), "{sql}");
+        let physical = frame.create_physical_plan().await?;
+        assert!(physical.schema().field(0).is_nullable(), "native Boolean CASE declaration changed: {sql}");
+        let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+        let mut values = Vec::new();
+        for batch in &batches {
+            let column = batch.column(0).as_any().downcast_ref::<arrow::array::Int64Array>()
+                .ok_or("expected native LONG result")?;
+            values.extend(column.iter());
+        }
+        assert_eq!(values, vec![Some(1), Some(1)], "{sql}");
+    }
     Ok(())
 }
 
