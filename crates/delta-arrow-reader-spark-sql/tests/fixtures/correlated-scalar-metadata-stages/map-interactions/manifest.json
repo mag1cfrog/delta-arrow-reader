@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "purpose": "Independent additive MAP_FROM_ARRAYS, MAP_FROM_ENTRIES and explicit SQL MAP CAST interactions with shared outer-reference metadata clearing. Unsupported Spark forms remain error evidence. All earlier packages and references are unchanged.",
+  "review_head": "f34cf093fb49fcb077a22f443fc2449c54dad260",
+  "comparison_base": "d1885226f91ccc2bf326e4d9276f2ac8153a0a04",
+  "reference_observations": 12,
+  "dar_comparisons": 24,
+  "files": [
+    {
+      "path": "capture_map_owner_interactions.py",
+      "bytes": 4727,
+      "sha256": "1eeaf8a8eeae3cdb541a5242981cc935b012b708bf529f48d3853244d979a386"
+    },
+    {
+      "path": "inputs-and-cases.json",
+      "bytes": 10083,
+      "sha256": "8ab3d617b87a7597113b4eb5ae0aad3fc1c45d127a3a791d61708559ba26ae94"
+    },
+    {
+      "path": "map_owner_interactions_probe.rs",
+      "bytes": 9743,
+      "sha256": "f4aa3076b091eaf0aaf8e54fee5212c61fef5877f5a76d313e775175903afb27"
+    },
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/comparison-four-spark.jsonl",
+      "bytes": 12891,
+      "sha256": "fcd1037b0866637ffb9a095c28b788008a55eef160c5d97cfde847b430905b8f"
+    },
+    {
+      "path": "sources/original-eight-spark.jsonl",
+      "bytes": 25175,
+      "sha256": "90002192e6381674a7914bd7fef4301d086c8dcd203a6f75c1bdcb35e71158fb"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/spark_inputs.rs",
+      "bytes": 5746,
+      "sha256": "ebf5352be9f1bfeba0d5ca5da3fe68182eafd51c996a7913a630df2ef365e002"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 9421,
+      "sha256": "f876f433b600b86fff322feafadd89932d737408439892d78812621fd2737d7c"
+    }
+  ],
+  "checks": [
+    "Python AST parses without importing Spark",
+    "Exact three forms x two order modes x two ANSI modes",
+    "Original mixed provider declaration and rows are byte-equivalent JSON",
+    "Original eight and additive four raw observations copied with verified hashes",
+    "Full public/executed Spark schemas; complete duplicate-preserving rows; Arrow physical schema; batch validation; per-case errors with stage and engine origin",
+    "No engines or product/worktree mutations by reviewer"
+  ],
+  "recipe": {
+    "capture_cwd": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-map-owner-interactions",
+    "spark": [
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-map-owner-interactions/capture_map_owner_interactions.py",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-map-owner-interactions/map-interactions-spark.jsonl"
+    ],
+    "dar_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-map-owner-interactions/map_owner_interactions_probe.rs",
+    "dar_target": "map_owner_interactions_probe",
+    "dar_args": [
+      "cargo",
+      "+1.96.0",
+      "test",
+      "--locked",
+      "--workspace",
+      "--test",
+      "map_owner_interactions_probe",
+      "--",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "placement": "Root copies dar_source into the disposable engine checkout tests directory. The source uses absolute frozen support paths and reads map-interactions-spark.jsonl at runtime.",
+    "required_pair": [
+      "d1885226f91ccc2bf326e4d9276f2ac8153a0a04",
+      "f34cf093fb49fcb077a22f443fc2449c54dad260"
+    ]
+  }
+}

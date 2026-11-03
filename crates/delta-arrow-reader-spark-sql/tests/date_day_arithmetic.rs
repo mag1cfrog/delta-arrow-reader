@@ -17,6 +17,33 @@ use spark_inputs::register_recorded_inputs;
 mod spark_results;
 use spark_results::TestResult;
 
+fn date_metadata_stages() -> TestResult<Vec<Value>> {
+    let records =
+        include_str!("fixtures/date-day-metadata-stages/date-day-metadata-stages-spark.jsonl")
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len() - 1, 92);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(records[0]["timezone"], "UTC");
+    let mut identities = std::collections::BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert(case["original_observation"].to_string()));
+        assert_eq!(case["original_matches"], true);
+        for key in ["id", "sql", "ansi", "expected"] {
+            assert_eq!(case[key], case["original_observation"][key]);
+        }
+        if let Some(after) = case.get("executed_schema_after_collect") {
+            assert_eq!(case["executed_schema_before_collect"], *after);
+        }
+    }
+    Ok(records)
+}
+
 pub(crate) async fn capture_date_result(
     session: &SessionContext,
     case: &Value,
@@ -41,7 +68,24 @@ pub(crate) async fn capture_date_result(
     let resolved_field = query.logical_plan.schema().field(0);
     assert_eq!(physical_field.name(), &query.column_names[0]);
     assert_eq!(resolved_field.data_type(), physical_field.data_type());
-    assert_eq!(resolved_field.metadata(), physical_field.metadata());
+    if let Some(public) = case.get("public_schema") {
+        assert_eq!(
+            json!(resolved_field.metadata()),
+            public["fields"][0]["metadata"]
+        );
+    }
+    if let Some(executed) = case
+        .get("executed_schema_after_collect")
+        .or_else(|| case.get("executed_schema_before_collect"))
+    {
+        assert_eq!(
+            json!(physical_field.metadata()),
+            executed["fields"][0]["metadata"],
+            "recorded date executed metadata"
+        );
+    } else {
+        assert_eq!(resolved_field.metadata(), physical_field.metadata());
+    }
     // Folding can narrow a physical field while the analyzed declaration stays nullable.
     assert!(!physical_field.is_nullable() || resolved_field.is_nullable());
     let physical_control = matches!(
@@ -136,6 +180,8 @@ fn capture_value(column: &dyn Array, row: usize) -> TestResult<Value> {
 
 #[tokio::test]
 async fn date_day_arithmetic_matches_spark() -> TestResult {
+    let stages = date_metadata_stages()?;
+    let mut stage_comparisons = 0;
     let mut differences = Vec::new();
     for (capture, count, encoding) in [
         (
@@ -189,11 +235,16 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
                 register_recorded_inputs(&session, &records[0], batch_size)?;
             }
             for case in &records[1..] {
-                let actual = capture_date_result(&session, case).await;
+                let stage = stages[1..]
+                    .iter()
+                    .find(|stage| stage["original_observation"] == *case);
+                stage_comparisons += usize::from(stage.is_some());
+                let actual = capture_date_result(&session, stage.unwrap_or(case)).await;
                 eprintln!(
                     "date-day observation: {}",
                     json!({
                         "id":case["id"],"ansi":case["ansi"],"batch_size":batch_size,
+                        "expected":case,
                         "outcome":match &actual {
                             Ok(value) => value.clone(),
                             Err(error) => json!({"error":error.to_string()}),
@@ -218,8 +269,34 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
             }
         }
     }
+    assert_eq!(stage_comparisons, 184);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
+}
+
+#[tokio::test]
+#[should_panic(expected = "recorded date executed metadata")]
+async fn date_stage_reference_rejects_unrecorded_metadata() {
+    let stages = date_metadata_stages().unwrap();
+    let mut case = stages[1..]
+        .iter()
+        .find(|case| case["id"] == "date_add_correlated_valid_text" && case["ansi"] == true)
+        .unwrap()
+        .clone();
+    case["executed_schema_after_collect"]["fields"][0]["metadata"] =
+        json!({"unrecorded":"metadata"});
+    let header: Value = serde_json::from_str(
+        include_str!("fixtures/date-day-correlated-spark.jsonl")
+            .lines()
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    register_recorded_inputs(&session, &header, 32).unwrap();
+    capture_date_result(&session, &case).await.unwrap();
 }
 
 #[tokio::test]

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "source_head": "3dda18219085af27fdfe796f805594bf2de95fa1",
+  "original_observations": 202,
+  "selected_observations": 152,
+  "unchanged_other_contract_observations": 50,
+  "dar_comparisons": 304,
+  "execution": "Source preparation only. No author engines, product edits or repository changes.",
+  "checks": [
+    "All source snapshots hash-exact",
+    "Exact unchanged Rust152/50 selection and original case order",
+    "All original SQL, providers and expected objects retained",
+    "Original nondeterministic count_row AST retained",
+    "NULL/Boolean/string/double encoder self-check",
+    "Capture Python ASTs parse"
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3573,
+      "sha256": "85ab179ad7d6852374b785e17488329362e9d2b1f360fce010c5fed43b0974dd"
+    },
+    {
+      "path": "capture-inputs-and-cases.json",
+      "bytes": 190680,
+      "sha256": "09da2caf3256bcf5fefdc2927278648816cb9c2d7c872992fdf8ddd5d97a80cd"
+    },
+    {
+      "path": "capture_main_scalar_stages.py",
+      "bytes": 6587,
+      "sha256": "5351a04c756a36a4a5b328c7fc993d7b3e36c9763f4b3485e83297208a0fc56c"
+    },
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_single_row_correlated_spark.py",
+      "bytes": 7107,
+      "sha256": "7a4bfa07246061f207c9c0b0d80cdd2654962d34eef738d7cbfdb10560f600ba"
+    },
+    {
+      "path": "sources/single-row-correlated-spark.jsonl",
+      "bytes": 84477,
+      "sha256": "0d3696b51f73f63ca68fa7cc5fb17143d137920f343e78056fa7b3d30a4718fc"
+    },
+    {
+      "path": "sources/single_row_correlated.rs",
+      "bytes": 37608,
+      "sha256": "50837069f95799cb13e1e98406eeffa27e83a2cc44141f11b4dca7831efb8b55"
+    }
+  ]
+}

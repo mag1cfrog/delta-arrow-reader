@@ -3,7 +3,7 @@
 use std::error::Error;
 
 use arrow::array::{Array, AsArray, ListArray, StructArray};
-use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema};
+use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::physical_plan::collect;
@@ -89,9 +89,20 @@ pub(crate) async fn capture_spark_query_observation(
     let physical = query.create_physical_plan(session).await?;
     let schema = physical.schema();
     let resolved = query.logical_plan.schema().fields();
-    validate_physical_schema(resolved, &query.column_names, schema.fields())?;
     let public_schema = capture_schema(resolved, Some(&query.column_names))?;
     let physical_schema = capture_schema(schema.fields(), None)?;
+    if let Some(expected) = case
+        .get("executed_schema_after_collect")
+        .or_else(|| case.get("executed_schema_before_collect"))
+    {
+        if physical_schema != *expected {
+            return Err(
+                format!("executed schema: expected {expected}, got {physical_schema}").into(),
+            );
+        }
+    } else {
+        validate_physical_schema(resolved, &query.column_names, schema.fields())?;
+    }
     let mut rows = Vec::new();
     for batch in collect(physical, session.task_ctx()).await? {
         validate_batch(schema.as_ref(), &batch)?;
@@ -271,6 +282,8 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
         DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
+        DataType::Date32 => json!("date"),
+        DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => json!("timestamp"),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
             "elementType":spark_schema_type(field.data_type())?,"containsNull":field.is_nullable()}),

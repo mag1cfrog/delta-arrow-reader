@@ -1,0 +1,63 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/818",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "seed_observations": 24,
+  "appended_observations": 12,
+  "observations": 36,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 72,
+  "case_ids": [
+    "correlated_direct_outer_alias",
+    "struct_direct_child_alias",
+    "struct_positive_child_alias",
+    "struct_unary_positive_child_alias",
+    "correlated_struct_inner_alias",
+    "correlated_direct_inner_alias"
+  ],
+  "inputs": [
+    "struct_mixed",
+    "struct_nulls",
+    "struct_empty"
+  ],
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "files": [
+    {
+      "path": "scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "original-scope-spark.jsonl",
+      "bytes": 56769,
+      "sha256": "332f7962d37366265ff8b23c0b170c40e1b451a4fff04ef67933a8ad0c3b3d5c"
+    },
+    {
+      "path": "capture_struct_child_stages.py",
+      "bytes": 5763,
+      "sha256": "f7798ed1a7555aeb09bdf18f6f8a97f053f1ae3238ceec5b772a4e8ac028b206"
+    },
+    {
+      "path": "capture_struct_child_stages_v2.py",
+      "bytes": 6460,
+      "sha256": "63cfa4806a8773c17bde1a5033e2ea45eaca7c6c05336277a87eb5718b5f2c9f"
+    },
+    {
+      "path": "../struct-expression-names-spark.jsonl",
+      "bytes": 95087,
+      "sha256": "5102b0a99c72233a572e23b789c42fc7b198784e63bc24ef5744cd76e2d7556e"
+    },
+    {
+      "path": "../capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    }
+  ]
+}

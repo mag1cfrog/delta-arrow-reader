@@ -8,7 +8,7 @@ use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, expr_fn};
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{drop_inherited_column_metadata, spark_in_list};
+use crate::function::common::{drop_scalar_subquery_metadata, spark_in_list};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -90,10 +90,13 @@ impl PlanResolver<'_> {
                 "Scalar subquery must return exactly one column, found {columns}"
             )));
         }
-        // Keep the metadata boundary even when simplification returns a source column.
+        let output_field = Arc::clone(subquery.schema().field(0));
         Ok(NamedExpr::new(
             vec!["subquery".to_string()],
-            drop_inherited_column_metadata(expr_fn::scalar_subquery(Arc::new(subquery))),
+            drop_scalar_subquery_metadata(
+                expr_fn::scalar_subquery(Arc::new(subquery)),
+                &output_field,
+            ),
         ))
     }
 

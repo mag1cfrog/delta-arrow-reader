@@ -13,6 +13,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_logical_plan::sort::SortWithinPartitionsNode;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::preserve_result_field_metadata;
 use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
@@ -32,7 +33,20 @@ impl PlanResolver<'_> {
             .resolve_query_sort_orders_by_plan(&input, &order, state)
             .await?;
         let sorts = Self::rebase_query_sort_orders(sorts, &input)?;
-        let plan = LogicalPlanBuilder::from(input).sort(sorts)?.build()?;
+        let mut plan = LogicalPlanBuilder::from(input).sort(sorts)?.build()?;
+        if let LogicalPlan::Projection(project) = plan {
+            // Hidden ORDER BY columns add an output projection with its own metadata declaration.
+            let expressions = project
+                .expr
+                .into_iter()
+                .zip(project.schema.iter())
+                .map(|(expression, (qualifier, field))| {
+                    preserve_result_field_metadata(expression, field)
+                        .alias_qualified(qualifier.cloned(), field.name())
+                })
+                .collect();
+            plan = LogicalPlan::Projection(Projection::try_new(expressions, project.input)?);
+        }
         // Grouping placeholders and hidden sort columns are resolved before key typing.
         Ok(plan
             .transform_down(|plan| {

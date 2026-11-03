@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+    "capture_date_day_metadata_stages.py",
+    "date-day-metadata-stages-spark.jsonl"
+  ],
+  "cwd": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/projection-correlated-818-date-stages-v1",
+  "exit_code": 0,
+  "started": 1793737296.1534932,
+  "elapsed_seconds": 10.63196611404419,
+  "log": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/projection-correlated-818-date-stages-v1.log",
+  "log_sha256": "276919ea43295d10f47683cd19e31829ce4d0847bb0716395725bbe03fe2a533",
+  "output": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/projection-correlated-818-date-stages-v1/date-day-metadata-stages-spark.jsonl",
+  "output_sha256": "6e8a9b1c0d899eae5bca35ffb12b35299b467e06ecbfcba67fc6f10f6078b15e",
+  "observations": 92,
+  "original_matches": 92,
+  "errors": 37
+}

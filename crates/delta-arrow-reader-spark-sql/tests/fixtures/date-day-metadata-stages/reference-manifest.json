@@ -1,0 +1,87 @@
+{
+  "issue": 818,
+  "observations": 92,
+  "required_errors": 37,
+  "files": [
+    {
+      "path": "capture-receipt.json",
+      "bytes": 1008,
+      "sha256": "658b5ef185622e4282f9afe89a1fb4fa61252a68ce5d6d7984de420de6becfa0"
+    },
+    {
+      "path": "capture_date_day_metadata_stages.py",
+      "bytes": 9080,
+      "sha256": "4f44bf75c083fc74ce107356101f8bed9a54d203c92c9c0ba96752c06ffe473b"
+    },
+    {
+      "path": "date-day-metadata-stages-spark.jsonl",
+      "bytes": 177234,
+      "sha256": "6e8a9b1c0d899eae5bca35ffb12b35299b467e06ecbfcba67fc6f10f6078b15e"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 4242,
+      "sha256": "dff5b3c4b8765cf6c2a2d5e335d311f7d3d8f264b73a95e090f695d804a14491"
+    },
+    {
+      "path": "sources/capture_date_day_arithmetic_spark.py",
+      "bytes": 6425,
+      "sha256": "f3db1eaa0d32291352cd87fcebd9a937cb7abc78a4828dc1fe3df7667d570d1d"
+    },
+    {
+      "path": "sources/capture_date_day_closed_lambda_spark.py",
+      "bytes": 1577,
+      "sha256": "463755f1de520dc51e79c86b68a793b674a0850ed851dc96a3235f1cafe3dbb9"
+    },
+    {
+      "path": "sources/capture_date_day_correlated_spark.py",
+      "bytes": 2665,
+      "sha256": "b9a165c5be68f9aff9f4fda4c59c7bdd66643664a935bc5d0fa3fe1fa8beaab8"
+    },
+    {
+      "path": "sources/capture_date_day_lambda_spark.py",
+      "bytes": 3029,
+      "sha256": "757a3aee3e85d23222286929037109dadf24ad95e5f8d0c83b953fdb1118939e"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/date-day-arithmetic-spark.jsonl",
+      "bytes": 83721,
+      "sha256": "091bc906c04bae318c525863875c8b5abd6470b84726d0bbd6b17a3066dfe52b"
+    },
+    {
+      "path": "sources/date-day-closed-lambda-spark.jsonl",
+      "bytes": 2939,
+      "sha256": "6af61070a8af3d7d5ef59b2b658b214868ccf80133204b727f6d0f6edf1b75da"
+    },
+    {
+      "path": "sources/date-day-correlated-spark.jsonl",
+      "bytes": 6879,
+      "sha256": "8b45bfc6737c7e3725febd7efe3ad71a3970b64c35e0602fb911103828a6031f"
+    },
+    {
+      "path": "sources/date-day-lambda-spark.jsonl",
+      "bytes": 8173,
+      "sha256": "0b2fb628b8f5bffdc9d8697d1861d56c44c62a98845c49a9e29aa59fad50a160"
+    },
+    {
+      "path": "sources/date_day_arithmetic.rs",
+      "bytes": 10610,
+      "sha256": "fb5ef08c895dcffda49e469d1f476e6f1111fba2a08fc948bcf2618cf6024d9e"
+    },
+    {
+      "path": "sources/historical-capture_date_day_metadata_stages.py",
+      "bytes": 7676,
+      "sha256": "352e14f67c806101d13bddf638d8bed42aa21158b210d5ab5bcb1bfd67a7c8a9"
+    },
+    {
+      "path": "sources/historical-manifest.json",
+      "bytes": 1017,
+      "sha256": "f36fd38facf39a30b4d056f471eefdebd4628efa2eb6bafd677aaae2c254744d"
+    }
+  ]
+}

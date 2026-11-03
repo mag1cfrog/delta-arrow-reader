@@ -1,0 +1,635 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "product_head": "3dda18219085af27fdfe796f805594bf2de95fa1",
+  "source_reference_sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2",
+  "observations": 12,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 24,
+  "inputs": [
+    {
+      "name": "struct_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2",
+          [
+            "-3",
+            [
+              "-4"
+            ]
+          ],
+          [
+            "-5",
+            "-6",
+            "-7"
+          ],
+          [
+            [
+              "-8"
+            ],
+            null
+          ],
+          [
+            "9"
+          ]
+        ],
+        [
+          "1",
+          "2",
+          [
+            "3",
+            [
+              "4"
+            ]
+          ],
+          [
+            "5",
+            "6",
+            "7"
+          ],
+          [
+            [
+              "8"
+            ]
+          ],
+          [
+            "10"
+          ]
+        ],
+        [
+          "2",
+          null,
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            [
+              null
+            ]
+          ],
+          [
+            "11"
+          ]
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          [
+            "12"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "struct_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null,
+          null,
+          null,
+          [
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "struct_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "source_files": [
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/spark_inputs.rs",
+      "bytes": 5746,
+      "sha256": "ebf5352be9f1bfeba0d5ca5da3fe68182eafd51c996a7913a630df2ef365e002"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 9356,
+      "sha256": "ee0b744628c649dca667913fd4ebe3e48da17ab0aa4517f90950a5c594440bc5"
+    }
+  ],
+  "cases": [
+    {
+      "group": "metadata_boundary_probe",
+      "id": "outer_star_struct",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT (SELECT STRUCT(q.*)) AS r FROM (SELECT v FROM struct_mixed) q"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "struct_hidden_order",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT (SELECT STRUCT(q.v AS renamed)) AS r FROM struct_mixed q ORDER BY q.id"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "outer_star_struct",
+      "input": "struct_nulls",
+      "ansi": true,
+      "sql": "SELECT (SELECT STRUCT(q.*)) AS r FROM (SELECT v FROM struct_nulls) q"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "struct_hidden_order",
+      "input": "struct_nulls",
+      "ansi": true,
+      "sql": "SELECT (SELECT STRUCT(q.v AS renamed)) AS r FROM struct_nulls q ORDER BY q.id"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "outer_star_struct",
+      "input": "struct_empty",
+      "ansi": true,
+      "sql": "SELECT (SELECT STRUCT(q.*)) AS r FROM (SELECT v FROM struct_empty) q"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "struct_hidden_order",
+      "input": "struct_empty",
+      "ansi": true,
+      "sql": "SELECT (SELECT STRUCT(q.v AS renamed)) AS r FROM struct_empty q ORDER BY q.id"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "outer_star_struct",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT (SELECT STRUCT(q.*)) AS r FROM (SELECT v FROM struct_mixed) q"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "struct_hidden_order",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT (SELECT STRUCT(q.v AS renamed)) AS r FROM struct_mixed q ORDER BY q.id"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "outer_star_struct",
+      "input": "struct_nulls",
+      "ansi": false,
+      "sql": "SELECT (SELECT STRUCT(q.*)) AS r FROM (SELECT v FROM struct_nulls) q"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "struct_hidden_order",
+      "input": "struct_nulls",
+      "ansi": false,
+      "sql": "SELECT (SELECT STRUCT(q.v AS renamed)) AS r FROM struct_nulls q ORDER BY q.id"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "outer_star_struct",
+      "input": "struct_empty",
+      "ansi": false,
+      "sql": "SELECT (SELECT STRUCT(q.*)) AS r FROM (SELECT v FROM struct_empty) q"
+    },
+    {
+      "group": "metadata_boundary_probe",
+      "id": "struct_hidden_order",
+      "input": "struct_empty",
+      "ansi": false,
+      "sql": "SELECT (SELECT STRUCT(q.v AS renamed)) AS r FROM struct_empty q ORDER BY q.id"
+    }
+  ]
+}

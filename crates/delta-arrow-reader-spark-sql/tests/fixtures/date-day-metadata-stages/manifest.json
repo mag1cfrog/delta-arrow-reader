@@ -1,0 +1,123 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "date_encoding": "unix_date_or_unix_date_array",
+  "baseline": "2104fb8c5d88d0b734841294de9a6de4e16be68d",
+  "candidate": "51404cb272b91c2e51dcd04f3947658d7b9e4392",
+  "purpose": "Preserve all original SQL/public fields/rows/errors while independently observing metadata stages. No test expectation or product behavior is changed by this preparation.",
+  "observations": 92,
+  "counts": {
+    "date-day-correlated": 24,
+    "date-day-lambda": 32,
+    "date-day-closed-lambda": 12,
+    "date-day-arithmetic": 24
+  },
+  "sources": [
+    {
+      "path": "sources/date-day-correlated-spark.jsonl",
+      "bytes": 6879,
+      "sha256": "8b45bfc6737c7e3725febd7efe3ad71a3970b64c35e0602fb911103828a6031f",
+      "observations": 24,
+      "group": "date-day-correlated"
+    },
+    {
+      "path": "sources/date-day-lambda-spark.jsonl",
+      "bytes": 8173,
+      "sha256": "0b2fb628b8f5bffdc9d8697d1861d56c44c62a98845c49a9e29aa59fad50a160",
+      "observations": 32,
+      "group": "date-day-lambda"
+    },
+    {
+      "path": "sources/date-day-closed-lambda-spark.jsonl",
+      "bytes": 2939,
+      "sha256": "6af61070a8af3d7d5ef59b2b658b214868ccf80133204b727f6d0f6edf1b75da",
+      "observations": 12,
+      "group": "date-day-closed-lambda"
+    },
+    {
+      "path": "sources/date-day-arithmetic-spark.jsonl",
+      "bytes": 83721,
+      "sha256": "091bc906c04bae318c525863875c8b5abd6470b84726d0bbd6b17a3066dfe52b",
+      "observations": 296,
+      "group": "date-day-arithmetic",
+      "selected_ids": [
+        "date_add_date_day_required",
+        "date_add_date_day_nullable",
+        "date_add_date_day_empty",
+        "dateadd_date_day_required",
+        "dateadd_date_day_nullable",
+        "dateadd_date_day_empty",
+        "date_sub_date_day_required",
+        "date_sub_date_day_nullable",
+        "date_sub_date_day_empty",
+        "date_add_null_date",
+        "date_add_literal_string_days",
+        "date_add_invalid_literal_days"
+      ],
+      "selected_observations": 24
+    }
+  ],
+  "files": [
+    {
+      "path": "sources/capture_date_day_arithmetic_spark.py",
+      "bytes": 6425,
+      "sha256": "f3db1eaa0d32291352cd87fcebd9a937cb7abc78a4828dc1fe3df7667d570d1d"
+    },
+    {
+      "path": "sources/capture_date_day_closed_lambda_spark.py",
+      "bytes": 1577,
+      "sha256": "463755f1de520dc51e79c86b68a793b674a0850ed851dc96a3235f1cafe3dbb9"
+    },
+    {
+      "path": "sources/capture_date_day_correlated_spark.py",
+      "bytes": 2665,
+      "sha256": "b9a165c5be68f9aff9f4fda4c59c7bdd66643664a935bc5d0fa3fe1fa8beaab8"
+    },
+    {
+      "path": "sources/capture_date_day_lambda_spark.py",
+      "bytes": 3029,
+      "sha256": "757a3aee3e85d23222286929037109dadf24ad95e5f8d0c83b953fdb1118939e"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/date-day-arithmetic-spark.jsonl",
+      "bytes": 83721,
+      "sha256": "091bc906c04bae318c525863875c8b5abd6470b84726d0bbd6b17a3066dfe52b"
+    },
+    {
+      "path": "sources/date-day-closed-lambda-spark.jsonl",
+      "bytes": 2939,
+      "sha256": "6af61070a8af3d7d5ef59b2b658b214868ccf80133204b727f6d0f6edf1b75da"
+    },
+    {
+      "path": "sources/date-day-correlated-spark.jsonl",
+      "bytes": 6879,
+      "sha256": "8b45bfc6737c7e3725febd7efe3ad71a3970b64c35e0602fb911103828a6031f"
+    },
+    {
+      "path": "sources/date-day-lambda-spark.jsonl",
+      "bytes": 8173,
+      "sha256": "0b2fb628b8f5bffdc9d8697d1861d56c44c62a98845c49a9e29aa59fad50a160"
+    },
+    {
+      "path": "sources/date_day_arithmetic.rs",
+      "bytes": 10610,
+      "sha256": "fb5ef08c895dcffda49e469d1f476e6f1111fba2a08fc948bcf2618cf6024d9e"
+    },
+    {
+      "path": "sources/historical-capture_date_day_metadata_stages.py",
+      "bytes": 7676,
+      "sha256": "352e14f67c806101d13bddf638d8bed42aa21158b210d5ab5bcb1bfd67a7c8a9"
+    },
+    {
+      "path": "sources/historical-manifest.json",
+      "bytes": 1017,
+      "sha256": "f36fd38facf39a30b4d056f471eefdebd4628efa2eb6bafd677aaae2c254744d"
+    }
+  ]
+}

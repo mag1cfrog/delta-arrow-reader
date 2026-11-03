@@ -176,10 +176,28 @@ planning or enable additional cast/predicate preparation. Real inner relations
 and volatile scalar results retain their separate execution boundary under
 #140. The [single-row references](tests/fixtures/README.md#guaranteed-single-row-correlated-scalars)
 distinguish exact result comparisons from those retained boundaries.
-Spark scalar-result construction removes inherited user metadata before either
-lowering route, using the same adapter as value-returning windows. Direct
-projections keep their source metadata, and Arrow extension metadata remains
-part of the result type. Native DataFusion scalar construction is unchanged.
+Spark scalar results clear inherited user metadata in public fields. Their
+private metadata boundary ends only after the existing guarded one-row
+substitution, allowing executed fields to inherit the inner source metadata or
+generated-alias marker. The output projection added for hidden ORDER BY columns
+preserves its analyzed metadata declaration, including nested fields and the
+returned Arrow array declarations. Metadata annotations retain their value
+expression's placement, so removing hidden ORDER BY columns does not introduce
+parallelism above the global sort. Captured field metadata is overlaid on the
+current nested type, retaining valid nonnull refinements while requiring the
+same field names, order and storage types. A guarded positional Arrow cast keeps
+duplicate STRUCT child values in place. Arrow extension keys remain part
+of the result type, including when the physical scalar expression omits them.
+MAP, MAP_FROM_ARRAYS and MAP_FROM_ENTRIES record their resolved value
+nullability in the existing MAP UDFs. One shared policy derives nested return
+types from live arguments, then enforces the recorded value nullability on the
+returned Arrow declaration after the existing duplicate-key and NULL handling.
+Their inputs retain their own field declarations. Explicit SQL CAST keeps its
+separate declared type.
+The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
+retain independent public and executed fields, the original scalar guards and
+the explicit Arrow type-contract difference from Spark. Native DataFusion
+scalar construction is unchanged.
 VALUES column declarations use the coerced expressions' nullability. Projected
 IN can reuse its nonnullable match result when both operands are nonnullable;
 nullable operands retain the existing three-valued comparison.
@@ -637,6 +655,6 @@ so CAST validation, error order, grouping identity and output names survive.
 Computed identity aliases such as `+k AS r` have empty public metadata and regain
 source metadata during optimization; direct extraction aliases retain leaf
 metadata at both stages. The [projection references](tests/fixtures/README.md#projection-metadata)
-check complete fields, values and returned batches. Correlated scalar metadata
-stages, wider declaration compatibility and naming/grammar gaps remain separate
-work under #818 and their existing owners.
+check complete fields, values and returned batches. Correlated scalar fields use
+the metadata lifetime described above. Wider declaration compatibility and
+naming/grammar gaps remain separate work under their existing owners.
