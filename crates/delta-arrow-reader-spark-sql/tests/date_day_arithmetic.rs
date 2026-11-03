@@ -18,15 +18,17 @@ mod spark_results;
 use spark_results::TestResult;
 
 fn date_metadata_stages() -> TestResult<Vec<Value>> {
-    let records = include_str!(
-        "fixtures/date-day-metadata-stages/date-day-metadata-stages-spark.jsonl"
-    )
-    .lines()
-    .map(serde_json::from_str)
-    .collect::<Result<Vec<Value>, _>>()?;
+    let records =
+        include_str!("fixtures/date-day-metadata-stages/date-day-metadata-stages-spark.jsonl")
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?;
     assert_eq!(records.len() - 1, 92);
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
     assert_eq!(records[0]["timezone"], "UTC");
     let mut identities = std::collections::BTreeSet::new();
     for case in &records[1..] {
@@ -67,7 +69,10 @@ pub(crate) async fn capture_date_result(
     assert_eq!(physical_field.name(), &query.column_names[0]);
     assert_eq!(resolved_field.data_type(), physical_field.data_type());
     if let Some(public) = case.get("public_schema") {
-        assert_eq!(json!(resolved_field.metadata()), public["fields"][0]["metadata"]);
+        assert_eq!(
+            json!(resolved_field.metadata()),
+            public["fields"][0]["metadata"]
+        );
     }
     if let Some(executed) = case
         .get("executed_schema_after_collect")
@@ -281,8 +286,12 @@ async fn date_stage_reference_rejects_unrecorded_metadata() {
     case["executed_schema_after_collect"]["fields"][0]["metadata"] =
         json!({"unrecorded":"metadata"});
     let header: Value = serde_json::from_str(
-        include_str!("fixtures/date-day-correlated-spark.jsonl").lines().next().unwrap(),
-    ).unwrap();
+        include_str!("fixtures/date-day-correlated-spark.jsonl")
+            .lines()
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
     let session = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
