@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use datafusion::arrow::array::AsArray;
-use datafusion::arrow::compute::filter_record_batch;
+use datafusion::arrow::compute::{cast as arrow_cast, filter_record_batch};
 use datafusion::arrow::datatypes::{DataType, Schema};
 use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
 use datafusion::datasource::memory::MemorySourceConfig;
@@ -1411,15 +1411,15 @@ impl Prepare {
                         return Ok(Transformed::no(expr));
                     }
                     // Spark folds the whole constant STRUCT with its original child declarations.
+                    let declared_type = expr.get_type(&DFSchema::empty())?;
                     let value = match self.eval_constant(&expr) {
-                        Ok(ColumnarValue::Scalar(value)) => value,
-                        Ok(ColumnarValue::Array(array)) if array.len() == 1 => {
-                            ScalarValue::try_from_array(array.as_ref(), 0)?
-                        }
+                        Ok(ColumnarValue::Scalar(value)) => value.to_array()?,
+                        Ok(ColumnarValue::Array(array)) if array.len() == 1 => array,
                         // Required errors and discarded branches keep the existing preparation order.
                         _ => return Ok(Transformed::no(expr)),
                     };
-                    Ok(Transformed::yes(lit(value)))
+                    let value = arrow_cast(value.as_ref(), &declared_type)?;
+                    Ok(Transformed::yes(lit(ScalarValue::try_from_array(value.as_ref(), 0)?)))
                 })?.update_data(|expr| name.restore(expr)))
             })
         })?.data)
