@@ -123,6 +123,17 @@ fn duplicate_struct_casts_keep_strict_and_safe_leaf_errors() -> TestResult {
     ], None)?;
     actual.to_data().validate_full()?;
     assert_eq!(actual.to_data(), expected.to_data());
+    let required_source: ArrayRef = Arc::new(StructArray::try_new(vec![
+        Field::new("item", DataType::Utf8, false),
+        Field::new("item", DataType::Int32, false),
+    ].into(), vec![
+        Arc::new(StringArray::from(vec!["invalid"])), Arc::new(Int32Array::from(vec![22])),
+    ], None)?);
+    let required_target = DataType::Struct(vec![
+        Field::new("item", DataType::Int64, false),
+        Field::new("item", DataType::Int32, false),
+    ].into());
+    assert!(cast_column(&required_source, &required_target, &CastOptions::default()).is_err());
     Ok(())
 }
 
