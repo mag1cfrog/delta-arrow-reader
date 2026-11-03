@@ -16,16 +16,19 @@ use spark_results::{TestResult, capture_spark_query_observation};
 
 #[tokio::test]
 async fn case_results_match_spark_declarations_execution_and_errors() -> TestResult {
-    let records = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/case-result-nullability-spark.jsonl"
-    ))?
-    .lines()
-    .map(serde_json::from_str::<Value>)
-    .collect::<Result<Vec<_>, _>>()?;
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    for (group, source, count) in [
+        ("base", include_str!("fixtures/case-result-nullability-spark.jsonl"), 324),
+        ("parents", include_str!("fixtures/case-result-nullability-parents-spark.jsonl"), 128),
+        ("pruning", include_str!("fixtures/case-result-nullability-pruning-spark.jsonl"), 64),
+    ] {
+    let records = source.lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
-    assert_eq!(records.len() - 1, 324);
+    assert_eq!(records.len() - 1, count);
     let mut identities = BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -38,7 +41,6 @@ async fn case_results_match_spark_declarations_execution_and_errors() -> TestRes
             assert_eq!(case["schema_stages"]["executed_before_collect"], case["schema_stages"]["executed"]);
         }
     }
-    let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -49,6 +51,7 @@ async fn case_results_match_spark_declarations_execution_and_errors() -> TestRes
         );
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
+            comparisons += 1;
             let actual = capture_spark_query_observation(&session, case).await;
             let matches = match &actual {
                 Ok(actual) => actual["result"] == case["expected"]
@@ -63,16 +66,18 @@ async fn case_results_match_spark_declarations_execution_and_errors() -> TestRes
                 },
             };
             eprintln!("CASE_SCHEMA_OBSERVATION {}", json!({
-                "id":case["id"], "input":case["input"], "ansi":case["ansi"],
+                "group":group, "id":case["id"], "input":case["input"], "ansi":case["ansi"],
                 "batch":batch_size, "observation":actual.as_ref().ok(),
                 "error":actual.as_ref().err().map(ToString::to_string), "matches":matches,
             }));
             if !matches {
-                differences.push(format!("{} input={} ANSI={} batch={batch_size}: expected {} physical={}, got {actual:?}",
+                differences.push(format!("{group}: {} input={} ANSI={} batch={batch_size}: expected {} physical={}, got {actual:?}",
                     case["id"], case["input"], case["ansi"], case["expected"], case["schema_stages"]["executed"]));
             }
         }
     }
+    }
+    assert_eq!(comparisons, 1032);
     assert!(differences.is_empty(), "{} differences:\n{}", differences.len(), differences.join("\n"));
     Ok(())
 }
