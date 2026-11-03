@@ -39,8 +39,8 @@ use sail_function::scalar::math::{
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
-use sail_function::scalar::struct_function::StructFunction;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::struct_function::StructFunction;
 
 /// Preserve Spark constant STRUCT declarations and early expression errors.
 #[derive(Debug)]
