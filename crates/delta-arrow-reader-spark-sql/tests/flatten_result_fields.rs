@@ -1,4 +1,4 @@
-//! Array result fields and values match independently captured Spark plans.
+//! FLATTEN result fields and values match independently captured Spark plans.
 
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -14,7 +14,7 @@ use spark_results::TestResult;
 
 #[tokio::test]
 async fn flatten_result_fields_match_spark() -> TestResult {
-    assert_array_result_fields(
+    assert_flatten_result_fields(
         include_str!("fixtures/flatten-result-fields-spark.jsonl"),
         26,
     )
@@ -38,18 +38,18 @@ async fn flatten_untyped_boundaries_match_spark() -> TestResult {
                 )
         })
         .collect::<Vec<_>>();
-    assert_array_result_records(&flatten, 4).await
+    assert_flatten_result_records(&flatten, 4).await
 }
 
-async fn assert_array_result_fields(source: &str, expected_cases: usize) -> TestResult {
+async fn assert_flatten_result_fields(source: &str, expected_cases: usize) -> TestResult {
     let records = source
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_array_result_records(&records, expected_cases).await
+    assert_flatten_result_records(&records, expected_cases).await
 }
 
-async fn assert_array_result_records(records: &[Value], expected_cases: usize) -> TestResult {
+async fn assert_flatten_result_records(records: &[Value], expected_cases: usize) -> TestResult {
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records[0]["spark_revision"],
@@ -214,4 +214,3 @@ async fn spark_configuration_preserves_native_flatten() -> TestResult {
     }
     Ok(())
 }
-
