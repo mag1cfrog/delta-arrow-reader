@@ -326,3 +326,36 @@ async fn spark_map_retains_the_struct_admission_error_cause() -> TestResult {
     assert!(retained_cause, "MAP must retain its STRUCT admission error cause: {error:?}");
     Ok(())
 }
+
+#[test]
+fn constructor_admission_preserves_nested_duplicate_positions() -> TestResult {
+    use datafusion::logical_expr::ScalarUDFImpl;
+    use sail_function::scalar::array::spark_array::SparkArray;
+
+    let array = SparkArray::new();
+    let fields = |names: &[&str]| DataType::Struct(names.iter()
+        .map(|name| Field::new(*name, DataType::Int32, false))
+        .collect::<Vec<_>>().into());
+    let left = fields(&["a", "a", "b"]);
+    let right = fields(&["a", "b", "b"]);
+    let wrappers: [fn(DataType) -> DataType; 2] = [
+        |value| DataType::Struct(vec![Field::new("child", value, false)].into()),
+        |value| DataType::List(Arc::new(Field::new_list_field(value, false))),
+    ];
+    for wrap in wrappers {
+        let wrapped_left = wrap(left.clone());
+        let wrapped_right = wrap(right.clone());
+        for input in [vec![wrapped_left.clone(), wrapped_right.clone()],
+            vec![DataType::Null, wrapped_left.clone(), wrapped_right.clone()]] {
+            let error = array.coerce_types(&input)
+                .expect_err("nested duplicate layouts must not remap values by name");
+            assert!(error.to_string().contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]"));
+        }
+        assert_eq!(array.coerce_types(&[DataType::Null, wrapped_left.clone(), wrapped_left.clone()])?,
+            vec![wrapped_left; 3]);
+    }
+    let outer_left = DataType::Struct(vec![Field::new("child", left, false)].into());
+    let outer_right = DataType::Struct(vec![Field::new("child", right, false)].into());
+    assert!(try_type_union_resolution_with_struct(&[outer_left, outer_right]).is_err());
+    Ok(())
+}
