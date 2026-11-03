@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/capture_spark.py",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+    "--manifest",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/cases.json"
+  ],
+  "exit_code": 0,
+  "started": 1793743076.7503512,
+  "elapsed_seconds": 8.157686471939087,
+  "log": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark-capture-v1.log",
+  "log_sha256": "864f20dc91d54f6a63edaeca88fad69f7ec0423df6cdf5e3ff8dfe2530883ee3",
+  "output": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+  "output_sha256": "9445afefef5d3d1237760350e14d365d20072cea7af97a5e59f5e95a3377518e"
+}

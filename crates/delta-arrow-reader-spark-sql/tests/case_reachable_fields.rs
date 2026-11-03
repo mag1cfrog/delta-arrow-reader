@@ -15,33 +15,6 @@ use spark_results::TestResult;
 
 const REFERENCE: &str =
     include_str!("fixtures/case-reachable-fields/case-result-nullability-spark.jsonl");
-const CASE_IDS: &[&str] = &[
-    "searched_true",
-    "searched_false",
-    "searched_typed_null",
-    "searched_folded_true",
-    "simple_literal_true",
-    "true_missing_else",
-    "false_missing_else",
-    "null_missing_else",
-    "column_missing_else",
-    "column_required_else",
-    "column_nullable_then",
-    "column_nullable_else",
-    "column_guarded_nullable",
-    "true_then_nullable",
-    "actual_null",
-    "multiple_true_cuts_nullable",
-    "nullable_before_true",
-    "false_before_true",
-    "true_before_nullable",
-    "dead_error_else",
-    "dead_error_then",
-    "required_error_else",
-    "column_required_error",
-    "metadata_literal",
-];
-
 fn references() -> TestResult<Vec<Value>> {
     let records = REFERENCE
         .lines()
@@ -59,11 +32,7 @@ fn references() -> TestResult<Vec<Value>> {
 #[tokio::test]
 async fn case_reachable_result_fields_match_spark() -> TestResult {
     let records = references()?;
-    let cases = records[1..]
-        .iter()
-        .filter(|case| case["id"].as_str().is_some_and(|id| CASE_IDS.contains(&id)))
-        .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 142);
+    let cases = &records[1..];
     let identities = cases
         .iter()
         .map(|case| {
@@ -74,7 +43,7 @@ async fn case_reachable_result_fields_match_spark() -> TestResult {
             ))
         })
         .collect::<TestResult<std::collections::BTreeSet<_>>>()?;
-    assert_eq!(identities.len(), 142);
+    assert_eq!(identities.len(), 324);
     let mut differences = Vec::new();
     let mut comparisons = 0;
     for batch_size in [1, 32] {
@@ -91,7 +60,7 @@ async fn case_reachable_result_fields_match_spark() -> TestResult {
             .build(),
         );
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
-        for case in &cases {
+        for case in cases {
             comparisons += 1;
             let mut comparison =
                 spark_results::compare_exact_spark_query_stages(&session, case).await?;
@@ -105,7 +74,7 @@ async fn case_reachable_result_fields_match_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(comparisons, 284);
+    assert_eq!(comparisons, 648);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

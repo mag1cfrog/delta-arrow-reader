@@ -3,7 +3,10 @@
 use std::error::Error;
 
 use arrow::array::{Array, AsArray, ListArray, StructArray};
-use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema, TimeUnit};
+use arrow::datatypes::{
+    DataType, Fields, Float32Type, Float64Type, IntervalUnit, IntervalYearMonthType, Schema,
+    TimeUnit,
+};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::physical_plan::collect;
@@ -134,6 +137,7 @@ pub(crate) async fn compare_exact_spark_query_stages(
     let mut public = None;
     let mut before = None;
     let mut executed = None;
+    let mut rows_raw = None;
     let actual: TestResult<Vec<Vec<Value>>> = async {
         let query = plan_query(
             session,
@@ -177,22 +181,45 @@ pub(crate) async fn compare_exact_spark_query_stages(
                 );
             }
         }
+        rows_raw = Some(rows.clone());
         rows.sort_by_key(|row| json!(row).to_string());
         Ok(rows)
     }
     .await;
-    let public_matches = case["schema_stages"]
-        .get("analyzed")
+    let recorded_stage = |stage: &str, alias: &str| -> TestResult<Option<&Value>> {
+        let nested = case["schema_stages"].get(stage);
+        let flat = case.get(alias);
+        if let (Some(nested), Some(flat)) = (nested, flat)
+            && nested != flat
+        {
+            return Err(format!(
+                "conflicting recorded schema stage {stage}: {nested} != {flat}"
+            )
+            .into());
+        }
+        Ok(nested.or(flat))
+    };
+    let public_matches = recorded_stage("analyzed", "analyzed_schema")?
         .is_none_or(|expected| public.as_ref() == Some(expected));
-    let before_matches = case["schema_stages"]
-        .get("executed_before_collect")
+    let before_matches = recorded_stage("executed_before_collect", "executed_schema_before_collect")?
         .is_none_or(|expected| before.as_ref() == Some(expected));
-    let executed_matches = case["schema_stages"]
-        .get("executed")
+    let executed_matches = recorded_stage("executed", "executed_schema_after_collect")?
         .is_none_or(|expected| executed.as_ref() == Some(expected));
     let rows_match = case["expected"]
         .get("rows")
-        .is_none_or(|expected| actual.as_ref().is_ok_and(|rows| json!(rows) == *expected));
+        .is_none_or(|expected| {
+            let mut expected = expected.as_array().expect("recorded rows").clone();
+            if case["ordered"] == true {
+                expected.sort_by_key(Value::to_string);
+            }
+            actual
+                .as_ref()
+                .is_ok_and(|rows| json!(rows) == json!(expected))
+        });
+    let ordered_rows_match = case["ordered"] != true
+        || rows_raw
+            .as_ref()
+            .is_some_and(|rows| json!(rows) == case["expected"]["rows"]);
     let error_matches = if let Some(condition) = case["expected"]["condition"].as_str() {
         let expected_phase = match case["spark_error_phase"].as_str() {
             Some("sql") => "resolve",
@@ -209,14 +236,19 @@ pub(crate) async fn compare_exact_spark_query_stages(
     } else {
         actual.is_ok()
     };
-    let matches =
-        public_matches && before_matches && executed_matches && rows_match && error_matches;
+    let matches = public_matches
+        && before_matches
+        && executed_matches
+        && rows_match
+        && ordered_rows_match
+        && error_matches;
     Ok(json!({
         "public_schema":public, "before_collect":before, "physical_schema":executed,
-        "rows":actual.as_ref().ok(), "native_phase":phase,
+        "rows":actual.as_ref().ok(), "rows_raw":rows_raw, "native_phase":phase,
         "error":actual.as_ref().err().map(ToString::to_string),
         "public_matches":public_matches, "before_matches":before_matches,
         "physical_matches":executed_matches, "rows_match":rows_match,
+        "ordered_rows_match":ordered_rows_match,
         "error_matches":error_matches, "matches":matches,
     }))
 }
@@ -279,6 +311,7 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Int32 => json!("integer"),
         DataType::Int64 => json!("long"),
         DataType::Boolean => json!("boolean"),
+        DataType::Interval(IntervalUnit::YearMonth) => json!("interval month"),
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
         DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
@@ -369,6 +402,9 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
                     })
                     .collect::<TestResult<Vec<_>>>()?
             )
+        }
+        DataType::Interval(IntervalUnit::YearMonth) => {
+            json!(column.as_primitive::<IntervalYearMonthType>().value(row).to_string())
         }
         DataType::Float32 => {
             let value = column.as_primitive::<Float32Type>().value(row);

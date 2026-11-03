@@ -1,0 +1,862 @@
+{
+  "format": "dar_case_721_hidden_sort_packages_v1",
+  "records": 86,
+  "observations": 172,
+  "batch_sizes": [
+    1,
+    32
+  ],
+  "target_partitions": 2,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "packages": [
+    {
+      "package": "original-parents",
+      "fixture": "case-result-nullability-parents-spark.jsonl",
+      "original_source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-current-delivery-v1/references/case-result-nullability-parents-spark.jsonl",
+      "path": "references/original-parents.jsonl",
+      "source_records": 128,
+      "records": 48,
+      "bytes": 174701,
+      "sha256": "d856c4702eeb6363fca199acbddb30af62b4eb55871792124a6bf4e7d63d4661",
+      "select_ids": [
+        "struct_required_struct_literal_true",
+        "struct_required_struct_literal_true_hidden_order",
+        "struct_required_struct_folded_true",
+        "struct_required_struct_folded_true_hidden_order",
+        "struct_scalar_literal_true",
+        "struct_scalar_literal_true_hidden_order",
+        "struct_scalar_folded_true",
+        "struct_scalar_folded_true_hidden_order",
+        "direct_required_struct_literal_true",
+        "direct_required_struct_literal_true_hidden_order",
+        "struct_required_struct_column",
+        "struct_required_struct_column_hidden_order"
+      ],
+      "selected_identities": [
+        {
+          "id": "struct_scalar_literal_true",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 4,
+          "full_reference_case_sha256": "52448259b1c1612a40a9ed9b054e2bc2d6244f3497c3c265d10ad1149a7e0c30"
+        },
+        {
+          "id": "struct_scalar_literal_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 5,
+          "full_reference_case_sha256": "fcafbb8392c793da551e5744b19101045b3bcc7e76ea0ad1bae4067117b5be45"
+        },
+        {
+          "id": "direct_required_struct_literal_true",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_mixed q",
+          "source_record_line": 6,
+          "full_reference_case_sha256": "b71dd18049f3d6d6a244a7586261e28f71e6be0b0cefbec7fefeb10b271c4d84"
+        },
+        {
+          "id": "direct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 7,
+          "full_reference_case_sha256": "f6df3f4217b4be471f301b7128473ff05d9eaa793331741917461515053c3b73"
+        },
+        {
+          "id": "struct_required_struct_literal_true",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 8,
+          "full_reference_case_sha256": "12a47de6e517d9ad7291d49dad53ba971c5190fffd9b07b62719966c2c204eb9"
+        },
+        {
+          "id": "struct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 9,
+          "full_reference_case_sha256": "2d7cff15f6b9f24d3710570d24a14a6d94448ea949a740425f8e2d4146571d1a"
+        },
+        {
+          "id": "struct_scalar_folded_true",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 12,
+          "full_reference_case_sha256": "08a4f1269fd6542c6974274f2f6613eedd6365681f99e8fafeb9d7a0b6266299"
+        },
+        {
+          "id": "struct_scalar_folded_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 13,
+          "full_reference_case_sha256": "a8e0a546ad20750df17e0bc3814c4f5dcc74bd5cc318efd22c5945f710874b71"
+        },
+        {
+          "id": "struct_required_struct_folded_true",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 16,
+          "full_reference_case_sha256": "3d885d7d4528a530123dfd2a894fe75c7d6520160cb9094796303798d635933f"
+        },
+        {
+          "id": "struct_required_struct_folded_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 17,
+          "full_reference_case_sha256": "63cc5dd607119c94a01f067973b824e97bb071887bc56d09f51b68882289ce52"
+        },
+        {
+          "id": "struct_required_struct_column",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 24,
+          "full_reference_case_sha256": "743af842d5ae48ede76f8cd4882e08af8ec701d4331f284a7a1f3ea8b8ba1858"
+        },
+        {
+          "id": "struct_required_struct_column_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 25,
+          "full_reference_case_sha256": "bd5417a621d18132553a1bc3aea6ce5fb902c160b13c7313bef8a70b4724138f"
+        },
+        {
+          "id": "struct_scalar_literal_true",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 36,
+          "full_reference_case_sha256": "bd40694c23d1c8ca1502a6fa7950db72531acc2ccb0c2aed52eb91c88a96ede0"
+        },
+        {
+          "id": "struct_scalar_literal_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 37,
+          "full_reference_case_sha256": "20670170d0b27c9aba4b8d80d433e4b4ec2f93bfbbe59d8b33a79c63c80e56d5"
+        },
+        {
+          "id": "direct_required_struct_literal_true",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_empty q",
+          "source_record_line": 38,
+          "full_reference_case_sha256": "f011da17408f2071e1296357eaf48cc4564662d3829b5c9c5f92f3180b9f5b27"
+        },
+        {
+          "id": "direct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 39,
+          "full_reference_case_sha256": "1b97078fd5cf2f61cf9cd4733590a6577b98addf3488025f406dfc41760080d0"
+        },
+        {
+          "id": "struct_required_struct_literal_true",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 40,
+          "full_reference_case_sha256": "a0c484a911707567746533ccccbb9d8d611988371fea21786397c8d2ad137dfe"
+        },
+        {
+          "id": "struct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 41,
+          "full_reference_case_sha256": "fa771858b2b16f2f39b8098ecbecaa69ce04e9b390d3331771fbf0f2cfbc5248"
+        },
+        {
+          "id": "struct_scalar_folded_true",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 44,
+          "full_reference_case_sha256": "92ff4dfcc849be850f83edbcd8faecef3c0628a6db2c5f227b0ba0c5e677443d"
+        },
+        {
+          "id": "struct_scalar_folded_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 45,
+          "full_reference_case_sha256": "c071a7ae5477f6e281c9c8510baa3dcbb11959751fa1c6dedef6a64126f3bd09"
+        },
+        {
+          "id": "struct_required_struct_folded_true",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 48,
+          "full_reference_case_sha256": "2266d9b1602c170ee272c16a176b7cd69c392fbc74b13fe77394886f8a8f1719"
+        },
+        {
+          "id": "struct_required_struct_folded_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 49,
+          "full_reference_case_sha256": "3cb0552b7ea5912aa7811267c1446a174cc2192ecd1ad4e8678170fc3bbff8fa"
+        },
+        {
+          "id": "struct_required_struct_column",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 56,
+          "full_reference_case_sha256": "e9f42078023b6501393dace1882a4d92903d94d1959643568063e98fdef45794"
+        },
+        {
+          "id": "struct_required_struct_column_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 57,
+          "full_reference_case_sha256": "283f6e611c1cd579984c7080d5233083808f698c8c9546f6ca1cc72c1f3cfd4c"
+        },
+        {
+          "id": "struct_scalar_literal_true",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 68,
+          "full_reference_case_sha256": "733fbbf0f06f40ae6060602e8b79772730ac4407282d44428ccab33b5a6f8579"
+        },
+        {
+          "id": "struct_scalar_literal_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 69,
+          "full_reference_case_sha256": "a07e21eebe4cfa3effa33ada4f9f17fc0d27a8201af73603389cb34057b19167"
+        },
+        {
+          "id": "direct_required_struct_literal_true",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_mixed q",
+          "source_record_line": 70,
+          "full_reference_case_sha256": "2dd72033d06d8f1eda1ba1953cdeba17096e249cf1aae91b340a79315a18a0cf"
+        },
+        {
+          "id": "direct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 71,
+          "full_reference_case_sha256": "37144cf6e8bb5e93b156413d7b14c36ea2bd885fefbad7bd9c576ebcc79ba3b4"
+        },
+        {
+          "id": "struct_required_struct_literal_true",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 72,
+          "full_reference_case_sha256": "d3a9adab46bc28df269273a0ecf6cf901b69f17e26f1c7a05cfe45ad247cd549"
+        },
+        {
+          "id": "struct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 73,
+          "full_reference_case_sha256": "1e98bbbee75a44941c8b6ce1a2b04d4a8849cb07a326a767f5ae7e003c9ea4dd"
+        },
+        {
+          "id": "struct_scalar_folded_true",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 76,
+          "full_reference_case_sha256": "87a55ab132d8229f3365f102f9003dbc2a94abfc654b6e84bde07e2da141c215"
+        },
+        {
+          "id": "struct_scalar_folded_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 77,
+          "full_reference_case_sha256": "ad047b108acc3627299315ae3cab7dec94edba72c415521253179116cd97d63a"
+        },
+        {
+          "id": "struct_required_struct_folded_true",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 80,
+          "full_reference_case_sha256": "c3ab5fc2b60d1ea18a9e1620e0093986ac8bf5ef2557a2c84bed24ecd7f98a56"
+        },
+        {
+          "id": "struct_required_struct_folded_true_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 81,
+          "full_reference_case_sha256": "501f8a282912f10453840e4a653a6fd77acc6f39e6fe991f3007d73694fc20bd"
+        },
+        {
+          "id": "struct_required_struct_column",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "source_record_line": 88,
+          "full_reference_case_sha256": "8426aca15c2d629936885c443dd32d5ef1ef223694676c254a1849f14af734da"
+        },
+        {
+          "id": "struct_required_struct_column_hidden_order",
+          "input": "case_parent_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "source_record_line": 89,
+          "full_reference_case_sha256": "272d4f1ed1affc1ae74bdd156bda1ad755b70c7832ef49eb5ffc40fc5afa1b0f"
+        },
+        {
+          "id": "struct_scalar_literal_true",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 100,
+          "full_reference_case_sha256": "02aa217905503fc5b77796719db7f62aa1f5964391723390dc21e223297e2792"
+        },
+        {
+          "id": "struct_scalar_literal_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 101,
+          "full_reference_case_sha256": "bcb03f2db104de95bac91988a2bd2bad104f470180a5faeee1bc55bf5c86d6d4"
+        },
+        {
+          "id": "direct_required_struct_literal_true",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_empty q",
+          "source_record_line": 102,
+          "full_reference_case_sha256": "3acac3178b292268d6c9d3ecd975de6af9e456759e6d07d43ace6ebd25da8522"
+        },
+        {
+          "id": "direct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 103,
+          "full_reference_case_sha256": "0f635a3238c05f92bb4541f807410a175a07224fe921b2b244c086669fbadb0c"
+        },
+        {
+          "id": "struct_required_struct_literal_true",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 104,
+          "full_reference_case_sha256": "0cc1f1954a54ffb9eaf3892751ca9b6447a3066b60c641bad6c09cc102301c76"
+        },
+        {
+          "id": "struct_required_struct_literal_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 105,
+          "full_reference_case_sha256": "c4cf1be60a5d4814feeff3069ac6ab22d37377cbf13bcd6268e0f670c56105a1"
+        },
+        {
+          "id": "struct_scalar_folded_true",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 108,
+          "full_reference_case_sha256": "8813c4e48ef21f56e5f6f7aed78d0d5450de99b9f0917bd529395fc9095afb5a"
+        },
+        {
+          "id": "struct_scalar_folded_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.v) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 109,
+          "full_reference_case_sha256": "eca8513224aedc2093ae4c2414d9461f5da4b3f92db7623c8696e376c081cdd6"
+        },
+        {
+          "id": "struct_required_struct_folded_true",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 112,
+          "full_reference_case_sha256": "4fec9df4075dd36598be4b34f2291f99c264056f918385e6453ab919613afdd3"
+        },
+        {
+          "id": "struct_required_struct_folded_true_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 113,
+          "full_reference_case_sha256": "de7735d086c6c41c0c83ae095d7495d9323d3661ab1f0bcddf3b1a03b5cce648"
+        },
+        {
+          "id": "struct_required_struct_column",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "source_record_line": 120,
+          "full_reference_case_sha256": "e3ccb819733ef29b0f3a20702f7f95c7d63da1fc28004ebf72b28d89622150f1"
+        },
+        {
+          "id": "struct_required_struct_column_hidden_order",
+          "input": "case_parent_empty",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN q.id=0 THEN (SELECT q.required) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "source_record_line": 121,
+          "full_reference_case_sha256": "cf675df06bf6956bb4f219af2f1a68d719aa3ce637ce6aaf5a4dbde71601ea9d"
+        }
+      ],
+      "input_metadata_sha256": "36dd52a33dd04b64c0e68d3565a28c5664ce124591b784dde0c8e473768eaaf7"
+    },
+    {
+      "package": "scalar-case-literal",
+      "fixture": "compatibility.jsonl",
+      "original_source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/projection-correlated-818-paired-v1/references/compatibility.jsonl",
+      "path": "references/scalar-case-literal.jsonl",
+      "source_records": 8,
+      "records": 4,
+      "bytes": 25175,
+      "sha256": "90002192e6381674a7914bd7fef4301d086c8dcd203a6f75c1bdcb35e71158fb",
+      "select_ids": [
+        "case_hidden_order",
+        "case_no_order"
+      ],
+      "selected_identities": [
+        {
+          "id": "case_hidden_order",
+          "input": "struct_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q ORDER BY q.id",
+          "source_record_line": 2,
+          "full_reference_case_sha256": "dedcd46f203fdef1da44bbd463ddb20fdc9e1b789d810d8e9fcb74523e3c6b8c"
+        },
+        {
+          "id": "case_no_order",
+          "input": "struct_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q",
+          "source_record_line": 3,
+          "full_reference_case_sha256": "e768fbf95bf4f6023c00b73d630a9acab8a521ac48e7a29287c909d4432a4c36"
+        },
+        {
+          "id": "case_hidden_order",
+          "input": "struct_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q ORDER BY q.id",
+          "source_record_line": 6,
+          "full_reference_case_sha256": "0c84782edbbde1a8edf1278d94a4d485a32d1eb9fa3d3e687e4165b1e372a31d"
+        },
+        {
+          "id": "case_no_order",
+          "input": "struct_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN true THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q",
+          "source_record_line": 7,
+          "full_reference_case_sha256": "537f1b5149f20296d7a6d1708484ef51042c5e9f7bfb83d46e058de09035b460"
+        }
+      ],
+      "input_metadata_sha256": "c863ad0142bd160529d45b1b087f341c8a6b84fdfddd8d7c8809ab48ee71d5a7"
+    },
+    {
+      "package": "scalar-case-folded",
+      "fixture": "case-equal.jsonl",
+      "original_source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/projection-correlated-818-paired-v1/references/case-equal.jsonl",
+      "path": "references/scalar-case-folded.jsonl",
+      "source_records": 4,
+      "records": 4,
+      "bytes": 12891,
+      "sha256": "fcd1037b0866637ffb9a095c28b788008a55eef160c5d97cfde847b430905b8f",
+      "select_ids": null,
+      "selected_identities": [
+        {
+          "id": "case_equal_hidden_order",
+          "input": "struct_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q ORDER BY q.id",
+          "source_record_line": 2,
+          "full_reference_case_sha256": "9be98edb387a17a315d1a1534309a8f17c60803aa3554528ef4e61116a322850"
+        },
+        {
+          "id": "case_equal_no_order",
+          "input": "struct_mixed",
+          "ansi": true,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q",
+          "source_record_line": 3,
+          "full_reference_case_sha256": "ed70e4acde3ca643fe910d4f3bf5a5fa2324d1831347f92d8a110f49b60dbbf7"
+        },
+        {
+          "id": "case_equal_hidden_order",
+          "input": "struct_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q ORDER BY q.id",
+          "source_record_line": 4,
+          "full_reference_case_sha256": "4d55a82a3dc0959484297b02b33f0aedf7680bd46704487cfe77c6a446a02142"
+        },
+        {
+          "id": "case_equal_no_order",
+          "input": "struct_mixed",
+          "ansi": false,
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN 1 ELSE CAST(NULL AS INT) END AS x) AS r FROM struct_mixed q",
+          "source_record_line": 5,
+          "full_reference_case_sha256": "942c9dc29d417bbb7e14259b9573a38a46e9eda31c7b4718aa9405ef6b4a9ae5"
+        }
+      ],
+      "input_metadata_sha256": "c863ad0142bd160529d45b1b087f341c8a6b84fdfddd8d7c8809ab48ee71d5a7"
+    },
+    {
+      "package": "absent-scalar-original",
+      "fixture": "main.jsonl",
+      "original_source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/projection-correlated-818-paired-v1/references/main.jsonl",
+      "path": "references/absent-scalar-original.jsonl",
+      "source_records": 152,
+      "records": 4,
+      "bytes": 464703,
+      "sha256": "3fa86a006fe1d8cbaebec4b1c23a107b2bd670f07b9cf4d8b30b62979d5cf6eb",
+      "select_ids": [
+        "inputs_uncorrelated_zero",
+        "empty_inputs_uncorrelated_zero"
+      ],
+      "selected_identities": [
+        {
+          "id": "inputs_uncorrelated_zero",
+          "input": null,
+          "ansi": true,
+          "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+          "source_record_line": 22,
+          "full_reference_case_sha256": "d41ca94e1dd83b46fac1a17c546436c85dbbded5f1ad8f9a895f13cdc8ebc54a"
+        },
+        {
+          "id": "empty_inputs_uncorrelated_zero",
+          "input": null,
+          "ansi": true,
+          "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+          "source_record_line": 46,
+          "full_reference_case_sha256": "c101d1f570241b57763938f8f52f57456218942fb5b19f8740254b7e5ea6d994"
+        },
+        {
+          "id": "inputs_uncorrelated_zero",
+          "input": null,
+          "ansi": false,
+          "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM inputs) p",
+          "source_record_line": 98,
+          "full_reference_case_sha256": "2e1b32d310cc6b64e42aa75203f4dbb31dd2230ba7ad40a1b92908c448b2fc1e"
+        },
+        {
+          "id": "empty_inputs_uncorrelated_zero",
+          "input": null,
+          "ansi": false,
+          "sql": "SELECT p.id,(SELECT i.id FROM inputs i WHERE false) AS r FROM (SELECT id,g,v,txt FROM empty_inputs) p",
+          "source_record_line": 122,
+          "full_reference_case_sha256": "8f4db741237b7638a590246cfba606bc3d462751618ce96592ae88b49bc98aa7"
+        }
+      ],
+      "input_metadata_sha256": "c7e154608cc057981344aea29f98ab89c9c225ab73c93d5cca5cef6de680fdfe"
+    },
+    {
+      "package": "numeric-pruning-original",
+      "fixture": "numeric-pruning-spark.jsonl",
+      "original_source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-nested-fields-721-capture-v1/numeric-pruning-spark.jsonl",
+      "path": "references/numeric-pruning-original.jsonl",
+      "source_records": 2,
+      "records": 2,
+      "bytes": 3146,
+      "sha256": "71e6c66aa31123954e0638bf6d09746178db9ccd8cdc0230220dcce2e55eb745",
+      "select_ids": null,
+      "selected_identities": [
+        {
+          "id": "array_numeric_pruned_value_coercion",
+          "input": "case_nested_mixed",
+          "ansi": true,
+          "sql": "SELECT CASE WHEN FALSE THEN ARRAY(CAST(2 AS BIGINT)) ELSE ARRAY(id) END AS r FROM case_nested_mixed",
+          "source_record_line": 2,
+          "full_reference_case_sha256": "f2802c1c5097f1c7bdc019840e32ddc265854966dbcdfd54af0ff8205611c678"
+        },
+        {
+          "id": "array_numeric_pruned_value_coercion",
+          "input": "case_nested_mixed",
+          "ansi": false,
+          "sql": "SELECT CASE WHEN FALSE THEN ARRAY(CAST(2 AS BIGINT)) ELSE ARRAY(id) END AS r FROM case_nested_mixed",
+          "source_record_line": 3,
+          "full_reference_case_sha256": "61bbfabcd7beb0c28509ef96d9eda0f980c35f0c35dd5661da13a8656183a79f"
+        }
+      ],
+      "input_metadata_sha256": "7863e4dbacd11229377dd3c72ce3b1977667efe0daca2cbfc07b0019936b31af"
+    },
+    {
+      "package": "new-boundaries",
+      "fixture": "spark.jsonl",
+      "original_source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+      "path": "references/new-boundaries.jsonl",
+      "source_records": 24,
+      "records": 24,
+      "bytes": 42065,
+      "sha256": "9445afefef5d3d1237760350e14d365d20072cea7af97a5e59f5e95a3377518e",
+      "select_ids": null,
+      "selected_identities": [
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 2,
+          "id": "absent_struct_literal_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "ansi": true,
+          "ordered": false,
+          "full_reference_case_sha256": "f74f3d5dbc6dc9c219d93389b9e9e6d1ca85d7d47f5772b98a025cf7a93f495a"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 3,
+          "id": "absent_struct_literal_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": true,
+          "ordered": true,
+          "full_reference_case_sha256": "ef854d4623556147fea4307a12b8b6922bcebdb7f5894b9fbd9555ae935240c7"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 4,
+          "id": "absent_struct_folded_no_order",
+          "input": "case_parent_empty",
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "ansi": true,
+          "ordered": false,
+          "full_reference_case_sha256": "8d7848338e6e509203893b7347337cffc5956049ba2403f22b4ade7e569804af"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 5,
+          "id": "absent_struct_folded_hidden_order",
+          "input": "case_parent_empty",
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "ansi": true,
+          "ordered": true,
+          "full_reference_case_sha256": "31c3b6d5829837ca37abc4106c67fab124713b92946c1ed158d4c5b98d1d9a46"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 6,
+          "id": "nullable_struct_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.optional) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "ansi": true,
+          "ordered": false,
+          "full_reference_case_sha256": "479656f3fc330ef82229ca565428884fec09f92e3a67dfd1b1379802135b4bd5"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 7,
+          "id": "generated_output_name_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) FROM case_parent_mixed q",
+          "ansi": true,
+          "ordered": false,
+          "full_reference_case_sha256": "8e3bdb96cbaf878eb110bad328dac30234f6080adb05d5f59d20ac6a7a5a94b9"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 8,
+          "id": "numeric_required_cast_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN CAST((SELECT q.id) AS BIGINT) ELSE CAST(NULL AS BIGINT) END AS x) AS r FROM case_parent_mixed q",
+          "ansi": true,
+          "ordered": false,
+          "full_reference_case_sha256": "2d60c1905559a12ca80d0d1ee8542a02b041e1e9a5599321ddf87650ef0dbc88"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 9,
+          "id": "numeric_dead_wide_arm_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN false THEN CAST((SELECT q.id) AS BIGINT) ELSE q.id END AS x) AS r FROM case_parent_mixed q",
+          "ansi": true,
+          "ordered": false,
+          "full_reference_case_sha256": "b3c61dcdc4eaf9f65300d6ab39c6a1d6d1a5896f268457dd3979b09dba7c87e7"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 10,
+          "id": "nullable_struct_hidden_order_desc",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.optional) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id DESC",
+          "ansi": true,
+          "ordered": true,
+          "full_reference_case_sha256": "c97e4851ed830712564a792a8d303b979624882df97fec068707e31d80b3ee5c"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 11,
+          "id": "generated_output_name_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": true,
+          "ordered": true,
+          "full_reference_case_sha256": "9fbf86919ecb1ab6b0f030fa3c8da280cf341b82af8dbe394ae95007e38d7906"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 12,
+          "id": "numeric_required_cast_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN CAST((SELECT q.id) AS BIGINT) ELSE CAST(NULL AS BIGINT) END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": true,
+          "ordered": true,
+          "full_reference_case_sha256": "25754b56b066f83f746b8f61f76d045d9c4ae7a85e1b0d6bc773df2aed3d3c8b"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 13,
+          "id": "numeric_dead_wide_arm_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN false THEN CAST((SELECT q.id) AS BIGINT) ELSE q.id END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": true,
+          "ordered": true,
+          "full_reference_case_sha256": "2c2c5b125aba07fa00f3a2f1d089d5fe3c49d021b316ff598f09e5b2f6816d6b"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 14,
+          "id": "absent_struct_literal_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "ansi": false,
+          "ordered": false,
+          "full_reference_case_sha256": "b2baceedf9991560b2caeae3016007bfc78a66e173328310122a5294ecb4dcde"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 15,
+          "id": "absent_struct_literal_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": false,
+          "ordered": true,
+          "full_reference_case_sha256": "dad52efe7509d1a844e197fae96bd88d5ae6b3005628057af3fb1008bebda515"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 16,
+          "id": "absent_struct_folded_no_order",
+          "input": "case_parent_empty",
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_empty q",
+          "ansi": false,
+          "ordered": false,
+          "full_reference_case_sha256": "8e9bae70c78946c789b4f1c41f2c7871efe447c7b20ebeb2b869a1758eec6be3"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 17,
+          "id": "absent_struct_folded_hidden_order",
+          "input": "case_parent_empty",
+          "sql": "SELECT STRUCT(CASE WHEN 1=1 THEN (SELECT q.required WHERE false) ELSE NULL END AS x) AS r FROM case_parent_empty q ORDER BY q.id",
+          "ansi": false,
+          "ordered": true,
+          "full_reference_case_sha256": "7e4fccee947b5a2df4970dac8684c65041dc36c1b464b7867161738f11df95b8"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 18,
+          "id": "nullable_struct_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.optional) ELSE NULL END AS x) AS r FROM case_parent_mixed q",
+          "ansi": false,
+          "ordered": false,
+          "full_reference_case_sha256": "1f7b0d522e99866f4c0f04545826a7cb3893fb6be092b938e7af8d289f9bf3d6"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 19,
+          "id": "generated_output_name_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) FROM case_parent_mixed q",
+          "ansi": false,
+          "ordered": false,
+          "full_reference_case_sha256": "d21cc68bc09bfddc9b20866ad5473aa786f5f4c3f5068e85d69704f13deaf0c4"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 20,
+          "id": "numeric_required_cast_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN CAST((SELECT q.id) AS BIGINT) ELSE CAST(NULL AS BIGINT) END AS x) AS r FROM case_parent_mixed q",
+          "ansi": false,
+          "ordered": false,
+          "full_reference_case_sha256": "7a703f0f52dc87408382c13f803189814c86ecf860b2a50ce4944b51c881e21c"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 21,
+          "id": "numeric_dead_wide_arm_no_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN false THEN CAST((SELECT q.id) AS BIGINT) ELSE q.id END AS x) AS r FROM case_parent_mixed q",
+          "ansi": false,
+          "ordered": false,
+          "full_reference_case_sha256": "0a5fa74fe6602a092ce37d6437f71bbcfa090ac0e81fa12c3a0473afb1ec2f0e"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 22,
+          "id": "nullable_struct_hidden_order_desc",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.optional) ELSE NULL END AS x) AS r FROM case_parent_mixed q ORDER BY q.id DESC",
+          "ansi": false,
+          "ordered": true,
+          "full_reference_case_sha256": "04174973260e9c6a5ebe0dd6c56f55bb22face3a5544724fba3cd0b19ddc1a2f"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 23,
+          "id": "generated_output_name_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN (SELECT q.required) ELSE NULL END AS x) FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": false,
+          "ordered": true,
+          "full_reference_case_sha256": "7d2f06fb20902ca16cd708b501d55d0df074b855b200e1fa07b6df2cf880711d"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 24,
+          "id": "numeric_required_cast_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN true THEN CAST((SELECT q.id) AS BIGINT) ELSE CAST(NULL AS BIGINT) END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": false,
+          "ordered": true,
+          "full_reference_case_sha256": "79b36330eccf88cd7d88904c10ebffeee7e0ed2ec560d217829f001acf48daf1"
+        },
+        {
+          "source_fixture": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/case-721-hidden-order-capture-v1/spark.jsonl",
+          "source_record_line": 25,
+          "id": "numeric_dead_wide_arm_hidden_order",
+          "input": "case_parent_mixed",
+          "sql": "SELECT STRUCT(CASE WHEN false THEN CAST((SELECT q.id) AS BIGINT) ELSE q.id END AS x) AS r FROM case_parent_mixed q ORDER BY q.id",
+          "ansi": false,
+          "ordered": true,
+          "full_reference_case_sha256": "8d389501a9e747d7fd9e1263a5244f447686889d546995e3c6c0bcbe891f2b4f"
+        }
+      ],
+      "input_metadata_sha256": "36dd52a33dd04b64c0e68d3565a28c5664ce124591b784dde0c8e473768eaaf7",
+      "independent_capture_receipt": "spark-capture-v1-result.json",
+      "independent_capture_audit": "spark-independent-audit-v1.json"
+    }
+  ],
+  "matching": "Use package, original source fixture/name, complete input schemas/rows, complete unchanged reference JSON (including SQL/ANSI/order marker), and batch. Never collapse short id/input/ANSI keys.",
+  "stage_contract": "Compare public/analyzed fields and each recorded physical stage separately. Do not use analyzed schemas as a replacement for actual optimized/executed references.",
+  "rows_contract": "For ordered=true new records compare exact reference sequence to DAR rows_raw. For all records compare row multisets without deduplication. Retain full actual batches/raw fields/arrays/errors and validity.",
+  "frozen_reference_policy": "Whole original files are copied byte-for-byte. Selection occurs only through this manifest; no record, expected field, name, metadata, row or error is rewritten.",
+  "limits": "Historical original captures lack raw Spark order/batch layouts. All selected references succeed; original full1032 still supplies mandatory required-error and broader controls.",
+  "root_860_scope": "Independent error identifiers remain860 work. This package neither modifies nor widens860."
+}
