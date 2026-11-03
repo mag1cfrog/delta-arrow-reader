@@ -178,6 +178,12 @@ fn array_element(array: expr::Expr, element: expr::Expr) -> expr::Expr {
 
 fn array_contains(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
+    if input.arguments.len() != 2 {
+        return Err(PlanError::invalid(format!(
+            "ARRAY_CONTAINS requires two arguments, got {}",
+            input.arguments.len()
+        )));
+    }
     let (mut array, mut element) = input.arguments.two()?;
     let array_type = array.get_type(schema)?;
     let element_type = element.get_type(schema)?;

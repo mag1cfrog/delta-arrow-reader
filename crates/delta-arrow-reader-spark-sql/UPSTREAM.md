@@ -196,6 +196,13 @@ exposes eligible one-sided filters before that simplification; outer/anti
 preservation rules remain with DataFusion. Its references and remaining
 differences are described in the [fixture notes](tests/fixtures/README.md#array-membership).
 
+ARRAY_CONTAINS result declarations include the outer array, immediate element
+and lookup nullability across the five admitted Arrow list layouts. The Spark
+resolver checks its two-argument arity before lowering; native membership
+registration, coercion and value evaluation retain their existing paths. The
+[declaration references](tests/fixtures/README.md#array_contains-result-declarations)
+record complete fields, actual NULLs and required errors separately from values.
+
 Foldable group preparation requires the query-local Spark marker at both
 preparation call sites. Native SQL in a Spark-configured session retains DataFusion's
 constant-group elimination, including its aggregate kernels and required CAST

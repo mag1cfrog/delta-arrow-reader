@@ -2287,3 +2287,60 @@ modules from the parent fixture directory:
 PYTHONPATH=tests/fixtures python tests/fixtures/null-base-attribute-evaluation-815/capture_attribute_evaluation.py /tmp/null-base-attribute-evaluation-815-spark.jsonl
 cargo test --locked --workspace --test null_base_extraction
 ```
+
+## ARRAY_CONTAINS result declarations
+
+`array-contains-result-fields-spark.jsonl` preserves all 32 independent Spark
+4.2.0 observations from commit `6fae14ac222cba4b9f0740e7e53615cfd55334e6`.
+Its SHA256 is
+`c5b0d06e76112648c45af8d7b4fad8496c23a97f43164411e553dc75c233aa82`.
+The pinned Spark revision is `32f7299601108917fb01920a54e084595b7b3bf8`.
+Both ANSI modes cover direct and nested results, required/nullable columns,
+empty providers and arrays, NULL arrays/lookups/elements, hit/miss results,
+integer limits, signed zero, NaN and required conversion errors.
+
+`array_result_fields.rs` replays every record at batch sizes 1 and 32. The
+existing shared comparator checks complete analyzed, before-collection and
+executed fields, complete row multisets and required failure phases. Its Arrow
+validators check actual NULLs and returned batch validity. Separate controls
+compare native ARRAY_HAS observations and reject incorrect error fields,
+failure phases and diagnostic causes.
+
+Two native resolver diagnostics have no Spark condition tag. The replay accepts
+only these exact SQL/condition pairs at Spark `sql` and DAR `resolve`, while
+retaining every field and row check:
+
+| SQL | Recorded Spark condition | Required native diagnostic |
+| --- | --- | --- |
+| `SELECT ARRAY_CONTAINS(1, 1) AS r` | `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE` | `array_contains does not support type Int32` |
+| `SELECT ARRAY_CONTAINS(ARRAY(1)) AS r` | `WRONG_NUM_ARGS.WITHOUT_SUGGESTION` | `ARRAY_CONTAINS requires two arguments, got 1` |
+
+Observation logs retain the shared comparator's results and add
+`reference_matches` for this explicit diagnostic translation. The raw conditions
+and schemas remain unchanged. The required CAST error uses the shared Spark
+condition and planning-phase comparison directly.
+
+`capture_array_contains_result_fields_spark.py` is a reproducible extraction of
+the original `capture_array_result_fields_835_837_v1.py`, whose SHA256 is
+`383b987f617cb02924ffadd04168d45d81f7ec08534e6c56258a1517bc7e06ed`.
+The extracted script's SHA256 is
+`735bb1a5a574638b79849596ae6913d4673c218405498d14792b739790313e78`.
+Its providers, rows, 16 query definitions, value encoding and complete ANSI/stage
+capture loop match the original. Only this group is captured, so a fresh file
+records the extracted script's hash. The frozen fixture header retains the
+original hash. Use the existing pinned PySpark 4.2.0/Java 21 environment and a
+fresh output path, from this crate's directory:
+
+```sh
+python tests/fixtures/capture_array_contains_result_fields_spark.py /tmp/array-contains-result-fields-spark.jsonl
+cargo test --locked --workspace --test array_result_fields
+cargo test --locked --workspace --test array_contains
+```
+
+The original two `scan_stop` records remain in the preserved CASE reference at
+`95ef3425ebe5f45559df506eea408f405640b906:crates/delta-arrow-reader-spark-sql/tests/fixtures/case-result-nullability-review-spark.jsonl`.
+Their concatenated raw lines, including newlines, have SHA256
+`196266629416e18821ac80e082acec47e64297bd9f10d20461cf169335b814c7`.
+They keep their nonnullable `contains_value` field. The isolated membership
+reference above tests that declaration without changing the original combined
+CASE query or importing its other pending repairs.
