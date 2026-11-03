@@ -107,21 +107,9 @@ impl ScalarUDFImpl for SparkAbs {
         let [arg] = args.args.as_slice() else {
             return Err(invalid_arg_count_exec_err("abs", (1, 1), args.args.len()));
         };
-        // Float/Decimal/UInt/Null have no ANSI overflow concerns; delegate to
-        // DataFusion's built-in abs so the kernel stays correct even on
-        // bypass paths where `simplify` has not rewritten the call.
-        if matches!(
-            arg.data_type(),
-            DataType::Float32
-                | DataType::Float64
-                | DataType::Decimal128(_, _)
-                | DataType::Decimal256(_, _)
-                | DataType::UInt8
-                | DataType::UInt16
-                | DataType::UInt32
-                | DataType::UInt64
-                | DataType::Null
-        ) {
+        // Signed integers keep Spark's ANSI overflow policy; other numerics use native kernels.
+        let data_type = arg.data_type();
+        if (data_type.is_numeric() && !data_type.is_signed_integer()) || data_type.is_null() {
             return datafusion::functions::math::abs::AbsFunc::new().invoke_with_args(args);
         }
         let return_dtype = args.return_field.data_type().clone();
@@ -464,24 +452,14 @@ impl ScalarUDFImpl for SparkAbs {
         }
 
         let dt = info.get_data_type(arg)?;
-        match dt {
-            // Keep the Spark field contract while invoke_with_args selects the kernel.
-            DataType::Interval(_)
-            | DataType::Duration(_)
-            | DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::Decimal128(_, _)
-            | DataType::Decimal256(_, _)
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64
-            | DataType::Null => Ok(ExprSimplifyResult::Original(args)),
-            _ => Ok(ExprSimplifyResult::Simplified(abs(args.one()?))),
+        // Keep the Spark field contract while invoke_with_args selects the kernel.
+        if dt.is_numeric()
+            || dt.is_null()
+            || matches!(dt, DataType::Interval(_) | DataType::Duration(_))
+        {
+            Ok(ExprSimplifyResult::Original(args))
+        } else {
+            Ok(ExprSimplifyResult::Simplified(abs(args.one()?)))
         }
     }
 
