@@ -32,7 +32,7 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
                 let condition_type = condition.get_type(function_context.schema)?;
                 if condition_type != DataType::Boolean {
                     return Err(PlanError::InvalidArgument(format!(
-                        "CASE WHEN condition must be BOOLEAN, got {condition_type:?}"
+                        "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] CASE WHEN condition must be BOOLEAN, got {condition_type:?}"
                     )));
                 }
                 conditions.push(condition);
@@ -121,7 +121,7 @@ async fn case_retains_branches_and_validates_conditions_before_results() -> Plan
     assert!(matches!(
         resolve(vec![lit(true), col("unresolved_result"), lit(1_i32), lit(2_i32), lit(3_i32)]),
         Err(PlanError::InvalidArgument(message))
-            if message == "CASE WHEN condition must be BOOLEAN, got Int32"
+            if message == "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] CASE WHEN condition must be BOOLEAN, got Int32"
     ));
     Ok(())
 }

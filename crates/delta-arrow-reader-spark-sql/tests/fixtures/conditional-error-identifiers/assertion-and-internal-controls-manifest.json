@@ -1,0 +1,466 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "assert_true",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "1",
+          "assert-column"
+        ]
+      ]
+    },
+    {
+      "name": "assert_false",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "0",
+          "assert-column"
+        ]
+      ]
+    },
+    {
+      "name": "assert_null",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "assert_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "1",
+          "true-unused"
+        ],
+        [
+          "1",
+          "0",
+          "assert-column"
+        ],
+        [
+          "2",
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "assert_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "case_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "case-id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "case-value"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "9"
+        ]
+      ]
+    },
+    {
+      "name": "case_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "case-id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "case-value"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "case_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "case-id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "case-value"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "assert_true_default",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(TRUE) AS r"
+    },
+    {
+      "id": "assert_true_ordinary",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(TRUE,'assert-required') AS r"
+    },
+    {
+      "id": "assert_true_null",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(TRUE,CAST(NULL AS STRING)) AS r"
+    },
+    {
+      "id": "assert_false_default",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(FALSE) AS r"
+    },
+    {
+      "id": "assert_false_ordinary",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(FALSE,'assert-required') AS r"
+    },
+    {
+      "id": "assert_false_null",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(FALSE,CAST(NULL AS STRING)) AS r"
+    },
+    {
+      "id": "assert_typed_null_default",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(CAST(NULL AS BOOLEAN)) AS r"
+    },
+    {
+      "id": "assert_typed_null_ordinary",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(CAST(NULL AS BOOLEAN),'assert-required') AS r"
+    },
+    {
+      "id": "assert_typed_null_null",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(CAST(NULL AS BOOLEAN),CAST(NULL AS STRING)) AS r"
+    },
+    {
+      "id": "assert_untyped_null_default",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(NULL) AS r"
+    },
+    {
+      "id": "assert_untyped_null_ordinary",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(NULL,'assert-required') AS r"
+    },
+    {
+      "id": "assert_untyped_null_null",
+      "input": "none",
+      "sql": "SELECT ASSERT_TRUE(NULL,CAST(NULL AS STRING)) AS r"
+    },
+    {
+      "id": "assert_column_default",
+      "input": "assert_true",
+      "sql": "SELECT ASSERT_TRUE(v>0) AS r FROM assert_true"
+    },
+    {
+      "id": "assert_column_ordinary",
+      "input": "assert_true",
+      "sql": "SELECT ASSERT_TRUE(v>0,'assert-required') AS r FROM assert_true"
+    },
+    {
+      "id": "assert_column_null",
+      "input": "assert_true",
+      "sql": "SELECT ASSERT_TRUE(v>0,CAST(NULL AS STRING)) AS r FROM assert_true"
+    },
+    {
+      "id": "assert_column_column",
+      "input": "assert_true",
+      "sql": "SELECT ASSERT_TRUE(v>0,message) AS r FROM assert_true"
+    },
+    {
+      "id": "assert_column_default",
+      "input": "assert_false",
+      "sql": "SELECT ASSERT_TRUE(v>0) AS r FROM assert_false"
+    },
+    {
+      "id": "assert_column_ordinary",
+      "input": "assert_false",
+      "sql": "SELECT ASSERT_TRUE(v>0,'assert-required') AS r FROM assert_false"
+    },
+    {
+      "id": "assert_column_null",
+      "input": "assert_false",
+      "sql": "SELECT ASSERT_TRUE(v>0,CAST(NULL AS STRING)) AS r FROM assert_false"
+    },
+    {
+      "id": "assert_column_column",
+      "input": "assert_false",
+      "sql": "SELECT ASSERT_TRUE(v>0,message) AS r FROM assert_false"
+    },
+    {
+      "id": "assert_column_default",
+      "input": "assert_null",
+      "sql": "SELECT ASSERT_TRUE(v>0) AS r FROM assert_null"
+    },
+    {
+      "id": "assert_column_ordinary",
+      "input": "assert_null",
+      "sql": "SELECT ASSERT_TRUE(v>0,'assert-required') AS r FROM assert_null"
+    },
+    {
+      "id": "assert_column_null",
+      "input": "assert_null",
+      "sql": "SELECT ASSERT_TRUE(v>0,CAST(NULL AS STRING)) AS r FROM assert_null"
+    },
+    {
+      "id": "assert_column_column",
+      "input": "assert_null",
+      "sql": "SELECT ASSERT_TRUE(v>0,message) AS r FROM assert_null"
+    },
+    {
+      "id": "assert_column_default",
+      "input": "assert_mixed",
+      "sql": "SELECT ASSERT_TRUE(v>0) AS r FROM assert_mixed"
+    },
+    {
+      "id": "assert_column_ordinary",
+      "input": "assert_mixed",
+      "sql": "SELECT ASSERT_TRUE(v>0,'assert-required') AS r FROM assert_mixed"
+    },
+    {
+      "id": "assert_column_null",
+      "input": "assert_mixed",
+      "sql": "SELECT ASSERT_TRUE(v>0,CAST(NULL AS STRING)) AS r FROM assert_mixed"
+    },
+    {
+      "id": "assert_column_column",
+      "input": "assert_mixed",
+      "sql": "SELECT ASSERT_TRUE(v>0,message) AS r FROM assert_mixed"
+    },
+    {
+      "id": "assert_column_default",
+      "input": "assert_empty",
+      "sql": "SELECT ASSERT_TRUE(v>0) AS r FROM assert_empty"
+    },
+    {
+      "id": "assert_column_ordinary",
+      "input": "assert_empty",
+      "sql": "SELECT ASSERT_TRUE(v>0,'assert-required') AS r FROM assert_empty"
+    },
+    {
+      "id": "assert_column_null",
+      "input": "assert_empty",
+      "sql": "SELECT ASSERT_TRUE(v>0,CAST(NULL AS STRING)) AS r FROM assert_empty"
+    },
+    {
+      "id": "assert_column_column",
+      "input": "assert_empty",
+      "sql": "SELECT ASSERT_TRUE(v>0,message) AS r FROM assert_empty"
+    },
+    {
+      "id": "literal_index",
+      "input": "case_mixed",
+      "sql": "SELECT ARRAY(v)[1] AS r FROM case_mixed"
+    },
+    {
+      "id": "floating_div",
+      "input": "case_mixed",
+      "sql": "SELECT CAST(id AS DOUBLE) DIV CAST(id-id AS DOUBLE) AS r FROM case_mixed"
+    },
+    {
+      "id": "literal_index",
+      "input": "case_nulls",
+      "sql": "SELECT ARRAY(v)[1] AS r FROM case_nulls"
+    },
+    {
+      "id": "floating_div",
+      "input": "case_nulls",
+      "sql": "SELECT CAST(id AS DOUBLE) DIV CAST(id-id AS DOUBLE) AS r FROM case_nulls"
+    },
+    {
+      "id": "literal_index",
+      "input": "case_empty",
+      "sql": "SELECT ARRAY(v)[1] AS r FROM case_empty"
+    },
+    {
+      "id": "floating_div",
+      "input": "case_empty",
+      "sql": "SELECT CAST(id AS DOUBLE) DIV CAST(id-id AS DOUBLE) AS r FROM case_empty"
+    }
+  ],
+  "observations": 76
+}

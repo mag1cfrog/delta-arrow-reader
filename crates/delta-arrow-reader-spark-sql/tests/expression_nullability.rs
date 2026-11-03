@@ -111,7 +111,7 @@ async fn check_spark_reference(fixture: &str, count: usize, retained_gaps: &[Val
                         json!({"condition":"DIVIDE_BY_ZERO"})
                     } else if message.contains("Overflow happened on") {
                         json!({"condition":"ARITHMETIC_OVERFLOW"})
-                    } else if message.ends_with("Execution error: dead") {
+                    } else if message.ends_with("Execution error: [USER_RAISED_EXCEPTION] dead") {
                         json!({"condition":"USER_RAISED_EXCEPTION"})
                     } else if message.contains("[CAST_INVALID_INPUT]")
                         || message.contains("Cannot cast string 'bad' to value of Int32 type")

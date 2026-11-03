@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use datafusion::arrow::array::Array;
+use datafusion::arrow::array::{Array, NullArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::common::{DataFusionError, Result};
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
@@ -12,6 +12,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RaiseError {
     signature: Signature,
+    user_error: bool,
 }
 
 impl Default for RaiseError {
@@ -28,17 +29,40 @@ impl RaiseError {
                 vec![DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View],
                 Volatility::Immutable,
             ),
+            user_error: false,
         }
     }
-}
 
-fn raise_from_strings<'a>(
-    mut iter: impl Iterator<Item = Option<&'a str>>,
-) -> Result<ColumnarValue> {
-    if let Some(message) = iter.find_map(|v| v) {
-        Err(DataFusionError::Execution(message.to_string()))
-    } else {
-        internal_err!("raise_error expects a single UTF-8 string argument")
+    // SQL user errors need their own condition; internal callers carry other causes.
+    pub fn new_user_error() -> Self {
+        Self {
+            user_error: true,
+            ..Self::new()
+        }
+    }
+
+    fn raise(&self, message: Option<&str>) -> Result<ColumnarValue> {
+        let message = match message {
+            Some(message) => message,
+            None if self.user_error => "null",
+            None => return internal_err!("raise_error expects a single UTF-8 string argument"),
+        };
+        Err(DataFusionError::Execution(if self.user_error {
+            format!("[USER_RAISED_EXCEPTION] {message}")
+        } else {
+            message.to_string()
+        }))
+    }
+
+    fn raise_from_strings<'a>(
+        &self,
+        mut iter: impl Iterator<Item = Option<&'a str>>,
+    ) -> Result<ColumnarValue> {
+        self.raise(if self.user_error {
+            iter.next().flatten()
+        } else {
+            iter.find_map(|value| value)
+        })
     }
 }
 
@@ -64,23 +88,28 @@ impl ScalarUDFImpl for RaiseError {
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        let ScalarFunctionArgs { args, .. } = args;
+        let ScalarFunctionArgs {
+            args, number_rows, ..
+        } = args;
         let Ok(arg) = args.one() else {
             return internal_err!("raise_error should only be called with one argument");
         };
+        if self.user_error && number_rows == 0 && arg.data_type().is_string() {
+            return Ok(ColumnarValue::Array(Arc::new(NullArray::new(0))));
+        }
         match arg {
-            ColumnarValue::Scalar(ScalarValue::Utf8(Some(message)))
-            | ColumnarValue::Scalar(ScalarValue::LargeUtf8(Some(message)))
-            | ColumnarValue::Scalar(ScalarValue::Utf8View(Some(message))) => {
-                Err(DataFusionError::Execution(message))
+            ColumnarValue::Scalar(ScalarValue::Utf8(message))
+            | ColumnarValue::Scalar(ScalarValue::LargeUtf8(message))
+            | ColumnarValue::Scalar(ScalarValue::Utf8View(message)) => {
+                self.raise(message.as_deref())
             }
             ColumnarValue::Array(array) => match array.data_type() {
-                DataType::Utf8 => raise_from_strings(as_string_array(array.as_ref())?.iter()),
+                DataType::Utf8 => self.raise_from_strings(as_string_array(array.as_ref())?.iter()),
                 DataType::LargeUtf8 => {
-                    raise_from_strings(as_large_string_array(array.as_ref())?.iter())
+                    self.raise_from_strings(as_large_string_array(array.as_ref())?.iter())
                 }
                 DataType::Utf8View => {
-                    raise_from_strings(as_string_view_array(array.as_ref())?.iter())
+                    self.raise_from_strings(as_string_view_array(array.as_ref())?.iter())
                 }
                 _ => internal_err!("raise_error expects a single UTF-8 string argument"),
             },
