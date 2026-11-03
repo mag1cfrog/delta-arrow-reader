@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::configure_spark_sql;
+use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -145,6 +145,61 @@ async fn case_result_types_and_analyzer_scan_match_spark() -> TestResult {
         }
     }
     assert_eq!(comparisons, 24);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn case_common_types_and_internal_case_boundaries_match_spark() -> TestResult {
+    use datafusion::physical_plan::collect;
+    let records = include_str!("fixtures/case-result-nullability-boundaries-spark.jsonl")
+        .lines().map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+    assert_eq!(records.len() - 1, 6);
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(configure_spark_sql(
+            SessionStateBuilder::new().with_default_features().with_config(
+                SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
+            ),
+        ).build());
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            comparisons += 1;
+            let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions { ansi_mode:case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone:"UTC".into(), ..SparkSqlOptions::default() }).await?;
+            let public = spark_results::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?;
+            let physical = query.create_physical_plan(&session).await?;
+            let physical_schema = physical.schema();
+            let executed = spark_results::capture_schema(physical_schema.fields(), None)?;
+            let mut rows = Vec::new();
+            for batch in collect(physical, session.task_ctx()).await? {
+                spark_results::validate_batch(physical_schema.as_ref(), &batch)?;
+                for row in 0..batch.num_rows() {
+                    rows.push(batch.columns().iter().map(|column| spark_results::encode_value(column.as_ref(), row))
+                        .collect::<TestResult<Vec<_>>>()?);
+                }
+            }
+            rows.sort_by_key(|row| json!(row).to_string());
+            let public_matches = public == case["expected"]["schema"];
+            let physical_matches = executed == case["schema_stages"]["executed"];
+            let rows_matches = json!(rows) == case["expected"]["rows"];
+            eprintln!("CASE_721_BOUNDARY_OBSERVATION {}", json!({
+                "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
+                "public_schema":public, "physical_schema":executed, "rows":rows,
+                "public_matches":public_matches, "physical_matches":physical_matches, "rows_matches":rows_matches,
+            }));
+            if !public_matches || !physical_matches || !rows_matches {
+                differences.push(format!("{} ANSI={} batch={batch_size}: public={public_matches} physical={physical_matches} rows={rows_matches}; expected {} executed={}, got public={public} executed={executed} rows={rows:?}",
+                    case["id"], case["ansi"], case["expected"], case["schema_stages"]["executed"]));
+            }
+        }
+    }
+    assert_eq!(comparisons, 12);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
