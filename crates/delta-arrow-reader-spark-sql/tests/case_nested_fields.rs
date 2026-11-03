@@ -19,7 +19,7 @@ mod spark_results;
 use spark_results::TestResult;
 
 fn references() -> TestResult<Vec<Value>> {
-    let records = include_str!("fixtures/case-nested-result-fields-spark.jsonl")
+    let mut records = include_str!("fixtures/case-nested-result-fields-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
@@ -29,6 +29,15 @@ fn references() -> TestResult<Vec<Value>> {
         "32f7299601108917fb01920a54e084595b7b3bf8"
     );
     assert_eq!(records.len() - 1, 74);
+    let pruning = include_str!("fixtures/case-nested-pruning-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(pruning.len() - 1, 22);
+    for key in ["spark_version", "spark_revision", "inputs"] {
+        assert_eq!(pruning[0][key], records[0][key]);
+    }
+    records.extend(pruning.into_iter().skip(1));
     let mut identities = std::collections::BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -101,7 +110,7 @@ async fn case_nested_result_fields_match_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(comparisons, 148);
+    assert_eq!(comparisons, 192);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
