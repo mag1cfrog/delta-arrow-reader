@@ -1688,6 +1688,20 @@ impl Prepare {
             .collect::<Result<Vec<_>>>()?;
         let input = inputs.first().and_then(|p| p.as_ref());
         let batch = match plan {
+            // Spark's one-row relation needs the same early cast checks as local VALUES.
+            LogicalPlan::EmptyRelation(empty)
+                if empty.produce_one_row
+                    && empty.schema.fields().is_empty()
+                    && self.props.config_options.as_ref().is_some_and(|options| {
+                        options.extensions.get::<SparkSqlExpressionSemantics>().is_some()
+                    }) =>
+            {
+                RecordBatch::try_new_with_options(
+                    Arc::clone(empty.schema.inner()),
+                    vec![],
+                    &RecordBatchOptions::new().with_row_count(Some(1)),
+                )?
+            }
             LogicalPlan::Values(values) if !values.values.is_empty() => {
                 if !values.values.iter().flatten().try_fold(true, |valid, e| {
                     Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, false)?)

@@ -327,6 +327,10 @@ NULL keeps the original merged nested type. The
 typed Boolean and DATE arrays, structs, nested arrays, discarded branches and
 native controls. IF keeps its existing unmarked CASE path. This is another
 partial #721 slice; broader conditional coercion remains separate.
+The query-local preparation rule reconstructs an empty-schema, one-row Spark
+relation for its existing local cast checks. Required literal WHEN conversions
+therefore retain their planning-error phase. Native queries and zero-row
+relations keep their existing preparation paths.
 
 Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
