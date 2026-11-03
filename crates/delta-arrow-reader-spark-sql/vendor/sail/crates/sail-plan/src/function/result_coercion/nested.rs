@@ -57,6 +57,13 @@ pub(crate) fn is_nested_result_type(data_type: &DataType) -> bool {
     list_field(data_type).is_some() || matches!(data_type, DataType::Struct(_))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+// Both callers align fields by position; conditionals also require matching names.
+pub(super) enum StructFieldNames {
+    RequireMatching,
+    AllowPositionalRename,
+}
+
 fn has_string_type(data_type: &DataType) -> bool {
     is_string_type(data_type)
         || list_field(data_type).is_some_and(|field| has_string_type(field.data_type()))
@@ -69,6 +76,10 @@ fn cast_adds_nulls(source: &DataType, target: &DataType) -> bool {
         target != &DataType::Binary
     } else if let DataType::Decimal128(precision, scale) = target {
         decimal_cast_can_overflow(source, *precision, *scale)
+    } else if matches!((source, target),
+        (DataType::Date32 | DataType::Date64, DataType::Timestamp(_, None)))
+    {
+        true
     } else {
         matches!(source, DataType::Float32 | DataType::Float64) && target.is_signed_integer()
     }
@@ -80,6 +91,7 @@ fn common_type(
     left: &DataType,
     right: &DataType,
     context: &FunctionContextInput<'_>,
+    struct_field_names: StructFieldNames,
 ) -> PlanResult<Option<DataType>> {
     if left == right || right == &DataType::Null {
         return Ok(Some(left.clone()));
@@ -88,7 +100,7 @@ fn common_type(
         return Ok(Some(right.clone()));
     }
     if let (Some(left_field), Some(right_field)) = (list_field(left), list_field(right)) {
-        let Some(target) = common_type(left_field.data_type(), right_field.data_type(), context)?
+        let Some(target) = common_type(left_field.data_type(), right_field.data_type(), context, struct_field_names)?
         else {
             return Ok(None);
         };
@@ -111,10 +123,11 @@ fn common_type(
         }
         let mut fields = Vec::with_capacity(left.len());
         for (left, right) in left.iter().zip(right) {
-            if !left.name().eq_ignore_ascii_case(right.name()) {
+            if struct_field_names == StructFieldNames::RequireMatching
+                && !left.name().eq_ignore_ascii_case(right.name()) {
                 return Ok(None);
             }
-            let Some(target) = common_type(left.data_type(), right.data_type(), context)? else {
+            let Some(target) = common_type(left.data_type(), right.data_type(), context, struct_field_names)? else {
                 return Ok(None);
             };
             let nullable = left.is_nullable()
@@ -162,6 +175,7 @@ pub(super) fn coerce_nested_result_values(
     arguments: Vec<expr::Expr>,
     data_types: &[DataType],
     context: &FunctionContextInput<'_>,
+    struct_field_names: StructFieldNames,
 ) -> PlanResult<Vec<expr::Expr>> {
     let mut types = data_types.iter().collect::<Vec<_>>();
     if !context.plan_config.ansi_mode {
@@ -170,7 +184,7 @@ pub(super) fn coerce_nested_result_values(
     }
     let mut target = DataType::Null;
     for source in types {
-        target = common_type(&target, source, context).map_err(|cause| {
+        target = common_type(&target, source, context, struct_field_names).map_err(|cause| {
             PlanError::invalid(format!(
                 "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] Incompatible nested result types: {data_types:?}: {cause}"
             ))
@@ -327,8 +341,9 @@ impl ScalarUDFImpl for NestedResultCast {
 mod tests {
     use super::*;
 
-    use arrow::array::{Int64Array, StringArray};
+    use arrow::array::StringArray;
     use arrow::buffer::OffsetBuffer;
+    use arrow::datatypes::Int64Type;
     use datafusion::prelude::SessionContext;
     use datafusion_common::config::ConfigOptions;
 
@@ -349,14 +364,23 @@ mod tests {
         let field = Arc::new(Field::new("x", DataType::Utf8, true)
             .with_metadata([("source".into(), "child".into())].into()));
         let nulls = Some(NullBuffer::from(vec![true, true, false, true, true, true]));
-        let inputs: [ArrayRef; 2] = [
+        let mut inputs: Vec<ArrayRef> = vec![
             Arc::new(StructArray::try_new(vec![field.clone()].into(), vec![strings.clone()], nulls.clone())?),
-            Arc::new(ListArray::try_new(field, OffsetBuffer::from_lengths([1; 6]), strings, nulls)?),
+            Arc::new(ListArray::try_new(field.clone(), OffsetBuffer::from_lengths([1; 6]), strings, nulls)?),
         ];
+        for storage in [
+            DataType::LargeList(field.clone()),
+            DataType::FixedSizeList(field.clone(), 1),
+            DataType::ListView(field.clone()),
+            DataType::LargeListView(field),
+        ] {
+            inputs.push(arrow::compute::cast(inputs[1].as_ref(), &storage)?);
+        }
         for input in inputs {
             let target_field = Arc::new(Field::new("x", DataType::Int64, true));
             let target = match input.data_type() {
                 DataType::Struct(_) => DataType::Struct(vec![target_field].into()),
+                DataType::LargeList(_) | DataType::LargeListView(_) => DataType::LargeList(target_field),
                 _ => DataType::List(target_field),
             };
             let conversion = NestedResultCast {
@@ -379,6 +403,7 @@ mod tests {
                 result.to_data().validate_full()?;
                 let values = match result.data_type() {
                     DataType::Struct(_) => result.as_struct().column(0).clone(),
+                    DataType::LargeList(_) => result.as_list::<i64>().values().clone(),
                     _ => result.as_list::<i32>().values().clone(),
                 };
                 let expected = if len == 0 {
@@ -388,20 +413,34 @@ mod tests {
                 } else {
                     vec![Some(2), None, Some(3)]
                 };
-                assert_eq!(values.as_any().downcast_ref::<Int64Array>().unwrap().iter().collect::<Vec<_>>(), expected);
+                assert_eq!(values.as_primitive::<Int64Type>().iter().collect::<Vec<_>>(), expected);
             }
-            let scalar = ScalarValue::try_from_array(&input, 1)?;
-            let field = Arc::new(Field::new("input", input.data_type().clone(), true));
-            let result = conversion.invoke_with_args(ScalarFunctionArgs {
-                args: vec![ColumnarValue::Scalar(scalar)],
-                arg_fields: vec![field],
-                number_rows: 1,
-                return_field: Arc::new(Field::new("result", target.clone(), true)),
-                config_options: Arc::new(ConfigOptions::default()),
-            })?;
-            let ColumnarValue::Scalar(result) = result else { panic!("nested scalar became an array") };
-            assert_eq!(result.data_type(), target);
-            result.to_array()?.to_data().validate_full()?;
+            for row in [1, 2] {
+                let scalar = ScalarValue::try_from_array(&input, row)?;
+                let field = Arc::new(Field::new("input", input.data_type().clone(), true));
+                let result = conversion.invoke_with_args(ScalarFunctionArgs {
+                    args: vec![ColumnarValue::Scalar(scalar)],
+                    arg_fields: vec![field],
+                    number_rows: 1,
+                    return_field: Arc::new(Field::new("result", target.clone(), true)),
+                    config_options: Arc::new(ConfigOptions::default()),
+                })?;
+                let ColumnarValue::Scalar(result) = result else {
+                    return Err(PlanError::internal("nested scalar became an array"));
+                };
+                assert_eq!(result.data_type(), target);
+                assert_eq!(result.is_null(), row == 2);
+                let result = result.to_array()?;
+                result.to_data().validate_full()?;
+                if row == 1 {
+                    let values = match result.data_type() {
+                        DataType::Struct(_) => result.as_struct().column(0).clone(),
+                        DataType::LargeList(_) => result.as_list::<i64>().value(0),
+                        _ => result.as_list::<i32>().value(0),
+                    };
+                    assert_eq!(ScalarValue::try_from_array(&values, 0)?, ScalarValue::Int64(Some(2)));
+                }
+            }
         }
         Ok(())
     }

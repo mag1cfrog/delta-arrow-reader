@@ -17,7 +17,7 @@ use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{FunctionContextInput, SparkComparisonFloat};
-use crate::function::result_coercion::coerce_result_values;
+use crate::function::result_coercion::coerce_set_operation_result_values;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -171,7 +171,7 @@ impl PlanResolver<'_> {
                 .into_iter()
                 .map(|input| Expr::from(input.schema().qualified_field(index)))
                 .collect();
-            let columns = coerce_result_values(columns, &context)?;
+            let columns = coerce_set_operation_result_values(columns, &context)?;
             let types = columns
                 .iter()
                 .map(|column| column.get_type(&schema))
