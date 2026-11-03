@@ -2116,3 +2116,55 @@ dictionary storage.
 python tests/fixtures/capture_struct_field_resolution_spark.py /tmp/struct-field-resolution-spark.jsonl
 cargo test --locked --workspace --test struct_field_resolution --test struct_dictionary_fields
 ```
+
+## NULL-base extraction
+
+`null-base-extraction-815-spark.jsonl` retains all 130 independent observations
+from the pinned Spark 4.2.0 build in UTC and both ANSI modes. Its SHA256 is
+`26005c02480656adabda46e6568993cd3a736e88910deba3210e870a459197e6`.
+There are 102 successful records and 28 planning rejections. The capture preserves
+the complete input declarations/rows, public output declarations/rows, separate
+analyzed/optimized/executed schemas and exact failure stage/cause information.
+`null-base-extraction-815-provenance.json` pins the capture source, imported
+encoder, original fixture and Spark revision.
+
+The 65 SQL statements per ANSI mode distinguish ordinary NULL columns, computed
+NULL expressions, nested NULL fields, bracket/dotted lambda syntax and CASE/CAST
+roots. Populated, NULL-only and empty providers retain actual STRUCT/array NULLs
+and metadata. All four unaliased forms preserve their complete names and metadata.
+The test replays every observation at batch sizes 1 and 32 using the shared full
+public-field, physical-field, row and returned-batch validators.
+
+The observed Spark rules differ by resolution path. Dotted `x.missing` and
+`x.n.missing` reject for a NULL-typed lambda base. `x['missing']`, CASE/CAST bases,
+and ordinary NULL expressions inside a typed lambda succeed. A NULL-typed
+RAISE_ERROR base also produces NULL, including a live CASE branch and a lambda
+body; extraction suppresses evaluation of that base. These outcomes supersede the
+capture plan's earlier assumptions about a shared NULL-lambda rejection and
+required RAISE_ERROR evaluation.
+
+The pinned Spark source explains the distinction:
+[ExtractValue.applyOrNull](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/complexTypeExtractors.scala#L63)
+replaces a NULL-typed base with a NULL literal.
+[ColumnResolutionHelper](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/ColumnResolutionHelper.scala#L225)
+uses that path for computed/bracket extraction and keeps its generated name.
+[ResolveLambdaVariables](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/higherOrderFunctions.scala#L77)
+resolves dotted lambda tails through the strict extractor instead. An ordinary
+column uses the NULL-tolerant path in
+[AttributeSeq](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/package.scala#L405).
+
+`struct-extraction-boundaries-815-spark.jsonl` copies the original header and all
+four ordinary NULL record lines unchanged. The partition assertion preserves
+the original ten #803 records, four #815 records and two pending #816 Map
+records. The full original capture and existing #803 partition remain intact.
+Native SQL controls compare complete logical/physical declarations, returned
+batches and failure causes before Spark configuration and before/after a Spark
+NULL extraction. These checks are a test-first acceptance suite; adding the
+references alone does not establish compatibility.
+
+Recollect to a fresh path using the existing pinned PySpark 4.2.0/Java 21 setup:
+
+```sh
+python tests/fixtures/capture_null_base_extraction_spark.py /tmp/null-base-extraction-815-spark.jsonl
+cargo test --locked --workspace --test null_base_extraction
+```
