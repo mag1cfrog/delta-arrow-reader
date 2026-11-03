@@ -359,3 +359,32 @@ fn constructor_admission_preserves_nested_duplicate_positions() -> TestResult {
     assert!(try_type_union_resolution_with_struct(&[outer_left, outer_right]).is_err());
     Ok(())
 }
+
+#[test]
+fn positional_struct_rename_preserves_input_parent_nullability() -> TestResult {
+    use datafusion::logical_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
+    use sail_function::scalar::spark_struct_rename::SparkStructRename;
+
+    let source_fields: Fields = vec![Field::new("X", DataType::Int32, true)
+        .with_metadata([("source".to_owned(), "value".to_owned())].into())].into();
+    let target_fields: Fields = vec![source_fields[0].as_ref().clone().with_name("x")].into();
+    for nullable in [false, true] {
+        let source = StructArray::try_new(source_fields.clone(),
+            vec![Arc::new(Int32Array::from(vec![11,22]))],
+            nullable.then(|| NullBuffer::from(vec![true,false])))?;
+        let arg_field = Arc::new(Field::new("input", source.data_type().clone(), nullable));
+        let rename = SparkStructRename::new(DataType::Struct(target_fields.clone()));
+        let return_field = rename.return_field_from_args(ReturnFieldArgs {
+            arg_fields: std::slice::from_ref(&arg_field), scalar_arguments: &[],
+        })?;
+        assert_eq!(return_field.is_nullable(), nullable);
+        let expected = StructArray::try_new(target_fields.clone(), source.columns().to_vec(), source.nulls().cloned())?;
+        let actual = rename.invoke_with_args(ScalarFunctionArgs {
+            args: vec![ColumnarValue::Array(Arc::new(source))], arg_fields: vec![arg_field],
+            number_rows: 2, return_field, config_options: Default::default(),
+        })?.into_array(2)?;
+        actual.to_data().validate_full()?;
+        assert_eq!(actual.to_data(), expected.to_data());
+    }
+    Ok(())
+}

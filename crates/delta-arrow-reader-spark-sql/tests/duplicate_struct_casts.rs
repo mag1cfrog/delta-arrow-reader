@@ -63,6 +63,17 @@ async fn array_struct_admission_matches_spark() -> TestResult {
         std::env::var_os("DAR_ARRAY_STRUCT_ADMISSION_OUTPUT"), 20).await
 }
 
+#[tokio::test]
+async fn array_struct_constructor_case_matches_spark() -> TestResult {
+    let reference = std::env::var_os("DAR_ARRAY_STRUCT_CONSTRUCTOR_CASE_REFERENCE").map_or_else(
+        || std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/array-struct-constructor-case-spark.jsonl"),
+        std::path::PathBuf::from,
+    );
+    constructor_cases_match_spark(reference,
+        std::env::var_os("DAR_ARRAY_STRUCT_CONSTRUCTOR_CASE_OUTPUT"), 8).await
+}
+
 async fn constructor_cases_match_spark(
     reference: std::path::PathBuf,
     output_path: Option<std::ffi::OsString>,
