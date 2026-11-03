@@ -192,18 +192,29 @@ mod tests {
 
     #[test]
     fn constructed_map_refines_only_outer_nullability() -> Result<()> {
-        let value_type = DataType::Struct(vec![
-            Field::new("item", DataType::Int32, true)
-                .with_metadata([("source".into(), "nullable".into())].into()),
-            Field::new("item", DataType::Int64, false),
-        ].into());
+        let value_type = DataType::Struct(
+            vec![
+                Field::new("item", DataType::Int32, true)
+                    .with_metadata([("source".into(), "nullable".into())].into()),
+                Field::new("item", DataType::Int64, false),
+            ]
+            .into(),
+        );
         let default = SparkMapFromArrays::new(false);
         let constructed = SparkMapFromArrays::new(false).with_non_nullable_result();
         assert_ne!(default, constructed);
         for (keys_nullable, values_nullable) in [(false, false), (true, false), (false, true)] {
             let fields = [
-                Arc::new(Field::new("keys", DataType::new_list(DataType::Utf8, false), keys_nullable)),
-                Arc::new(Field::new("values", DataType::new_list(value_type.clone(), true), values_nullable)),
+                Arc::new(Field::new(
+                    "keys",
+                    DataType::new_list(DataType::Utf8, false),
+                    keys_nullable,
+                )),
+                Arc::new(Field::new(
+                    "values",
+                    DataType::new_list(value_type.clone(), true),
+                    values_nullable,
+                )),
             ];
             let field = default.return_field_from_args(ReturnFieldArgs {
                 arg_fields: &fields,
@@ -214,7 +225,10 @@ mod tests {
                 arg_fields: &fields,
                 scalar_arguments: &[],
             })?;
-            assert_eq!(result.as_ref(), &field.as_ref().clone().with_nullable(false));
+            assert_eq!(
+                result.as_ref(),
+                &field.as_ref().clone().with_nullable(false)
+            );
             let DataType::Map(entries, _) = result.data_type() else {
                 panic!("expected Map");
             };

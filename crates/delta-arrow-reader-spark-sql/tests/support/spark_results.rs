@@ -348,8 +348,7 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
                     .map(|index| {
                         let key = encode_value(entries.column(0).as_ref(), index)?;
                         let value = encode_value(entries.column(1).as_ref(), index)?;
-                        if key.is_null()
-                            || (value.is_null() && !entries.fields()[1].is_nullable())
+                        if key.is_null() || (value.is_null() && !entries.fields()[1].is_nullable())
                         {
                             return Err("nonnullable MAP key/value returned NULL".into());
                         }

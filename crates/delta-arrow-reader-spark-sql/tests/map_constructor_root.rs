@@ -25,17 +25,28 @@ fn records(source: &str, count: usize) -> TestResult<Vec<Value>> {
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records.len() - 1, count);
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert!(records[0]["spark_build"].as_str().ok_or("missing build")?
-        .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8"));
+    assert!(
+        records[0]["spark_build"]
+            .as_str()
+            .ok_or("missing build")?
+            .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
+    );
     Ok(records)
 }
 
 fn session(batch_size: usize) -> SessionContext {
-    SessionContext::new_with_state(configure_spark_sql(
-        SessionStateBuilder::new().with_default_features().with_config(
-            SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
-        ),
-    ).build())
+    SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(batch_size)
+                        .with_target_partitions(2),
+                ),
+        )
+        .build(),
+    )
 }
 
 #[tokio::test]
@@ -47,11 +58,20 @@ async fn map_constructor_fields_and_rows_match_recorded_core_cases() -> TestResu
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         let mut checked = 0;
         for case in &records[1..] {
-            if !matches!(case["id"].as_str(), Some(
-                "direct_nullable" | "direct_required" | "empty_map" | "array_element"
-                | "struct_child" | "map_value" | "lambda_result"
-                | "from_arrays_control" | "from_entries_control"
-            )) {
+            if !matches!(
+                case["id"].as_str(),
+                Some(
+                    "direct_nullable"
+                        | "direct_required"
+                        | "empty_map"
+                        | "array_element"
+                        | "struct_child"
+                        | "map_value"
+                        | "lambda_result"
+                        | "from_arrays_control"
+                        | "from_entries_control"
+                )
+            ) {
                 continue;
             }
             let stages = json!({"sql":case["sql"],"ansi":case["ansi"],
@@ -61,8 +81,10 @@ async fn map_constructor_fields_and_rows_match_recorded_core_cases() -> TestResu
                     "executed":case["executed_schema_after_collect"]}});
             let actual = compare_exact_spark_query_stages(&session, &stages).await?;
             if actual["matches"] != true {
-                differences.push(format!("{} input={} ANSI={} batch={batch_size}: {actual}",
-                    case["id"], case["input"], case["ansi"]));
+                differences.push(format!(
+                    "{} input={} ANSI={} batch={batch_size}: {actual}",
+                    case["id"], case["input"], case["ansi"]
+                ));
             }
             checked += 1;
         }
@@ -103,7 +125,10 @@ async fn original_folded_map_lambda_and_null_element_match_spark() -> TestResult
         let session = session(batch_size);
         for case in &records[1..] {
             let actual = compare_exact_spark_query_stages(&session, case).await?;
-            assert_eq!(actual["matches"], true, "batch={batch_size}: {case}: {actual}");
+            assert_eq!(
+                actual["matches"], true,
+                "batch={batch_size}: {case}: {actual}"
+            );
         }
     }
     Ok(())
@@ -120,44 +145,88 @@ async fn map_constructor_preserves_null_cast_native_and_cardinality_guards() -> 
                 "SELECT MAP_FROM_ENTRIES(CAST(NULL AS ARRAY<STRUCT<key:STRING,value:INT>>)) AS r",
                 "SELECT (SELECT MAP('key',v) FROM (VALUES (1)) q(v) WHERE false) AS r",
             ] {
-                let actual = capture_spark_query_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+                let actual =
+                    capture_spark_query_observation(&session, &json!({"sql":sql,"ansi":ansi}))
+                        .await?;
                 assert_eq!(actual["result"]["rows"], json!([[null]]), "{sql}");
-                assert_eq!(actual["result"]["schema"]["fields"][0]["nullable"], true, "{sql}");
+                assert_eq!(
+                    actual["result"]["schema"]["fields"][0]["nullable"], true,
+                    "{sql}"
+                );
             }
-            let cast = capture_spark_query_observation(&session, &json!({"ansi":ansi,
-                "sql":"SELECT CAST(MAP('k',1) AS MAP<STRING,INT>) AS r"})).await?;
-            assert_eq!(cast["result"]["schema"]["fields"][0]["type"]["valueContainsNull"], true);
-            assert_eq!(cast["result"]["rows"], json!([[[["k","1"]]]]));
-            let error = capture_spark_query_observation(&session, &json!({"ansi":ansi,
-                "sql":"SELECT (SELECT MAP('key',v) FROM (VALUES (1),(2)) q(v)) AS r"}))
-                .await.expect_err("multirow scalar must fail");
-            assert!(matches!(error.downcast_ref::<DataFusionError>().map(DataFusionError::find_root),
+            let cast = capture_spark_query_observation(
+                &session,
+                &json!({"ansi":ansi,
+                "sql":"SELECT CAST(MAP('k',1) AS MAP<STRING,INT>) AS r"}),
+            )
+            .await?;
+            assert_eq!(
+                cast["result"]["schema"]["fields"][0]["type"]["valueContainsNull"],
+                true
+            );
+            assert_eq!(cast["result"]["rows"], json!([[[["k", "1"]]]]));
+            let error = capture_spark_query_observation(
+                &session,
+                &json!({"ansi":ansi,
+                "sql":"SELECT (SELECT MAP('key',v) FROM (VALUES (1),(2)) q(v)) AS r"}),
+            )
+            .await
+            .expect_err("multirow scalar must fail");
+            assert!(
+                matches!(error.downcast_ref::<DataFusionError>().map(DataFusionError::find_root),
                 Some(DataFusionError::Execution(message)) if message.contains("Scalar subquery returned more than one row")),
-                "{error}");
-            let error = capture_spark_query_observation(&session, &json!({"ansi":ansi,
-                "sql":"SELECT MAP('k',1,'k',2) AS r"}))
-                .await.expect_err("duplicate keys must fail");
-            assert!(matches!(error.downcast_ref::<DataFusionError>().map(DataFusionError::find_root),
+                "{error}"
+            );
+            let error = capture_spark_query_observation(
+                &session,
+                &json!({"ansi":ansi,
+                "sql":"SELECT MAP('k',1,'k',2) AS r"}),
+            )
+            .await
+            .expect_err("duplicate keys must fail");
+            assert!(
+                matches!(error.downcast_ref::<DataFusionError>().map(DataFusionError::find_root),
                 Some(DataFusionError::Execution(message)) if message.contains("[DUPLICATED_MAP_KEY]")),
-                "{error}");
+                "{error}"
+            );
         }
         for (sql, cause) in [
-            ("SELECT MAP('a',1,2,2) AS r", "Cannot cast string 'a' to value of Int32 type"),
-            ("SELECT MAP(1,'invalid',2,2) AS r", "Cannot cast string 'invalid' to value of Int32 type"),
+            (
+                "SELECT MAP('a',1,2,2) AS r",
+                "Cannot cast string 'a' to value of Int32 type",
+            ),
+            (
+                "SELECT MAP(1,'invalid',2,2) AS r",
+                "Cannot cast string 'invalid' to value of Int32 type",
+            ),
         ] {
-            let query = plan_query(&session, sql, &SparkSqlOptions {
-                ansi_mode: true, ..SparkSqlOptions::default()
-            }).await?;
-            let error = query.create_physical_plan(&session).await.expect_err("required numeric cast");
+            let query = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode: true,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let error = query
+                .create_physical_plan(&session)
+                .await
+                .expect_err("required numeric cast");
             let DataFusionError::ArrowError(error, _) = error.find_root() else {
                 return Err(format!("unexpected numeric cast failure: {error}").into());
             };
-            assert!(matches!(error.as_ref(), arrow::error::ArrowError::CastError(message) if message == cause));
+            assert!(
+                matches!(error.as_ref(), arrow::error::ArrowError::CastError(message) if message == cause)
+            );
         }
         for sql in ["SELECT make_array(1,NULL) AS r", "SELECT make_array() AS r"] {
             let expected = capture_native_query_observation(&native, sql).await?;
             assert!(expected["error"].is_null(), "{expected}");
-            assert_eq!(capture_native_query_observation(&session, sql).await?, expected);
+            assert_eq!(
+                capture_native_query_observation(&session, sql).await?,
+                expected
+            );
         }
     }
     Ok(())
