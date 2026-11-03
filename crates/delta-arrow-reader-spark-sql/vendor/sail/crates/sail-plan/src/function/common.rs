@@ -2333,6 +2333,20 @@ fn metadata_annotations_derive_fields_before_physical_parent_planning()
     let expression = create_physical_expr(&annotated, &logical_schema, &ExecutionProps::new())?;
     let logical_field = expression.return_field(logical_schema.inner())?;
     assert!(logical_field.is_nullable());
+    let incompatible_children = vec![Arc::new(Field::new("renamed", DataType::Int32, false))];
+    let incompatible_schema = Arc::new(Schema::new(vec![Field::new(
+        "k",
+        DataType::Struct(incompatible_children.clone().into()),
+        false,
+    )]));
+    let incompatible_batch = RecordBatch::try_new(
+        Arc::clone(&incompatible_schema),
+        vec![Arc::new(StructArray::try_new(
+            incompatible_children.into(),
+            vec![Arc::new(Int32Array::from(vec![7]))],
+            None,
+        )?)],
+    )?;
     for nullable in [false, true] {
         let actual_schema = Arc::new(Schema::new(vec![Field::new(
             "k",
@@ -2350,6 +2364,20 @@ fn metadata_annotations_derive_fields_before_physical_parent_planning()
             nullable.then(|| vec![false].into()),
         )?);
         let batch = RecordBatch::try_new(Arc::clone(&actual_schema), vec![Arc::clone(&input)])?;
+        let returned = expression.evaluate(&batch)?.into_array(1)?;
+        assert_eq!(returned.to_data(), input.to_data());
+        for error in [
+            expression.return_field(&incompatible_schema).err(),
+            expression.evaluate(&incompatible_batch).err(),
+        ] {
+            let error = error.ok_or_else(|| {
+                datafusion_common::internal_datafusion_err!(
+                    "incompatible nested declaration was accepted"
+                )
+            })?;
+            assert!(error.to_string().contains("result metadata declaration cannot change"));
+        }
+        assert_eq!(expression.return_field(&actual_schema)?.as_ref(), &expected);
         let returned = expression.evaluate(&batch)?.into_array(1)?;
         assert_eq!(returned.to_data(), input.to_data());
         let projection = Arc::new(ProjectionExec::try_new(
@@ -2410,6 +2438,106 @@ fn native_function_fields_keep_their_planned_declaration() -> datafusion_common:
     assert_eq!(expression.return_field(&actual_schema)?, planned);
     assert!(expression.nullable(&actual_schema)?);
     assert_eq!(expression.data_type(&actual_schema)?, DataType::Int32);
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn invocation_consumes_physical_or_default_cached_return_fields() -> datafusion_common::Result<()> {
+    use datafusion::arrow::array::{Array, ArrayRef, Int32Array};
+    use datafusion::arrow::datatypes::Schema;
+    use datafusion::arrow::record_batch::RecordBatch;
+    use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr, expressions::Column};
+
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    struct DefaultCachedFieldConsumer {
+        expected: FieldRef,
+    }
+
+    impl ScalarUDFImpl for DefaultCachedFieldConsumer {
+        fn name(&self) -> &str {
+            "return_field_consumer"
+        }
+
+        fn signature(&self) -> &Signature {
+            static SIGNATURE: std::sync::LazyLock<Signature> =
+                std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+            &SIGNATURE
+        }
+
+        fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+            Ok(args[0].clone())
+        }
+
+        fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+            Ok(Arc::clone(&args.arg_fields[0]))
+        }
+
+        fn invoke_with_args(
+            &self,
+            args: ScalarFunctionArgs,
+        ) -> datafusion_common::Result<ColumnarValue> {
+            assert_eq!(args.return_field, self.expected);
+            let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+            Ok(value)
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    struct PhysicalFieldConsumer(DefaultCachedFieldConsumer);
+
+    impl ScalarUDFImpl for PhysicalFieldConsumer {
+        fn name(&self) -> &str {
+            self.0.name()
+        }
+
+        fn signature(&self) -> &Signature {
+            self.0.signature()
+        }
+
+        fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+            self.0.return_type(args)
+        }
+
+        fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+            self.0.return_field_from_args(args)
+        }
+
+        fn return_field_uses_physical_input_schema(&self) -> bool {
+            true
+        }
+
+        fn invoke_with_args(
+            &self,
+            args: ScalarFunctionArgs,
+        ) -> datafusion_common::Result<ColumnarValue> {
+            self.0.invoke_with_args(args)
+        }
+    }
+
+    let planned = Arc::new(Field::new("k", DataType::Int32, true));
+    let refined = Arc::new(Field::new("k", DataType::Int32, false));
+    let logical_schema = Schema::new(vec![Arc::clone(&planned)]);
+    let values: ArrayRef = Arc::new(Int32Array::from(vec![7]));
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Arc::clone(&refined)])),
+        vec![Arc::clone(&values)],
+    )?;
+    for function in [
+        ScalarUDF::from(DefaultCachedFieldConsumer { expected: planned }),
+        ScalarUDF::from(PhysicalFieldConsumer(DefaultCachedFieldConsumer {
+            expected: refined,
+        })),
+    ] {
+        let expression = ScalarFunctionExpr::try_new(
+            Arc::new(function),
+            vec![Arc::new(Column::new("k", 0))],
+            &logical_schema,
+            Arc::new(Default::default()),
+        )?;
+        let returned = expression.evaluate(&batch)?.into_array(1)?;
+        assert_eq!(returned.to_data(), values.to_data());
+    }
     Ok(())
 }
 
