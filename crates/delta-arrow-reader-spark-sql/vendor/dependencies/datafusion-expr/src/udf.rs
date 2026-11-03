@@ -418,9 +418,10 @@ pub struct ScalarFunctionArgs {
     pub arg_fields: Vec<FieldRef>,
     /// The number of rows in record batch being evaluated
     pub number_rows: usize,
-    /// The return field of the scalar function returned (from `return_type`
-    /// or `return_field_from_args`) when creating the physical expression
-    /// from the logical expression
+    /// The return field computed by `return_type` or `return_field_from_args`.
+    /// Functions opting into [`ScalarUDFImpl::return_field_uses_physical_input_schema`]
+    /// derive it from the current physical argument fields; others retain the
+    /// field from physical expression construction.
     pub return_field: FieldRef,
     /// The config options at execution time
     pub config_options: Arc<ConfigOptions>,
@@ -684,6 +685,17 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
             .collect::<Vec<_>>();
         let return_type = self.return_type(&data_types)?;
         Ok(Arc::new(Field::new(self.name(), return_type, true)))
+    }
+
+    /// Whether physical expressions derive their return field from the current
+    /// input schema through [`Self::return_field_from_args`].
+    ///
+    /// The default retains the field computed during expression construction.
+    /// Metadata annotations can opt in when physical arguments refine logical
+    /// nullability or nested fields. Derivation uses each argument's complete
+    /// physical field without evaluating its value.
+    fn return_field_uses_physical_input_schema(&self) -> bool {
+        false
     }
 
     #[deprecated(
@@ -1114,6 +1126,10 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
         self.inner.return_field_from_args(args)
+    }
+
+    fn return_field_uses_physical_input_schema(&self) -> bool {
+        self.inner.return_field_uses_physical_input_schema()
     }
 
     fn is_nullable(&self, args: &[Expr], schema: &dyn ExprSchema) -> bool {

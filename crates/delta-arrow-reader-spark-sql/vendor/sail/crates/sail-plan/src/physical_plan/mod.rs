@@ -4,15 +4,12 @@ use std::{borrow::Cow, sync::Arc};
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::execution::context::QueryPlanner;
-use datafusion::physical_expr::{
-    LexOrdering, OrderingRequirements, PhysicalExpr, ScalarFunctionExpr, create_physical_sort_exprs,
-};
+use datafusion::physical_expr::{LexOrdering, OrderingRequirements, create_physical_sort_exprs};
 use datafusion::physical_optimizer::output_requirements::OutputRequirementExec;
 use datafusion::physical_plan::ExecutionPlan;
-use datafusion::physical_plan::projection::{ProjectionExec, ProjectionExpr};
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
-use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{Result, internal_err};
 use datafusion_expr::{LogicalPlan, UserDefinedLogicalNode};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
@@ -21,7 +18,6 @@ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use self::monotonic_id::MonotonicIdExec;
 use self::spark_partition_id::SparkPartitionIdExec;
-use crate::function::common::SparkResultMetadata;
 
 mod monotonic_id;
 mod spark_partition_id;
@@ -56,53 +52,9 @@ impl QueryPlanner for SparkQueryPlanner {
             }
             Ok(TreeNodeRecursion::Continue)
         })?;
-        let physical =
-            DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
-                .create_physical_plan(logical_plan, &state)
-                .await?;
-        Ok(physical.transform_up(|plan| {
-            let Some(projection) = plan.downcast_ref::<ProjectionExec>() else {
-                return Ok(Transformed::no(plan));
-            };
-            let schema = projection.input().schema();
-            let mut changed = false;
-            let expressions = projection
-                .expr()
-                .iter()
-                .map(|expression| {
-                    let rewritten = expression.expr.clone().transform_up(|expression| {
-                        let Some(function) =
-                            ScalarFunctionExpr::try_downcast_func::<SparkResultMetadata>(
-                                expression.as_ref(),
-                            )
-                        else {
-                            return Ok(Transformed::no(expression));
-                        };
-                        // Logical UNION fields can be more nullable than the executable input.
-                        let rebound: Arc<dyn PhysicalExpr> = Arc::new(ScalarFunctionExpr::try_new(
-                            Arc::new(function.fun().clone()),
-                            function.args().to_vec(),
-                            schema.as_ref(),
-                            Arc::new(function.config_options().clone()),
-                        )?);
-                        Ok(if expression.eq(&rebound) {
-                            Transformed::no(expression)
-                        } else {
-                            Transformed::yes(rebound)
-                        })
-                    })?;
-                    changed |= rewritten.transformed;
-                    Ok(ProjectionExpr::new(rewritten.data, expression.alias.clone()))
-                })
-                .collect::<Result<Vec<_>>>()?;
-            // Parent projections cache their output fields when their child is replaced.
-            let rebound = ProjectionExec::try_new(expressions, projection.input().clone())?;
-            Ok(if changed || rebound.schema() != projection.schema() {
-                Transformed::yes(Arc::new(rebound) as Arc<dyn ExecutionPlan>)
-            } else {
-                Transformed::no(plan)
-            })
-        })?.data)
+        DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
+            .create_physical_plan(logical_plan, &state)
+            .await
     }
 }
 

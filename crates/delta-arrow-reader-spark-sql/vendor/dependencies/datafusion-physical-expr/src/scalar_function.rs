@@ -115,6 +115,11 @@ impl ScalarFunctionExpr {
             .iter()
             .map(|e| e.return_field(batch.schema_ref()))
             .collect::<Result<Vec<_>>>()?;
+        let return_field = if self.fun.inner().return_field_uses_physical_input_schema() {
+            Self::derive_return_field(self.fun.as_ref(), &self.args, &arg_fields)?
+        } else {
+            Arc::clone(&self.return_field)
+        };
 
         let input_empty = args.is_empty();
         let input_all_scalar = args
@@ -126,7 +131,7 @@ impl ScalarFunctionExpr {
             args,
             arg_fields,
             number_rows: batch.num_rows(),
-            return_field: Arc::clone(&self.return_field),
+            return_field,
             config_options: Arc::clone(&self.config_options),
         })?;
 
@@ -181,19 +186,7 @@ impl ScalarFunctionExpr {
             .iter()
             .map(|e| e.return_field(schema))
             .collect::<Result<Vec<_>>>()?;
-
-        // verify that input data types is consistent with function's `TypeSignature`
-        fields_with_udf(&arg_fields, fun.as_ref())?;
-
-        let arguments = args
-            .iter()
-            .map(|e| e.downcast_ref::<Literal>().map(|literal| literal.value()))
-            .collect::<Vec<_>>();
-        let ret_args = ReturnFieldArgs {
-            arg_fields: &arg_fields,
-            scalar_arguments: &arguments,
-        };
-        let return_field = fun.return_field_from_args(ret_args)?;
+        let return_field = Self::derive_return_field(fun.as_ref(), &args, &arg_fields)?;
         Ok(Self {
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
             short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
@@ -203,6 +196,25 @@ impl ScalarFunctionExpr {
             return_field,
             config_options,
         })
+    }
+
+    fn derive_return_field(
+        fun: &ScalarUDF,
+        args: &[Arc<dyn PhysicalExpr>],
+        arg_fields: &[FieldRef],
+    ) -> Result<FieldRef> {
+        // verify that input data types is consistent with function's `TypeSignature`
+        fields_with_udf(arg_fields, fun)?;
+
+        let arguments = args
+            .iter()
+            .map(|e| e.downcast_ref::<Literal>().map(|literal| literal.value()))
+            .collect::<Vec<_>>();
+        let ret_args = ReturnFieldArgs {
+            arg_fields,
+            scalar_arguments: &arguments,
+        };
+        fun.return_field_from_args(ret_args)
     }
 
     /// Get the scalar function implementation
@@ -314,12 +326,12 @@ fn sorted_config_entries(config_options: &ConfigOptions) -> Vec<ConfigEntry> {
 }
 
 impl PhysicalExpr for ScalarFunctionExpr {
-    fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
-        Ok(self.return_field.data_type().clone())
+    fn data_type(&self, input_schema: &Schema) -> Result<DataType> {
+        Ok(self.return_field(input_schema)?.data_type().clone())
     }
 
-    fn nullable(&self, _input_schema: &Schema) -> Result<bool> {
-        Ok(self.return_field.is_nullable())
+    fn nullable(&self, input_schema: &Schema) -> Result<bool> {
+        Ok(self.return_field(input_schema)?.is_nullable())
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
@@ -390,8 +402,17 @@ impl PhysicalExpr for ScalarFunctionExpr {
         self.invoke_evaluated(batch, args)
     }
 
-    fn return_field(&self, _input_schema: &Schema) -> Result<FieldRef> {
-        Ok(Arc::clone(&self.return_field))
+    fn return_field(&self, input_schema: &Schema) -> Result<FieldRef> {
+        if self.fun.inner().return_field_uses_physical_input_schema() {
+            let arg_fields = self
+                .args
+                .iter()
+                .map(|e| e.return_field(input_schema))
+                .collect::<Result<Vec<_>>>()?;
+            Self::derive_return_field(self.fun.as_ref(), &self.args, &arg_fields)
+        } else {
+            Ok(Arc::clone(&self.return_field))
+        }
     }
 
     fn children(&self) -> Vec<&Arc<dyn PhysicalExpr>> {

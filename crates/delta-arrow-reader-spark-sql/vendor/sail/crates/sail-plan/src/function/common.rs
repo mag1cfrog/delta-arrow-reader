@@ -258,7 +258,7 @@ enum ResultMetadataLifetime {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub(crate) struct SparkResultMetadata {
+struct SparkResultMetadata {
     metadata: FieldMetadata,
     lifetime: ResultMetadataLifetime,
     metadata_source_type: Option<DataType>,
@@ -304,6 +304,10 @@ impl ScalarUDFImpl for SparkResultMetadata {
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
         self.annotate_field(&args.arg_fields[0])
+    }
+
+    fn return_field_uses_physical_input_schema(&self) -> bool {
+        true
     }
 
     fn simplify(
@@ -2293,7 +2297,9 @@ fn metadata_value_analysis_uses_implementation_identity() {
 #[test]
 fn metadata_annotations_derive_fields_before_physical_parent_planning()
 -> datafusion_common::Result<()> {
+    use datafusion::arrow::array::{Array, ArrayRef, Int32Array, StructArray};
     use datafusion::arrow::datatypes::Schema;
+    use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::physical_expr::{create_physical_expr, expressions::Column};
     use datafusion::physical_plan::ExecutionPlan;
     use datafusion::physical_plan::aggregates::{AggregateExec, AggregateMode, PhysicalGroupBy};
@@ -2304,7 +2310,8 @@ fn metadata_annotations_derive_fields_before_physical_parent_planning()
     let captured_child = Field::new("x", DataType::Int32, true)
         .with_metadata(HashMap::from([("child".into(), "captured".into())]));
     let captured_type = DataType::Struct(vec![Arc::new(captured_child.clone())].into());
-    let actual_type = DataType::Struct(vec![Arc::new(captured_child.with_nullable(false))].into());
+    let actual_children = vec![Arc::new(captured_child.with_nullable(false))];
+    let actual_type = DataType::Struct(actual_children.clone().into());
     let logical_schema = DFSchema::try_from(Schema::new(vec![Field::new(
         "k",
         captured_type.clone(),
@@ -2337,6 +2344,14 @@ fn metadata_annotations_derive_fields_before_physical_parent_planning()
         assert_eq!(expression.return_field(&actual_schema)?.as_ref(), &expected);
         assert_eq!(expression.data_type(&actual_schema)?, actual_type);
         assert_eq!(expression.nullable(&actual_schema)?, nullable);
+        let input: ArrayRef = Arc::new(StructArray::try_new(
+            actual_children.clone().into(),
+            vec![Arc::new(Int32Array::from(vec![7]))],
+            nullable.then(|| vec![false].into()),
+        )?);
+        let batch = RecordBatch::try_new(Arc::clone(&actual_schema), vec![Arc::clone(&input)])?;
+        let returned = expression.evaluate(&batch)?.into_array(1)?;
+        assert_eq!(returned.to_data(), input.to_data());
         let projection = Arc::new(ProjectionExec::try_new(
             vec![(Arc::clone(&expression), "r".to_string())],
             Arc::new(EmptyExec::new(actual_schema)),
