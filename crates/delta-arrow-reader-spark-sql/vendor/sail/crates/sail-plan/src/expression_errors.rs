@@ -2076,7 +2076,7 @@ async fn integer_divide_evaluation_order()
                         "{sql}"
                     );
                 } else {
-                    let batches = result?;
+                    let batches = result.map_err(|error| format!("{sql}, ANSI={ansi}: {error}"))?;
                     assert_eq!(
                         batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
                         rows,
