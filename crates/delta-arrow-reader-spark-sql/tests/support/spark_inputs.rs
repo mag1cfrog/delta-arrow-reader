@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use arrow::array::{ArrayRef, StructArray, new_empty_array};
-use arrow::datatypes::{DataType, Field, Schema};
+use arrow::datatypes::{DataType, Decimal128Type, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::datasource::MemTable;
@@ -21,6 +21,12 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
         Some("integer") => DataType::Int32,
         Some("long") => DataType::Int64,
         Some("string") => DataType::Utf8,
+        Some(decimal) if decimal.starts_with("decimal(") && decimal.ends_with(')') => {
+            let (precision, scale) = decimal[8..decimal.len() - 1]
+                .split_once(',')
+                .ok_or("missing Decimal precision and scale")?;
+            DataType::Decimal128(precision.parse()?, scale.parse()?)
+        }
         None if value["type"] == "array" => DataType::List(Arc::new(Field::new(
             "item",
             decode_recorded_data_type(&value["elementType"])?,
@@ -72,6 +78,17 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
             ScalarValue::Int16(Some(value.as_str().ok_or("missing short")?.parse()?))
         }
         DataType::Int64 => ScalarValue::Int64(Some(value.as_str().ok_or("missing long")?.parse()?)),
+        DataType::Decimal128(precision, scale) => ScalarValue::Decimal128(
+            Some(arrow::compute::kernels::cast_utils::parse_decimal::<
+                Decimal128Type,
+            >(
+                value.as_str().ok_or("missing Decimal value")?,
+                *precision,
+                *scale,
+            )?),
+            *precision,
+            *scale,
+        ),
         DataType::List(field) => ScalarValue::List(ScalarValue::new_list(
             &value
                 .as_array()

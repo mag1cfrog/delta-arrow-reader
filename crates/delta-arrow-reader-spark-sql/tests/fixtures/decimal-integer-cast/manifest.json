@@ -1,0 +1,130 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "float_encoding": "ieee754_bits",
+  "inputs": [
+    {
+      "name": "decimal_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "decimal(3,2)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_input"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-1.25"
+        ],
+        [
+          "0.00"
+        ],
+        [
+          "1.75"
+        ]
+      ]
+    },
+    {
+      "name": "decimal_required_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "decimal(3,2)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_input"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "decimal_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "decimal(3,2)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_input"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-1.25"
+        ],
+        [
+          "0.00"
+        ],
+        [
+          "1.75"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "decimal_nullable_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "v",
+            "type": "decimal(3,2)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_input"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "guaranteed_literal",
+      "sql": "SELECT CAST(-1.25 AS TINYINT) AS c0,CAST(-1.25 AS SMALLINT) AS c1,CAST(-1.25 AS INT) AS c2,CAST(-1.25 AS BIGINT) AS c3"
+    },
+    {
+      "id": "typed_null",
+      "sql": "SELECT CAST(CAST(NULL AS DECIMAL(3,2)) AS TINYINT) AS c0,CAST(CAST(NULL AS DECIMAL(3,2)) AS SMALLINT) AS c1,CAST(CAST(NULL AS DECIMAL(3,2)) AS INT) AS c2,CAST(CAST(NULL AS DECIMAL(3,2)) AS BIGINT) AS c3"
+    },
+    {
+      "id": "decimal_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS c0,CAST(v AS SMALLINT) AS c1,CAST(v AS INT) AS c2,CAST(v AS BIGINT) AS c3 FROM decimal_required"
+    },
+    {
+      "id": "decimal_required_empty",
+      "sql": "SELECT CAST(v AS TINYINT) AS c0,CAST(v AS SMALLINT) AS c1,CAST(v AS INT) AS c2,CAST(v AS BIGINT) AS c3 FROM decimal_required_empty"
+    },
+    {
+      "id": "decimal_nullable",
+      "sql": "SELECT CAST(v AS TINYINT) AS c0,CAST(v AS SMALLINT) AS c1,CAST(v AS INT) AS c2,CAST(v AS BIGINT) AS c3 FROM decimal_nullable"
+    },
+    {
+      "id": "decimal_nullable_empty",
+      "sql": "SELECT CAST(v AS TINYINT) AS c0,CAST(v AS SMALLINT) AS c1,CAST(v AS INT) AS c2,CAST(v AS BIGINT) AS c3 FROM decimal_nullable_empty"
+    },
+    {
+      "id": "nullable_is_null",
+      "sql": "SELECT CAST(v AS TINYINT) IS NULL AS c0,CAST(v AS SMALLINT) IS NULL AS c1,CAST(v AS INT) IS NULL AS c2,CAST(v AS BIGINT) IS NULL AS c3 FROM decimal_nullable"
+    }
+  ],
+  "observations": 14
+}

@@ -45,9 +45,7 @@ use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
 use sail_function::scalar::misc::raise_error::RaiseError;
-use sail_function::scalar::spark_cast_numeric_to_decimal::{
-    DecimalCastMode, SparkCastNumericToDecimal,
-};
+use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 
 pub(crate) use super::conditional::SparkNullIfZero;
@@ -510,7 +508,7 @@ fn is_zero_literal(expr: &Expr) -> bool {
                 false
             }
         }
-        Expr::ScalarFunction(f) if f.func.inner().is::<SparkCastNumericToDecimal>() => {
+        Expr::ScalarFunction(f) if f.func.inner().is::<SparkDecimalCast>() => {
             matches!(f.args.as_slice(), [Expr::Literal(scalar, _)] if is_scalar_zero(scalar))
         }
         _ => false,
@@ -755,7 +753,7 @@ fn cast_integer_literal_to_decimal(expr: Expr, target: DataType, ansi_mode: bool
         } else {
             DecimalCastMode::Legacy
         };
-        ScalarUDF::from(SparkCastNumericToDecimal::new(precision, scale, mode)).call(vec![expr])
+        ScalarUDF::from(SparkDecimalCast::to_decimal(precision, scale, mode)).call(vec![expr])
     } else {
         cast(expr, target)
     }
@@ -1489,7 +1487,7 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
             }
         }
         Expr::ScalarFunction(f)
-            if f.func.inner().downcast_ref::<SparkCastNumericToDecimal>()
+            if f.func.inner().downcast_ref::<SparkDecimalCast>()
                 .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi)
                 || f.func.inner().downcast_ref::<SparkCastStringToInteger>()
                     .is_some_and(|cast| cast.mode() == StringIntegerCastMode::Ansi) =>
@@ -1521,7 +1519,7 @@ pub(crate) fn guard_cast_arithmetic(
             Expr::Cast(cast) => simple(&cast.expr),
             Expr::TryCast(cast) => simple(&cast.expr),
             Expr::Alias(alias) => simple(&alias.expr),
-            Expr::ScalarFunction(f) if f.func.inner().is::<SparkCastNumericToDecimal>() => {
+            Expr::ScalarFunction(f) if f.func.inner().is::<SparkDecimalCast>() => {
                 matches!(f.args.as_slice(), [expr] if simple(expr))
             }
             _ => false,

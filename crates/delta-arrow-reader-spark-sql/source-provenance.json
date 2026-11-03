@@ -140,7 +140,7 @@
     },
     {
       "path": "vendor/sail/crates/sail-function/src/scalar/spark_cast_float_to_decimal.rs",
-      "renamed_to": "vendor/sail/crates/sail-function/src/scalar/spark_cast_numeric_to_decimal.rs",
+      "renamed_to": "vendor/sail/crates/sail-function/src/scalar/spark_decimal_cast.rs",
       "accepted_sha256": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
       "archive": "empty-input-scalar-runs.json.gz",
       "member": "baseline/float-cast.rs",

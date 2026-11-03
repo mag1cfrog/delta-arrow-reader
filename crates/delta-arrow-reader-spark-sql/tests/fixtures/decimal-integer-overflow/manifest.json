@@ -1,0 +1,2131 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "float_encoding": "ieee754_bits",
+  "inputs": [
+    {
+      "name": "tinyint_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-129.0"
+        ],
+        [
+          "1",
+          "-128.0"
+        ],
+        [
+          "2",
+          "-127.0"
+        ],
+        [
+          "3",
+          "126.0"
+        ],
+        [
+          "4",
+          "127.0"
+        ],
+        [
+          "5",
+          "128.0"
+        ],
+        [
+          "6",
+          "-128.9"
+        ],
+        [
+          "7",
+          "127.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ]
+      ]
+    },
+    {
+      "name": "tinyint_required_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "tinyint_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-129.0"
+        ],
+        [
+          "1",
+          "-128.0"
+        ],
+        [
+          "2",
+          "-127.0"
+        ],
+        [
+          "3",
+          "126.0"
+        ],
+        [
+          "4",
+          "127.0"
+        ],
+        [
+          "5",
+          "128.0"
+        ],
+        [
+          "6",
+          "-128.9"
+        ],
+        [
+          "7",
+          "127.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ],
+        [
+          "15",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "tinyint_nullable_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "smallint_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-32769.0"
+        ],
+        [
+          "1",
+          "-32768.0"
+        ],
+        [
+          "2",
+          "-32767.0"
+        ],
+        [
+          "3",
+          "32766.0"
+        ],
+        [
+          "4",
+          "32767.0"
+        ],
+        [
+          "5",
+          "32768.0"
+        ],
+        [
+          "6",
+          "-32768.9"
+        ],
+        [
+          "7",
+          "32767.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ]
+      ]
+    },
+    {
+      "name": "smallint_required_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "smallint_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-32769.0"
+        ],
+        [
+          "1",
+          "-32768.0"
+        ],
+        [
+          "2",
+          "-32767.0"
+        ],
+        [
+          "3",
+          "32766.0"
+        ],
+        [
+          "4",
+          "32767.0"
+        ],
+        [
+          "5",
+          "32768.0"
+        ],
+        [
+          "6",
+          "-32768.9"
+        ],
+        [
+          "7",
+          "32767.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ],
+        [
+          "15",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "smallint_nullable_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "int_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2147483649.0"
+        ],
+        [
+          "1",
+          "-2147483648.0"
+        ],
+        [
+          "2",
+          "-2147483647.0"
+        ],
+        [
+          "3",
+          "2147483646.0"
+        ],
+        [
+          "4",
+          "2147483647.0"
+        ],
+        [
+          "5",
+          "2147483648.0"
+        ],
+        [
+          "6",
+          "-2147483648.9"
+        ],
+        [
+          "7",
+          "2147483647.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ]
+      ]
+    },
+    {
+      "name": "int_required_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "int_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2147483649.0"
+        ],
+        [
+          "1",
+          "-2147483648.0"
+        ],
+        [
+          "2",
+          "-2147483647.0"
+        ],
+        [
+          "3",
+          "2147483646.0"
+        ],
+        [
+          "4",
+          "2147483647.0"
+        ],
+        [
+          "5",
+          "2147483648.0"
+        ],
+        [
+          "6",
+          "-2147483648.9"
+        ],
+        [
+          "7",
+          "2147483647.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ],
+        [
+          "15",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "int_nullable_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "bigint_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-9223372036854775809.0"
+        ],
+        [
+          "1",
+          "-9223372036854775808.0"
+        ],
+        [
+          "2",
+          "-9223372036854775807.0"
+        ],
+        [
+          "3",
+          "9223372036854775806.0"
+        ],
+        [
+          "4",
+          "9223372036854775807.0"
+        ],
+        [
+          "5",
+          "9223372036854775808.0"
+        ],
+        [
+          "6",
+          "-9223372036854775808.9"
+        ],
+        [
+          "7",
+          "9223372036854775807.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ]
+      ]
+    },
+    {
+      "name": "bigint_required_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": false,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "bigint_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-9223372036854775809.0"
+        ],
+        [
+          "1",
+          "-9223372036854775808.0"
+        ],
+        [
+          "2",
+          "-9223372036854775807.0"
+        ],
+        [
+          "3",
+          "9223372036854775806.0"
+        ],
+        [
+          "4",
+          "9223372036854775807.0"
+        ],
+        [
+          "5",
+          "9223372036854775808.0"
+        ],
+        [
+          "6",
+          "-9223372036854775808.9"
+        ],
+        [
+          "7",
+          "9223372036854775807.9"
+        ],
+        [
+          "8",
+          "-1.9"
+        ],
+        [
+          "9",
+          "1.9"
+        ],
+        [
+          "10",
+          "-0.9"
+        ],
+        [
+          "11",
+          "0.0"
+        ],
+        [
+          "12",
+          "0.9"
+        ],
+        [
+          "13",
+          "-1000000000000000000000000000000000000.0"
+        ],
+        [
+          "14",
+          "1000000000000000000000000000000000000.0"
+        ],
+        [
+          "15",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "bigint_nullable_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "decimal(38,1)",
+            "nullable": true,
+            "metadata": {
+              "source": "decimal_boundary"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "tinyint_cast_below_min_literal",
+      "sql": "SELECT CAST(CAST(-129.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_below_min_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=0"
+    },
+    {
+      "id": "tinyint_cast_min_literal",
+      "sql": "SELECT CAST(CAST(-128.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_min_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=1"
+    },
+    {
+      "id": "tinyint_cast_above_min_literal",
+      "sql": "SELECT CAST(CAST(-127.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_above_min_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=2"
+    },
+    {
+      "id": "tinyint_cast_below_max_literal",
+      "sql": "SELECT CAST(CAST(126.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_below_max_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=3"
+    },
+    {
+      "id": "tinyint_cast_max_literal",
+      "sql": "SELECT CAST(CAST(127.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_max_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=4"
+    },
+    {
+      "id": "tinyint_cast_above_max_literal",
+      "sql": "SELECT CAST(CAST(128.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_above_max_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=5"
+    },
+    {
+      "id": "tinyint_cast_min_fraction_literal",
+      "sql": "SELECT CAST(CAST(-128.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_min_fraction_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=6"
+    },
+    {
+      "id": "tinyint_cast_max_fraction_literal",
+      "sql": "SELECT CAST(CAST(127.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_max_fraction_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=7"
+    },
+    {
+      "id": "tinyint_cast_negative_fraction_literal",
+      "sql": "SELECT CAST(CAST(-1.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_negative_fraction_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=8"
+    },
+    {
+      "id": "tinyint_cast_positive_fraction_literal",
+      "sql": "SELECT CAST(CAST(1.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_positive_fraction_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=9"
+    },
+    {
+      "id": "tinyint_cast_negative_subunit_literal",
+      "sql": "SELECT CAST(CAST(-0.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_negative_subunit_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=10"
+    },
+    {
+      "id": "tinyint_cast_zero_literal",
+      "sql": "SELECT CAST(CAST(0.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_zero_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=11"
+    },
+    {
+      "id": "tinyint_cast_positive_subunit_literal",
+      "sql": "SELECT CAST(CAST(0.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_positive_subunit_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=12"
+    },
+    {
+      "id": "tinyint_cast_huge_negative_literal",
+      "sql": "SELECT CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_huge_negative_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=13"
+    },
+    {
+      "id": "tinyint_cast_huge_positive_literal",
+      "sql": "SELECT CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_cast_huge_positive_required",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=14"
+    },
+    {
+      "id": "tinyint_cast_nullable",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_nullable"
+    },
+    {
+      "id": "tinyint_cast_required_empty",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_required_empty"
+    },
+    {
+      "id": "tinyint_cast_nullable_empty",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_nullable_empty"
+    },
+    {
+      "id": "tinyint_cast_safe_nullable",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM tinyint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "tinyint_cast_sliced_safe_nullable",
+      "sql": "SELECT CAST(v AS TINYINT) AS r FROM (SELECT id,v FROM tinyint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "tinyint_cast_max_consumers",
+      "sql": "SELECT CAST(v AS TINYINT) IS NULL AS is_null,CAST(v AS TINYINT) IS NOT NULL AS is_not_null,CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=4"
+    },
+    {
+      "id": "tinyint_cast_above_max_consumers",
+      "sql": "SELECT CAST(v AS TINYINT) IS NULL AS is_null,CAST(v AS TINYINT) IS NOT NULL AS is_not_null,CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=5"
+    },
+    {
+      "id": "tinyint_cast_below_min_consumers",
+      "sql": "SELECT CAST(v AS TINYINT) IS NULL AS is_null,CAST(v AS TINYINT) IS NOT NULL AS is_not_null,CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=0"
+    },
+    {
+      "id": "tinyint_cast_huge_positive_consumers",
+      "sql": "SELECT CAST(v AS TINYINT) IS NULL AS is_null,CAST(v AS TINYINT) IS NOT NULL AS is_not_null,CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=14"
+    },
+    {
+      "id": "tinyint_try_cast_below_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-129.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_below_min_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=0"
+    },
+    {
+      "id": "tinyint_try_cast_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-128.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_min_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=1"
+    },
+    {
+      "id": "tinyint_try_cast_above_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-127.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_above_min_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=2"
+    },
+    {
+      "id": "tinyint_try_cast_below_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(126.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_below_max_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=3"
+    },
+    {
+      "id": "tinyint_try_cast_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(127.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_max_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=4"
+    },
+    {
+      "id": "tinyint_try_cast_above_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(128.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_above_max_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=5"
+    },
+    {
+      "id": "tinyint_try_cast_min_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-128.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_min_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=6"
+    },
+    {
+      "id": "tinyint_try_cast_max_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(127.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_max_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=7"
+    },
+    {
+      "id": "tinyint_try_cast_negative_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_negative_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=8"
+    },
+    {
+      "id": "tinyint_try_cast_positive_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(1.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_positive_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=9"
+    },
+    {
+      "id": "tinyint_try_cast_negative_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(-0.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_negative_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=10"
+    },
+    {
+      "id": "tinyint_try_cast_zero_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_zero_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=11"
+    },
+    {
+      "id": "tinyint_try_cast_positive_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.9 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_positive_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=12"
+    },
+    {
+      "id": "tinyint_try_cast_huge_negative_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_huge_negative_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=13"
+    },
+    {
+      "id": "tinyint_try_cast_huge_positive_literal",
+      "sql": "SELECT TRY_CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS TINYINT) AS r"
+    },
+    {
+      "id": "tinyint_try_cast_huge_positive_required",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required WHERE id=14"
+    },
+    {
+      "id": "tinyint_try_cast_nullable",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_nullable"
+    },
+    {
+      "id": "tinyint_try_cast_required_empty",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_required_empty"
+    },
+    {
+      "id": "tinyint_try_cast_nullable_empty",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_nullable_empty"
+    },
+    {
+      "id": "tinyint_try_cast_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM tinyint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "tinyint_try_cast_sliced_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM (SELECT id,v FROM tinyint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "tinyint_try_cast_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) IS NULL AS is_null,TRY_CAST(v AS TINYINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=4"
+    },
+    {
+      "id": "tinyint_try_cast_above_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) IS NULL AS is_null,TRY_CAST(v AS TINYINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=5"
+    },
+    {
+      "id": "tinyint_try_cast_below_min_consumers",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) IS NULL AS is_null,TRY_CAST(v AS TINYINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=0"
+    },
+    {
+      "id": "tinyint_try_cast_huge_positive_consumers",
+      "sql": "SELECT TRY_CAST(v AS TINYINT) IS NULL AS is_null,TRY_CAST(v AS TINYINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS TINYINT)=0 AS is_zero FROM tinyint_required WHERE id=14"
+    },
+    {
+      "id": "smallint_cast_below_min_literal",
+      "sql": "SELECT CAST(CAST(-32769.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_below_min_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=0"
+    },
+    {
+      "id": "smallint_cast_min_literal",
+      "sql": "SELECT CAST(CAST(-32768.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_min_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=1"
+    },
+    {
+      "id": "smallint_cast_above_min_literal",
+      "sql": "SELECT CAST(CAST(-32767.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_above_min_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=2"
+    },
+    {
+      "id": "smallint_cast_below_max_literal",
+      "sql": "SELECT CAST(CAST(32766.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_below_max_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=3"
+    },
+    {
+      "id": "smallint_cast_max_literal",
+      "sql": "SELECT CAST(CAST(32767.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_max_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=4"
+    },
+    {
+      "id": "smallint_cast_above_max_literal",
+      "sql": "SELECT CAST(CAST(32768.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_above_max_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=5"
+    },
+    {
+      "id": "smallint_cast_min_fraction_literal",
+      "sql": "SELECT CAST(CAST(-32768.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_min_fraction_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=6"
+    },
+    {
+      "id": "smallint_cast_max_fraction_literal",
+      "sql": "SELECT CAST(CAST(32767.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_max_fraction_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=7"
+    },
+    {
+      "id": "smallint_cast_negative_fraction_literal",
+      "sql": "SELECT CAST(CAST(-1.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_negative_fraction_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=8"
+    },
+    {
+      "id": "smallint_cast_positive_fraction_literal",
+      "sql": "SELECT CAST(CAST(1.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_positive_fraction_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=9"
+    },
+    {
+      "id": "smallint_cast_negative_subunit_literal",
+      "sql": "SELECT CAST(CAST(-0.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_negative_subunit_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=10"
+    },
+    {
+      "id": "smallint_cast_zero_literal",
+      "sql": "SELECT CAST(CAST(0.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_zero_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=11"
+    },
+    {
+      "id": "smallint_cast_positive_subunit_literal",
+      "sql": "SELECT CAST(CAST(0.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_positive_subunit_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=12"
+    },
+    {
+      "id": "smallint_cast_huge_negative_literal",
+      "sql": "SELECT CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_huge_negative_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=13"
+    },
+    {
+      "id": "smallint_cast_huge_positive_literal",
+      "sql": "SELECT CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_cast_huge_positive_required",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=14"
+    },
+    {
+      "id": "smallint_cast_nullable",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_nullable"
+    },
+    {
+      "id": "smallint_cast_required_empty",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_required_empty"
+    },
+    {
+      "id": "smallint_cast_nullable_empty",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_nullable_empty"
+    },
+    {
+      "id": "smallint_cast_safe_nullable",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM smallint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "smallint_cast_sliced_safe_nullable",
+      "sql": "SELECT CAST(v AS SMALLINT) AS r FROM (SELECT id,v FROM smallint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "smallint_cast_max_consumers",
+      "sql": "SELECT CAST(v AS SMALLINT) IS NULL AS is_null,CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=4"
+    },
+    {
+      "id": "smallint_cast_above_max_consumers",
+      "sql": "SELECT CAST(v AS SMALLINT) IS NULL AS is_null,CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=5"
+    },
+    {
+      "id": "smallint_cast_below_min_consumers",
+      "sql": "SELECT CAST(v AS SMALLINT) IS NULL AS is_null,CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=0"
+    },
+    {
+      "id": "smallint_cast_huge_positive_consumers",
+      "sql": "SELECT CAST(v AS SMALLINT) IS NULL AS is_null,CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=14"
+    },
+    {
+      "id": "smallint_try_cast_below_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-32769.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_below_min_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=0"
+    },
+    {
+      "id": "smallint_try_cast_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-32768.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_min_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=1"
+    },
+    {
+      "id": "smallint_try_cast_above_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-32767.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_above_min_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=2"
+    },
+    {
+      "id": "smallint_try_cast_below_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(32766.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_below_max_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=3"
+    },
+    {
+      "id": "smallint_try_cast_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(32767.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_max_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=4"
+    },
+    {
+      "id": "smallint_try_cast_above_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(32768.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_above_max_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=5"
+    },
+    {
+      "id": "smallint_try_cast_min_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-32768.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_min_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=6"
+    },
+    {
+      "id": "smallint_try_cast_max_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(32767.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_max_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=7"
+    },
+    {
+      "id": "smallint_try_cast_negative_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_negative_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=8"
+    },
+    {
+      "id": "smallint_try_cast_positive_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(1.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_positive_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=9"
+    },
+    {
+      "id": "smallint_try_cast_negative_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(-0.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_negative_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=10"
+    },
+    {
+      "id": "smallint_try_cast_zero_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_zero_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=11"
+    },
+    {
+      "id": "smallint_try_cast_positive_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.9 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_positive_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=12"
+    },
+    {
+      "id": "smallint_try_cast_huge_negative_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_huge_negative_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=13"
+    },
+    {
+      "id": "smallint_try_cast_huge_positive_literal",
+      "sql": "SELECT TRY_CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS SMALLINT) AS r"
+    },
+    {
+      "id": "smallint_try_cast_huge_positive_required",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required WHERE id=14"
+    },
+    {
+      "id": "smallint_try_cast_nullable",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_nullable"
+    },
+    {
+      "id": "smallint_try_cast_required_empty",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_required_empty"
+    },
+    {
+      "id": "smallint_try_cast_nullable_empty",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_nullable_empty"
+    },
+    {
+      "id": "smallint_try_cast_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM smallint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "smallint_try_cast_sliced_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM (SELECT id,v FROM smallint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "smallint_try_cast_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) IS NULL AS is_null,TRY_CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=4"
+    },
+    {
+      "id": "smallint_try_cast_above_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) IS NULL AS is_null,TRY_CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=5"
+    },
+    {
+      "id": "smallint_try_cast_below_min_consumers",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) IS NULL AS is_null,TRY_CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=0"
+    },
+    {
+      "id": "smallint_try_cast_huge_positive_consumers",
+      "sql": "SELECT TRY_CAST(v AS SMALLINT) IS NULL AS is_null,TRY_CAST(v AS SMALLINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS SMALLINT)=0 AS is_zero FROM smallint_required WHERE id=14"
+    },
+    {
+      "id": "int_cast_below_min_literal",
+      "sql": "SELECT CAST(CAST(-2147483649.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_below_min_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=0"
+    },
+    {
+      "id": "int_cast_min_literal",
+      "sql": "SELECT CAST(CAST(-2147483648.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_min_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=1"
+    },
+    {
+      "id": "int_cast_above_min_literal",
+      "sql": "SELECT CAST(CAST(-2147483647.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_above_min_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=2"
+    },
+    {
+      "id": "int_cast_below_max_literal",
+      "sql": "SELECT CAST(CAST(2147483646.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_below_max_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=3"
+    },
+    {
+      "id": "int_cast_max_literal",
+      "sql": "SELECT CAST(CAST(2147483647.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_max_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=4"
+    },
+    {
+      "id": "int_cast_above_max_literal",
+      "sql": "SELECT CAST(CAST(2147483648.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_above_max_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=5"
+    },
+    {
+      "id": "int_cast_min_fraction_literal",
+      "sql": "SELECT CAST(CAST(-2147483648.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_min_fraction_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=6"
+    },
+    {
+      "id": "int_cast_max_fraction_literal",
+      "sql": "SELECT CAST(CAST(2147483647.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_max_fraction_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=7"
+    },
+    {
+      "id": "int_cast_negative_fraction_literal",
+      "sql": "SELECT CAST(CAST(-1.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_negative_fraction_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=8"
+    },
+    {
+      "id": "int_cast_positive_fraction_literal",
+      "sql": "SELECT CAST(CAST(1.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_positive_fraction_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=9"
+    },
+    {
+      "id": "int_cast_negative_subunit_literal",
+      "sql": "SELECT CAST(CAST(-0.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_negative_subunit_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=10"
+    },
+    {
+      "id": "int_cast_zero_literal",
+      "sql": "SELECT CAST(CAST(0.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_zero_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=11"
+    },
+    {
+      "id": "int_cast_positive_subunit_literal",
+      "sql": "SELECT CAST(CAST(0.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_positive_subunit_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=12"
+    },
+    {
+      "id": "int_cast_huge_negative_literal",
+      "sql": "SELECT CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_huge_negative_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=13"
+    },
+    {
+      "id": "int_cast_huge_positive_literal",
+      "sql": "SELECT CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_cast_huge_positive_required",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required WHERE id=14"
+    },
+    {
+      "id": "int_cast_nullable",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_nullable"
+    },
+    {
+      "id": "int_cast_required_empty",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_required_empty"
+    },
+    {
+      "id": "int_cast_nullable_empty",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_nullable_empty"
+    },
+    {
+      "id": "int_cast_safe_nullable",
+      "sql": "SELECT CAST(v AS INT) AS r FROM int_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "int_cast_sliced_safe_nullable",
+      "sql": "SELECT CAST(v AS INT) AS r FROM (SELECT id,v FROM int_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "int_cast_max_consumers",
+      "sql": "SELECT CAST(v AS INT) IS NULL AS is_null,CAST(v AS INT) IS NOT NULL AS is_not_null,CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=4"
+    },
+    {
+      "id": "int_cast_above_max_consumers",
+      "sql": "SELECT CAST(v AS INT) IS NULL AS is_null,CAST(v AS INT) IS NOT NULL AS is_not_null,CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=5"
+    },
+    {
+      "id": "int_cast_below_min_consumers",
+      "sql": "SELECT CAST(v AS INT) IS NULL AS is_null,CAST(v AS INT) IS NOT NULL AS is_not_null,CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=0"
+    },
+    {
+      "id": "int_cast_huge_positive_consumers",
+      "sql": "SELECT CAST(v AS INT) IS NULL AS is_null,CAST(v AS INT) IS NOT NULL AS is_not_null,CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=14"
+    },
+    {
+      "id": "int_try_cast_below_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-2147483649.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_below_min_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=0"
+    },
+    {
+      "id": "int_try_cast_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-2147483648.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_min_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=1"
+    },
+    {
+      "id": "int_try_cast_above_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-2147483647.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_above_min_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=2"
+    },
+    {
+      "id": "int_try_cast_below_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(2147483646.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_below_max_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=3"
+    },
+    {
+      "id": "int_try_cast_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(2147483647.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_max_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=4"
+    },
+    {
+      "id": "int_try_cast_above_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(2147483648.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_above_max_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=5"
+    },
+    {
+      "id": "int_try_cast_min_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-2147483648.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_min_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=6"
+    },
+    {
+      "id": "int_try_cast_max_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(2147483647.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_max_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=7"
+    },
+    {
+      "id": "int_try_cast_negative_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_negative_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=8"
+    },
+    {
+      "id": "int_try_cast_positive_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(1.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_positive_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=9"
+    },
+    {
+      "id": "int_try_cast_negative_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(-0.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_negative_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=10"
+    },
+    {
+      "id": "int_try_cast_zero_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_zero_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=11"
+    },
+    {
+      "id": "int_try_cast_positive_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.9 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_positive_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=12"
+    },
+    {
+      "id": "int_try_cast_huge_negative_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_huge_negative_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=13"
+    },
+    {
+      "id": "int_try_cast_huge_positive_literal",
+      "sql": "SELECT TRY_CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS INT) AS r"
+    },
+    {
+      "id": "int_try_cast_huge_positive_required",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required WHERE id=14"
+    },
+    {
+      "id": "int_try_cast_nullable",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_nullable"
+    },
+    {
+      "id": "int_try_cast_required_empty",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_required_empty"
+    },
+    {
+      "id": "int_try_cast_nullable_empty",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_nullable_empty"
+    },
+    {
+      "id": "int_try_cast_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM int_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "int_try_cast_sliced_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS INT) AS r FROM (SELECT id,v FROM int_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "int_try_cast_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS INT) IS NULL AS is_null,TRY_CAST(v AS INT) IS NOT NULL AS is_not_null,TRY_CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=4"
+    },
+    {
+      "id": "int_try_cast_above_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS INT) IS NULL AS is_null,TRY_CAST(v AS INT) IS NOT NULL AS is_not_null,TRY_CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=5"
+    },
+    {
+      "id": "int_try_cast_below_min_consumers",
+      "sql": "SELECT TRY_CAST(v AS INT) IS NULL AS is_null,TRY_CAST(v AS INT) IS NOT NULL AS is_not_null,TRY_CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=0"
+    },
+    {
+      "id": "int_try_cast_huge_positive_consumers",
+      "sql": "SELECT TRY_CAST(v AS INT) IS NULL AS is_null,TRY_CAST(v AS INT) IS NOT NULL AS is_not_null,TRY_CAST(v AS INT)=0 AS is_zero FROM int_required WHERE id=14"
+    },
+    {
+      "id": "bigint_cast_below_min_literal",
+      "sql": "SELECT CAST(CAST(-9223372036854775809.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_below_min_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=0"
+    },
+    {
+      "id": "bigint_cast_min_literal",
+      "sql": "SELECT CAST(CAST(-9223372036854775808.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_min_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=1"
+    },
+    {
+      "id": "bigint_cast_above_min_literal",
+      "sql": "SELECT CAST(CAST(-9223372036854775807.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_above_min_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=2"
+    },
+    {
+      "id": "bigint_cast_below_max_literal",
+      "sql": "SELECT CAST(CAST(9223372036854775806.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_below_max_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=3"
+    },
+    {
+      "id": "bigint_cast_max_literal",
+      "sql": "SELECT CAST(CAST(9223372036854775807.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_max_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=4"
+    },
+    {
+      "id": "bigint_cast_above_max_literal",
+      "sql": "SELECT CAST(CAST(9223372036854775808.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_above_max_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=5"
+    },
+    {
+      "id": "bigint_cast_min_fraction_literal",
+      "sql": "SELECT CAST(CAST(-9223372036854775808.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_min_fraction_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=6"
+    },
+    {
+      "id": "bigint_cast_max_fraction_literal",
+      "sql": "SELECT CAST(CAST(9223372036854775807.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_max_fraction_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=7"
+    },
+    {
+      "id": "bigint_cast_negative_fraction_literal",
+      "sql": "SELECT CAST(CAST(-1.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_negative_fraction_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=8"
+    },
+    {
+      "id": "bigint_cast_positive_fraction_literal",
+      "sql": "SELECT CAST(CAST(1.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_positive_fraction_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=9"
+    },
+    {
+      "id": "bigint_cast_negative_subunit_literal",
+      "sql": "SELECT CAST(CAST(-0.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_negative_subunit_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=10"
+    },
+    {
+      "id": "bigint_cast_zero_literal",
+      "sql": "SELECT CAST(CAST(0.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_zero_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=11"
+    },
+    {
+      "id": "bigint_cast_positive_subunit_literal",
+      "sql": "SELECT CAST(CAST(0.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_positive_subunit_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=12"
+    },
+    {
+      "id": "bigint_cast_huge_negative_literal",
+      "sql": "SELECT CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_huge_negative_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=13"
+    },
+    {
+      "id": "bigint_cast_huge_positive_literal",
+      "sql": "SELECT CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_cast_huge_positive_required",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=14"
+    },
+    {
+      "id": "bigint_cast_nullable",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_nullable"
+    },
+    {
+      "id": "bigint_cast_required_empty",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_required_empty"
+    },
+    {
+      "id": "bigint_cast_nullable_empty",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_nullable_empty"
+    },
+    {
+      "id": "bigint_cast_safe_nullable",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM bigint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "bigint_cast_sliced_safe_nullable",
+      "sql": "SELECT CAST(v AS BIGINT) AS r FROM (SELECT id,v FROM bigint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "bigint_cast_max_consumers",
+      "sql": "SELECT CAST(v AS BIGINT) IS NULL AS is_null,CAST(v AS BIGINT) IS NOT NULL AS is_not_null,CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=4"
+    },
+    {
+      "id": "bigint_cast_above_max_consumers",
+      "sql": "SELECT CAST(v AS BIGINT) IS NULL AS is_null,CAST(v AS BIGINT) IS NOT NULL AS is_not_null,CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=5"
+    },
+    {
+      "id": "bigint_cast_below_min_consumers",
+      "sql": "SELECT CAST(v AS BIGINT) IS NULL AS is_null,CAST(v AS BIGINT) IS NOT NULL AS is_not_null,CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=0"
+    },
+    {
+      "id": "bigint_cast_huge_positive_consumers",
+      "sql": "SELECT CAST(v AS BIGINT) IS NULL AS is_null,CAST(v AS BIGINT) IS NOT NULL AS is_not_null,CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=14"
+    },
+    {
+      "id": "bigint_try_cast_below_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-9223372036854775809.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_below_min_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=0"
+    },
+    {
+      "id": "bigint_try_cast_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-9223372036854775808.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_min_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=1"
+    },
+    {
+      "id": "bigint_try_cast_above_min_literal",
+      "sql": "SELECT TRY_CAST(CAST(-9223372036854775807.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_above_min_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=2"
+    },
+    {
+      "id": "bigint_try_cast_below_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(9223372036854775806.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_below_max_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=3"
+    },
+    {
+      "id": "bigint_try_cast_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(9223372036854775807.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_max_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=4"
+    },
+    {
+      "id": "bigint_try_cast_above_max_literal",
+      "sql": "SELECT TRY_CAST(CAST(9223372036854775808.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_above_max_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=5"
+    },
+    {
+      "id": "bigint_try_cast_min_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-9223372036854775808.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_min_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=6"
+    },
+    {
+      "id": "bigint_try_cast_max_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(9223372036854775807.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_max_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=7"
+    },
+    {
+      "id": "bigint_try_cast_negative_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_negative_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=8"
+    },
+    {
+      "id": "bigint_try_cast_positive_fraction_literal",
+      "sql": "SELECT TRY_CAST(CAST(1.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_positive_fraction_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=9"
+    },
+    {
+      "id": "bigint_try_cast_negative_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(-0.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_negative_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=10"
+    },
+    {
+      "id": "bigint_try_cast_zero_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_zero_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=11"
+    },
+    {
+      "id": "bigint_try_cast_positive_subunit_literal",
+      "sql": "SELECT TRY_CAST(CAST(0.9 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_positive_subunit_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=12"
+    },
+    {
+      "id": "bigint_try_cast_huge_negative_literal",
+      "sql": "SELECT TRY_CAST(CAST(-1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_huge_negative_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=13"
+    },
+    {
+      "id": "bigint_try_cast_huge_positive_literal",
+      "sql": "SELECT TRY_CAST(CAST(1000000000000000000000000000000000000.0 AS DECIMAL(38,1)) AS BIGINT) AS r"
+    },
+    {
+      "id": "bigint_try_cast_huge_positive_required",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required WHERE id=14"
+    },
+    {
+      "id": "bigint_try_cast_nullable",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_nullable"
+    },
+    {
+      "id": "bigint_try_cast_required_empty",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_required_empty"
+    },
+    {
+      "id": "bigint_try_cast_nullable_empty",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_nullable_empty"
+    },
+    {
+      "id": "bigint_try_cast_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM bigint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15)"
+    },
+    {
+      "id": "bigint_try_cast_sliced_safe_nullable",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM (SELECT id,v FROM bigint_nullable WHERE id IN (1,2,3,4,6,7,8,9,10,11,12,15) ORDER BY id LIMIT 11 OFFSET 1) s"
+    },
+    {
+      "id": "bigint_try_cast_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) IS NULL AS is_null,TRY_CAST(v AS BIGINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=4"
+    },
+    {
+      "id": "bigint_try_cast_above_max_consumers",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) IS NULL AS is_null,TRY_CAST(v AS BIGINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=5"
+    },
+    {
+      "id": "bigint_try_cast_below_min_consumers",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) IS NULL AS is_null,TRY_CAST(v AS BIGINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=0"
+    },
+    {
+      "id": "bigint_try_cast_huge_positive_consumers",
+      "sql": "SELECT TRY_CAST(v AS BIGINT) IS NULL AS is_null,TRY_CAST(v AS BIGINT) IS NOT NULL AS is_not_null,TRY_CAST(v AS BIGINT)=0 AS is_zero FROM bigint_required WHERE id=14"
+    }
+  ],
+  "observations": 624
+}
