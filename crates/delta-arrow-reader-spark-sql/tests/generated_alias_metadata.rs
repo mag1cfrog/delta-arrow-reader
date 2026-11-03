@@ -138,26 +138,56 @@ async fn projection_metadata_categories_match_spark() -> TestResult {
     assert_eq!(records[0]["timezone"], "UTC");
     // Label spelling and bare PIVOT admission have separate complete external replays.
     let categories = [
-        "columns", "literals", "direct_cast", "direct_try_cast", "text_cast",
-        "text_try_cast", "nested_cast", "nested_try_cast", "mixed_cast", "cast_literal",
-        "scalar", "aggregate", "explicit", "explicit_aggregate", "extract", "cast_extract",
-        "constructed_extract_explicit", "explicit_extract", "subquery_scalar",
-        "subquery_rename_scalar", "subquery_generated", "subquery_rename_generated",
-        "subquery_aggregate", "subquery_rename_aggregate", "subquery_extracted",
-        "subquery_rename_extracted", "subquery_rename_constructed",
-        "subquery_generated_reference", "subquery_generated_explicit", "subquery_generated_cast",
-        "valid_text_cast", "valid_text_try_cast", "window_renamed",
-        "pivot_parenthesized", "pivot_parenthesized_explicit",
+        "columns",
+        "literals",
+        "direct_cast",
+        "direct_try_cast",
+        "text_cast",
+        "text_try_cast",
+        "nested_cast",
+        "nested_try_cast",
+        "mixed_cast",
+        "cast_literal",
+        "scalar",
+        "aggregate",
+        "explicit",
+        "explicit_aggregate",
+        "extract",
+        "cast_extract",
+        "constructed_extract_explicit",
+        "explicit_extract",
+        "subquery_scalar",
+        "subquery_rename_scalar",
+        "subquery_generated",
+        "subquery_rename_generated",
+        "subquery_aggregate",
+        "subquery_rename_aggregate",
+        "subquery_extracted",
+        "subquery_rename_extracted",
+        "subquery_rename_constructed",
+        "subquery_generated_reference",
+        "subquery_generated_explicit",
+        "subquery_generated_cast",
+        "valid_text_cast",
+        "valid_text_try_cast",
+        "window_renamed",
+        "pivot_parenthesized",
+        "pivot_parenthesized_explicit",
     ];
     let mut identities = BTreeSet::new();
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
-                SessionStateBuilder::new().with_default_features().with_config(
-                    SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
-                ),
-            ).build(),
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
         );
         register_recorded_inputs(&session, &records[0], batch_size)?;
         for input in ["mixed", "nulls", "empty"] {
@@ -165,7 +195,8 @@ async fn projection_metadata_categories_match_spark() -> TestResult {
                 for ansi in [true, false] {
                     let id = format!("alias_{input}_{category}");
                     assert!(identities.insert((id.clone(), ansi, batch_size)));
-                    let cases = records[1..].iter()
+                    let cases = records[1..]
+                        .iter()
                         .filter(|case| case["id"] == id && case["ansi"] == ansi)
                         .collect::<Vec<_>>();
                     let [case] = cases.as_slice() else {
@@ -178,7 +209,9 @@ async fn projection_metadata_categories_match_spark() -> TestResult {
                         None => result.err().map(|error| error.to_string()),
                     };
                     if let Some(difference) = difference {
-                        differences.push(format!("{id} ANSI={ansi} batch={batch_size}: {difference}"));
+                        differences.push(format!(
+                            "{id} ANSI={ansi} batch={batch_size}: {difference}"
+                        ));
                     }
                 }
             }

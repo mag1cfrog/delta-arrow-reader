@@ -1,15 +1,13 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::tree_node::{TreeNode, TreeNodeRewriter};
 use datafusion_common::{Column, DFSchemaRef, TableReference};
-use datafusion_expr::expr::{FieldMetadata, ScalarFunction};
+use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::expr_rewriter::normalize_col;
 use datafusion_expr::utils::{columnize_expr, expand_qualified_wildcard, expand_wildcard};
 use datafusion_expr::{Expr, LogicalPlan, Projection};
 use sail_common::spec;
-use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
@@ -35,7 +33,7 @@ impl PlanResolver<'_> {
         };
         let schema = input.schema();
         let expr = self
-            .resolve_named_output_expressions(expr, schema, state)
+            .resolve_projection_expressions(expr, schema, state)
             .await?;
         let (input, expr) = self.rewrite_wildcard(input, expr, state)?;
         let (input, expr) = self.rewrite_projection::<MonotonicIdRewriter>(input, expr, state)?;
@@ -253,31 +251,19 @@ impl PlanResolver<'_> {
     ) -> PlanResult<Vec<Expr>> {
         expr.into_iter()
             .map(|e| {
-                let NamedExpr {
-                    name,
-                    expr,
-                    metadata,
-                    ..
-                } = e;
-                let name = if name.len() == 1 {
-                    name.one()?
+                let name = if e.name.len() == 1 {
+                    e.name[0].clone()
                 } else {
-                    let names = format!("({})", name.join(", "));
+                    let names = format!("({})", e.name.join(", "));
                     return Err(PlanError::invalid(format!(
                         "one name expected for expression, got: {names}"
                     )));
                 };
-                if let Expr::Column(Column { name: field_id, .. }) = &expr {
+                if let Expr::Column(Column { name: field_id, .. }) = &e.expr {
                     state.get_field_info(field_id)?;
                 }
                 let field_id = state.register_field_name(name);
-                if !metadata.is_empty() {
-                    let metadata_map: HashMap<String, String> = metadata.into_iter().collect();
-                    let field_metadata = Some(FieldMetadata::from(metadata_map));
-                    Ok(expr.alias_with_metadata(field_id, field_metadata))
-                } else {
-                    Ok(expr.alias(field_id))
-                }
+                Ok(e.into_alias(field_id))
             })
             .collect()
     }

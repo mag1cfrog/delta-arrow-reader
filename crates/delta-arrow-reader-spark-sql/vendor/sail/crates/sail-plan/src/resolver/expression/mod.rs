@@ -4,10 +4,14 @@ use std::fmt::Debug;
 use async_recursion::async_recursion;
 use datafusion_common::DFSchemaRef;
 use datafusion_expr::expr;
+use datafusion_functions::core::getfield::GetFieldFunc;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::explode::Explode;
+use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::{drop_inherited_column_metadata, set_result_metadata};
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
@@ -87,6 +91,15 @@ impl NamedExpr {
         }
     }
 
+    pub fn into_alias(self, field_id: String) -> expr::Expr {
+        let expression = if self.metadata.is_empty() {
+            self.expr
+        } else {
+            set_result_metadata(self.expr, self.metadata)
+        };
+        expression.alias(field_id)
+    }
+
     pub fn with_metadata(mut self, metadata: Vec<(String, String)>) -> Self {
         self.metadata = metadata;
         self
@@ -102,6 +115,34 @@ impl NamedExpr {
             Some(name) => Ok(name.clone()),
             None => Ok(self.name.clone().one()?),
         }
+    }
+}
+
+fn is_extraction_only(expression: &spec::Expr) -> bool {
+    match expression {
+        spec::Expr::UnresolvedAttribute { .. }
+        | spec::Expr::IdentifierClause { .. }
+        | spec::Expr::Literal(_) => true,
+        spec::Expr::UnresolvedExtractValue { child, extraction } => {
+            is_extraction_only(child) && is_extraction_only(extraction)
+        }
+        _ => false,
+    }
+}
+
+fn needs_projection_expansion(expression: &expr::Expr) -> bool {
+    matches!(expression, expr::Expr::ScalarFunction(function)
+        if function.func.inner().is::<Explode>() || function.func.inner().is::<MultiExpr>())
+}
+
+fn inherits_alias_metadata(expression: &expr::Expr) -> bool {
+    match expression {
+        expr::Expr::Alias(_)
+        | expr::Expr::Column(_)
+        | expr::Expr::OuterReferenceColumn(..)
+        | expr::Expr::Literal(..) => true,
+        expr::Expr::ScalarFunction(function) => function.func.inner().is::<GetFieldFunc>(),
+        _ => false,
     }
 }
 
@@ -158,10 +199,10 @@ impl PlanResolver<'_> {
                 cast_to_type,
                 rename: _,
                 is_try,
-            } => {
-                self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
-                    .await
-            }
+            } => self
+                .resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                .await
+                .map(|(named, _)| named),
             Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => {
                 Err(PlanError::unsupported("DataFrame column expressions"))
             }
@@ -347,6 +388,66 @@ impl PlanResolver<'_> {
                 .resolve_named_expression(expression, schema, state)
                 .await?;
             results.push(named_expr);
+        }
+        Ok(results)
+    }
+
+    pub(super) async fn resolve_projection_expressions(
+        &self,
+        expressions: Vec<spec::Expr>,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<Vec<NamedExpr>> {
+        let mut scope = state.enter_config_scope();
+        let state = scope.state();
+        state.config_mut().include_cast_in_expression_name = false;
+        let mut results = Vec::with_capacity(expressions.len());
+        for expression in expressions {
+            let extraction_only = is_extraction_only(&expression);
+            let named_source = matches!(
+                &expression,
+                spec::Expr::Literal(_)
+                    | spec::Expr::UnresolvedAttribute { .. }
+                    | spec::Expr::Alias { .. }
+                    | spec::Expr::UnresolvedStar { .. }
+                    | spec::Expr::IdentifierClause { .. }
+                    | spec::Expr::UnresolvedDate { .. }
+                    | spec::Expr::UnresolvedTime { .. }
+                    | spec::Expr::UnresolvedTimestamp { .. }
+            );
+            let (mut named, direct_named_cast) = match expression {
+                spec::Expr::Cast {
+                    expr,
+                    cast_to_type,
+                    is_try,
+                    ..
+                } => {
+                    self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                        .await?
+                }
+                expression => (
+                    self.resolve_named_expression(expression, schema, state)
+                        .await?,
+                    false,
+                ),
+            };
+            if !named_source && !needs_projection_expansion(&named.expr) {
+                if !direct_named_cast && !extraction_only {
+                    // Output metadata must not participate in grouping expression identity.
+                    named.metadata.retain(|(key, _)| {
+                        matches!(
+                            key.as_str(),
+                            "ARROW:extension:name" | "ARROW:extension:metadata"
+                        )
+                    });
+                    named
+                        .metadata
+                        .push(("__autoGeneratedAlias".into(), "true".into()));
+                } else if !inherits_alias_metadata(&named.expr) {
+                    named.expr = drop_inherited_column_metadata(named.expr);
+                }
+            }
+            results.push(named);
         }
         Ok(results)
     }

@@ -7,6 +7,7 @@ use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, Proj
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
@@ -112,8 +113,8 @@ impl PlanResolver<'_> {
         let mut nan_positions = HashSet::new();
         for value in values.iter() {
             value.iter().enumerate().for_each(|(idx, expr)| {
-                if let Expr::Cast(cast) = expr
-                    && let Expr::Literal(sv, _) = cast.expr.as_ref()
+                if let Expr::Cast(cast) = without_metadata_annotations(expr)
+                    && let Expr::Literal(sv, _) = without_metadata_annotations(&cast.expr)
                     && let Some(true) = sv
                         .try_as_str()
                         .flatten()

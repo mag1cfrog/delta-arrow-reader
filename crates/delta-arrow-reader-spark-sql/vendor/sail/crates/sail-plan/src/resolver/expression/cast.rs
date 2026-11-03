@@ -30,6 +30,7 @@ use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
+use crate::function::common::drop_inherited_column_metadata;
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 use crate::resolver::PlanResolver;
@@ -44,7 +45,13 @@ impl PlanResolver<'_> {
         is_try: bool,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<NamedExpr> {
+    ) -> PlanResult<(NamedExpr, bool)> {
+        let named_source = matches!(
+            &expr,
+            spec::Expr::Alias { .. }
+                | spec::Expr::UnresolvedAttribute { .. }
+                | spec::Expr::IdentifierClause { .. }
+        );
         let include_cast_in_name = state.config().include_cast_in_expression_name;
         let mut scope = state.enter_config_scope();
         let state = scope.state();
@@ -53,7 +60,14 @@ impl PlanResolver<'_> {
         // Must intercept before resolve_data_type converts Variant to Struct.
         if matches!(cast_to_type, spec::DataType::Variant) {
             let named = self.resolve_named_expression(expr, schema, state).await?;
-            let name = if include_cast_in_name || need_rename_cast(&named.expr) {
+            let named_input = named_source
+                && matches!(
+                    &named.expr,
+                    expr::Expr::Alias(_)
+                        | expr::Expr::Column(_)
+                        | expr::Expr::OuterReferenceColumn(..)
+                );
+            let name = if include_cast_in_name || !named_input {
                 let prefix = if is_try { "TRY_" } else { "" };
                 vec![format!(
                     "{}CAST({} AS VARIANT)",
@@ -64,7 +78,7 @@ impl PlanResolver<'_> {
                 named.name
             };
             let expr = ScalarUDF::new_from_impl(SparkCastToVariant::new()).call(vec![named.expr]);
-            return Ok(NamedExpr::new(name, expr));
+            return Ok((NamedExpr::new(name, expr), named_input));
         }
 
         // Extract the DayTimeInterval field unit before resolving to Arrow type,
@@ -85,7 +99,12 @@ impl PlanResolver<'_> {
         let expr_field = named.expr.to_field(schema)?.1;
         let expr_type = expr_field.data_type().clone();
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
-        let name = if include_cast_in_name || need_rename_cast(&named.expr) {
+        let named_input = named_source
+            && matches!(
+                &named.expr,
+                expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
+            );
+        let name = if include_cast_in_name || !named_input {
             let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
             vec![format!(
                 "{}CAST({} AS {})",
@@ -309,7 +328,10 @@ impl PlanResolver<'_> {
             (_, to, true) => try_cast(expr, to),
             (_, to, _) => cast(expr, to),
         };
-        Ok(NamedExpr::new(name, expr))
+        Ok((
+            NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+            named_input,
+        ))
     }
 }
 
@@ -414,15 +436,6 @@ fn day_time_field_to_microseconds(field: spec::IntervalFieldType) -> i64 {
         spec::IntervalFieldType::Minute => 60_000_000,
         // Second, or Year/Month (shouldn't appear for DayTime intervals)
         _ => 1_000_000,
-    }
-}
-
-fn need_rename_cast(expr: &expr::Expr) -> bool {
-    match expr {
-        expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..) => {
-            false
-        }
-        _ => true,
     }
 }
 
