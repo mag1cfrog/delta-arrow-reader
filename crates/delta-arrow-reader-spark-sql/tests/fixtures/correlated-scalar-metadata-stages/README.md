@@ -49,10 +49,12 @@ cd crates/delta-arrow-reader-spark-sql
 cargo +1.96.0 test --locked --workspace --test generated_alias_metadata -- --nocapture --test-threads=1
 ```
 
-The new test performs 72 complete comparisons at batch sizes 1 and 32. The
-test-only commit retains all production source from prerequisite
-`5bce7951cf8665b9a6d44c1c57d36a8425fc83af`. That prerequisite is unmerged;
-passing this target does not complete #710, #790 or #818.
+The correlated test performs 72 complete comparisons at batch sizes 1 and 32.
+The delivery checkpoint `0c45354c63aad5e63d4e4e0a67477d3ab2222603` freezes these
+tests on staging `2104fb8c5d88d0b734841294de9a6de4e16be68d`, which includes #710.
+The source snapshots and manifests preserve the earlier capture environment.
+Runtime acceptance of the delivery candidate is recorded separately from these
+independent references.
 
 To recapture in a pre-existing Spark 4.2.0 environment, stage the original
 scripts and their dependencies in a temporary directory. Run from this fixture
@@ -149,8 +151,11 @@ The eight raw `compatibility/compatibility-spark.jsonl` records, SHA256
 CASE and correlated MAP with and without hidden ORDER BY. Four additive
 `CASE WHEN 1=1` records remain in `case-comparison/case-equal-spark.jsonl`, SHA256
 `fcd1037b0866637ffb9a095c28b788008a55eef160c5d97cfde847b430905b8f`.
-Both files replay complete public/executed fields and rows without normalizing
-their nullability or metadata. MAP encoding retains entry order and duplicates.
+Both files retain complete public/executed fields and rows without normalizing
+their nullability or metadata. They are external diagnostic references for
+comparing the baseline and candidate, because their strict Spark declarations
+also cover work owned by other issues. MAP encoding retains entry order and
+duplicates.
 
 These records expose separate facts. A hidden-output metadata annotation must
 allow the optimizer's valid nested nonnull refinement without changing the
@@ -174,7 +179,7 @@ The 12 `map-interactions/map-interactions-spark.jsonl` records, SHA256
 MAP_FROM_ARRAYS, MAP_FROM_ENTRIES and explicit SQL MAP CAST with and without a
 hidden ORDER BY column, in both ANSI modes. The exact capture, provider, SQL,
 source dependencies and original eight/additive four references are preserved
-in the package. All 24 comparisons use the existing full stage observer,
-including complete fields, validated batches and duplicate-preserving rows.
-MAP's separate #824 top-level nullability differences remain strict alongside
-the #818 nested metadata observations.
+in the package for external baseline/candidate comparisons. They retain complete
+fields, batch validation and duplicate-preserving rows. The staged #824 repair
+now supplies SQL MAP's nonnullable outer container; no captured field is changed
+for this metadata delivery.

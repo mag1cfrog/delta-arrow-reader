@@ -266,9 +266,35 @@ impl PlanResolver<'_> {
         let mut exprs: Vec<expr::Expr> = vec![];
 
         for expression in expressions {
-            let named = self
-                .resolve_named_expression(expression, schema, state)
-                .await?;
+            let (named, alias_display_name) = match expression {
+                spec::Expr::Alias {
+                    expr,
+                    name,
+                    metadata,
+                } => {
+                    let direct_alias_source = Self::is_direct_alias_source(&expr);
+                    let named = self.resolve_named_expression(*expr, schema, state).await?;
+                    let source_name = named.expression_name()?;
+                    let has_alias = !name.is_empty();
+                    let named = Self::apply_expression_alias(
+                        named, name, metadata, direct_alias_source, schema,
+                    )?;
+                    let display_name = if has_alias {
+                        Some(struct_alias_display_name(
+                            &source_name,
+                            &named.name.clone().one()?,
+                        ))
+                    } else {
+                        None
+                    };
+                    (named, display_name)
+                }
+                expression => (
+                    self.resolve_named_expression(expression, schema, state)
+                        .await?,
+                    None,
+                ),
+            };
             let NamedExpr {
                 name,
                 expression_name,
@@ -320,7 +346,11 @@ impl PlanResolver<'_> {
                 }
 
                 other => {
-                    names.push(expression_name.unwrap_or(name.one()?));
+                    names.push(
+                        alias_display_name
+                            .or(expression_name)
+                            .unwrap_or(name.one()?),
+                    );
                     exprs.push(other);
                 }
             }
@@ -405,6 +435,20 @@ impl PlanResolver<'_> {
         }
         arguments
     }
+}
+
+fn struct_alias_display_name(source: &str, alias: &str) -> String {
+    let mut chars = alias.chars();
+    let unquoted = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    let alias = if unquoted {
+        alias.to_string()
+    } else {
+        format!("`{}`", alias.replace('`', "``"))
+    };
+    format!("{source} AS {alias}")
 }
 
 /// Extract metadata from a UDF by calling return_field_from_args with real argument information

@@ -36,16 +36,18 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 
     let keys = expr_fn::make_array(keys);
     let values = expr_fn::make_array(values);
-    let values = cast_list_value_nullability(values, schema, true)?;
     let last_value_wins =
         input.function_context.plan_config.map_key_dedup_policy == MapKeyDedupPolicy::LastWin;
-    let expr = F::udf(SparkMapFromArrays::new(last_value_wins).with_non_nullable_result())(
+    F::udf(
+        SparkMapFromArrays::new(last_value_wins)
+            .with_non_nullable_result()
+            .with_value_contains_null(value_contains_null),
+    )(
         ScalarFunctionInput {
             arguments: vec![keys, values],
             function_context: input.function_context,
         },
-    )?;
-    cast_map_value_nullability(expr, schema, value_contains_null)
+    )
 }
 
 fn map_from_arrays(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -57,14 +59,14 @@ fn map_from_arrays(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         DataType::List(field) | DataType::LargeList(field) => field.is_nullable(),
         _ => true,
     };
-    let values = cast_list_value_nullability(values, schema, true)?;
     let last_value_wins =
         input.function_context.plan_config.map_key_dedup_policy == MapKeyDedupPolicy::LastWin;
-    let expr = F::udf(SparkMapFromArrays::new(last_value_wins))(ScalarFunctionInput {
-        arguments: vec![keys, values],
-        function_context: input.function_context,
-    })?;
-    cast_map_value_nullability(expr, schema, value_contains_null)
+    F::udf(SparkMapFromArrays::new(last_value_wins).with_value_contains_null(value_contains_null))(
+        ScalarFunctionInput {
+            arguments: vec![keys, values],
+            function_context: input.function_context,
+        },
+    )
 }
 
 fn map_from_entries(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -73,14 +75,14 @@ fn map_from_entries(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let entries = input.arguments.one()?;
     let value_contains_null = map_entries_value_contains_null(&entries.get_type(schema.as_ref())?);
-    let entries = cast_map_entries_value_nullability(entries, schema, true)?;
     let last_value_wins =
         input.function_context.plan_config.map_key_dedup_policy == MapKeyDedupPolicy::LastWin;
-    let expr = F::udf(SparkMapFromEntries::new(last_value_wins))(ScalarFunctionInput {
-        arguments: vec![entries],
-        function_context: input.function_context,
-    })?;
-    cast_map_value_nullability(expr, schema, value_contains_null)
+    F::udf(SparkMapFromEntries::new(last_value_wins).with_value_contains_null(value_contains_null))(
+        ScalarFunctionInput {
+            arguments: vec![entries],
+            function_context: input.function_context,
+        },
+    )
 }
 
 fn map_entries(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -139,51 +141,6 @@ fn cast_list_value_nullability(
         _ => return Ok(expr),
     };
     Ok(cast(expr, target_type))
-}
-
-fn cast_map_entries_value_nullability(
-    expr: expr::Expr,
-    schema: &datafusion_common::DFSchemaRef,
-    nullable: bool,
-) -> PlanResult<expr::Expr> {
-    let data_type = expr.get_type(schema.as_ref())?;
-    let (target_type, changed) = match data_type {
-        DataType::List(field) => {
-            let target_field = cast_map_entry_field_value_nullability(&field, nullable)?;
-            let changed = !Arc::ptr_eq(&field, &target_field);
-            (DataType::List(target_field), changed)
-        }
-        DataType::LargeList(field) => {
-            let target_field = cast_map_entry_field_value_nullability(&field, nullable)?;
-            let changed = !Arc::ptr_eq(&field, &target_field);
-            (DataType::LargeList(target_field), changed)
-        }
-        _ => return Ok(expr),
-    };
-    if changed {
-        Ok(cast(expr, target_type))
-    } else {
-        Ok(expr)
-    }
-}
-
-fn cast_map_entry_field_value_nullability(
-    field: &FieldRef,
-    nullable: bool,
-) -> PlanResult<FieldRef> {
-    let DataType::Struct(fields) = field.data_type() else {
-        return Ok(field.clone());
-    };
-    let fields_vec = fields.iter().collect::<Vec<_>>();
-    let [key_field, value_field] = fields_vec.as_slice() else {
-        return Ok(field.clone());
-    };
-    if value_field.is_nullable() == nullable {
-        return Ok(field.clone());
-    }
-    Ok(Arc::new(field.as_ref().clone().with_data_type(
-        DataType::Struct(vec![(*key_field).clone(), with_nullable(value_field, nullable)].into()),
-    )))
 }
 
 fn cast_map_value_nullability(

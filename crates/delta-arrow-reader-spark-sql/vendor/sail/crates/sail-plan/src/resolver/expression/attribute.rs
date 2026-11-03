@@ -10,6 +10,7 @@ use sail_common::spec;
 use sail_function::scalar::array_struct_field::ArrayStructField;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::clear_inherited_field_metadata;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::lambda::LAMBDA_VARIABLE_EXPRESSION_NAME;
@@ -264,10 +265,12 @@ impl PlanResolver<'_> {
                             && info.name().eq_ignore_ascii_case(name.as_ref())
                     })
                     .map(|(_, name)| {
+                        let mut outer_field = field.as_ref().clone();
+                        clear_inherited_field_metadata(&mut outer_field);
                         (
                             name.as_ref().to_string(),
                             expr::Expr::OuterReferenceColumn(
-                                field.clone(),
+                                Arc::new(outer_field),
                                 Column::new(qualifier.cloned(), field.name()),
                             ),
                         )

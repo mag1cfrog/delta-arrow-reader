@@ -11,6 +11,7 @@ use sail_common::spec;
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::error::{PlanError, PlanResult};
+use crate::function::common::clear_inherited_field_metadata;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -117,8 +118,10 @@ impl PlanResolver<'_> {
                     if info.is_hidden() && qualifier_filter.is_none() {
                         continue;
                     }
+                    let mut outer_field = field.as_ref().clone();
+                    clear_inherited_field_metadata(&mut outer_field);
                     let outer_col = Expr::OuterReferenceColumn(
-                        field.clone(),
+                        Arc::new(outer_field),
                         Column::new(qualifier.cloned(), field.name()),
                     );
                     projected.push(NamedExpr::new(vec![info.name().to_string()], outer_col));
