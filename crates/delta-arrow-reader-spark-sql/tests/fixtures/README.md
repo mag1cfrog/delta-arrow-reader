@@ -2160,11 +2160,11 @@ the original ten #803 records, four #815 records and two pending #816 Map
 records. The full original capture and existing #803 partition remain intact.
 Native SQL controls compare complete logical/physical declarations, returned
 batches and failure causes before Spark configuration and before/after a Spark
-NULL extraction. Ordinary attributes and computed/bracket extraction admit
-NULL-typed bases through the existing native get_field inference/execution.
-Dotted typed-lambda paths keep strict NULL-base validation throughout their
-nested tail. The Spark resolver suppresses a computed NULL base before calling
-get_field, matching the captured Spark rule without changing native SQL.
+NULL extraction. Ordinary attributes and computed/bracket extraction fold a
+NULL-typed base to a NULL literal in the shared Spark resolver, including an
+ordinary attribute whose upstream projection contains fallible work. Dotted
+typed-lambda paths keep strict NULL-base validation throughout their nested tail.
+Native get_field and the non-NULL extraction rules remain unchanged.
 
 Recollect to a fresh path using the existing pinned PySpark 4.2.0/Java 21 setup:
 

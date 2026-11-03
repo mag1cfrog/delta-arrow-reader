@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, FieldRef, Fields};
-use datafusion_common::{Column, DFSchemaRef, TableReference};
+use datafusion_common::{Column, DFSchemaRef, ScalarValue, TableReference};
 use datafusion_expr::expr::{LambdaVariable, ScalarFunction};
 use datafusion_expr::{ExprSchemable, ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
@@ -319,8 +319,10 @@ impl PlanResolver<'_> {
                     }
                     _ => data_type,
                 };
-                match (lookup_type, allow_null_base) {
-                    (DataType::Struct(fields), _) => {
+                match lookup_type {
+                    // Spark folds NULL extraction before evaluating even a projected base.
+                    DataType::Null if allow_null_base => Ok(lit(ScalarValue::Null)),
+                    DataType::Struct(fields) => {
                         let field = Self::resolve_struct_field(fields, name.as_ref())?;
                         let args = vec![expr, lit(field.name().to_string())];
                         let expr =
@@ -340,7 +342,7 @@ impl PlanResolver<'_> {
                             allow_null_base,
                         )
                     }
-                    (DataType::Map(_, _), _) | (DataType::Null, true) => {
+                    DataType::Map(_, _) => {
                         let expr = get_field().call(vec![expr, lit(name.as_ref().to_string())]);
                         let data_type = expr.get_type(schema)?;
                         Self::resolve_potentially_nested_field(
@@ -351,12 +353,9 @@ impl PlanResolver<'_> {
                             allow_null_base,
                         )
                     }
-                    (
-                        DataType::List(field)
-                        | DataType::LargeList(field)
-                        | DataType::FixedSizeList(field, _),
-                        _,
-                    ) => {
+                    DataType::List(field)
+                    | DataType::LargeList(field)
+                    | DataType::FixedSizeList(field, _) => {
                         let DataType::Struct(fields) = field.data_type() else {
                             return Err(PlanError::analysis(format!(
                                 "cannot resolve attribute: [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] field {:?} requires a STRUCT array element, got {}",
