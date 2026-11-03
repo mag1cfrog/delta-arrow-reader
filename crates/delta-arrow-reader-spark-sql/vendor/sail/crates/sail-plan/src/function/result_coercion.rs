@@ -17,6 +17,9 @@ use crate::function::common::FunctionContextInput;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
+mod nested;
+pub(crate) use nested::is_nested_result_type;
+
 pub(crate) fn coerce_result_values(
     arguments: Vec<expr::Expr>,
     function_context: &FunctionContextInput<'_>,
@@ -25,6 +28,9 @@ pub(crate) fn coerce_result_values(
         .iter()
         .map(|arg| arg.get_type(function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
+    if data_types.iter().any(is_nested_result_type) {
+        return nested::coerce_nested_result_values(arguments, &data_types, function_context);
+    }
     if let Some(target) = common_numeric_type(&data_types, function_context.plan_config.ansi_mode) {
         return Ok(arguments
             .into_iter()
@@ -44,37 +50,7 @@ pub(crate) fn coerce_result_values(
         return arguments
             .into_iter()
             .zip(data_types)
-            .map(|(arg, source)| {
-                if source == target {
-                    return Ok(arg);
-                }
-                let arg = if is_string_type(&source) {
-                    match target {
-                        DataType::Int64 => SparkCastStringToInteger::try_new(
-                            DataType::Int64,
-                            StringIntegerCastMode::Ansi,
-                        )?
-                        .into_expr(arg),
-                        DataType::Float64 => ScalarUDF::from(SparkCastStringToFloat::try_new(
-                            DataType::Float64,
-                            false,
-                        )?)
-                        .call(vec![arg]),
-                        DataType::Boolean => {
-                            ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![arg])
-                        }
-                        _ => cast(arg, target.clone()),
-                    }
-                } else if target == DataType::Utf8
-                    && (is_temporal_type(&source)
-                        || matches!(source, DataType::Float32 | DataType::Float64))
-                {
-                    ScalarUDF::from(SparkToUtf8::new()).call(vec![arg])
-                } else {
-                    cast(arg, target.clone())
-                };
-                Ok(arg)
-            })
+            .map(|(arg, source)| cast_result_value(arg, &source, &target))
             .collect();
     }
     let has_string = data_types.iter().any(is_string_type);
@@ -114,6 +90,45 @@ pub(crate) fn coerce_result_values(
         arguments
     };
     Ok(arguments)
+}
+
+fn cast_result_value(
+    arg: expr::Expr,
+    source: &DataType,
+    target: &DataType,
+) -> PlanResult<expr::Expr> {
+    if source == target {
+        return Ok(arg);
+    }
+    if is_string_type(source) {
+        return Ok(match target {
+            DataType::Int64 => SparkCastStringToInteger::try_new(
+                DataType::Int64,
+                StringIntegerCastMode::Ansi,
+            )?
+            .into_expr(arg),
+            DataType::Float64 => ScalarUDF::from(SparkCastStringToFloat::try_new(
+                DataType::Float64,
+                false,
+            )?)
+            .call(vec![arg]),
+            DataType::Boolean => {
+                ScalarUDF::from(SparkCastStringToBoolean::new(false)).call(vec![arg])
+            }
+            _ if is_temporal_type(target) => return coerce_to_temporal(arg, source, target),
+            _ => cast(arg, target.clone()),
+        });
+    }
+    if target == &DataType::Utf8
+        && (is_temporal_type(source)
+            || matches!(source, DataType::Float32 | DataType::Float64))
+    {
+        Ok(ScalarUDF::from(SparkToUtf8::new()).call(vec![arg]))
+    } else if is_temporal_type(source) && is_temporal_type(target) {
+        coerce_to_temporal(arg, source, target)
+    } else {
+        Ok(cast(arg, target.clone()))
+    }
 }
 
 // STRING with INT selects BIGINT in ANSI mode and STRING otherwise.

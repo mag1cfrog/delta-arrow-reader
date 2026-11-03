@@ -12,7 +12,7 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
-    coerce_result_values, common_result_type_with_strings, is_temporal_type,
+    coerce_result_values, common_result_type_with_strings, is_nested_result_type, is_temporal_type,
 };
 
 mod nullif;
@@ -86,7 +86,8 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let (left, right) = input.arguments.two()?;
     let schema = input.function_context.schema;
     let data_types = [left.get_type(schema)?, right.get_type(schema)?];
-    if data_types.iter().any(is_temporal_type)
+    if data_types.iter().any(is_nested_result_type)
+        || data_types.iter().any(is_temporal_type)
         || common_numeric_type(&data_types, input.function_context.plan_config.ansi_mode).is_some()
         || common_result_type_with_strings(
             &data_types,
