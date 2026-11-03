@@ -2199,7 +2199,7 @@ records; the two Map observations retain separate #816 ownership. The
 [MAP constructor root replay](#map-constructor-root) checks their original
 constant-Map query and the actual NULL-element control.
 Use `capture_struct_extraction_boundaries_review_v3_spark.py` to recollect the
-complete reference, including those pending cases.
+complete reference, including those retained cases.
 
 All 442 scoped Spark observations run at batch sizes 1 and 32 without filtering.
 `struct_dictionary_fields.rs` adds 32 provider-backed comparisons for direct and
