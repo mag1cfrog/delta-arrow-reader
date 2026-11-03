@@ -146,35 +146,68 @@ mod tests {
 
     #[test]
     fn array_compact_keeps_visible_sliced_values_and_fields() -> Result<()> {
-        let field = Arc::new(Field::new_list_field(DataType::Int32, true)
-            .with_metadata([("origin".into(), "compact-slice".into())].into()));
-        let nulls = Some(NullBuffer::from(vec![true, true, false, true, true, true, true]));
+        let field = Arc::new(
+            Field::new_list_field(DataType::Int32, true)
+                .with_metadata([("origin".into(), "compact-slice".into())].into()),
+        );
+        let nulls = Some(NullBuffer::from(vec![
+            true, true, false, true, true, true, true,
+        ]));
         let input = ListArray::try_new(
-            field.clone(), OffsetBuffer::from_lengths([2, 3, 2, 0, 2, 1, 1]),
-            Arc::new(Int32Array::from(vec![Some(900), Some(901), Some(3), None, Some(4),
-                Some(700), Some(701), None, None, Some(800), Some(99)])), nulls.clone(),
+            field.clone(),
+            OffsetBuffer::from_lengths([2, 3, 2, 0, 2, 1, 1]),
+            Arc::new(Int32Array::from(vec![
+                Some(900),
+                Some(901),
+                Some(3),
+                None,
+                Some(4),
+                Some(700),
+                Some(701),
+                None,
+                None,
+                Some(800),
+                Some(99),
+            ])),
+            nulls.clone(),
         )?;
         let expected = ListArray::try_new(
-            field.clone(), OffsetBuffer::from_lengths([2, 2, 0, 0, 0, 1, 1]),
-            Arc::new(Int32Array::from(vec![900, 901, 3, 4, 800, 99])), nulls,
+            field.clone(),
+            OffsetBuffer::from_lengths([2, 2, 0, 0, 0, 1, 1]),
+            Arc::new(Int32Array::from(vec![900, 901, 3, 4, 800, 99])),
+            nulls,
         )?;
         for data_type in [DataType::List(field.clone()), DataType::LargeList(field)] {
             let input = compute::cast(&input, &data_type)?;
             let expected = compute::cast(&expected, &data_type)?;
-            for (offset, len) in [(0, 7), (1, 5), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (3, 0)] {
+            for (offset, len) in [
+                (0, 7),
+                (1, 5),
+                (1, 1),
+                (2, 1),
+                (3, 1),
+                (4, 1),
+                (5, 1),
+                (3, 0),
+            ] {
                 let argument = input.slice(offset, len);
                 let arg_field = Arc::new(Field::new("a", data_type.clone(), true));
-                let actual = SparkArrayCompact::new().invoke_with_args(ScalarFunctionArgs {
-                    args: vec![ColumnarValue::Array(argument)],
-                    arg_fields: vec![arg_field.clone()],
-                    number_rows: len,
-                    return_field: arg_field,
-                    config_options: Arc::default(),
-                })?.into_array(len)?;
+                let actual = SparkArrayCompact::new()
+                    .invoke_with_args(ScalarFunctionArgs {
+                        args: vec![ColumnarValue::Array(argument)],
+                        arg_fields: vec![arg_field.clone()],
+                        number_rows: len,
+                        return_field: arg_field,
+                        config_options: Arc::default(),
+                    })?
+                    .into_array(len)?;
                 actual.to_data().validate_full()?;
                 assert_eq!(actual.data_type(), &data_type);
-                assert_eq!(actual.as_ref(), expected.slice(offset, len).as_ref(),
-                    "{data_type} offset={offset} len={len}");
+                assert_eq!(
+                    actual.as_ref(),
+                    expected.slice(offset, len).as_ref(),
+                    "{data_type} offset={offset} len={len}"
+                );
             }
         }
         Ok(())
