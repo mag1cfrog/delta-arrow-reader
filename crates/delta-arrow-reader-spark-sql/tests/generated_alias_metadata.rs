@@ -1240,7 +1240,8 @@ async fn collection_errors_cannot_hide_physical_schema_mismatches() -> TestResul
 #[tokio::test]
 async fn correlated_scalar_aliases_match_public_and_executed_spark_schemas() -> TestResult {
     let raw = include_str!("fixtures/correlated-scalar-metadata-stages/scope-spark.jsonl");
-    let seed = include_str!("fixtures/correlated-scalar-metadata-stages/original-scope-spark.jsonl");
+    let seed =
+        include_str!("fixtures/correlated-scalar-metadata-stages/original-scope-spark.jsonl");
     assert!(
         raw.starts_with(seed),
         "original 24 observations were rewritten"

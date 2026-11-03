@@ -44,10 +44,9 @@ pub(crate) async fn capture_spark_query_observation(
         .or_else(|| case.get("executed_schema_before_collect"))
     {
         if physical_schema != *expected {
-            return Err(format!(
-                "executed schema: expected {expected}, got {physical_schema}"
-            )
-            .into());
+            return Err(
+                format!("executed schema: expected {expected}, got {physical_schema}").into(),
+            );
         }
     } else {
         validate_physical_schema(resolved, &query.column_names, schema.fields())?;

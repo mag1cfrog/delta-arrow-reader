@@ -47,12 +47,11 @@ fn scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
     assert_eq!(records.len() - 1, 68);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
-    let ordering = include_str!(
-        "fixtures/correlated-scalar-metadata-stages/ordering/ordering-spark.jsonl"
-    )
-    .lines()
-    .map(serde_json::from_str)
-    .collect::<Result<Vec<Value>, _>>()?;
+    let ordering =
+        include_str!("fixtures/correlated-scalar-metadata-stages/ordering/ordering-spark.jsonl")
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?;
     assert_eq!(ordering.len() - 1, 8);
     let boundaries = include_str!(
         "fixtures/correlated-scalar-metadata-stages/boundaries/boundaries-spark.jsonl"
@@ -62,9 +61,17 @@ fn scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
     .collect::<Result<Vec<Value>, _>>()?;
     assert_eq!(boundaries.len() - 1, 12);
     for extra in [ordering, boundaries] {
-        let inputs = records[0]["inputs"].as_array_mut().ok_or("missing inputs")?;
-        for input in extra[0]["inputs"].as_array().ok_or("missing extra inputs")? {
-            if let Some(existing) = inputs.iter().find(|existing| existing["name"] == input["name"]) {
+        let inputs = records[0]["inputs"]
+            .as_array_mut()
+            .ok_or("missing inputs")?;
+        for input in extra[0]["inputs"]
+            .as_array()
+            .ok_or("missing extra inputs")?
+        {
+            if let Some(existing) = inputs
+                .iter()
+                .find(|existing| existing["name"] == input["name"])
+            {
                 assert_eq!(existing, input);
             } else {
                 inputs.push(input.clone());
@@ -585,7 +592,8 @@ async fn single_row_scalars_preserve_resolved_schema_and_null_safety() -> TestRe
                 spark_results::capture_schema(physical_schema.fields(), None)?,
                 stage_case["executed_schema_after_collect"],
                 "{} ANSI={} batch={batch_size}",
-                case["id"], case["ansi"]
+                case["id"],
+                case["ansi"]
             );
             eprintln!(
                 "SINGLE_ROW_NONNULLABLE_SCHEMAS {}",

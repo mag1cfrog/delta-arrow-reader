@@ -13,7 +13,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 use sail_logical_plan::sort::SortWithinPartitionsNode;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::set_result_metadata;
+use crate::function::common::preserve_result_field_metadata;
 use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
@@ -41,14 +41,7 @@ impl PlanResolver<'_> {
                 .into_iter()
                 .zip(project.schema.iter())
                 .map(|(expression, (qualifier, field))| {
-                    set_result_metadata(
-                        expression,
-                        field
-                            .metadata()
-                            .iter()
-                            .map(|(key, value)| (key.clone(), value.clone()))
-                            .collect(),
-                    )
+                    preserve_result_field_metadata(expression, field)
                     .alias_qualified(qualifier.cloned(), field.name())
                 })
                 .collect();
