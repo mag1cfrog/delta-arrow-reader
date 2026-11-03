@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
+#[allow(dead_code)]
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_results::{TestResult, capture_schema, encode_value, validate_batch};
