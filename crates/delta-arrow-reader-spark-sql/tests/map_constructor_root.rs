@@ -12,7 +12,7 @@ mod spark_inputs;
 mod spark_results;
 use spark_results::{
     TestResult, capture_native_query_observation, capture_spark_query_observation,
-    compare_exact_spark_query_stages,
+    capture_spark_query_result, compare_exact_spark_query_stages,
 };
 
 const MAP: &str = include_str!("fixtures/map-constructor-nullability-spark.jsonl");
@@ -146,11 +146,11 @@ async fn map_constructor_preserves_null_cast_native_and_cardinality_guards() -> 
                 "SELECT (SELECT MAP('key',v) FROM (VALUES (1)) q(v) WHERE false) AS r",
             ] {
                 let actual =
-                    capture_spark_query_observation(&session, &json!({"sql":sql,"ansi":ansi}))
+                    capture_spark_query_result(&session, &json!({"sql":sql,"ansi":ansi}))
                         .await?;
-                assert_eq!(actual["result"]["rows"], json!([[null]]), "{sql}");
+                assert_eq!(actual["rows"], json!([[null]]), "{sql}");
                 assert_eq!(
-                    actual["result"]["schema"]["fields"][0]["nullable"], true,
+                    actual["schema"]["fields"][0]["nullable"], true,
                     "{sql}"
                 );
             }
