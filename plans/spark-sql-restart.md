@@ -9,15 +9,23 @@ has been reviewed. Publish the final support contract separately.
 
 ### Core delivery order
 
-The current delivery sequence is #824, #816, #710, then #818. The staging base
-for this rescope is `c3eb810caca0e7b378ae0464953f225f6b0dfc58`.
+The SQL MAP constructor repair for #824 also completes the original #816
+lambda contract in this branch. The next delivery sequence is #710, then #818.
+The staging base for this rescope is `c3eb810caca0e7b378ae0464953f225f6b0dfc58`.
 
 | Issue | Merge contract | Remaining code prerequisite |
 | --- | --- | --- |
-| #824 | SQL MAP container nullability, including direct/scalar/lambda consumers; preserve nullable values, constructor errors, explicit casts and other MAP constructors. | None. Port the constructor-only override to current staging. |
-| #816 | Original folded MAP lambda and NULL-element control, provider inputs and binding guards, delivered by the constructor root repair. | #824. No general lambda simplifier is planned. |
+| #824 | SQL MAP container nullability, including direct/scalar/lambda consumers; preserve nullable values, constructor errors, explicit casts and other MAP constructors. | Constructor-only repair included. |
+| #816 | Original folded MAP lambda and NULL-element control, provider inputs and binding guards, delivered by the constructor root repair. | Satisfied by the included #824 repair. No general lambda simplifier is needed. |
 | #710 | Ordinary projection/aggregate generated metadata and its existing consumers; preserve fields, values and error/evaluation behavior. | None. #803 is already merged through #817. |
 | #818 | Original correlated scalar metadata stages plus containment of its introduced MAP, CASE and hidden ORDER BY regressions. | #710's annotation and projection implementation. |
+
+The constructor source at `b7ac26e8` passes 723 workspace tests with zero
+failures and three inherited ignored tests, formatting and package Clippy.
+Complete paired observations preserve the metadata/name/capture gaps with
+their owners. The existing malformed programmatic lambda-binding gap is #856;
+the unchanged constant-cast NULL-predicate error timing is recorded under #173.
+Neither is a dependency of the constructor repair.
 
 Each slice must satisfy its original contract and pass the full existing
 standalone workspace regression suite, formatting and package Clippy on the
