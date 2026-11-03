@@ -39,23 +39,91 @@ fn case(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
                 branch_values.push(result);
             }
             _ => {
-                conditions.push(lit(true));
                 branch_values.push(condition);
                 break;
             }
         }
     }
-    let branch_values = coerce_result_values(branch_values, &function_context)?;
+    let mut branch_values = coerce_result_values(branch_values, &function_context)?;
+    let else_expr = if branch_values.len() > conditions.len() {
+        branch_values.pop().map(Box::new)
+    } else {
+        None
+    };
     let when_then_expr = conditions
         .into_iter()
         .zip(branch_values)
         .map(|(condition, value)| (Box::new(condition), Box::new(value)))
         .collect();
-    Ok(expr::Expr::Case(expr::Case {
-        expr: None, // Expr::Case in from_ast_expression incorporates into when_then_expr
+    Ok(expr::Expr::Case(expr::Case::new_spark_searched(
         when_then_expr,
-        else_expr: None,
-    }))
+        else_expr,
+    )))
+}
+
+#[tokio::test]
+async fn case_retains_branches_and_validates_conditions_before_results() -> PlanResult<()> {
+    use crate::config::PlanConfig;
+    use crate::function::common::FunctionContextInput;
+    use datafusion::prelude::SessionContext;
+    use datafusion_common::DFSchema;
+    use datafusion_expr::{cast, col};
+
+    let context = SessionContext::new();
+    let schema = Arc::new(DFSchema::empty());
+    let config = Arc::new(PlanConfig::default());
+    let resolve = |arguments| {
+        case(ScalarFunctionInput {
+            arguments,
+            function_context: FunctionContextInput {
+                argument_display_names: &[],
+                plan_config: &config,
+                session_context: &context,
+                schema: &schema,
+            },
+        })
+    };
+    for explicit_else in [false, true] {
+        let mut arguments = vec![
+            lit(false),
+            lit(1_i32),
+            lit(true),
+            lit(2_i64),
+            lit(false),
+            lit(3_i32),
+        ];
+        if explicit_else {
+            arguments.push(lit(4_i32));
+        }
+        let expr::Expr::Case(resolved) = resolve(arguments)? else {
+            panic!("expected CASE")
+        };
+        assert!(resolved.is_spark_searched());
+        assert_eq!(
+            resolved.when_then_expr,
+            vec![
+                (
+                    Box::new(lit(false)),
+                    Box::new(cast(lit(1_i32), DataType::Int64))
+                ),
+                (Box::new(lit(true)), Box::new(lit(2_i64))),
+                (
+                    Box::new(lit(false)),
+                    Box::new(cast(lit(3_i32), DataType::Int64))
+                ),
+            ]
+        );
+        assert_eq!(
+            resolved.else_expr,
+            explicit_else.then(|| Box::new(cast(lit(4_i32), DataType::Int64)))
+        );
+    }
+    assert!(matches!(
+        resolve(vec![lit(true), col("unresolved_result"), lit(1_i32), lit(2_i32), lit(3_i32)]),
+        Err(PlanError::InvalidArgument(message))
+            if message == "CASE WHEN condition must be BOOLEAN, got Int32"
+    ));
+    Ok(())
 }
 
 fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {

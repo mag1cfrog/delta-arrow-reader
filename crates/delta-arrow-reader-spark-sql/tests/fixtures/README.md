@@ -5,6 +5,47 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Scalar CASE explicit ELSE
+
+`case-explicit-else/case-explicit-else-spark.jsonl` records 58 independent
+observations for scalar CASE declarations and evaluation. The focused Rust test
+compares complete results at batch sizes 1 and 32 and retains native SQL controls.
+
+`case-explicit-else/historical-spark.jsonl` captures 123 exact historical queries
+from Spark 4.2.0, revision `32f7299601108917fb01920a54e084595b7b3bf8`, in UTC.
+It retains complete schemas at each stage, rows, plans and capture hashes.
+`reviewed-corrections.json` changes only analyzed nullability for these queries:
+45 existing entries gain the verified declaration and 78 entries are added.
+Rows, names, types, physical nullability and errors retain their exact historical
+expectations. Every changed declaration matches Spark; 119 complete rowsets also
+match. The four `context_0_case` / `context_1_case` observations in
+`replay/existing-projected-cases`, in both ANSI modes, retain their pre-existing
+SQL three-valued projected-IN rows. They remain historical differences under
+#142; their different raw Spark rows remain in this reference. The historical
+matcher and frozen corpus are unchanged.
+
+Recapture with Python 3.12, PySpark 4.2.0 and Java 21 from this crate. Select only
+ID, SQL and ANSI from the reference; the script checks each against the original
+corpus and recomputes every outcome with pinned Spark.
+
+```sh
+case_else_capture_dir="$(mktemp -d)"
+python - "$case_else_capture_dir/selectors.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+reference = Path("tests/fixtures/case-explicit-else/historical-spark.jsonl")
+cases = map(json.loads, reference.read_text().splitlines()[1:])
+Path(sys.argv[1]).write_text(json.dumps([
+    {key: case[key] for key in ("id", "sql", "ansi")} for case in cases
+]))
+PY
+python tests/fixtures/case-explicit-else/capture_historical_case_else_spark.py \
+    tests/fixtures "$case_else_capture_dir/selectors.json" \
+    "$case_else_capture_dir/historical-spark.jsonl"
+```
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
