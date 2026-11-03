@@ -29,6 +29,7 @@ async fn nested_conditional_results_match_spark() -> TestResult {
         (include_str!("fixtures/conditional-nested-supplement-spark.jsonl"), 110),
         (include_str!("fixtures/conditional-nested-order-spark.jsonl"), 16),
         (include_str!("fixtures/conditional-nested-boundaries-spark.jsonl"), 10),
+        (include_str!("fixtures/conditional-nested-set-operations-spark.jsonl"), 10),
     ] {
         let supplement = fixture.lines().map(serde_json::from_str::<Value>)
             .collect::<Result<Vec<_>, _>>()?;
@@ -38,7 +39,7 @@ async fn nested_conditional_results_match_spark() -> TestResult {
         assert_eq!(supplement[0]["inputs"], records[0]["inputs"]);
         records.extend(supplement.into_iter().skip(1));
     }
-    assert_eq!(records.len() - 1, 148);
+    assert_eq!(records.len() - 1, 158);
     let mut identities = std::collections::BTreeSet::new();
     for case in &records[1..] {
         assert!(identities.insert((
@@ -91,22 +92,24 @@ async fn nested_conditional_results_match_spark() -> TestResult {
                 )?);
                 phase = "create_physical_plan";
                 let physical = query.create_physical_plan(&session).await?;
-                let schema = physical.schema();
+                let before_schema = physical.schema();
                 phase = "physical_schema";
-                before_collect = Some(spark_results::capture_schema(schema.fields(), None)?);
+                before_collect = Some(spark_results::capture_schema(before_schema.fields(), None)?);
                 phase = "collect";
-                let batches = collect(physical, session.task_ctx()).await?;
+                let batches = collect(physical.clone(), session.task_ctx()).await?;
+                phase = "executed_schema";
+                let executed_schema = physical.schema();
+                executed = Some(spark_results::capture_schema(executed_schema.fields(), None)?);
                 phase = "encode";
                 let mut rows = Vec::new();
                 for batch in batches {
-                    spark_results::validate_batch(schema.as_ref(), &batch)?;
+                    spark_results::validate_batch(executed_schema.as_ref(), &batch)?;
                     for row in 0..batch.num_rows() {
                         rows.push(batch.columns().iter().map(|column| {
                             spark_results::encode_value(column.as_ref(), row)
                         }).collect::<TestResult<Vec<_>>>()?);
                     }
                 }
-                executed = Some(spark_results::capture_schema(schema.fields(), None)?);
                 rows.sort_by_key(|row| json!(row).to_string());
                 Ok(rows)
             }.await;
@@ -148,7 +151,7 @@ async fn nested_conditional_results_match_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(comparisons, 296);
+    assert_eq!(comparisons, 316);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
