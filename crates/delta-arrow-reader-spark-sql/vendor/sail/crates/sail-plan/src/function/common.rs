@@ -48,7 +48,7 @@ pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::default(),
         lifetime: ResultMetadataLifetime::AnalysisOnly,
-        metadata_source_type: None,
+        hidden_sort_output_type: None,
     })
     .call(vec![expression])
 }
@@ -62,7 +62,7 @@ pub(crate) fn drop_scalar_subquery_metadata(
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::from(&field),
         lifetime: ResultMetadataLifetime::UntilScalarInlining,
-        metadata_source_type: None,
+        hidden_sort_output_type: None,
     })
     .call(vec![expression])
 }
@@ -97,24 +97,24 @@ pub(crate) fn set_result_metadata(
     ScalarUDF::from(SparkResultMetadata {
         metadata: metadata.into_iter().collect::<HashMap<_, _>>().into(),
         lifetime: ResultMetadataLifetime::Permanent,
-        metadata_source_type: None,
+        hidden_sort_output_type: None,
     })
     .call(vec![expression])
 }
 
-pub(crate) fn preserve_result_field_metadata(
+pub(crate) fn preserve_hidden_sort_output_declaration(
     expression: expr::Expr,
     field: &FieldRef,
 ) -> expr::Expr {
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::from(field.as_ref()),
         lifetime: ResultMetadataLifetime::Permanent,
-        metadata_source_type: Some(field.data_type().clone()),
+        hidden_sort_output_type: Some(field.data_type().clone()),
     })
     .call(vec![expression])
 }
 
-fn overlay_nested_field_metadata(
+fn overlay_hidden_sort_nested_fields(
     actual: &DataType,
     captured: &DataType,
 ) -> datafusion_common::Result<DataType> {
@@ -128,10 +128,11 @@ fn overlay_nested_field_metadata(
             actual
                 .as_ref()
                 .clone()
-                .with_data_type(overlay_nested_field_metadata(
+                .with_data_type(overlay_hidden_sort_nested_fields(
                     actual.data_type(),
                     captured.data_type(),
                 )?)
+                .with_nullable(captured.is_nullable())
                 .with_metadata(captured.metadata().clone()),
         ))
     };
@@ -168,7 +169,7 @@ fn overlay_nested_field_metadata(
 }
 
 // Arrow's positional cast keeps distinct values under duplicate STRUCT child names.
-fn redeclare_scalar_metadata(
+fn redeclare_scalar_fields(
     value: &ScalarValue,
     declared: &DataType,
 ) -> datafusion_common::Result<ScalarValue> {
@@ -192,10 +193,10 @@ pub(crate) fn materialize_metadata_literals(
                 return Ok(Transformed::yes(argument.clone()));
             }
             let field = annotation.annotate_field(&field)?;
-            let value = if annotation.metadata_source_type.is_some()
+            let value = if annotation.hidden_sort_output_type.is_some()
                 && value.data_type() != *field.data_type()
             {
-                redeclare_scalar_metadata(&value, field.data_type())?
+                redeclare_scalar_fields(&value, field.data_type())?
             } else {
                 value
             };
@@ -247,13 +248,13 @@ enum ResultMetadataLifetime {
 struct SparkResultMetadata {
     metadata: FieldMetadata,
     lifetime: ResultMetadataLifetime,
-    metadata_source_type: Option<DataType>,
+    hidden_sort_output_type: Option<DataType>,
 }
 
 impl SparkResultMetadata {
     fn result_data_type(&self, actual: &DataType) -> datafusion_common::Result<DataType> {
-        match &self.metadata_source_type {
-            Some(captured) => overlay_nested_field_metadata(actual, captured),
+        match &self.hidden_sort_output_type {
+            Some(captured) => overlay_hidden_sort_nested_fields(actual, captured),
             None => Ok(actual.clone()),
         }
     }
@@ -307,7 +308,7 @@ impl ScalarUDFImpl for SparkResultMetadata {
     }
 
     fn placement(&self, args: &[ExpressionPlacement]) -> ExpressionPlacement {
-        // A metadata-only output projection must not repartition a globally sorted input.
+        // An output annotation must not repartition a globally sorted input.
         args[0]
     }
 
@@ -316,7 +317,7 @@ impl ScalarUDFImpl for SparkResultMetadata {
         args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
         let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
-        if self.metadata_source_type.is_none() {
+        if self.hidden_sort_output_type.is_none() {
             return Ok(value);
         }
         let result_type = self.result_data_type(&value.data_type())?;
@@ -328,7 +329,7 @@ impl ScalarUDFImpl for SparkResultMetadata {
                 array.as_ref(),
                 &result_type,
             )?)),
-            ColumnarValue::Scalar(value) => Ok(ColumnarValue::Scalar(redeclare_scalar_metadata(
+            ColumnarValue::Scalar(value) => Ok(ColumnarValue::Scalar(redeclare_scalar_fields(
                 &value,
                 &result_type,
             )?)),
@@ -2240,18 +2241,20 @@ fn exact_integer_predicates_match_explicit_double_coercion() -> PlanResult<()> {
 fn metadata_annotations_preserve_expression_placement() {
     use datafusion_expr::ExpressionPlacement;
 
-    let annotation = SparkResultMetadata {
-        metadata: FieldMetadata::default(),
-        lifetime: ResultMetadataLifetime::Permanent,
-        metadata_source_type: None,
-    };
-    for placement in [
-        ExpressionPlacement::Literal,
-        ExpressionPlacement::Column,
-        ExpressionPlacement::MoveTowardsLeafNodes,
-        ExpressionPlacement::KeepInPlace,
-    ] {
-        assert_eq!(annotation.placement(&[placement]), placement);
+    for hidden_sort_output_type in [None, Some(DataType::Int32)] {
+        let annotation = SparkResultMetadata {
+            metadata: FieldMetadata::default(),
+            lifetime: ResultMetadataLifetime::Permanent,
+            hidden_sort_output_type,
+        };
+        for placement in [
+            ExpressionPlacement::Literal,
+            ExpressionPlacement::Column,
+            ExpressionPlacement::MoveTowardsLeafNodes,
+            ExpressionPlacement::KeepInPlace,
+        ] {
+            assert_eq!(annotation.placement(&[placement]), placement);
+        }
     }
 }
 
@@ -2384,7 +2387,7 @@ fn scalar_metadata_boundary_expires_only_after_inlining() -> datafusion_common::
 
 #[cfg(test)]
 #[test]
-fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<()> {
+fn hidden_sort_output_preserves_nested_declarations() -> datafusion_common::Result<()> {
     use datafusion::arrow::array::{Array, ArrayRef, Int32Array, ListArray, StructArray};
     use datafusion::arrow::buffer::{NullBuffer, OffsetBuffer};
     use datafusion::arrow::datatypes::Schema;
@@ -2430,7 +2433,7 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
     ));
     let source_field = Arc::new(Field::new("k", source.data_type().clone(), true));
     let schema = DFSchema::try_from(Schema::new(vec![Arc::clone(&source_field)]))?;
-    let expression = preserve_result_field_metadata(datafusion_expr::col("k"), &declared);
+    let expression = preserve_hidden_sort_output_declaration(datafusion_expr::col("k"), &declared);
     assert!(
         !expression
             .exists(|node| { Ok(matches!(node, expr::Expr::Cast(_) | expr::Expr::TryCast(_))) })?
@@ -2480,10 +2483,10 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
         };
         assert_eq!(&scalar_result.data_type(), declared.data_type());
         assert_eq!(
-            redeclare_scalar_metadata(&scalar_result, source.data_type())?,
+            redeclare_scalar_fields(&scalar_result, source.data_type())?,
             scalar
         );
-        let annotated = preserve_result_field_metadata(lit(scalar), &declared);
+        let annotated = preserve_hidden_sort_output_declaration(lit(scalar), &declared);
         let materialized = materialize_metadata_literals(annotated)?.data;
         let expr::Expr::Literal(value, _) = materialized else {
             return datafusion_common::internal_err!("expected metadata literal");
@@ -2500,10 +2503,10 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
         Field::new("leaf", DataType::Int32, false),
     ] {
         let changed = DataType::Struct(vec![Arc::new(field)].into());
-        assert!(overlay_nested_field_metadata(&original, &changed).is_err());
+        assert!(overlay_hidden_sort_nested_fields(&original, &changed).is_err());
         let declared = Arc::new(Field::new("r", changed, false));
         assert!(
-            preserve_result_field_metadata(datafusion_expr::col("k"), &declared)
+            preserve_hidden_sort_output_declaration(datafusion_expr::col("k"), &declared)
                 .to_field(&schema)
                 .is_err()
         );
@@ -2513,7 +2516,7 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
 
 #[cfg(test)]
 #[test]
-// This guards the metadata-only wrapper; CASE nullability has its own schema contract.
+// Metadata-only annotations refine nullability; hidden sort outputs retain their declaration.
 fn metadata_overlay_preserves_actual_nested_nullability() -> datafusion_common::Result<()> {
     use datafusion::arrow::array::{Array, ArrayRef, Int32Array, StructArray};
     use datafusion::arrow::datatypes::Schema;
@@ -2529,47 +2532,55 @@ fn metadata_overlay_preserves_actual_nested_nullability() -> datafusion_common::
     )?);
     let captured_type =
         DataType::Struct(vec![Arc::new(Field::new("x", DataType::Int32, true))].into());
-    let expected_type =
-        DataType::Struct(vec![Arc::new(Field::new("x", DataType::Int32, false))].into());
     let captured = Arc::new(Field::new("r", captured_type, true));
     let source_field = Arc::new(Field::new("k", source.data_type().clone(), false));
     let schema = DFSchema::try_from(Schema::new(vec![Arc::clone(&source_field)]))?;
-    let expression = preserve_result_field_metadata(datafusion_expr::col("k"), &captured);
-    let returned = expression.to_field(&schema)?.1;
-    assert_eq!(returned.data_type(), &expected_type);
-    assert!(!returned.is_nullable());
-    let expr::Expr::ScalarFunction(function) = expression else {
-        return datafusion_common::internal_err!("expected result metadata annotation");
-    };
-    let scalar = ScalarValue::try_from_array(source.as_ref(), 0)?;
-    for input in [
-        ColumnarValue::Array(Arc::clone(&source)),
-        ColumnarValue::Scalar(scalar.clone()),
+    for (expression, expected_type) in [
+        (
+            set_result_metadata(datafusion_expr::col("k"), vec![]),
+            source.data_type().clone(),
+        ),
+        (
+            preserve_hidden_sort_output_declaration(datafusion_expr::col("k"), &captured),
+            captured.data_type().clone(),
+        ),
     ] {
-        let result = function.func.invoke_with_args(ScalarFunctionArgs {
-            args: vec![input],
-            arg_fields: vec![Arc::clone(&source_field)],
-            number_rows: 2,
-            return_field: Arc::clone(&returned),
-            config_options: Arc::new(Default::default()),
-        })?;
-        assert_eq!(result.data_type(), expected_type);
-        let expected = match &result {
-            ColumnarValue::Array(_) => Arc::clone(&source),
-            ColumnarValue::Scalar(_) => scalar.to_array()?,
+        let returned = expression.to_field(&schema)?.1;
+        assert_eq!(returned.data_type(), &expected_type);
+        assert!(!returned.is_nullable());
+        let expr::Expr::ScalarFunction(function) = expression else {
+            return datafusion_common::internal_err!("expected result metadata annotation");
         };
-        let result = result.into_array(expected.len())?;
-        result.to_data().validate_full()?;
-        let restored = arrow_cast(result.as_ref(), source.data_type())?;
-        assert_eq!(restored.to_data(), expected.to_data());
+        let scalar = ScalarValue::try_from_array(source.as_ref(), 0)?;
+        for input in [
+            ColumnarValue::Array(Arc::clone(&source)),
+            ColumnarValue::Scalar(scalar.clone()),
+        ] {
+            let result = function.func.invoke_with_args(ScalarFunctionArgs {
+                args: vec![input],
+                arg_fields: vec![Arc::clone(&source_field)],
+                number_rows: 2,
+                return_field: Arc::clone(&returned),
+                config_options: Arc::new(Default::default()),
+            })?;
+            assert_eq!(result.data_type(), expected_type);
+            let expected = match &result {
+                ColumnarValue::Array(_) => Arc::clone(&source),
+                ColumnarValue::Scalar(_) => scalar.to_array()?,
+            };
+            let result = result.into_array(expected.len())?;
+            result.to_data().validate_full()?;
+            let restored = arrow_cast(result.as_ref(), source.data_type())?;
+            assert_eq!(restored.to_data(), expected.to_data());
+        }
+        let annotated = function.func.call(vec![lit(scalar)]);
+        let materialized = materialize_metadata_literals(annotated)?.data;
+        let expr::Expr::Literal(value, _) = materialized else {
+            return datafusion_common::internal_err!("expected metadata literal");
+        };
+        assert_eq!(value.data_type(), expected_type);
+        value.to_array()?.to_data().validate_full()?;
     }
-    let annotated = preserve_result_field_metadata(lit(scalar), &captured);
-    let materialized = materialize_metadata_literals(annotated)?.data;
-    let expr::Expr::Literal(value, _) = materialized else {
-        return datafusion_common::internal_err!("expected metadata literal");
-    };
-    assert_eq!(value.data_type(), expected_type);
-    value.to_array()?.to_data().validate_full()?;
     Ok(())
 }
 

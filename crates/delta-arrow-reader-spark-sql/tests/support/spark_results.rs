@@ -205,17 +205,17 @@ pub(crate) async fn compare_exact_spark_query_stages(
         .is_none_or(|expected| before.as_ref() == Some(expected));
     let executed_matches = recorded_stage("executed", "executed_schema_after_collect")?
         .is_none_or(|expected| executed.as_ref() == Some(expected));
-    let rows_match = case["expected"]
-        .get("rows")
-        .is_none_or(|expected| {
-            let mut expected = expected.as_array().expect("recorded rows").clone();
-            if case["ordered"] == true {
-                expected.sort_by_key(Value::to_string);
-            }
-            actual
-                .as_ref()
-                .is_ok_and(|rows| json!(rows) == json!(expected))
-        });
+    let rows_match = if let Some(expected) = case["expected"].get("rows") {
+        let mut expected = expected.as_array().ok_or("missing recorded rows")?.clone();
+        if case["ordered"] == true {
+            expected.sort_by_key(Value::to_string);
+        }
+        actual
+            .as_ref()
+            .is_ok_and(|rows| json!(rows) == json!(expected))
+    } else {
+        true
+    };
     let ordered_rows_match = case["ordered"] != true
         || rows_raw
             .as_ref()
