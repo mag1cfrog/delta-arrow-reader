@@ -2352,8 +2352,8 @@ Spark SQL planning. Inner ListView values use a canonical List control; inner
 LargeListView values use LargeList. Both share independently specified logical
 values and expected flat rows. Complete public, before-collect and executed
 Arrow fields, including storage width and metadata, must match the canonical
-control. This storage repair keeps canonical declaration inference under #835;
-it does not substitute weaker expected fields for that separate acceptance.
+control. The [result-field controls](#flatten-result-fields) independently check
+Spark's complete output declarations.
 
 Contiguous, gapped and overlapping ranges have explicit expected values.
 Prefix and suffix rows expose nonzero outer slices and sentinel leakage. A fourth
@@ -2372,5 +2372,36 @@ inner-view flattening behavior.
 The source normalization clones the immediate inner field and retains its leaf
 field reference. Only ListView-to-List and LargeListView-to-LargeList change;
 Arrow 58.4.0's checked view cast supplies range gathering and offset overflow
-checks. These controls establish equivalence to canonical storage. Final output
-metadata and nullability remain subject to the declaration repair in #835.
+checks. The result adapter retains the resulting leaf field, including its
+metadata and nullability, and derives output nullability from the outer array
+and immediate inner field.
+
+## FLATTEN result fields
+
+`flatten-result-fields-spark.jsonl` preserves all 26 raw observations from the
+independent #835 capture. Its SHA256 is
+`53b49bf66517c6eed57b61e446f972a34b40a10137c822e7973297ca7383d43a`.
+`array-result-fields-boundaries-spark.jsonl` preserves the complete 12-record
+boundary capture with SHA256
+`82bd3651030a90d4d44941200d97dbeeda0b2bcee284272b6aafef0433ebd956`.
+The FLATTEN test selects its four original `untyped_null` and `untyped_empty`
+records; its eight overlap records remain owned by their overlap deliveries.
+Both headers pin Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8` in UTC and retain the capture script
+hashes, input declarations, rows and error phases.
+
+`flatten_result_fields.rs` replays both ANSI modes at batch sizes 1 and 32 using
+the current provider loader and strict stage comparator. Cases cover literal
+and column inputs, direct and nested outputs, NULL elements, NULL outer and
+inner arrays, empty arrays, deeper nesting, zero rows and required cast errors.
+Four exact invalid-input query/condition pairs accept the existing resolver
+diagnostics only at the recorded resolution phase; all field and row checks
+remain required. Negative controls reject changes to the query, condition,
+cause, phase or any field/row comparison. Native FLATTEN controls compare
+configured and unconfigured schemas and batches.
+
+The sail-plan storage test covers List, LargeList, FixedSizeList width 2,
+ListView and LargeListView, full arrays, nonzero slices and zero-length slices.
+It checks every outer, inner and element nullability combination, exact leaf
+metadata, actual NULL representation and values. Constant STRUCT parent fields
+depend on the separate #849 prerequisite described above.

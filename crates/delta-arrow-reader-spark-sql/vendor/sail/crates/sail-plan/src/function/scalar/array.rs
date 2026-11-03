@@ -1,14 +1,15 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{
-    ExprSchemable, HigherOrderUDF, ScalarUDF, ScalarUDFImpl, cast, expr, is_null, lit, not, or,
-    when,
+    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
+    ScalarUDFImpl, Signature, cast, expr, is_null, lit, not, or, when,
 };
+use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
 use datafusion_spark::function::array::expr_fn as array_fn;
 use sail_common::utils::string::SPARK_WHITESPACE_OR_ISO_CONTROL_CHARACTERS;
@@ -374,11 +375,26 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         function_context,
     } = input;
 
+    if arguments.len() != 1 {
+        return Err(PlanError::invalid(format!(
+            "FLATTEN requires one argument, got {}",
+            arguments.len()
+        )));
+    }
     let array = normalize_flatten_inner_views(arguments.one()?, function_context.schema)?;
     let array_type = array.get_type(function_context.schema)?;
+    let flattened = ScalarUDF::from(FlattenResult::default()).call(vec![array.clone()]);
+    let inner = array_element_field(&array_type)
+        .ok_or_else(|| PlanError::invalid("FLATTEN requires an array of arrays"))?;
+    if !inner.data_type().is_list() {
+        return Err(PlanError::invalid("FLATTEN requires an array of arrays"));
+    }
+    if !inner.is_nullable() {
+        return Ok(flattened);
+    }
 
-    // Convert array type to nullable version to avoid Arrow errors with non-nullable empty arrays
-    let nullable_array_type = make_nullable_array_type(&array_type);
+    // The NULL probe only needs nullable inner arrays, not nullable output elements.
+    let nullable_array_type = nullable_array_probe_type(&array_type);
     let nullable_array = cast(array.clone(), nullable_array_type.clone());
 
     // Cast the null-only array to the nullable type to match
@@ -391,12 +407,69 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
-        when_then_expr: vec![(
-            Box::new(not(array_has_null)),
-            Box::new(expr_fn::flatten(nullable_array)),
-        )],
+        when_then_expr: vec![(Box::new(not(array_has_null)), Box::new(flattened))],
         else_expr: None,
     }))
+}
+
+fn array_element_field(data_type: &DataType) -> Option<&FieldRef> {
+    match data_type {
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::FixedSizeList(field, _)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field) => Some(field),
+        _ => None,
+    }
+}
+
+fn nullable_array_probe_type(data_type: &DataType) -> DataType {
+    let Some(field) = array_element_field(data_type) else {
+        return data_type.clone();
+    };
+    let field = Arc::new(field.as_ref().clone().with_nullable(true));
+    if matches!(
+        data_type,
+        DataType::LargeList(_) | DataType::LargeListView(_)
+    ) {
+        DataType::LargeList(field)
+    } else {
+        DataType::List(field)
+    }
+}
+
+// The planner guards nullable inner arrays; native FLATTEN supplies the values.
+#[derive(Debug, Default, PartialEq, Eq, Hash)]
+struct FlattenResult(Flatten);
+
+impl ScalarUDFImpl for FlattenResult {
+    fn name(&self) -> &str {
+        "flatten"
+    }
+
+    fn signature(&self) -> &Signature {
+        self.0.signature()
+    }
+
+    fn return_type(&self, arguments: &[DataType]) -> datafusion_common::Result<DataType> {
+        self.0.return_type(arguments)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        let [array] = datafusion_common::utils::take_function_args(self.name(), args.arg_fields)?;
+        Ok(Arc::new(Field::new(
+            self.name(),
+            self.return_type(&[array.data_type().clone()])?,
+            array.is_nullable(),
+        )))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        self.0.invoke_with_args(args)
+    }
 }
 
 fn sequence_trim_string(argument: expr::Expr) -> expr::Expr {
@@ -606,6 +679,132 @@ mod tests {
     use datafusion_expr::{ColumnarValue, col};
 
     use super::*;
+
+    #[test]
+    fn flatten_keeps_element_fields_across_list_storage_and_slices() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{Array, ArrayRef, AsArray, Int32Array};
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use arrow::datatypes::{Field, Schema};
+
+        let session = SessionContext::new();
+        let config = Arc::new(crate::config::PlanConfig::default());
+        for element_nullable in [false, true] {
+            for inner_nullable in [false, true] {
+                for outer_nullable in [false, true] {
+                    let element = Arc::new(
+                        Field::new("element", DataType::Int32, element_nullable)
+                            .with_metadata([("origin".into(), "flatten-leaf".into())].into()),
+                    );
+                    let values: ArrayRef = Arc::new(Int32Array::from(vec![
+                        Some(1),
+                        if element_nullable { None } else { Some(2) },
+                        Some(3),
+                        Some(4),
+                    ]));
+                    let inner: ArrayRef = Arc::new(ListArray::try_new(
+                        element.clone(),
+                        OffsetBuffer::from_lengths([1; 4]),
+                        values,
+                        inner_nullable.then(|| NullBuffer::from(vec![true, false, true, true])),
+                    )?);
+                    let inner_field = Arc::new(Field::new(
+                        "inner",
+                        inner.data_type().clone(),
+                        inner_nullable,
+                    ));
+                    let outer: ArrayRef = Arc::new(ListArray::try_new(
+                        inner_field.clone(),
+                        OffsetBuffer::from_lengths([2; 2]),
+                        inner,
+                        outer_nullable.then(|| NullBuffer::from(vec![true, false])),
+                    )?);
+                    for storage in [
+                        DataType::List(inner_field.clone()),
+                        DataType::LargeList(inner_field.clone()),
+                        DataType::FixedSizeList(inner_field.clone(), 2),
+                        DataType::ListView(inner_field.clone()),
+                        DataType::LargeListView(inner_field.clone()),
+                    ] {
+                        let input = arrow::compute::cast(outer.as_ref(), &storage)?;
+                        for (offset, len) in [(0, 2), (1, 1), (1, 0)] {
+                            let schema = Arc::new(Schema::new(vec![Field::new(
+                                "items",
+                                storage.clone(),
+                                outer_nullable,
+                            )]));
+                            let batch = RecordBatch::try_new(
+                                schema.clone(),
+                                vec![input.slice(offset, len)],
+                            )?;
+                            let schema = Arc::new(DFSchema::try_from(schema)?);
+                            let expression = flatten(ScalarFunctionInput {
+                                arguments: vec![col("items")],
+                                function_context: FunctionContextInput {
+                                    argument_display_names: &[],
+                                    plan_config: &config,
+                                    session_context: &session,
+                                    schema: &schema,
+                                },
+                            })?;
+                            let output_type = if matches!(
+                                storage,
+                                DataType::LargeList(_) | DataType::LargeListView(_)
+                            ) {
+                                DataType::LargeList(element.clone())
+                            } else {
+                                DataType::List(element.clone())
+                            };
+                            let (_, field) = expression.to_field(&schema)?;
+                            assert_eq!(field.data_type(), &output_type);
+                            assert_eq!(field.is_nullable(), outer_nullable || inner_nullable);
+                            let physical = session.create_physical_expr(expression, &schema)?;
+                            assert_eq!(
+                                physical.return_field(schema.inner())?.data_type(),
+                                &output_type
+                            );
+                            let result = physical.evaluate(&batch)?.into_array(len)?;
+                            result.to_data().validate_full()?;
+                            assert_eq!(result.data_type(), &output_type);
+                            for row in 0..len {
+                                let source_row = offset + row;
+                                assert_eq!(
+                                    result.is_null(row),
+                                    if source_row == 0 {
+                                        inner_nullable
+                                    } else {
+                                        outer_nullable
+                                    }
+                                );
+                                if result.is_valid(row) {
+                                    let values = match result.data_type() {
+                                        DataType::List(_) => result.as_list::<i32>().value(row),
+                                        _ => result.as_list::<i64>().value(row),
+                                    };
+                                    let actual =
+                                        values.as_any().downcast_ref::<Int32Array>().ok_or_else(
+                                            || PlanError::internal("expected flattened integers"),
+                                        )?;
+                                    assert_eq!(
+                                        actual.iter().collect::<Vec<_>>(),
+                                        if source_row == 0 {
+                                            vec![
+                                                Some(1),
+                                                if element_nullable { None } else { Some(2) },
+                                            ]
+                                        } else {
+                                            vec![Some(3), Some(4)]
+                                        }
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[expect(clippy::unwrap_used, clippy::panic)]
     #[test]
