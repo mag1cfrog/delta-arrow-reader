@@ -94,7 +94,7 @@ impl ScalarUDFImpl for RaiseError {
         let Ok(arg) = args.one() else {
             return internal_err!("raise_error should only be called with one argument");
         };
-        if self.user_error && number_rows == 0 {
+        if self.user_error && number_rows == 0 && arg.data_type().is_string() {
             return Ok(ColumnarValue::Array(Arc::new(NullArray::new(0))));
         }
         match arg {

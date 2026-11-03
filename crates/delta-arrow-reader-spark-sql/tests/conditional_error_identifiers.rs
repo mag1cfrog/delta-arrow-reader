@@ -96,7 +96,7 @@ async fn native_conditions_and_errors_stay_unchanged_after_spark_planning() -> T
             } else {
                 before.push((expected.clone(), actual.clone()));
             }
-            // Configured native division already preserves errors during folding.
+            // #861: configured native division already preserves errors during folding.
             if sql != "SELECT 1 / 0 AS r" {
                 assert_eq!(actual, expected, "{sql}, after Spark={after_spark}");
             }
@@ -183,8 +183,9 @@ fn register_ordered_null_first_messages(session: &SessionContext) -> TestResult 
     Ok(())
 }
 
-// Internal baseline guards are separate from the raw Spark parity comparisons above.
+// #863-#865 preserve internal diagnostics separately from raw Spark comparisons.
 fn preserves_inherited_diagnostic(case: &Value, actual: &Value, batch: usize) -> TestResult<bool> {
+    // #862 keeps the existing condition-before-result validation order.
     if case["id"] == "invalid_condition_before_results" {
         let expected = json!({
             "native_phase":"resolve",
@@ -373,5 +374,14 @@ fn user_raise_error_uses_the_first_null_and_accepts_zero_rows() -> TestResult {
             }
         }
     }
+    let invalid = function.invoke_with_args(ScalarFunctionArgs {
+        args: vec![ColumnarValue::Scalar(ScalarValue::Int32(None))],
+        arg_fields: vec![Arc::new(Field::new("message", DataType::Int32, true))],
+        number_rows: 0,
+        return_field: Arc::new(Field::new("raise_error", DataType::Null, true)),
+        config_options: Default::default(),
+    });
+    assert!(matches!(invalid, Err(datafusion::common::DataFusionError::Internal(message))
+        if message == "raise_error expects a single UTF-8 string argument"));
     Ok(())
 }
