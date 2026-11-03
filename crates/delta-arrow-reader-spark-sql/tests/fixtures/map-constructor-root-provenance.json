@@ -1,0 +1,28 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "map_encoding": "ordered entry pairs",
+  "struct_encoding": "positional fields",
+  "map_source_commit": "ecc867bb4e874c17629cbcfc324bdd6af33345f1",
+  "map_capture_source": "tests/fixtures/capture_map_constructor_nullability_spark.py",
+  "map_capture_sha256": "cee949a1dabef282c3fda8f0afe4b8413785eab40260055f59bd45396472079d",
+  "lambda_source_commit": "1f2535cfdde784db9df39c0c2cc4fe5e636f707e",
+  "lambda_capture_source": "tests/fixtures/capture_folded_map_lambda_spark.py",
+  "lambda_reference_full_sha256": "5062ca7347936534b7a1b5732327ba4c7752a97436ef8b51495d5029828136ae",
+  "lambda_subset_ids": [
+    "original",
+    "nullable_element"
+  ],
+  "files": [
+    {
+      "path": "map-constructor-nullability-spark.jsonl",
+      "bytes": 227547,
+      "sha256": "a884ad1e932b9419ce2ffacd2e8969588d0843bc1129665e621cab6de1c4c468"
+    },
+    {
+      "path": "folded-map-lambda-816-core-spark.jsonl",
+      "bytes": 5928,
+      "sha256": "a6e1d0d08fe0ae80db67d319c4626bf11cb572612b07703ecc00fafc030adb3b"
+    }
+  ]
+}
