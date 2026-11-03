@@ -34,11 +34,11 @@ Validate sources without an engine:
 python3 capture_date_day_metadata_stages.py unused-output.jsonl --check
 ```
 
-Recapture from this directory in the existing pinned Spark environment, using a
-fresh output path:
+Recapture from this directory using a Python environment with the recorded
+Spark build and a compatible JVM. Use a fresh output path:
 
 ```sh
-/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python capture_date_day_metadata_stages.py recapture.jsonl
+python capture_date_day_metadata_stages.py recapture.jsonl
 ```
 
 The script requires revision 32f7299601108917fb01920a54e084595b7b3bf8 and UTC.

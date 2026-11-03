@@ -9,17 +9,17 @@ has been reviewed. Publish the final support contract separately.
 
 ### Core delivery order
 
-The SQL MAP constructor repair for #824 also completes the original #816
-lambda contract. The basic projection metadata repair for #710 is now included
-in this branch; the next core delivery is #818. This projection slice starts
-from staging `4848ff1f058c0b023a2394d66e9ff59d2454ecf0`.
+The SQL MAP constructor repair for #824 completes the original #816 lambda
+contract through PR #857. PR #858 supplies the basic projection metadata repair
+for #710. This slice completes the correlated metadata contract in #818, starting
+from staging `2104fb8c5d88d0b734841294de9a6de4e16be68d`.
 
 | Issue | Merge contract | Remaining code prerequisite |
 | --- | --- | --- |
 | #824 | SQL MAP container nullability, including direct/scalar/lambda consumers; preserve nullable values, constructor errors, explicit casts and other MAP constructors. | Constructor-only repair included. |
 | #816 | Original folded MAP lambda and NULL-element control, provider inputs and binding guards, delivered by the constructor root repair. | Satisfied by the included #824 repair. No general lambda simplifier is needed. |
 | #710 | Ordinary projection/aggregate generated metadata and its existing consumers; preserve fields, values and error/evaluation behavior. | Basic repair included. #803 was already merged through #817. |
-| #818 | Original correlated scalar metadata stages plus containment of its introduced MAP, CASE and hidden ORDER BY regressions. | Uses the included #710 annotation and projection implementation. |
+| #818 | Original correlated scalar metadata stages plus containment of its introduced MAP, CASE and hidden ORDER BY regressions. | Implementation and regression protections included; #710 is satisfied. |
 
 The constructor source at `b7ac26e8` passes 723 workspace tests with zero
 failures and three inherited ignored tests, formatting and package Clippy.
@@ -37,6 +37,23 @@ observations preserve values, ordering, errors and unrelated fields. Sixteen IF
 historical expectations now use independently captured public nullability;
 their physical fields and values are unchanged. The same 72 broader naming and
 grammar differences remain with #757, #727, #744 and #790, outside this repair.
+
+The correlated source at `bf888c79` passes 758 workspace tests with zero failures
+and three inherited ignored tests, formatting and package Clippy. The 788 paired
+observations retain values, required errors, raw order, batch layout and volatile
+counts. Every changed field matches its independent reference or the existing
+Arrow extension type contract. That type contract intentionally preserves keys
+absent from raw Spark fields; the exact differences remain recorded. Existing
+MAP_VALUES admission failures remain with #825.
+
+Full regression exposed a date observer that assumed public and executed metadata
+were equal. A fresh 92-case Spark capture disproves that assumption while
+preserving every original public field, row and error. The observer now checks
+metadata by the exact recorded stage and retains all original type, nullability,
+Date32, row and error assertions. A separate paired replay of all 432 existing
+date cases at two batch sizes confirms unchanged values, errors and batches.
+Only the expected correlated alias metadata changes. The inherited closed-lambda
+physical nullability difference remains with #831; it does not block #818.
 
 Each slice must satisfy its original contract and pass the full existing
 standalone workspace regression suite, formatting and package Clippy on the
@@ -62,9 +79,12 @@ branches and temporary execution overlays, preserving necessary evidence and
 unfinished work.
 
 The last successful three-platform checkpoint is `fea63565`, run 41671391571.
-The staging base above has five later merges, so that checkpoint is not
-validation of the current head. Reports should identify which core dependency
+Six PRs merged between that checkpoint and this slice's base, so the checkpoint
+does not validate the current head. Reports should identify which core dependency
 was removed, what original acceptance remains, and the next blocking action.
+After this core sequence, reconcile the preserved queue before choosing the next
+slice; an unfinished draft or a newly discovered case does not set priority by
+itself.
 
 ### Earlier deliveries and retained evidence
 
