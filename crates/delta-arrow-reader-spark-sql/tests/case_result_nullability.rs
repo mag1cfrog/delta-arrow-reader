@@ -101,3 +101,50 @@ async fn spark_configuration_preserves_native_case_semantics() -> TestResult {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn case_result_types_and_analyzer_scan_match_spark() -> TestResult {
+    let records = include_str!("fixtures/case-result-nullability-review-spark.jsonl")
+        .lines().map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+    assert_eq!(records.len() - 1, 12);
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(configure_spark_sql(
+            SessionStateBuilder::new().with_default_features().with_config(
+                SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
+            ),
+        ).build());
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            comparisons += 1;
+            let actual = capture_spark_query_observation(&session, case).await;
+            let matches = match &actual {
+                Ok(actual) => actual["result"] == case["expected"]
+                    && actual["physical_schema"] == case["schema_stages"]["executed"],
+                Err(error) if case["expected"]["condition"] == "DATATYPE_MISMATCH.DATA_DIFF_TYPES" => {
+                    let message = error.to_string();
+                    message.contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]")
+                        || (message.contains("Failed to coerce then (")
+                            && message.contains("to common types in CASE WHEN expression"))
+                }
+                _ => false,
+            };
+            eprintln!("CASE_721_REVIEW_OBSERVATION {}", json!({
+                "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
+                "observation":actual.as_ref().ok(), "error":actual.as_ref().err().map(ToString::to_string),
+                "matches":matches,
+            }));
+            if !matches {
+                differences.push(format!("{} ANSI={} batch={batch_size}: expected {} physical={}, got {actual:?}",
+                    case["id"], case["ansi"], case["expected"], case["schema_stages"]["executed"]));
+            }
+        }
+    }
+    assert_eq!(comparisons, 24);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
