@@ -151,13 +151,45 @@ async fn case_result_types_and_analyzer_scan_match_spark() -> TestResult {
 
 #[tokio::test]
 async fn case_common_types_and_internal_case_boundaries_match_spark() -> TestResult {
+    assert_case_schema_stages_and_rows(
+        include_str!("fixtures/case-result-nullability-boundaries-spark.jsonl"),
+        6,
+        "CASE_721_BOUNDARY_OBSERVATION",
+    ).await
+}
+
+#[tokio::test]
+async fn case_common_types_preserve_live_nested_metadata_and_refinement() -> TestResult {
+    assert_case_schema_stages_and_rows(
+        include_str!("fixtures/case-result-nullability-common-metadata-spark.jsonl"),
+        12,
+        "CASE_721_COMMON_METADATA_OBSERVATION",
+    ).await
+}
+
+async fn assert_case_schema_stages_and_rows(
+    source: &str,
+    expected_cases: usize,
+    observation_label: &str,
+) -> TestResult {
     use datafusion::physical_plan::collect;
-    let records = include_str!("fixtures/case-result-nullability-boundaries-spark.jsonl")
-        .lines().map(serde_json::from_str::<Value>)
+    let records = source.lines().map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
-    assert_eq!(records.len() - 1, 6);
+    assert_eq!(records.len() - 1, expected_cases);
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert((
+            case["id"].as_str().ok_or("missing ID")?,
+            case["input"].as_str().ok_or("missing input")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+        assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
+        assert_eq!(case["schema_stages"]["executed_before_collect"], case["schema_stages"]["executed"]);
+        assert!(case["schema_stages"]["executed"].is_object());
+        assert!(case["expected"]["rows"].is_array());
+    }
     let mut differences = Vec::new();
     let mut comparisons = 0;
     for batch_size in [1, 32] {
@@ -188,7 +220,7 @@ async fn case_common_types_and_internal_case_boundaries_match_spark() -> TestRes
             let public_matches = public == case["expected"]["schema"];
             let physical_matches = executed == case["schema_stages"]["executed"];
             let rows_matches = json!(rows) == case["expected"]["rows"];
-            eprintln!("CASE_721_BOUNDARY_OBSERVATION {}", json!({
+            eprintln!("{observation_label} {}", json!({
                 "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
                 "public_schema":public, "physical_schema":executed, "rows":rows,
                 "public_matches":public_matches, "physical_matches":physical_matches, "rows_matches":rows_matches,
@@ -199,7 +231,7 @@ async fn case_common_types_and_internal_case_boundaries_match_spark() -> TestRes
             }
         }
     }
-    assert_eq!(comparisons, 12);
+    assert_eq!(comparisons, expected_cases * 2);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
