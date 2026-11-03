@@ -26,10 +26,11 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Twelve dependencies have local source overrides in this crate's Cargo.toml:
+Thirteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
+| DataFusion common | 54.1.0 | Preserve aligned duplicate STRUCT fields by position during casting and validation; return checked construction errors |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic and buffer handling changes |
@@ -199,6 +200,16 @@ The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages
 retain independent public and executed fields, the original scalar guards and
 the explicit Arrow type-contract difference from Spark. Native DataFusion
 scalar construction is unchanged.
+
+Shared DataFusion STRUCT casts preserve child positions when the complete field
+name sequence matches, including duplicate names. Type and nullability
+validation use those same positions. Other layouts retain native name matching,
+nullable missing fields and ignored extra fields. Cast results use checked Arrow
+construction, so an invalid nonnullable result returns an error. The
+[duplicate STRUCT references](tests/fixtures/README.md#duplicate-struct-casts)
+cover scalar and array casts, metadata-only declarations, nested consumers and
+native controls.
+
 VALUES column declarations use the coerced expressions' nullability. Projected
 IN can reuse its nonnullable match result when both operands are nonnullable;
 nullable operands retain the existing three-valued comparison.
