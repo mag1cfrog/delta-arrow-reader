@@ -264,7 +264,7 @@ async fn match_spark_conditional_results_and_admission() -> TestResult {
                         }
                         Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE") => error
                             .to_string()
-                            .contains("CASE WHEN condition must be BOOLEAN"),
+                            .contains("[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] CASE WHEN condition must be BOOLEAN"),
                         Some("DATATYPE_MISMATCH.DATA_DIFF_TYPES") => error
                             .to_string()
                             .contains("Incompatible STRING result types"),
