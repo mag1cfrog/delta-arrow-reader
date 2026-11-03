@@ -42,7 +42,7 @@ impl PlanResolver<'_> {
                 .zip(project.schema.iter())
                 .map(|(expression, (qualifier, field))| {
                     preserve_result_field_metadata(expression, field)
-                    .alias_qualified(qualifier.cloned(), field.name())
+                        .alias_qualified(qualifier.cloned(), field.name())
                 })
                 .collect();
             plan = LogicalPlan::Projection(Projection::try_new(expressions, project.input)?);

@@ -277,7 +277,11 @@ impl PlanResolver<'_> {
                     let source_name = named.expression_name()?;
                     let has_alias = !name.is_empty();
                     let named = Self::apply_expression_alias(
-                        named, name, metadata, direct_alias_source, schema,
+                        named,
+                        name,
+                        metadata,
+                        direct_alias_source,
+                        schema,
                     )?;
                     let display_name = if has_alias {
                         Some(struct_alias_display_name(

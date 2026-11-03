@@ -107,7 +107,10 @@ fn scalar_metadata_stage_case<'a>(records: &'a [Value], original: &Value) -> Tes
         assert_eq!(case["public_schema"], original["expected"]["schema"]);
         assert_eq!(case["expected"]["rows"], original["expected"]["rows"]);
     } else {
-        assert_eq!(case["error"]["condition"], original["expected"]["condition"]);
+        assert_eq!(
+            case["error"]["condition"],
+            original["expected"]["condition"]
+        );
     }
     Ok(case)
 }
@@ -263,7 +266,11 @@ async fn scalar_precollection_schema_keeps_required_engine_errors() -> TestResul
     let error = spark_results::capture_spark_query_observation(&session, case)
         .await
         .unwrap_err();
-    assert!(error.downcast_ref::<datafusion::error::DataFusionError>().is_some());
+    assert!(
+        error
+            .downcast_ref::<datafusion::error::DataFusionError>()
+            .is_some()
+    );
     assert!(error.to_string().contains("Divide by zero error"));
     let mut wrong = case.clone();
     wrong["executed_schema_before_collect"]["fields"][1]["metadata"] =
@@ -271,7 +278,11 @@ async fn scalar_precollection_schema_keeps_required_engine_errors() -> TestResul
     let error = spark_results::capture_spark_query_observation(&session, &wrong)
         .await
         .unwrap_err();
-    assert!(error.downcast_ref::<datafusion::error::DataFusionError>().is_none());
+    assert!(
+        error
+            .downcast_ref::<datafusion::error::DataFusionError>()
+            .is_none()
+    );
     assert!(error.to_string().contains("executed schema"));
     Ok(())
 }

@@ -102,7 +102,10 @@ pub(crate) fn set_result_metadata(
     .call(vec![expression])
 }
 
-pub(crate) fn preserve_result_field_metadata(expression: expr::Expr, field: &FieldRef) -> expr::Expr {
+pub(crate) fn preserve_result_field_metadata(
+    expression: expr::Expr,
+    field: &FieldRef,
+) -> expr::Expr {
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::from(field.as_ref()),
         lifetime: ResultMetadataLifetime::Permanent,
@@ -133,7 +136,9 @@ fn overlay_nested_field_metadata(
         ))
     };
     match (actual, captured) {
-        (DataType::Struct(actual), DataType::Struct(captured)) if actual.len() == captured.len() => {
+        (DataType::Struct(actual), DataType::Struct(captured))
+            if actual.len() == captured.len() =>
+        {
             Ok(DataType::Struct(
                 actual
                     .iter()
@@ -319,12 +324,14 @@ impl ScalarUDFImpl for SparkResultMetadata {
             return Ok(value);
         }
         match value {
-            ColumnarValue::Array(array) => {
-                Ok(ColumnarValue::Array(arrow_cast(array.as_ref(), &result_type)?))
-            }
-            ColumnarValue::Scalar(value) => Ok(ColumnarValue::Scalar(
-                redeclare_scalar_metadata(&value, &result_type)?,
-            )),
+            ColumnarValue::Array(array) => Ok(ColumnarValue::Array(arrow_cast(
+                array.as_ref(),
+                &result_type,
+            )?)),
+            ColumnarValue::Scalar(value) => Ok(ColumnarValue::Scalar(redeclare_scalar_metadata(
+                &value,
+                &result_type,
+            )?)),
         }
     }
 }
@@ -2400,7 +2407,12 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
         Some(NullBuffer::from(vec![true, false])),
     )?;
     let source: ArrayRef = Arc::new(StructArray::try_new(
-        vec![Arc::new(Field::new("items", list.data_type().clone(), true))].into(),
+        vec![Arc::new(Field::new(
+            "items",
+            list.data_type().clone(),
+            true,
+        ))]
+        .into(),
         vec![Arc::new(list)],
         Some(NullBuffer::from(vec![true, false])),
     )?);
@@ -2419,27 +2431,32 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
     let source_field = Arc::new(Field::new("k", source.data_type().clone(), true));
     let schema = DFSchema::try_from(Schema::new(vec![Arc::clone(&source_field)]))?;
     let expression = preserve_result_field_metadata(datafusion_expr::col("k"), &declared);
-    assert!(!expression.exists(|node| {
-        Ok(matches!(node, expr::Expr::Cast(_) | expr::Expr::TryCast(_)))
-    })?);
+    assert!(
+        !expression
+            .exists(|node| { Ok(matches!(node, expr::Expr::Cast(_) | expr::Expr::TryCast(_))) })?
+    );
     let returned = expression.to_field(&schema)?.1;
     assert_eq!(returned.data_type(), declared.data_type());
     assert!(returned.is_nullable());
     let refined = DFSchema::try_from(Schema::new(vec![Field::new(
-        "k", source.data_type().clone(), false,
+        "k",
+        source.data_type().clone(),
+        false,
     )]))?;
     assert!(!expression.to_field(&refined)?.1.is_nullable());
     let expr::Expr::ScalarFunction(function) = expression else {
         return datafusion_common::internal_err!("expected result metadata annotation");
     };
-    let result = function.func.invoke_with_args(ScalarFunctionArgs {
-        args: vec![ColumnarValue::Array(Arc::clone(&source))],
-        arg_fields: vec![source_field],
-        number_rows: 2,
-        return_field: returned,
-        config_options: Arc::new(Default::default()),
-    })?
-    .into_array(2)?;
+    let result = function
+        .func
+        .invoke_with_args(ScalarFunctionArgs {
+            args: vec![ColumnarValue::Array(Arc::clone(&source))],
+            arg_fields: vec![source_field],
+            number_rows: 2,
+            return_field: returned,
+            config_options: Arc::new(Default::default()),
+        })?
+        .into_array(2)?;
     assert_eq!(result.data_type(), declared.data_type());
     result.to_data().validate_full()?;
     assert_eq!(result.nulls(), source.nulls());
@@ -2449,7 +2466,11 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
         let scalar = ScalarValue::try_from_array(source.as_ref(), row)?;
         let scalar_result = function.func.invoke_with_args(ScalarFunctionArgs {
             args: vec![ColumnarValue::Scalar(scalar.clone())],
-            arg_fields: vec![Arc::new(Field::new("k", source.data_type().clone(), row == 1))],
+            arg_fields: vec![Arc::new(Field::new(
+                "k",
+                source.data_type().clone(),
+                row == 1,
+            ))],
             number_rows: 1,
             return_field: Arc::clone(&declared),
             config_options: Arc::new(Default::default()),
@@ -2458,7 +2479,10 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
             return datafusion_common::internal_err!("expected scalar metadata result");
         };
         assert_eq!(&scalar_result.data_type(), declared.data_type());
-        assert_eq!(redeclare_scalar_metadata(&scalar_result, source.data_type())?, scalar);
+        assert_eq!(
+            redeclare_scalar_metadata(&scalar_result, source.data_type())?,
+            scalar
+        );
         let annotated = preserve_result_field_metadata(lit(scalar), &declared);
         let materialized = materialize_metadata_literals(annotated)?.data;
         let expr::Expr::Literal(value, _) = materialized else {
@@ -2467,9 +2491,8 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
         assert_eq!(&value.data_type(), declared.data_type());
         value.to_array()?.to_data().validate_full()?;
     }
-    let original = DataType::Struct(
-        vec![Arc::new(Field::new("leaf", DataType::Int32, true))].into(),
-    );
+    let original =
+        DataType::Struct(vec![Arc::new(Field::new("leaf", DataType::Int32, true))].into());
     let schema = DFSchema::try_from(Schema::new(vec![Field::new("k", original.clone(), false)]))?;
     for field in [
         Field::new("renamed", DataType::Int32, true),
@@ -2504,12 +2527,10 @@ fn metadata_overlay_preserves_actual_nested_nullability() -> datafusion_common::
         vec![Arc::new(Int32Array::from(vec![1, 2]))],
         None,
     )?);
-    let captured_type = DataType::Struct(
-        vec![Arc::new(Field::new("x", DataType::Int32, true))].into(),
-    );
-    let expected_type = DataType::Struct(
-        vec![Arc::new(Field::new("x", DataType::Int32, false))].into(),
-    );
+    let captured_type =
+        DataType::Struct(vec![Arc::new(Field::new("x", DataType::Int32, true))].into());
+    let expected_type =
+        DataType::Struct(vec![Arc::new(Field::new("x", DataType::Int32, false))].into());
     let captured = Arc::new(Field::new("r", captured_type, true));
     let source_field = Arc::new(Field::new("k", source.data_type().clone(), false));
     let schema = DFSchema::try_from(Schema::new(vec![Arc::clone(&source_field)]))?;
@@ -2521,7 +2542,10 @@ fn metadata_overlay_preserves_actual_nested_nullability() -> datafusion_common::
         return datafusion_common::internal_err!("expected result metadata annotation");
     };
     let scalar = ScalarValue::try_from_array(source.as_ref(), 0)?;
-    for input in [ColumnarValue::Array(Arc::clone(&source)), ColumnarValue::Scalar(scalar.clone())] {
+    for input in [
+        ColumnarValue::Array(Arc::clone(&source)),
+        ColumnarValue::Scalar(scalar.clone()),
+    ] {
         let result = function.func.invoke_with_args(ScalarFunctionArgs {
             args: vec![input],
             arg_fields: vec![Arc::clone(&source_field)],

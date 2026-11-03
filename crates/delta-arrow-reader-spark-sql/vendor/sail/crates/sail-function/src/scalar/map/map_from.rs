@@ -36,12 +36,18 @@ fn map_return_field_with_value_nullability(
         return internal_err!("expected MAP key/value fields");
     };
     let value = Arc::new(value.as_ref().clone().with_nullable(nullable));
-    let entries = Arc::new(entries.as_ref().clone().with_data_type(
-        DataType::Struct(vec![Arc::clone(key), value].into()),
-    ));
-    Ok(Arc::new(field.as_ref().clone().with_data_type(
-        DataType::Map(entries, *sorted),
-    )))
+    let entries = Arc::new(
+        entries
+            .as_ref()
+            .clone()
+            .with_data_type(DataType::Struct(vec![Arc::clone(key), value].into())),
+    );
+    Ok(Arc::new(
+        field
+            .as_ref()
+            .clone()
+            .with_data_type(DataType::Map(entries, *sorted)),
+    ))
 }
 
 fn redeclare_map_value_nullability(
@@ -53,12 +59,13 @@ fn redeclare_map_value_nullability(
         return Ok(value);
     }
     match value {
-        ColumnarValue::Array(array) => {
-            Ok(ColumnarValue::Array(cast(array.as_ref(), return_type)?))
-        }
+        ColumnarValue::Array(array) => Ok(ColumnarValue::Array(cast(array.as_ref(), return_type)?)),
         ColumnarValue::Scalar(value) => {
             let array = cast(value.to_array()?.as_ref(), return_type)?;
-            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(array.as_ref(), 0)?))
+            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+                array.as_ref(),
+                0,
+            )?))
         }
     }
 }
@@ -315,7 +322,10 @@ fn constructor_nullability_keeps_live_nested_metadata() -> Result<()> {
     use std::collections::HashMap;
 
     let constructor = SparkMapFromArrays::new(false).with_value_contains_null(false);
-    for metadata in [HashMap::new(), HashMap::from([("source".into(), "plain".into())])] {
+    for metadata in [
+        HashMap::new(),
+        HashMap::from([("source".into(), "plain".into())]),
+    ] {
         let child = Arc::new(Field::new("item", DataType::Int32, true).with_metadata(metadata));
         let values: ArrayRef = Arc::new(StructArray::try_new(
             vec![Arc::clone(&child), child].into(),
@@ -384,22 +394,28 @@ fn constructor_nullability_keeps_live_nested_metadata() -> Result<()> {
                     ColumnarValue::Scalar(ScalarValue::try_from_array(value_lists.as_ref(), 0)?),
                 ]
             } else {
-                vec![ColumnarValue::Array(Arc::clone(&keys)),
-                    ColumnarValue::Array(Arc::clone(&value_lists))]
+                vec![
+                    ColumnarValue::Array(Arc::clone(&keys)),
+                    ColumnarValue::Array(Arc::clone(&value_lists)),
+                ]
             };
-            let result = constructor.invoke_with_args(ScalarFunctionArgs {
-                args,
-                arg_fields: arg_fields.clone(),
-                number_rows: rows,
-                return_field: Arc::clone(&returned),
-                config_options: Arc::new(Default::default()),
-            })?.into_array(rows)?;
+            let result = constructor
+                .invoke_with_args(ScalarFunctionArgs {
+                    args,
+                    arg_fields: arg_fields.clone(),
+                    number_rows: rows,
+                    return_field: Arc::clone(&returned),
+                    config_options: Arc::new(Default::default()),
+                })?
+                .into_array(rows)?;
             assert_eq!(result.data_type(), returned.data_type());
             result.to_data().validate_full()?;
             assert!(result.nulls().is_none());
             assert_eq!(result.as_map().offsets().as_ref(), &[0, 1, 2][..=rows]);
-            assert_eq!(result.as_map().keys().to_data(),
-                StringArray::from(vec!["k", "k"]).slice(0, rows).to_data());
+            assert_eq!(
+                result.as_map().keys().to_data(),
+                StringArray::from(vec!["k", "k"]).slice(0, rows).to_data()
+            );
             assert_eq!(
                 result.as_map().entries().column(1).to_data(),
                 values.slice(0, rows).to_data()
@@ -417,29 +433,43 @@ fn constructor_nullability_keeps_live_nested_metadata() -> Result<()> {
             Arc::clone(&values),
             None,
         )?);
-        let error = constructor.invoke_with_args(ScalarFunctionArgs {
-            args: vec![ColumnarValue::Array(Arc::clone(&duplicate_keys)),
-                ColumnarValue::Array(Arc::clone(&duplicate_values))],
-            arg_fields: arg_fields.clone(),
-            number_rows: 1,
-            return_field: Arc::clone(&returned),
-            config_options: Arc::new(Default::default()),
-        }).expect_err("duplicate keys must retain their original error");
-        assert!(error.to_string().contains("[DUPLICATED_MAP_KEY]"));
-        let last_wins = SparkMapFromArrays::new(true).with_value_contains_null(false)
+        let error = constructor
             .invoke_with_args(ScalarFunctionArgs {
-                args: vec![ColumnarValue::Array(duplicate_keys),
-                    ColumnarValue::Array(duplicate_values)],
+                args: vec![
+                    ColumnarValue::Array(Arc::clone(&duplicate_keys)),
+                    ColumnarValue::Array(Arc::clone(&duplicate_values)),
+                ],
                 arg_fields: arg_fields.clone(),
                 number_rows: 1,
                 return_field: Arc::clone(&returned),
                 config_options: Arc::new(Default::default()),
-            })?.into_array(1)?;
+            })
+            .expect_err("duplicate keys must retain their original error");
+        assert!(error.to_string().contains("[DUPLICATED_MAP_KEY]"));
+        let last_wins = SparkMapFromArrays::new(true)
+            .with_value_contains_null(false)
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![
+                    ColumnarValue::Array(duplicate_keys),
+                    ColumnarValue::Array(duplicate_values),
+                ],
+                arg_fields: arg_fields.clone(),
+                number_rows: 1,
+                return_field: Arc::clone(&returned),
+                config_options: Arc::new(Default::default()),
+            })?
+            .into_array(1)?;
         last_wins.to_data().validate_full()?;
         assert_eq!(last_wins.data_type(), returned.data_type());
         assert_eq!(last_wins.as_map().offsets().as_ref(), &[0, 1]);
-        assert_eq!(last_wins.as_map().keys().to_data(), StringArray::from(vec!["k"]).to_data());
-        assert_eq!(last_wins.as_map().values().to_data(), values.slice(1, 1).to_data());
+        assert_eq!(
+            last_wins.as_map().keys().to_data(),
+            StringArray::from(vec!["k"]).to_data()
+        );
+        assert_eq!(
+            last_wins.as_map().values().to_data(),
+            values.slice(1, 1).to_data()
+        );
 
         let null_values: ArrayRef = Arc::new(StructArray::try_new(
             values.as_struct().fields().clone(),
@@ -452,31 +482,44 @@ fn constructor_nullability_keeps_live_nested_metadata() -> Result<()> {
             Arc::clone(&null_values),
             None,
         )?);
-        let error = constructor.invoke_with_args(ScalarFunctionArgs {
-            args: vec![ColumnarValue::Array(Arc::clone(&keys)),
-                ColumnarValue::Array(Arc::clone(&bad_values))],
-            arg_fields: arg_fields.clone(),
-            number_rows: 2,
-            return_field: Arc::clone(&returned),
-            config_options: Arc::new(Default::default()),
-        }).expect_err("required MAP values must reject actual NULLs");
-        assert!(error.to_string().contains("Found unmasked nulls for non-nullable StructArray field"));
+        let error = constructor
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![
+                    ColumnarValue::Array(Arc::clone(&keys)),
+                    ColumnarValue::Array(Arc::clone(&bad_values)),
+                ],
+                arg_fields: arg_fields.clone(),
+                number_rows: 2,
+                return_field: Arc::clone(&returned),
+                config_options: Arc::new(Default::default()),
+            })
+            .expect_err("required MAP values must reject actual NULLs");
+        assert!(
+            error
+                .to_string()
+                .contains("Found unmasked nulls for non-nullable StructArray field")
+        );
         let nullable = SparkMapFromArrays::new(false).with_value_contains_null(true);
         let nullable_field = nullable.return_field_from_args(ReturnFieldArgs {
             arg_fields: &arg_fields,
             scalar_arguments: &[None, None],
         })?;
-        let nullable_result = nullable.invoke_with_args(ScalarFunctionArgs {
-            args: vec![ColumnarValue::Array(keys), ColumnarValue::Array(bad_values)],
-            arg_fields,
-            number_rows: 2,
-            return_field: Arc::clone(&nullable_field),
-            config_options: Arc::new(Default::default()),
-        })?.into_array(2)?;
+        let nullable_result = nullable
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![ColumnarValue::Array(keys), ColumnarValue::Array(bad_values)],
+                arg_fields,
+                number_rows: 2,
+                return_field: Arc::clone(&nullable_field),
+                config_options: Arc::new(Default::default()),
+            })?
+            .into_array(2)?;
         nullable_result.to_data().validate_full()?;
         assert_eq!(nullable_result.data_type(), nullable_field.data_type());
         assert_eq!(nullable_result.as_map().offsets().as_ref(), &[0, 1, 2]);
-        assert_eq!(nullable_result.as_map().values().to_data(), null_values.to_data());
+        assert_eq!(
+            nullable_result.as_map().values().to_data(),
+            null_values.to_data()
+        );
     }
     Ok(())
 }
@@ -489,20 +532,30 @@ fn entries_nullability_keeps_live_metadata_and_guards() -> Result<()> {
     use datafusion::arrow::datatypes::Field;
     use std::collections::HashMap;
 
-    let child = Arc::new(Field::new("item", DataType::Int32, true)
-        .with_metadata(HashMap::from([("source".into(), "plain".into())])));
+    let child = Arc::new(
+        Field::new("item", DataType::Int32, true)
+            .with_metadata(HashMap::from([("source".into(), "plain".into())])),
+    );
     let values: ArrayRef = Arc::new(StructArray::try_new(
         vec![Arc::clone(&child), child].into(),
-        vec![Arc::new(Int32Array::from(vec![Some(1), None])),
-            Arc::new(Int32Array::from(vec![Some(10), Some(20)]))],
+        vec![
+            Arc::new(Int32Array::from(vec![Some(1), None])),
+            Arc::new(Int32Array::from(vec![Some(10), Some(20)])),
+        ],
         None,
     )?);
     let constructor = SparkMapFromEntries::new(false).with_value_contains_null(false);
     for null_entry in [false, true] {
         let entries = StructArray::try_new(
-            vec![Arc::new(Field::new("named_key", DataType::Utf8, false)),
-                Arc::new(Field::new("named_value", values.data_type().clone(), false))].into(),
-            vec![Arc::new(StringArray::from(vec!["k", "k"])), Arc::clone(&values)],
+            vec![
+                Arc::new(Field::new("named_key", DataType::Utf8, false)),
+                Arc::new(Field::new("named_value", values.data_type().clone(), false)),
+            ]
+            .into(),
+            vec![
+                Arc::new(StringArray::from(vec!["k", "k"])),
+                Arc::clone(&values),
+            ],
             null_entry.then(|| NullBuffer::from(vec![true, false])),
         )?;
         let input: ArrayRef = Arc::new(ListArray::try_new(
@@ -511,7 +564,11 @@ fn entries_nullability_keeps_live_metadata_and_guards() -> Result<()> {
             Arc::new(entries),
             None,
         )?);
-        let arg_fields = vec![Arc::new(Field::new("entries", input.data_type().clone(), false))];
+        let arg_fields = vec![Arc::new(Field::new(
+            "entries",
+            input.data_type().clone(),
+            false,
+        ))];
         let returned = constructor.return_field_from_args(ReturnFieldArgs {
             arg_fields: &arg_fields,
             scalar_arguments: &[None],
@@ -532,13 +589,15 @@ fn entries_nullability_keeps_live_metadata_and_guards() -> Result<()> {
             } else {
                 ColumnarValue::Array(Arc::clone(&input))
             };
-            let result = constructor.invoke_with_args(ScalarFunctionArgs {
-                args: vec![input],
-                arg_fields: arg_fields.clone(),
-                number_rows: rows,
-                return_field: Arc::clone(&returned),
-                config_options: Arc::new(Default::default()),
-            })?.into_array(rows)?;
+            let result = constructor
+                .invoke_with_args(ScalarFunctionArgs {
+                    args: vec![input],
+                    arg_fields: arg_fields.clone(),
+                    number_rows: rows,
+                    return_field: Arc::clone(&returned),
+                    config_options: Arc::new(Default::default()),
+                })?
+                .into_array(rows)?;
             assert_eq!(result.data_type(), returned.data_type());
             result.to_data().validate_full()?;
             let entries = if null_entry && !scalar { 1 } else { rows };
@@ -549,9 +608,16 @@ fn entries_nullability_keeps_live_metadata_and_guards() -> Result<()> {
             if rows == 2 {
                 assert_eq!(result.is_null(1), null_entry);
             }
-            assert_eq!(result.as_map().keys().to_data(),
-                StringArray::from(vec!["k", "k"]).slice(0, entries).to_data());
-            assert_eq!(result.as_map().values().to_data(), values.slice(0, entries).to_data());
+            assert_eq!(
+                result.as_map().keys().to_data(),
+                StringArray::from(vec!["k", "k"])
+                    .slice(0, entries)
+                    .to_data()
+            );
+            assert_eq!(
+                result.as_map().values().to_data(),
+                values.slice(0, entries).to_data()
+            );
         }
     }
     for null_key in [false, true] {
@@ -561,8 +627,11 @@ fn entries_nullability_keeps_live_metadata_and_guards() -> Result<()> {
             StringArray::from(vec![Some("k"), Some("k")])
         };
         let entries = StructArray::try_new(
-            vec![Arc::new(Field::new("key", DataType::Utf8, null_key)),
-                Arc::new(Field::new("value", values.data_type().clone(), false))].into(),
+            vec![
+                Arc::new(Field::new("key", DataType::Utf8, null_key)),
+                Arc::new(Field::new("value", values.data_type().clone(), false)),
+            ]
+            .into(),
             vec![Arc::new(keys), Arc::clone(&values)],
             None,
         )?;
@@ -572,51 +641,83 @@ fn entries_nullability_keeps_live_metadata_and_guards() -> Result<()> {
             Arc::new(entries),
             None,
         )?);
-        let arg_fields = vec![Arc::new(Field::new("entries", input.data_type().clone(), false))];
+        let arg_fields = vec![Arc::new(Field::new(
+            "entries",
+            input.data_type().clone(),
+            false,
+        ))];
         let returned = constructor.return_field_from_args(ReturnFieldArgs {
             arg_fields: &arg_fields,
             scalar_arguments: &[None],
         })?;
-        let error = constructor.invoke_with_args(ScalarFunctionArgs {
-            args: vec![ColumnarValue::Array(Arc::clone(&input))],
-            arg_fields: arg_fields.clone(),
-            number_rows: 1,
-            return_field: Arc::clone(&returned),
-            config_options: Arc::new(Default::default()),
-        }).expect_err("invalid entries must retain the original key error");
+        let error = constructor
+            .invoke_with_args(ScalarFunctionArgs {
+                args: vec![ColumnarValue::Array(Arc::clone(&input))],
+                arg_fields: arg_fields.clone(),
+                number_rows: 1,
+                return_field: Arc::clone(&returned),
+                config_options: Arc::new(Default::default()),
+            })
+            .expect_err("invalid entries must retain the original key error");
         assert!(error.to_string().contains(if null_key {
             "Found unmasked nulls for non-nullable StructArray field"
         } else {
             "[DUPLICATED_MAP_KEY]"
         }));
         if !null_key {
-            let last_wins = SparkMapFromEntries::new(true).with_value_contains_null(false)
+            let last_wins = SparkMapFromEntries::new(true)
+                .with_value_contains_null(false)
                 .invoke_with_args(ScalarFunctionArgs {
                     args: vec![ColumnarValue::Array(input)],
                     arg_fields,
                     number_rows: 1,
                     return_field: Arc::clone(&returned),
                     config_options: Arc::new(Default::default()),
-                })?.into_array(1)?;
+                })?
+                .into_array(1)?;
             last_wins.to_data().validate_full()?;
             assert_eq!(last_wins.data_type(), returned.data_type());
             assert_eq!(last_wins.as_map().offsets().as_ref(), &[0, 1]);
-            assert_eq!(last_wins.as_map().keys().to_data(), StringArray::from(vec!["k"]).to_data());
-            assert_eq!(last_wins.as_map().values().to_data(), values.slice(1, 1).to_data());
+            assert_eq!(
+                last_wins.as_map().keys().to_data(),
+                StringArray::from(vec!["k"]).to_data()
+            );
+            assert_eq!(
+                last_wins.as_map().values().to_data(),
+                values.slice(1, 1).to_data()
+            );
         }
     }
-    let error = constructor.return_field_from_args(ReturnFieldArgs {
-        arg_fields: &[],
-        scalar_arguments: &[],
-    }).expect_err("MAP_FROM_ENTRIES must retain its argument count check");
-    assert!(error.to_string().contains("map_from_entries: expected one argument"));
-    let invalid = Arc::new(Field::new("entries", DataType::List(Arc::new(Field::new(
-        "item", DataType::Struct(vec![Field::new("key", DataType::Utf8, false)].into()), false,
-    ))), false));
-    let error = constructor.return_field_from_args(ReturnFieldArgs {
-        arg_fields: &[invalid],
-        scalar_arguments: &[None],
-    }).expect_err("MAP_FROM_ENTRIES must retain its key/value shape check");
-    assert!(error.to_string().contains("map_from_entries: expected array<struct<key, value>>"));
+    let error = constructor
+        .return_field_from_args(ReturnFieldArgs {
+            arg_fields: &[],
+            scalar_arguments: &[],
+        })
+        .expect_err("MAP_FROM_ENTRIES must retain its argument count check");
+    assert!(
+        error
+            .to_string()
+            .contains("map_from_entries: expected one argument")
+    );
+    let invalid = Arc::new(Field::new(
+        "entries",
+        DataType::List(Arc::new(Field::new(
+            "item",
+            DataType::Struct(vec![Field::new("key", DataType::Utf8, false)].into()),
+            false,
+        ))),
+        false,
+    ));
+    let error = constructor
+        .return_field_from_args(ReturnFieldArgs {
+            arg_fields: &[invalid],
+            scalar_arguments: &[None],
+        })
+        .expect_err("MAP_FROM_ENTRIES must retain its key/value shape check");
+    assert!(
+        error
+            .to_string()
+            .contains("map_from_entries: expected array<struct<key, value>>")
+    );
     Ok(())
 }

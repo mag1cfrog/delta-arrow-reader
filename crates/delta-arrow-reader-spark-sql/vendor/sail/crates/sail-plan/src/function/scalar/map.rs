@@ -42,12 +42,10 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         SparkMapFromArrays::new(last_value_wins)
             .with_non_nullable_result()
             .with_value_contains_null(value_contains_null),
-    )(
-        ScalarFunctionInput {
-            arguments: vec![keys, values],
-            function_context: input.function_context,
-        },
-    )
+    )(ScalarFunctionInput {
+        arguments: vec![keys, values],
+        function_context: input.function_context,
+    })
 }
 
 fn map_from_arrays(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {

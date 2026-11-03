@@ -1254,7 +1254,6 @@ async fn correlated_scalar_aliases_match_public_and_executed_spark_schemas() -> 
     replay_alias_schema_stages(raw, 36).await
 }
 
-
 #[tokio::test]
 async fn hidden_order_columns_preserve_recorded_comparison_rows() -> TestResult {
     use arrow::array::AsArray;
@@ -1361,14 +1360,16 @@ async fn hidden_order_columns_preserve_recorded_comparison_rows() -> TestResult 
     Ok(())
 }
 
-
 #[tokio::test]
 async fn map_factories_retain_throwing_argument_errors() -> TestResult {
     let session = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
     for (value, condition) in [
-        ("CAST('bad' AS INT)", "Cannot cast string 'bad' to value of Int32 type"),
+        (
+            "CAST('bad' AS INT)",
+            "Cannot cast string 'bad' to value of Int32 type",
+        ),
         ("1 DIV 0", "Divide by zero error"),
     ] {
         for expression in [
@@ -1379,7 +1380,10 @@ async fn map_factories_retain_throwing_argument_errors() -> TestResult {
             let sql = format!("SELECT (SELECT {expression}) AS r");
             let case = json!({"sql":sql,"ansi":true,"expected":{"condition":condition}});
             let result = compare_case(&session, &case).await;
-            assert!(has_engine_condition(&result, condition), "{sql}: {result:?}");
+            assert!(
+                has_engine_condition(&result, condition),
+                "{sql}: {result:?}"
+            );
         }
     }
     Ok(())
