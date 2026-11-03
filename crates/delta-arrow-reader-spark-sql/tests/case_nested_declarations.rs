@@ -45,8 +45,14 @@ async fn nested_case_declarations_match_spark() -> TestResult {
         assert_eq!(records[0]["spark_version"], manifest["spark_version"]);
         assert_eq!(records[0]["spark_revision"], manifest["spark_revision"]);
         assert_eq!(records[0]["timezone"], manifest["timezone"]);
-        assert_eq!(records[0]["capture_sha256"], manifest["capture_script_sha256"]);
-        assert_eq!(records[0]["manifest_sha256"], package["capture_manifest_sha256"]);
+        assert_eq!(
+            records[0]["capture_sha256"],
+            manifest["capture_script_sha256"]
+        );
+        assert_eq!(
+            records[0]["manifest_sha256"],
+            package["capture_manifest_sha256"]
+        );
         assert_eq!(json!(records.len() - 1), package["records"]);
         for case in &records[1..] {
             assert!(identities.insert((
@@ -64,7 +70,10 @@ async fn nested_case_declarations_match_spark() -> TestResult {
                 ] {
                     assert!(case["schema_stages"].get(stage).is_some());
                 }
-                assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
+                assert_eq!(
+                    case["expected"]["schema"],
+                    case["schema_stages"]["analyzed"]
+                );
                 assert!(case["expected"]["rows"].is_array());
             } else {
                 assert!(case["spark_error_phase"].is_string());
@@ -138,8 +147,7 @@ async fn nested_case_declarations_match_spark() -> TestResult {
 #[tokio::test]
 async fn spark_configuration_preserves_native_nested_case() -> TestResult {
     let list = |values: &[ScalarValue], data_type: &DataType, nullable: bool| {
-        ScalarValue::List(ScalarValue::new_list(values, data_type, nullable))
-            .to_array_of_size(3)
+        ScalarValue::List(ScalarValue::new_list(values, data_type, nullable)).to_array_of_size(3)
     };
     let required_values = list(
         &[ScalarValue::Boolean(Some(true))],
@@ -147,7 +155,10 @@ async fn spark_configuration_preserves_native_nested_case() -> TestResult {
         false,
     )?;
     let nullable_values = list(
-        &[ScalarValue::Boolean(Some(false)), ScalarValue::Boolean(None)],
+        &[
+            ScalarValue::Boolean(Some(false)),
+            ScalarValue::Boolean(None),
+        ],
         &DataType::Boolean,
         true,
     )?;
