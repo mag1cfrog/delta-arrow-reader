@@ -248,6 +248,20 @@ the value conversion. Native arithmetic and non-Decimal VALUES typing are
 unchanged. The [numeric references](tests/fixtures/README.md#conditional-numeric-results)
 cover exact types, values and lazy evaluation.
 
+ARRAY and STRUCT conditional results apply the existing scalar conversion rules
+recursively. STRUCT children retain their left-hand names and match with JDK
+simple case comparison through ICU 1.5.1. Incompatible names and shapes fail
+resolution. Equal-structure UNION inputs may rename children positionally;
+widening UNION, INTERSECT and EXCEPT require matching names.
+
+CASE retains branch declarations for refinement after pruning. IF retains the
+common nested declaration. COALESCE, IFNULL and NVL normalize their arguments to
+one declaration, then remove a declaration-only conversion only when native
+COALESCE simplification selects a single arm. Value conversions keep their
+required errors and skip hidden children of NULL containers. The
+[recursive references](tests/fixtures/README.md#recursive-conditional-results)
+cover these declarations, lazy evaluation and native behavior.
+
 STRING-to-BOOLEAN CAST uses Spark's whole-token and ASCII trimming rules.
 Invalid input raises a cast error in ANSI mode and returns NULL for TRY_CAST or
 legacy CAST. Its literal errors participate in the existing early-error handling;

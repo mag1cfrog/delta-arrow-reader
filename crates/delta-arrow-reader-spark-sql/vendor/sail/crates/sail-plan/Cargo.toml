@@ -38,4 +38,5 @@ arrow = { workspace = true }
 arrow-schema = { workspace = true }
 serde_json = { workspace = true }
 regex-syntax = { workspace = true }
+icu_casemap = { workspace = true }
 parquet-variant-compute = { workspace = true }
