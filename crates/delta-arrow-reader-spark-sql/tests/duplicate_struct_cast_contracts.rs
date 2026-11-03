@@ -238,3 +238,23 @@ fn constructor_struct_declarations_share_nullable_positional_fields() -> TestRes
     ]).is_err());
     Ok(())
 }
+
+#[test]
+fn constructor_struct_union_compares_complete_field_name_sequences() -> TestResult {
+    let struct_type = |names: &[&str]| DataType::Struct(names.iter()
+        .map(|name| Field::new(*name, DataType::Int32, false))
+        .collect::<Vec<_>>().into());
+    for (left_names, right_names) in [
+        (vec!["a,b", "c", "a"], vec!["a", "b,c", "a"]),
+        (vec!["a,b", "c"], vec!["a", "b", "c"]),
+    ] {
+        let left = struct_type(&left_names);
+        let right = struct_type(&right_names);
+        let error = try_type_union_resolution_with_struct(&[left.clone(), right])
+            .expect_err("comma-separated names must not make different layouts match");
+        assert!(error.to_string().contains("Expect same keys for struct type"));
+        assert_eq!(try_type_union_resolution_with_struct(&[left.clone(), left.clone()])?,
+            vec![left.clone(), left]);
+    }
+    Ok(())
+}

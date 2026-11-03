@@ -805,20 +805,20 @@ pub fn try_type_union_resolution(data_types: &[DataType]) -> Result<Vec<DataType
 pub fn try_type_union_resolution_with_struct(
     data_types: &[DataType],
 ) -> Result<Vec<DataType>> {
-    let mut keys_string: Option<String> = None;
+    let mut field_names: Option<Vec<&str>> = None;
     for data_type in data_types {
         if let DataType::Struct(fields) = data_type {
-            let keys = fields.iter().map(|f| f.name().to_owned()).join(",");
-            if let Some(ref k) = keys_string {
-                if *k != keys {
+            let names = fields.iter().map(|field| field.name().as_str()).collect::<Vec<_>>();
+            if let Some(expected_names) = &field_names {
+                if *expected_names != names {
                     return exec_err!(
                         "Expect same keys for struct type but got mismatched pair {} and {}",
-                        *k,
-                        keys
+                        expected_names.join(","),
+                        names.join(",")
                     );
                 }
             } else {
-                keys_string = Some(keys);
+                field_names = Some(names);
             }
         } else {
             return exec_err!("Expect to get struct but got {data_type}");
