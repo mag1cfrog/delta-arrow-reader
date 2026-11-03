@@ -3,6 +3,7 @@
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
+use futures_util::FutureExt;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -11,6 +12,38 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_results::TestResult;
+
+async fn capture_nested_observation(
+    observation: impl std::future::Future<Output = TestResult<Value>>,
+) -> TestResult<Value> {
+    match std::panic::AssertUnwindSafe(observation).catch_unwind().await {
+        Ok(observation) => observation,
+        Err(payload) => {
+            let panic = payload.downcast_ref::<String>().cloned()
+                .or_else(|| payload.downcast_ref::<&str>().map(|message| (*message).to_owned()))
+                .unwrap_or_else(|| "non-string panic payload".into());
+            Ok(json!({"status":"FAIL","matches":false,"panic":panic,
+                "public_schema":null,"before_collect":null,"physical_schema":null,
+                "rows":null,"rows_raw":null,"native_phase":null,"error":null,
+                "public_matches":null,"before_matches":null,"physical_matches":null,
+                "rows_match":null,"ordered_rows_match":null,"error_matches":false}))
+        }
+    }
+}
+
+#[tokio::test]
+async fn query_panics_are_failed_observations_without_an_invented_sql_error() -> TestResult {
+    let observation = capture_nested_observation(async {
+        std::panic::resume_unwind(Box::new("nested observer panic sentinel"))
+    }).await?;
+    assert_eq!(observation["status"], "FAIL");
+    assert_eq!(observation["matches"], false);
+    assert_eq!(observation["panic"], "nested observer panic sentinel");
+    assert_eq!(observation["error"], Value::Null);
+    assert_eq!(observation["native_phase"], Value::Null);
+    assert_eq!(observation["error_matches"], false);
+    Ok(())
+}
 
 async fn replay_nested_references(fixtures: &[(&str, usize)], marker: &str) -> TestResult {
     let mut records = Vec::<Value>::new();
@@ -60,8 +93,9 @@ async fn replay_nested_references(fixtures: &[(&str, usize)], marker: &str) -> T
         spark_inputs::register_recorded_inputs(&session, header, batch_size)?;
         for case in cases {
             comparisons += 1;
-            let mut comparison =
-                spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            let mut comparison = capture_nested_observation(
+                spark_results::compare_exact_spark_query_stages(&session, case),
+            ).await?;
             comparison["id"] = case["id"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch_size);
