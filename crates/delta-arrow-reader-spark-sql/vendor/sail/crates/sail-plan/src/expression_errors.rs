@@ -235,7 +235,10 @@ impl AnalyzerRule for PrepareSparkExpressions {
 
     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
         // Borrow first: ordinary queries require no rewritten plan or batch allocation.
-        let is_spark_query = options.extensions.get::<SparkSqlExpressionSemantics>().is_some();
+        let is_spark_query = options
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some();
         let mut found = false;
         let mut check_arithmetic = false;
         let mut check_cast = false;
@@ -691,7 +694,11 @@ fn prepare_foldable_groups(
     options: &ConfigOptions,
 ) -> Result<Transformed<LogicalPlan>> {
     use datafusion_expr::{Aggregate, Projection};
-    if options.extensions.get::<SparkSqlExpressionSemantics>().is_none() {
+    if options
+        .extensions
+        .get::<SparkSqlExpressionSemantics>()
+        .is_none()
+    {
         return Ok(Transformed::no(plan));
     }
     let LogicalPlan::Aggregate(aggregate) = plan else {
@@ -1231,8 +1238,10 @@ impl Prepare {
         exists: bool,
     ) -> Result<LogicalPlan> {
         use datafusion_expr::logical_plan::EmptyRelation;
-        let spark_comparison_errors =
-            options.extensions.get::<SparkSqlExpressionSemantics>().is_some();
+        let spark_comparison_errors = options
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some();
         // Local VALUES conversion precedes pruning. Empty local inputs never
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan

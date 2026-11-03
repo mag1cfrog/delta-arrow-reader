@@ -621,7 +621,9 @@ async fn real_relations_and_volatile_aliases_are_not_inlined() -> TestResult {
     spark_inputs::register_recorded_inputs(&session, &records[0], 1)?;
     let calls = register_counter(&session);
     let mut options = session.state().config_options().as_ref().clone();
-    options.extensions.insert(SparkSqlExpressionSemantics::default());
+    options
+        .extensions
+        .insert(SparkSqlExpressionSemantics::default());
     let mut checked = 0;
     for case in &records[1..] {
         let id = case["id"].as_str().ok_or("missing ID")?;
