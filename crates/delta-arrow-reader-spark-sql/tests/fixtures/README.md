@@ -2352,8 +2352,8 @@ Spark SQL planning. Inner ListView values use a canonical List control; inner
 LargeListView values use LargeList. Both share independently specified logical
 values and expected flat rows. Complete public, before-collect and executed
 Arrow fields, including storage width and metadata, must match the canonical
-control. This storage repair keeps canonical declaration inference under #835;
-it does not substitute weaker expected fields for that separate acceptance.
+control. The [result-field controls](#flatten-result-fields) independently check
+Spark's complete output declarations.
 
 Contiguous, gapped and overlapping ranges have explicit expected values.
 Prefix and suffix rows expose nonzero outer slices and sentinel leakage. A fourth
@@ -2372,8 +2372,9 @@ inner-view flattening behavior.
 The source normalization clones the immediate inner field and retains its leaf
 field reference. Only ListView-to-List and LargeListView-to-LargeList change;
 Arrow 58.4.0's checked view cast supplies range gathering and offset overflow
-checks. These controls establish equivalence to canonical storage. Final output
-metadata and nullability remain subject to the declaration repair in #835.
+checks. The result adapter retains the resulting leaf field, including its
+metadata and nullability, and derives output nullability from the outer array
+and immediate inner field.
 
 ## FLATTEN result fields
 

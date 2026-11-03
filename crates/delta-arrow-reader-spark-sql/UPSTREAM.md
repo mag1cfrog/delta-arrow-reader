@@ -209,7 +209,8 @@ the visible ranges, including overlap, while retaining the matching offset
 width, NULL buffers and field declarations. Outer storage is retained. The
 [inner-view controls](tests/fixtures/README.md#flatten-inner-list-views) compare
 complete results with the corresponding canonical storage and preserve native
-SQL behavior. Canonical FLATTEN declaration inference remains under #835.
+SQL behavior. The [result adapter](#flatten-declarations) applies Spark's output
+field rules to both canonical and normalized inputs.
 
 Foldable group preparation requires the query-local Spark marker at both
 preparation call sites. Native SQL in a Spark-configured session retains DataFusion's
