@@ -50,7 +50,7 @@ pub(crate) fn drop_inherited_column_metadata_for_analysis(expression: expr::Expr
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::default(),
         lifetime: ResultMetadataLifetime::AnalysisOnly,
-        declared_data_type: None,
+        metadata_source_type: None,
     })
     .call(vec![expression])
 }
@@ -64,7 +64,7 @@ pub(crate) fn drop_scalar_subquery_metadata(
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::from(&field),
         lifetime: ResultMetadataLifetime::UntilScalarInlining,
-        declared_data_type: None,
+        metadata_source_type: None,
     })
     .call(vec![expression])
 }
@@ -99,7 +99,7 @@ pub(crate) fn set_result_metadata(
     ScalarUDF::from(SparkResultMetadata {
         metadata: metadata.into_iter().collect::<HashMap<_, _>>().into(),
         lifetime: ResultMetadataLifetime::Permanent,
-        declared_data_type: None,
+        metadata_source_type: None,
     })
     .call(vec![expression])
 }
@@ -108,31 +108,59 @@ pub(crate) fn preserve_result_field_metadata(expression: expr::Expr, field: &Fie
     ScalarUDF::from(SparkResultMetadata {
         metadata: FieldMetadata::from(field.as_ref()),
         lifetime: ResultMetadataLifetime::Permanent,
-        declared_data_type: Some(field.data_type().clone()),
+        metadata_source_type: Some(field.data_type().clone()),
     })
     .call(vec![expression])
 }
 
-fn metadata_only_type_change(actual: &DataType, declared: &DataType) -> bool {
-    let same_field = |actual: &FieldRef, declared: &FieldRef| {
-        actual.name() == declared.name()
-            && actual.is_nullable() == declared.is_nullable()
-            && metadata_only_type_change(actual.data_type(), declared.data_type())
+fn overlay_nested_field_metadata(
+    actual: &DataType,
+    captured: &DataType,
+) -> datafusion_common::Result<DataType> {
+    let field = |actual: &FieldRef, captured: &FieldRef| -> datafusion_common::Result<FieldRef> {
+        if actual.name() != captured.name() || (actual.is_nullable() && !captured.is_nullable()) {
+            return datafusion_common::plan_err!(
+                "result metadata declaration cannot change {actual:?} to {captured:?}"
+            );
+        }
+        Ok(Arc::new(
+            actual
+                .as_ref()
+                .clone()
+                .with_data_type(overlay_nested_field_metadata(
+                    actual.data_type(),
+                    captured.data_type(),
+                )?)
+                .with_metadata(captured.metadata().clone()),
+        ))
     };
-    match (actual, declared) {
-        (DataType::Struct(actual), DataType::Struct(declared)) => {
-            actual.len() == declared.len()
-                && actual.iter().zip(declared).all(|(a, b)| same_field(a, b))
+    match (actual, captured) {
+        (DataType::Struct(actual), DataType::Struct(captured)) if actual.len() == captured.len() => {
+            Ok(DataType::Struct(
+                actual
+                    .iter()
+                    .zip(captured)
+                    .map(|(actual, captured)| field(actual, captured))
+                    .collect::<datafusion_common::Result<Vec<_>>>()?
+                    .into(),
+            ))
         }
-        (DataType::List(actual), DataType::List(declared))
-        | (DataType::LargeList(actual), DataType::LargeList(declared)) => same_field(actual, declared),
-        (DataType::FixedSizeList(actual, a), DataType::FixedSizeList(declared, b)) => {
-            a == b && same_field(actual, declared)
+        (DataType::List(actual), DataType::List(captured)) => {
+            Ok(DataType::List(field(actual, captured)?))
         }
-        (DataType::Map(actual, a), DataType::Map(declared, b)) => {
-            a == b && same_field(actual, declared)
+        (DataType::LargeList(actual), DataType::LargeList(captured)) => {
+            Ok(DataType::LargeList(field(actual, captured)?))
         }
-        _ => actual == declared,
+        (DataType::FixedSizeList(actual, a), DataType::FixedSizeList(captured, b)) if a == b => {
+            Ok(DataType::FixedSizeList(field(actual, captured)?, *a))
+        }
+        (DataType::Map(actual, a), DataType::Map(captured, b)) if a == b => {
+            Ok(DataType::Map(field(actual, captured)?, *a))
+        }
+        _ if actual == captured => Ok(actual.clone()),
+        _ => datafusion_common::plan_err!(
+            "result metadata declaration cannot change {actual:?} to {captured:?}"
+        ),
     }
 }
 
@@ -161,7 +189,7 @@ pub(crate) fn materialize_metadata_literals(
                 return Ok(Transformed::yes(argument.clone()));
             }
             let field = annotation.annotate_field(&field)?;
-            let value = if annotation.declared_data_type.is_some()
+            let value = if annotation.metadata_source_type.is_some()
                 && value.data_type() != *field.data_type()
             {
                 redeclare_scalar_metadata(&value, field.data_type())?
@@ -216,20 +244,14 @@ enum ResultMetadataLifetime {
 struct SparkResultMetadata {
     metadata: FieldMetadata,
     lifetime: ResultMetadataLifetime,
-    declared_data_type: Option<DataType>,
+    metadata_source_type: Option<DataType>,
 }
 
 impl SparkResultMetadata {
     fn result_data_type(&self, actual: &DataType) -> datafusion_common::Result<DataType> {
-        if let Some(declared) = &self.declared_data_type {
-            if !metadata_only_type_change(actual, declared) {
-                return datafusion_common::plan_err!(
-                    "result metadata declaration cannot change {actual:?} to {declared:?}"
-                );
-            }
-            Ok(declared.clone())
-        } else {
-            Ok(actual.clone())
+        match &self.metadata_source_type {
+            Some(captured) => overlay_nested_field_metadata(actual, captured),
+            None => Ok(actual.clone()),
         }
     }
 
@@ -286,20 +308,20 @@ impl ScalarUDFImpl for SparkResultMetadata {
         args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
         let [value] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
-        if let Some(declared) = &self.declared_data_type
-            && value.data_type() != *declared
-        {
-            self.result_data_type(&value.data_type())?;
-            match value {
-                ColumnarValue::Array(array) => {
-                    Ok(ColumnarValue::Array(arrow_cast(array.as_ref(), declared)?))
-                }
-                ColumnarValue::Scalar(value) => Ok(ColumnarValue::Scalar(
-                    redeclare_scalar_metadata(&value, declared)?,
-                )),
+        if self.metadata_source_type.is_none() {
+            return Ok(value);
+        }
+        let result_type = self.result_data_type(&value.data_type())?;
+        if value.data_type() == result_type {
+            return Ok(value);
+        }
+        match value {
+            ColumnarValue::Array(array) => {
+                Ok(ColumnarValue::Array(arrow_cast(array.as_ref(), &result_type)?))
             }
-        } else {
-            Ok(value)
+            ColumnarValue::Scalar(value) => Ok(ColumnarValue::Scalar(
+                redeclare_scalar_metadata(&value, &result_type)?,
+            )),
         }
     }
 }
@@ -2432,7 +2454,7 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
         Field::new("leaf", DataType::Int32, false),
     ] {
         let changed = DataType::Struct(vec![Arc::new(field)].into());
-        assert!(!metadata_only_type_change(&original, &changed));
+        assert!(overlay_nested_field_metadata(&original, &changed).is_err());
         let declared = Arc::new(Field::new("r", changed, false));
         assert!(
             preserve_result_field_metadata(datafusion_expr::col("k"), &declared)
@@ -2445,7 +2467,8 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
 
 #[cfg(test)]
 #[test]
-fn result_metadata_keeps_refined_nested_nullability() -> datafusion_common::Result<()> {
+// This guards the metadata-only wrapper; CASE nullability has its own schema contract.
+fn metadata_overlay_preserves_actual_nested_nullability() -> datafusion_common::Result<()> {
     use datafusion::arrow::array::{Array, ArrayRef, Int32Array, StructArray};
     use datafusion::arrow::datatypes::Schema;
 
