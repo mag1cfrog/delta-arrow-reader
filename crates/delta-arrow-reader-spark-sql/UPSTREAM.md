@@ -253,8 +253,8 @@ recursively. STRUCT children retain their left-hand names and match with JDK
 simple case comparison through ICU 1.5.1. Incompatible names and shapes fail
 resolution. Equal-structure UNION inputs may rename children positionally;
 widening UNION, INTERSECT and EXCEPT require matching names.
-UNION output field metadata comes from its resolved left input. Broader metadata
-behavior under widening aliases remains tracked under #794.
+UNION output user metadata comes from its resolved left input. Broader
+Arrow-extension and widening metadata behavior remains tracked under #794.
 
 CASE retains branch declarations for refinement after pruning. IF retains the
 common nested declaration. COALESCE, IFNULL and NVL normalize their arguments to
