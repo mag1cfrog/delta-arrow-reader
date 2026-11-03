@@ -1295,3 +1295,12 @@ async fn case_comparison_matches_exact_spark_stages() -> TestResult {
     )
     .await
 }
+
+#[tokio::test]
+async fn map_owner_interactions_match_exact_spark_stages() -> TestResult {
+    replay_alias_schema_stages(
+        include_str!("fixtures/correlated-scalar-metadata-stages/map-interactions/map-interactions-spark.jsonl"),
+        12,
+    )
+    .await
+}

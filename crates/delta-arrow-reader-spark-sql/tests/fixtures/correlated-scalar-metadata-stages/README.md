@@ -168,3 +168,13 @@ default MAP_FROM_ARRAYS/MAP_FROM_ENTRIES paths and explicit SQL CAST retain thei
 existing implementations; their interactions with scalar inlining require
 independent reference checks. No expectation is changed to make a gap appear
 compatible.
+
+The 12 `map-interactions/map-interactions-spark.jsonl` records, SHA256
+`89e9d955fbe8f3817897aa1bd71413f0ed80c533bbfc9d8ce3d2613c74406101`, cover
+MAP_FROM_ARRAYS, MAP_FROM_ENTRIES and explicit SQL MAP CAST with and without a
+hidden ORDER BY column, in both ANSI modes. The exact capture, provider, SQL,
+source dependencies and original eight/additive four references are preserved
+in the package. All 24 comparisons use the existing full stage observer,
+including complete fields, validated batches and duplicate-preserving rows.
+MAP's separate #824 top-level nullability differences remain strict alongside
+the #818 nested metadata observations.
