@@ -1277,3 +1277,12 @@ async fn correlated_scalar_aliases_match_public_and_executed_spark_schemas() -> 
     }
     replay_alias_schema_stages(raw, 36).await
 }
+
+#[tokio::test]
+async fn hidden_projection_compatibility_matches_exact_spark_stages() -> TestResult {
+    replay_alias_schema_stages(
+        include_str!("fixtures/correlated-scalar-metadata-stages/compatibility/compatibility-spark.jsonl"),
+        8,
+    )
+    .await
+}

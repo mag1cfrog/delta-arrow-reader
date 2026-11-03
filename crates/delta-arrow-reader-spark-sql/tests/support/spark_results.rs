@@ -137,6 +137,20 @@ pub(crate) fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
             .map(|field| Ok(json!({"name":field.name(), "type":spark_schema_type(field.data_type())?,
                 "nullable":field.is_nullable(), "metadata":field.metadata()})))
             .collect::<TestResult<Vec<_>>>()?}),
+        DataType::Map(entries, _) => {
+            let DataType::Struct(fields) = entries.data_type() else {
+                return Err("expected MAP entry fields".into());
+            };
+            let [key, value] = fields.as_ref() else {
+                return Err("expected MAP key/value fields".into());
+            };
+            if entries.is_nullable() || key.is_nullable() {
+                return Err("MAP entries and keys must be nonnullable".into());
+            }
+            json!({"type":"map","keyType":spark_schema_type(key.data_type())?,
+                "valueType":spark_schema_type(value.data_type())?,
+                "valueContainsNull":value.is_nullable()})
+        }
         other => return Err(format!("unexpected Spark output type: {other}").into()),
     })
 }
@@ -182,6 +196,23 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
                             .into());
                         }
                         Ok(value)
+                    })
+                    .collect::<TestResult<Vec<_>>>()?
+            )
+        }
+        DataType::Map(_, _) => {
+            let entries = column.as_map().value(row);
+            json!(
+                (0..entries.len())
+                    .map(|index| {
+                        let key = encode_value(entries.column(0).as_ref(), index)?;
+                        let value = encode_value(entries.column(1).as_ref(), index)?;
+                        if key.is_null()
+                            || (value.is_null() && !entries.fields()[1].is_nullable())
+                        {
+                            return Err("nonnullable MAP key/value returned NULL".into());
+                        }
+                        Ok(json!([key, value]))
                     })
                     .collect::<TestResult<Vec<_>>>()?
             )

@@ -2445,6 +2445,66 @@ fn result_metadata_preserves_nested_declarations() -> datafusion_common::Result<
 
 #[cfg(test)]
 #[test]
+fn result_metadata_keeps_refined_nested_nullability() -> datafusion_common::Result<()> {
+    use datafusion::arrow::array::{Array, ArrayRef, Int32Array, StructArray};
+    use datafusion::arrow::datatypes::Schema;
+
+    let actual_child = Arc::new(
+        Field::new("x", DataType::Int32, false)
+            .with_metadata(HashMap::from([("source".into(), "computed".into())])),
+    );
+    let source: ArrayRef = Arc::new(StructArray::try_new(
+        vec![actual_child].into(),
+        vec![Arc::new(Int32Array::from(vec![1, 2]))],
+        None,
+    )?);
+    let captured_type = DataType::Struct(
+        vec![Arc::new(Field::new("x", DataType::Int32, true))].into(),
+    );
+    let expected_type = DataType::Struct(
+        vec![Arc::new(Field::new("x", DataType::Int32, false))].into(),
+    );
+    let captured = Arc::new(Field::new("r", captured_type, true));
+    let source_field = Arc::new(Field::new("k", source.data_type().clone(), false));
+    let schema = DFSchema::try_from(Schema::new(vec![Arc::clone(&source_field)]))?;
+    let expression = preserve_result_field_metadata(datafusion_expr::col("k"), &captured);
+    let returned = expression.to_field(&schema)?.1;
+    assert_eq!(returned.data_type(), &expected_type);
+    assert!(!returned.is_nullable());
+    let expr::Expr::ScalarFunction(function) = expression else {
+        return datafusion_common::internal_err!("expected result metadata annotation");
+    };
+    let scalar = ScalarValue::try_from_array(source.as_ref(), 0)?;
+    for input in [ColumnarValue::Array(Arc::clone(&source)), ColumnarValue::Scalar(scalar.clone())] {
+        let result = function.func.invoke_with_args(ScalarFunctionArgs {
+            args: vec![input],
+            arg_fields: vec![Arc::clone(&source_field)],
+            number_rows: 2,
+            return_field: Arc::clone(&returned),
+            config_options: Arc::new(Default::default()),
+        })?;
+        assert_eq!(result.data_type(), expected_type);
+        let expected = match &result {
+            ColumnarValue::Array(_) => Arc::clone(&source),
+            ColumnarValue::Scalar(_) => scalar.to_array()?,
+        };
+        let result = result.into_array(expected.len())?;
+        result.to_data().validate_full()?;
+        let restored = arrow_cast(result.as_ref(), source.data_type())?;
+        assert_eq!(restored.to_data(), expected.to_data());
+    }
+    let annotated = preserve_result_field_metadata(lit(scalar), &captured);
+    let materialized = materialize_metadata_literals(annotated)?.data;
+    let expr::Expr::Literal(value, _) = materialized else {
+        return datafusion_common::internal_err!("expected metadata literal");
+    };
+    assert_eq!(value.data_type(), expected_type);
+    value.to_array()?.to_data().validate_full()?;
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
 fn metadata_annotations_keep_null_propagation_and_fields() -> datafusion_common::Result<()> {
     use datafusion::optimizer::simplify_expressions::ExprSimplifier;
     use datafusion_expr::create_udf;
