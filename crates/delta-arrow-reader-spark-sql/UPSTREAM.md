@@ -551,8 +551,10 @@ nested access is invalid; only an absent local base can continue outer lookup.
 STRUCT children match case-insensitively and must be unique. Missing children,
 duplicate children, scalar extraction and invalid scalar-array selectors retain
 distinct planning conditions. Computed and bracket field selectors use the same
-extraction path. Map lookup delegates one key to native get_field, then resumes
-shared validation using the native result type. Dictionary-encoded STRUCTs keep
+extraction path. Map access in the shared nested-field resolver delegates one
+key to native get_field, then resumes shared validation using the native result
+type. Computed/bracket Map lookup retains its existing map_extract path.
+Dictionary-encoded STRUCTs keep
 their native dictionary result type and share case-insensitive, unique child
 selection. Numeric array indexing retains its existing path. Typed lambda
 parameters use the same child validation; untyped parameters retain deferred
