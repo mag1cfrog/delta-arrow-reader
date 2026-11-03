@@ -2355,9 +2355,8 @@ Arrow fields, including storage width and metadata, must match the canonical
 control. This storage repair keeps canonical declaration inference under #835;
 it does not substitute weaker expected fields for that separate acceptance.
 
-The three required contiguous, gapped and overlapping ranges retain the frozen
-v3 independent probe's backing values and selected logical values. Added prefix
-and suffix rows expose nonzero outer slices and sentinel leakage. A fourth
+Contiguous, gapped and overlapping ranges have explicit expected values.
+Prefix and suffix rows expose nonzero outer slices and sentinel leakage. A fourth
 layout contains actual NULL outer/inner arrays and leaf elements, empty inner
 and outer arrays, and unused backing values. The inputs validate their Arrow
 data and compare their full logical rows before query execution.
@@ -2373,8 +2372,5 @@ inner-view flattening behavior.
 The source normalization clones the immediate inner field and retains its leaf
 field reference. Only ListView-to-List and LargeListView-to-LargeList change;
 Arrow 58.4.0's checked view cast supplies range gathering and offset overflow
-checks. The frozen external v3 probe has SHA256
-`f31e402c6def1c3484dc04709be2d96f773bf7579074b55fefee98ea36c8a97e`.
-It retains 24 absolute Spark field/row identities for the later composed
-#835/#853 check. The standalone storage controls compare complete canonical
-fields while that declaration repair remains separate.
+checks. These controls establish equivalence to canonical storage. Final output
+metadata and nullability remain subject to the declaration repair in #835.

@@ -34,7 +34,7 @@ struct Layout {
 
 fn layouts() -> Vec<Layout> {
     let mut layouts = Vec::new();
-    // Frozen v3 ranges retain gaps/overlap; prefix/suffix rows expose sliced offsets.
+    // Prefix/suffix rows expose slicing mistakes; hidden values expose wrong view ranges.
     for (name, backing, offsets, flat) in [
         ("contiguous", vec![1, 2, 3, 4], vec![0, 2], vec![1, 2, 3, 4]),
         (
