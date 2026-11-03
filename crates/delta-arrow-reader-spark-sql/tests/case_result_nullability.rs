@@ -167,6 +167,24 @@ async fn case_common_types_preserve_live_nested_metadata_and_refinement() -> Tes
     ).await
 }
 
+#[tokio::test]
+async fn case_results_preserve_required_subquery_preparation() -> TestResult {
+    assert_case_schema_stages_and_rows(
+        include_str!("fixtures/case-result-nullability-true-subquery-spark.jsonl"),
+        12,
+        "CASE_721_TRUE_SUBQUERY_OBSERVATION",
+    ).await
+}
+
+#[tokio::test]
+async fn case_nested_common_types_and_field_admission_match_spark() -> TestResult {
+    assert_case_schema_stages_and_rows(
+        include_str!("fixtures/case-result-nullability-nested-common-spark.jsonl"),
+        12,
+        "CASE_721_NESTED_COMMON_OBSERVATION",
+    ).await
+}
+
 async fn assert_case_schema_stages_and_rows(
     source: &str,
     expected_cases: usize,
@@ -185,10 +203,12 @@ async fn assert_case_schema_stages_and_rows(
             case["input"].as_str().ok_or("missing input")?,
             case["ansi"].as_bool().ok_or("missing ANSI mode")?,
         )));
-        assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
-        assert_eq!(case["schema_stages"]["executed_before_collect"], case["schema_stages"]["executed"]);
-        assert!(case["schema_stages"]["executed"].is_object());
-        assert!(case["expected"]["rows"].is_array());
+        if case["expected"].get("condition").is_none() {
+            assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
+            assert_eq!(case["schema_stages"]["executed_before_collect"], case["schema_stages"]["executed"]);
+            assert!(case["schema_stages"]["executed"].is_object());
+            assert!(case["expected"]["rows"].is_array());
+        }
     }
     let mut differences = Vec::new();
     let mut comparisons = 0;
@@ -201,32 +221,69 @@ async fn assert_case_schema_stages_and_rows(
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             comparisons += 1;
-            let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?,
-                &SparkSqlOptions { ansi_mode:case["ansi"].as_bool().ok_or("missing ANSI mode")?,
-                    session_timezone:"UTC".into(), ..SparkSqlOptions::default() }).await?;
-            let public = spark_results::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?;
-            let physical = query.create_physical_plan(&session).await?;
-            let physical_schema = physical.schema();
-            let executed = spark_results::capture_schema(physical_schema.fields(), None)?;
-            let mut rows = Vec::new();
-            for batch in collect(physical, session.task_ctx()).await? {
-                spark_results::validate_batch(physical_schema.as_ref(), &batch)?;
-                for row in 0..batch.num_rows() {
-                    rows.push(batch.columns().iter().map(|column| spark_results::encode_value(column.as_ref(), row))
-                        .collect::<TestResult<Vec<_>>>()?);
+            let mut phase = "resolve";
+            let mut public = None;
+            let mut executed = None;
+            let actual: TestResult<Vec<Vec<Value>>> = async {
+                let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions { ansi_mode:case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                        session_timezone:"UTC".into(), ..SparkSqlOptions::default() }).await?;
+                phase = "public_schema";
+                public = Some(spark_results::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?);
+                phase = "create_physical_plan";
+                let physical = query.create_physical_plan(&session).await?;
+                let physical_schema = physical.schema();
+                phase = "physical_schema";
+                executed = Some(spark_results::capture_schema(physical_schema.fields(), None)?);
+                phase = "collect";
+                let mut rows = Vec::new();
+                for batch in collect(physical, session.task_ctx()).await? {
+                    spark_results::validate_batch(physical_schema.as_ref(), &batch)?;
+                    for row in 0..batch.num_rows() {
+                        rows.push(batch.columns().iter().map(|column| spark_results::encode_value(column.as_ref(), row))
+                            .collect::<TestResult<Vec<_>>>()?);
+                    }
                 }
-            }
-            rows.sort_by_key(|row| json!(row).to_string());
-            let public_matches = public == case["expected"]["schema"];
-            let physical_matches = executed == case["schema_stages"]["executed"];
-            let rows_matches = json!(rows) == case["expected"]["rows"];
+                rows.sort_by_key(|row| json!(row).to_string());
+                Ok(rows)
+            }.await;
+            let public_matches = case["schema_stages"].get("analyzed")
+                .map(|expected| public.as_ref() == Some(expected));
+            let physical_matches = case["schema_stages"].get("executed")
+                .map(|expected| executed.as_ref() == Some(expected));
+            let rows_matches = case["expected"].get("rows")
+                .map(|expected| actual.as_ref().is_ok_and(|rows| json!(rows) == *expected));
+            let error_matches = case["expected"]["condition"].as_str().map(|condition| {
+                actual.as_ref().err().is_some_and(|error| {
+                    let message = error.to_string();
+                    match condition {
+                        "DIVIDE_BY_ZERO" => phase == "create_physical_plan" && {
+                            let message = message.to_ascii_lowercase();
+                            message.contains("[divide_by_zero]") || message.contains("divide by zero")
+                                || message.contains("division by zero")
+                        },
+                        "DATATYPE_MISMATCH.DATA_DIFF_TYPES" => phase == "resolve" && (
+                            message.contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]")
+                                || (message.contains("Failed to coerce then (")
+                                    && message.contains("to common types in CASE WHEN expression"))
+                        ),
+                        _ => false,
+                    }
+                })
+            });
+            let matches = public_matches.unwrap_or(true) && physical_matches.unwrap_or(true)
+                && rows_matches.unwrap_or(true) && error_matches.unwrap_or(true);
             eprintln!("{observation_label} {}", json!({
                 "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
-                "public_schema":public, "physical_schema":executed, "rows":rows,
+                "public_schema":public, "physical_schema":executed, "rows":actual.as_ref().ok(),
                 "public_matches":public_matches, "physical_matches":physical_matches, "rows_matches":rows_matches,
+                "error_matches":error_matches, "native_phase":phase,
+                "error":actual.as_ref().err().map(ToString::to_string), "matches":matches,
+                "expected":case["expected"], "expected_physical":case["schema_stages"]["executed"],
+                "spark_error_phase":case["spark_error_phase"], "spark_error":case["spark_error"],
             }));
-            if !public_matches || !physical_matches || !rows_matches {
-                differences.push(format!("{} ANSI={} batch={batch_size}: public={public_matches} physical={physical_matches} rows={rows_matches}; expected {} executed={}, got public={public} executed={executed} rows={rows:?}",
+            if !matches {
+                differences.push(format!("{} ANSI={} batch={batch_size}: public={public_matches:?} physical={physical_matches:?} rows={rows_matches:?} error={error_matches:?}; expected {} executed={}, got public={public:?} executed={executed:?} result={actual:?} phase={phase}",
                     case["id"], case["ansi"], case["expected"], case["schema_stages"]["executed"]));
             }
         }
