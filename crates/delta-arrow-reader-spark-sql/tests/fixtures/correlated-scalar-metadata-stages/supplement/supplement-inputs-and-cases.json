@@ -1,0 +1,4652 @@
+{
+  "source_head": "d1e7a104049e6589ce40d05beafb771e072248c4",
+  "product_head": "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "counts": {
+    "required_source": 18,
+    "bare_scalar_guard": 24,
+    "case_scalar_guard": 12,
+    "nonnullable_scalar_guard": 8,
+    "extension_scalar_guard": 4,
+    "extension_native_guard_spark_control": 2
+  },
+  "observations": 68,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 136,
+  "inputs": [
+    {
+      "name": "struct_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-2",
+          [
+            "-3",
+            [
+              "-4"
+            ]
+          ],
+          [
+            "-5",
+            "-6",
+            "-7"
+          ],
+          [
+            [
+              "-8"
+            ],
+            null
+          ],
+          [
+            "9"
+          ]
+        ],
+        [
+          "1",
+          "2",
+          [
+            "3",
+            [
+              "4"
+            ]
+          ],
+          [
+            "5",
+            "6",
+            "7"
+          ],
+          [
+            [
+              "8"
+            ]
+          ],
+          [
+            "10"
+          ]
+        ],
+        [
+          "2",
+          null,
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            [
+              null
+            ]
+          ],
+          [
+            "11"
+          ]
+        ],
+        [
+          "3",
+          null,
+          null,
+          null,
+          null,
+          [
+            "12"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "struct_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null,
+          null,
+          null,
+          [
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "struct_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "id"
+            }
+          },
+          {
+            "name": "v",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "plain"
+            }
+          },
+          {
+            "name": "nested",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "nested"
+                  }
+                },
+                {
+                  "name": "inner",
+                  "type": {
+                    "type": "struct",
+                    "fields": [
+                      {
+                        "name": "leaf",
+                        "type": "integer",
+                        "nullable": true,
+                        "metadata": {
+                          "source": "deep"
+                        }
+                      }
+                    ]
+                  },
+                  "nullable": true,
+                  "metadata": {
+                    "source": "inner"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "record"
+            }
+          },
+          {
+            "name": "quoted",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "a.b",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "a.b"
+                  }
+                },
+                {
+                  "name": "sp ace",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "sp ace"
+                  }
+                },
+                {
+                  "name": "back`tick",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {
+                    "source": "back`tick"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "elementType": {
+                "type": "struct",
+                "fields": [
+                  {
+                    "name": "item",
+                    "type": "integer",
+                    "nullable": true,
+                    "metadata": {
+                      "source": "array"
+                    }
+                  }
+                ]
+              },
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "required",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "item",
+                  "type": "integer",
+                  "nullable": false,
+                  "metadata": {
+                    "source": "required"
+                  }
+                }
+              ]
+            },
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "metadata_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "origin": "outer",
+              "comment": "source id"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "metadata_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "origin": "outer",
+              "comment": "source id"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "metadata_null",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "origin": "outer",
+              "comment": "source id"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "nonnull_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0"
+        ],
+        [
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "nonnull_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "extension_values",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "{\"n\":1}"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "null"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "group": "required_source",
+      "id": "correlated_required_outer_alias",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed)) AS r FROM struct_mixed q",
+      "source_id": "correlated_direct_outer_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_outer_alias",
+      "input": "struct_nulls",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed)) AS r FROM struct_nulls q",
+      "source_id": "correlated_direct_outer_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_outer_alias",
+      "input": "struct_empty",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed)) AS r FROM struct_empty q",
+      "source_id": "correlated_direct_outer_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_outer_alias",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed)) AS r FROM struct_mixed q",
+      "source_id": "correlated_direct_outer_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_outer_alias",
+      "input": "struct_nulls",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed)) AS r FROM struct_nulls q",
+      "source_id": "correlated_direct_outer_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_outer_alias",
+      "input": "struct_empty",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed)) AS r FROM struct_empty q",
+      "source_id": "correlated_direct_outer_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_struct_inner_alias",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed) AS inner_s) AS r FROM struct_mixed q",
+      "source_id": "correlated_struct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_direct_inner_alias",
+      "input": "struct_mixed",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT q.id AS inner_v) AS r FROM struct_mixed q",
+      "source_id": "correlated_direct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_struct_inner_alias",
+      "input": "struct_nulls",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed) AS inner_s) AS r FROM struct_nulls q",
+      "source_id": "correlated_struct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_direct_inner_alias",
+      "input": "struct_nulls",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT q.id AS inner_v) AS r FROM struct_nulls q",
+      "source_id": "correlated_direct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_struct_inner_alias",
+      "input": "struct_empty",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed) AS inner_s) AS r FROM struct_empty q",
+      "source_id": "correlated_struct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_direct_inner_alias",
+      "input": "struct_empty",
+      "ansi": true,
+      "sql": "SELECT id, (SELECT q.id AS inner_v) AS r FROM struct_empty q",
+      "source_id": "correlated_direct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_struct_inner_alias",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed) AS inner_s) AS r FROM struct_mixed q",
+      "source_id": "correlated_struct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_direct_inner_alias",
+      "input": "struct_mixed",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT q.id AS inner_v) AS r FROM struct_mixed q",
+      "source_id": "correlated_direct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_struct_inner_alias",
+      "input": "struct_nulls",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed) AS inner_s) AS r FROM struct_nulls q",
+      "source_id": "correlated_struct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_direct_inner_alias",
+      "input": "struct_nulls",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT q.id AS inner_v) AS r FROM struct_nulls q",
+      "source_id": "correlated_direct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_struct_inner_alias",
+      "input": "struct_empty",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT STRUCT(q.id AS renamed) AS inner_s) AS r FROM struct_empty q",
+      "source_id": "correlated_struct_inner_alias"
+    },
+    {
+      "group": "required_source",
+      "id": "correlated_required_direct_inner_alias",
+      "input": "struct_empty",
+      "ansi": false,
+      "sql": "SELECT id, (SELECT q.id AS inner_v) AS r FROM struct_empty q",
+      "source_id": "correlated_direct_inner_alias"
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_plain_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1"
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_inputs_plain_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_plain_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_inputs_plain_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_sibling_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "1"
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 3,
+      "original_observation": {
+        "id": "metadata_inputs_sibling_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1",
+              "1"
+            ],
+            [
+              null,
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 3
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_sibling_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "1",
+            "7"
+          ],
+          [
+            null,
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 3,
+      "original_observation": {
+        "id": "metadata_inputs_sibling_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              null,
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 3
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_plain_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_plain_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_plain_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_plain_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_sibling_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_sibling_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_sibling_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_sibling_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_plain_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_null_plain_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_plain_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_null_plain_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_sibling_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 2,
+      "original_observation": {
+        "id": "metadata_null_sibling_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 2
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_sibling_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            null,
+            "7"
+          ],
+          [
+            null,
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 2,
+      "original_observation": {
+        "id": "metadata_null_sibling_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 2
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_plain_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1"
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_inputs_plain_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_plain_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_inputs_plain_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_sibling_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1",
+            "1"
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 3,
+      "original_observation": {
+        "id": "metadata_inputs_sibling_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1",
+              "1"
+            ],
+            [
+              null,
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 3
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_inputs_sibling_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "1",
+            "7"
+          ],
+          [
+            null,
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 3,
+      "original_observation": {
+        "id": "metadata_inputs_sibling_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              null,
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 3
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_plain_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_plain_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_plain_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_plain_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_sibling_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_sibling_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_empty_sibling_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_empty_sibling_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_plain_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_null_plain_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_plain_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 0,
+      "original_observation": {
+        "id": "metadata_null_plain_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 0
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_sibling_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "evaluated_rows": 2,
+      "original_observation": {
+        "id": "metadata_null_sibling_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null
+            ]
+          ]
+        },
+        "evaluated_rows": 2
+      }
+    },
+    {
+      "group": "bare_scalar_guard",
+      "id": "metadata_null_sibling_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "observed",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            null,
+            "7"
+          ],
+          [
+            null,
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "evaluated_rows": 2,
+      "original_observation": {
+        "id": "metadata_null_sibling_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,count_row(p.id) AS observed,CAST(7 AS INT) AS incidental FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "observed",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              null,
+              "7"
+            ]
+          ]
+        },
+        "evaluated_rows": 2
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_inputs_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1"
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_inputs_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_inputs_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_inputs_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_empty_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "metadata_empty_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_empty_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "metadata_empty_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_null_case_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_null_case_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_null_case_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_null_case_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_inputs_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1"
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_inputs_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_inputs_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_inputs_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_empty_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "metadata_empty_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_empty_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "metadata_empty_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_null_case_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_null_case_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null
+            ],
+            [
+              null,
+              null
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "case_scalar_guard",
+      "id": "metadata_null_case_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {
+                "origin": "outer",
+                "comment": "source id"
+              }
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            null,
+            null,
+            "7"
+          ],
+          [
+            null,
+            null,
+            "7"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "metadata_null_case_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT CASE WHEN true THEN p.id ELSE 0 END) AS scalar_id,CAST(7 AS INT) AS incidental FROM metadata_null p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {
+                  "origin": "outer",
+                  "comment": "source id"
+                }
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              null,
+              null,
+              "7"
+            ],
+            [
+              null,
+              null,
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_inputs_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "nonnull_inputs_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_inputs_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "7"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "nonnull_inputs_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_empty_bare",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "nonnull_empty_bare",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_empty_cast",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "nonnull_empty_cast",
+        "ansi": true,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_inputs_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0"
+          ],
+          [
+            "1",
+            "1"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "nonnull_inputs_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "1",
+              "1"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_inputs_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_inputs p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": [
+          [
+            "0",
+            "0",
+            "7"
+          ],
+          [
+            "1",
+            "1",
+            "7"
+          ]
+        ]
+      },
+      "original_observation": {
+        "id": "nonnull_inputs_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_inputs p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "0",
+              "0",
+              "7"
+            ],
+            [
+              "1",
+              "1",
+              "7"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_empty_bare",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "nonnull_empty_bare",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM nonnull_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "nonnullable_scalar_guard",
+      "id": "nonnull_empty_cast",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_empty p",
+      "expected": {
+        "status": "ok",
+        "schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "direct_id",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            },
+            {
+              "name": "scalar_id",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {}
+            },
+            {
+              "name": "incidental",
+              "type": "integer",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": []
+      },
+      "original_observation": {
+        "id": "nonnull_empty_cast",
+        "ansi": false,
+        "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id,CAST(7 AS INT) AS incidental FROM nonnull_empty p",
+        "expected": {
+          "status": "ok",
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "direct_id",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              },
+              {
+                "name": "scalar_id",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "incidental",
+                "type": "integer",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": []
+        }
+      }
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_bare",
+      "input": "extension_values",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p ORDER BY p.id",
+      "guard_public_metadata": [
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": "",
+          "origin": "outer"
+        },
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": ""
+        }
+      ]
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_cast",
+      "input": "extension_values",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value,CAST(7 AS INT) AS incidental FROM extension_values p ORDER BY p.id",
+      "guard_public_metadata": [
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": "",
+          "origin": "outer"
+        },
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": ""
+        }
+      ]
+    },
+    {
+      "group": "extension_native_guard_spark_control",
+      "id": "extension_native_relation",
+      "input": "extension_values",
+      "ansi": true,
+      "sql": "SELECT value,(SELECT value FROM extension_values WHERE id=0) AS scalar_value FROM extension_values ORDER BY id"
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_bare",
+      "input": "extension_values",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p ORDER BY p.id",
+      "guard_public_metadata": [
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": "",
+          "origin": "outer"
+        },
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": ""
+        }
+      ]
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_cast",
+      "input": "extension_values",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value,CAST(7 AS INT) AS incidental FROM extension_values p ORDER BY p.id",
+      "guard_public_metadata": [
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": "",
+          "origin": "outer"
+        },
+        {
+          "ARROW:extension:name": "arrow.json",
+          "ARROW:extension:metadata": ""
+        }
+      ]
+    },
+    {
+      "group": "extension_native_guard_spark_control",
+      "id": "extension_native_relation",
+      "input": "extension_values",
+      "ansi": false,
+      "sql": "SELECT value,(SELECT value FROM extension_values WHERE id=0) AS scalar_value FROM extension_values ORDER BY id"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/single-row-correlated-case-metadata-spark.jsonl",
+      "bytes": 6356,
+      "sha256": "93638dc3a839d76bf245ace361376ffeb93c5f4066abcdcb5ee2986b3b231193"
+    },
+    {
+      "path": "sources/single-row-correlated-metadata-spark.jsonl",
+      "bytes": 13100,
+      "sha256": "3fa8b2ad942162a47d30a6dd4865b05d37a73a7eb7d242a110a6e92a6aa61de9"
+    },
+    {
+      "path": "sources/single-row-correlated-nonnullable-spark.jsonl",
+      "bytes": 3500,
+      "sha256": "8c7258c6a2e71229b5f8240d9772b61b741c01f5bd22ec6acb7506ff0549a48e"
+    },
+    {
+      "path": "sources/single_row_correlated.rs",
+      "bytes": 28954,
+      "sha256": "f96138c5cb5a52a264feb089fef9049774ba486f63ab1596c437759898f6b729"
+    }
+  ]
+}

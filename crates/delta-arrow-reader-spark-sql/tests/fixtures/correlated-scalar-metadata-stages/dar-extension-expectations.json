@@ -1,0 +1,357 @@
+{
+  "policy": "Arrow extension metadata describes the DAR result type. Preserve both extension keys under the existing #710 contract; Spark treats these keys as ordinary user metadata and returns an empty scalar map. Raw Spark fields remain unchanged.",
+  "references": [
+    "https://github.com/mag1cfrog/delta-arrow-reader/issues/710",
+    "../../../UPSTREAM.md"
+  ],
+  "cases": [
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_bare",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p ORDER BY p.id",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_cast",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value,CAST(7 AS INT) AS incidental FROM extension_values p ORDER BY p.id",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          },
+          {
+            "name": "incidental",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          },
+          {
+            "name": "incidental",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      }
+    },
+    {
+      "group": "extension_native_guard_spark_control",
+      "id": "extension_native_relation",
+      "ansi": true,
+      "sql": "SELECT value,(SELECT value FROM extension_values WHERE id=0) AS scalar_value FROM extension_values ORDER BY id",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_bare",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p ORDER BY p.id",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "group": "extension_scalar_guard",
+      "id": "extension_cast",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value,CAST(7 AS INT) AS incidental FROM extension_values p ORDER BY p.id",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          },
+          {
+            "name": "incidental",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          },
+          {
+            "name": "incidental",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      }
+    },
+    {
+      "group": "extension_native_guard_spark_control",
+      "id": "extension_native_relation",
+      "ansi": false,
+      "sql": "SELECT value,(SELECT value FROM extension_values WHERE id=0) AS scalar_value FROM extension_values ORDER BY id",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

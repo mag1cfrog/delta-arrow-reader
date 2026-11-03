@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/818",
+  "source_head": "d1e7a104049e6589ce40d05beafb771e072248c4",
+  "product_head": "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
+  "observations": 68,
+  "counts": {
+    "required_source": 18,
+    "bare_scalar_guard": 24,
+    "case_scalar_guard": 12,
+    "nonnullable_scalar_guard": 8,
+    "extension_scalar_guard": 4,
+    "extension_native_guard_spark_control": 2
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3404,
+      "sha256": "de10702ffe485aa0198f69c84d12851fb383c8e22fc7042d6c42b4a195d3bf89"
+    },
+    {
+      "path": "capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/single-row-correlated-case-metadata-spark.jsonl",
+      "bytes": 6356,
+      "sha256": "93638dc3a839d76bf245ace361376ffeb93c5f4066abcdcb5ee2986b3b231193"
+    },
+    {
+      "path": "sources/single-row-correlated-metadata-spark.jsonl",
+      "bytes": 13100,
+      "sha256": "3fa8b2ad942162a47d30a6dd4865b05d37a73a7eb7d242a110a6e92a6aa61de9"
+    },
+    {
+      "path": "sources/single-row-correlated-nonnullable-spark.jsonl",
+      "bytes": 3500,
+      "sha256": "8c7258c6a2e71229b5f8240d9772b61b741c01f5bd22ec6acb7506ff0549a48e"
+    },
+    {
+      "path": "sources/single_row_correlated.rs",
+      "bytes": 28954,
+      "sha256": "f96138c5cb5a52a264feb089fef9049774ba486f63ab1596c437759898f6b729"
+    },
+    {
+      "path": "supplement-inputs-and-cases.json",
+      "bytes": 118925,
+      "sha256": "f41f18d029918a5c67109edb3ce719d1a761c9648e2434c99092fa0a720b1460"
+    }
+  ],
+  "checks": [
+    "Python AST parses",
+    "Source snapshot hashes match",
+    "68 distinct group/id/input/ANSI identities",
+    "All original SQL, expected objects and provider declarations preserved",
+    "Required-source queries substitute q.id only",
+    "Decode self-check preserves NULL, strings and nested integers"
+  ],
+  "execution": "No Cargo, Rust, Spark or JVM engine run by author. Root owns serialized engines."
+}

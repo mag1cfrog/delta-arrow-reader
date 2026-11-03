@@ -1,5 +1,6 @@
 //! Single-row correlated projections use their outer row without a scalar executor.
 
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::sync::{
     Arc,
@@ -34,6 +35,160 @@ fn references() -> TestResult<Vec<Value>> {
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
     Ok(records)
+}
+
+fn scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
+    let records = include_str!(
+        "fixtures/correlated-scalar-metadata-stages/supplement/supplement-spark.jsonl"
+    )
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(records.len() - 1, 68);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["timezone"], "UTC");
+    Ok(records)
+}
+
+fn scalar_metadata_stage_case<'a>(records: &'a [Value], original: &Value) -> TestResult<&'a Value> {
+    let case = records[1..]
+        .iter()
+        .find(|case| case.get("original_observation") == Some(original))
+        .ok_or("missing original scalar observation")?;
+    assert_eq!(case["sql"], original["sql"]);
+    assert_eq!(case["public_schema"], original["expected"]["schema"]);
+    assert_eq!(case["expected"]["rows"], original["expected"]["rows"]);
+    Ok(case)
+}
+
+#[tokio::test]
+async fn scalar_metadata_stages_and_arrow_extension_contract_match() -> TestResult {
+    let records = scalar_metadata_stage_records()?;
+    let extension_contract: Value = serde_json::from_str(include_str!(
+        "fixtures/correlated-scalar-metadata-stages/dar-extension-expectations.json"
+    ))?;
+    let exceptions = extension_contract["cases"]
+        .as_array()
+        .ok_or("missing extension expectations")?;
+    assert_eq!(exceptions.len(), 6);
+    for exception in exceptions {
+        let case = records[1..]
+            .iter()
+            .find(|case| {
+                case["group"] == exception["group"]
+                    && case["id"] == exception["id"]
+                    && case["ansi"] == exception["ansi"]
+            })
+            .ok_or("missing extension reference")?;
+        for (dar, spark) in [
+            ("dar_public_schema", "public_schema"),
+            ("dar_executed_schema", "executed_schema_after_collect"),
+        ] {
+            let mut schema = exception[dar].clone();
+            assert_eq!(schema["fields"][1]["name"], "scalar_value");
+            assert_eq!(
+                schema["fields"][1]["metadata"],
+                json!({"ARROW:extension:name":"arrow.json","ARROW:extension:metadata":""})
+            );
+            schema["fields"][1]["metadata"] = json!({});
+            assert_eq!(schema, case[spark]);
+        }
+    }
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert((
+            case["group"].as_str().ok_or("missing group")?,
+            case["id"].as_str().ok_or("missing ID")?,
+            case.get("input").and_then(Value::as_str),
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+        assert!(case.get("error").is_none());
+        assert_eq!(case["public_schema"], case["analyzed_schema"]);
+        assert_eq!(case["public_schema"], case["expected"]["schema"]);
+        assert_eq!(
+            case["optimized_schema"],
+            case["executed_schema_before_collect"]
+        );
+        assert_eq!(
+            case["executed_schema_before_collect"],
+            case["executed_schema_after_collect"]
+        );
+    }
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    let mut extension_comparisons = 0;
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        let calls = register_counter(&session);
+        for case in &records[1..] {
+            let exception = exceptions.iter().find(|entry| {
+                entry["group"] == case["group"]
+                    && entry["id"] == case["id"]
+                    && entry["ansi"] == case["ansi"]
+            });
+            let mut query_case = case.clone();
+            let public = if let Some(exception) = exception {
+                assert_eq!(exception["sql"], case["sql"]);
+                query_case["executed_schema_after_collect"] =
+                    exception["dar_executed_schema"].clone();
+                extension_comparisons += 1;
+                &exception["dar_public_schema"]
+            } else {
+                &case["public_schema"]
+            };
+            calls.store(0, Ordering::SeqCst);
+            let observed =
+                spark_results::capture_spark_query_observation(&session, &query_case).await;
+            let evaluated_rows = calls.load(Ordering::SeqCst) as u64;
+            let matches = observed.as_ref().is_ok_and(|actual| {
+                actual["result"]["schema"] == *public
+                    && actual["result"]["rows"] == case["expected"]["rows"]
+                    && actual["physical_schema"] == query_case["executed_schema_after_collect"]
+            }) && Some(evaluated_rows) == case["evaluated_rows"].as_u64();
+            eprintln!(
+                "scalar_metadata_stages: {}",
+                json!({"group":case["group"],"id":case["id"],"input":case["input"],
+                    "ansi":case["ansi"],"batch_size":batch_size,"matches_dar_contract":matches,
+                    "intentional_reference_difference":exception.map(|_| &extension_contract["policy"]),
+                    "expected_spark":case,"expected_dar_public":public,
+                    "expected_dar_executed":query_case["executed_schema_after_collect"],
+                    "actual":observed.as_ref().ok(),"error":observed.as_ref().err().map(|e| e.to_string()),
+                    "evaluated_rows":evaluated_rows})
+            );
+            if !matches {
+                differences.push(format!(
+                    "{} {} input={} ANSI={} batch={batch_size}: expected public {public}, executed {}, rows {} and evaluations {}, got {observed:?} and {evaluated_rows}",
+                    case["group"], case["id"], case["input"], case["ansi"],
+                    query_case["executed_schema_after_collect"], case["expected"]["rows"],
+                    case["evaluated_rows"]
+                ));
+            }
+            comparisons += 1;
+        }
+    }
+    assert_eq!(comparisons, 136);
+    assert_eq!(extension_comparisons, 12);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn scalar_executed_reference_cannot_hide_a_metadata_mismatch() -> TestResult {
+    let records = scalar_metadata_stage_records()?;
+    let mut case = records[1..]
+        .iter()
+        .find(|case| case["id"] == "nonnull_inputs_bare")
+        .ok_or("missing nonnullable control")?
+        .clone();
+    case["executed_schema_after_collect"]["fields"][1]["metadata"] =
+        json!({"unrecorded":"metadata"});
+    let session = session(32);
+    spark_inputs::register_recorded_inputs(&session, &records[0], 32)?;
+    let result = spark_results::capture_spark_query_observation(&session, &case).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("executed schema"));
+    Ok(())
 }
 
 fn session(batch_size: usize) -> SessionContext {
@@ -157,6 +312,7 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
     assert_eq!(records.len(), 25);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
+    let stages = scalar_metadata_stage_records()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size);
@@ -164,6 +320,7 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
         let calls = register_counter(&session);
         let mut checked = 0;
         for case in &records[1..] {
+            let stage_case = scalar_metadata_stage_case(&stages, case)?;
             let id = case["id"].as_str().ok_or("missing ID")?;
             calls.store(0, Ordering::SeqCst);
             let planned = async {
@@ -188,7 +345,7 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
                 case["ansi"]
             );
             let actual = match planned {
-                Ok(()) => spark_results::capture_spark_query_result(&session, case).await,
+                Ok(()) => spark_results::capture_spark_query_result(&session, stage_case).await,
                 Err(error) => Err(error),
             };
             let expected = &case["expected"];
@@ -213,7 +370,7 @@ async fn single_row_metadata_and_volatile_siblings_match_spark() -> TestResult {
 }
 
 #[tokio::test]
-async fn single_row_case_results_drop_metadata_after_simplification() -> TestResult {
+async fn single_row_case_results_preserve_public_and_executed_metadata() -> TestResult {
     let records = include_str!("fixtures/single-row-correlated-case-metadata-spark.jsonl")
         .lines()
         .map(serde_json::from_str)
@@ -221,12 +378,14 @@ async fn single_row_case_results_drop_metadata_after_simplification() -> TestRes
     assert_eq!(records.len(), 13);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
+    let stages = scalar_metadata_stage_records()?;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size);
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         let mut checked = 0;
         for case in &records[1..] {
+            let stage_case = scalar_metadata_stage_case(&stages, case)?;
             let query = plan_query(
                 &session,
                 case["sql"].as_str().ok_or("missing SQL")?,
@@ -258,7 +417,7 @@ async fn single_row_case_results_drop_metadata_after_simplification() -> TestRes
                 Ok(TreeNodeRecursion::Continue)
             })?;
             assert_eq!(scalar_fields, 1, "{}", case["id"]);
-            let actual = spark_results::capture_spark_query_result(&session, case).await;
+            let actual = spark_results::capture_spark_query_result(&session, stage_case).await;
             let expected = &case["expected"];
             assert_eq!(expected["status"], "ok");
             let matches = actual.as_ref().is_ok_and(|actual| {
@@ -287,10 +446,12 @@ async fn single_row_scalars_preserve_resolved_schema_and_null_safety() -> TestRe
     assert_eq!(records.len(), 9);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
+    let stages = scalar_metadata_stage_records()?;
     for batch_size in [1, 32] {
         let session = session(batch_size);
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
+            let stage_case = scalar_metadata_stage_case(&stages, case)?;
             let query = plan_query(
                 &session,
                 case["sql"].as_str().ok_or("missing SQL")?,
@@ -340,6 +501,12 @@ async fn single_row_scalars_preserve_resolved_schema_and_null_safety() -> TestRe
             }
             let physical = query.create_physical_plan(&session).await?;
             let physical_schema = physical.schema();
+            assert_eq!(
+                spark_results::capture_schema(physical_schema.fields(), None)?,
+                stage_case["executed_schema_after_collect"],
+                "{} ANSI={} batch={batch_size}",
+                case["id"], case["ansi"]
+            );
             eprintln!(
                 "SINGLE_ROW_NONNULLABLE_SCHEMAS {}",
                 json!({
@@ -363,6 +530,7 @@ async fn single_row_scalars_preserve_resolved_schema_and_null_safety() -> TestRe
             }
             let mut rows = Vec::new();
             for batch in collect(physical, session.task_ctx()).await? {
+                spark_results::validate_batch(physical_schema.as_ref(), &batch)?;
                 for row in 0..batch.num_rows() {
                     rows.push(
                         batch

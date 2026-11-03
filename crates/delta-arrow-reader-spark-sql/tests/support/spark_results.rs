@@ -37,9 +37,18 @@ pub(crate) async fn capture_spark_query_observation(
     let physical = query.create_physical_plan(session).await?;
     let schema = physical.schema();
     let resolved = query.logical_plan.schema().fields();
-    validate_physical_schema(resolved, &query.column_names, schema.fields())?;
     let public_schema = capture_schema(resolved, Some(&query.column_names))?;
     let physical_schema = capture_schema(schema.fields(), None)?;
+    if let Some(expected) = case.get("executed_schema_after_collect") {
+        if physical_schema != *expected {
+            return Err(format!(
+                "executed schema: expected {expected}, got {physical_schema}"
+            )
+            .into());
+        }
+    } else {
+        validate_physical_schema(resolved, &query.column_names, schema.fields())?;
+    }
     let mut rows = Vec::new();
     for batch in collect(physical, session.task_ctx()).await? {
         validate_batch(schema.as_ref(), &batch)?;

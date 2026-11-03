@@ -71,3 +71,41 @@ queries. Its output intentionally uses `original-scope-spark.jsonl`, not the
 new seed recapture. Compare fields and rows when assessing a new capture; Spark
 plan expression IDs can vary between runs. Do not replace the committed raw
 references with DAR output or normalize their metadata to make tests pass.
+
+## Supplemental executed fields
+
+`supplement/supplement-spark.jsonl` retains all 68 additional independent
+observations, SHA256
+`bbb5ff0502904421fea62e502d92dffcf4f226f74754aad5f12ce8d86f87c668`.
+Its capture sources, planned cases and source snapshots are unchanged. The
+source-package README records the state before root executed the capture.
+
+The supplement adds 18 required-`q.id` variants of the three correlated shapes,
+the exact 24 old bare-scalar statements, 12 CASE statements, eight nonnullable
+controls, four extension scalar statements and two Spark controls using the
+native extension statement. All old public fields, rows and volatile counts
+remain in their original files and in each `original_observation`.
+
+The independent executed fields disprove the old physical-equals-public
+assumption for bare and CASE scalars. Bare scalar outputs regain source
+metadata after one-row inlining. CASE outputs regain the inner generated-alias
+marker. Required scalar outputs also become nonnullable. The original public
+assertions remain; their tests now check the exact recorded executed fields
+and validate every returned batch. Inner marker, evaluation-count, error,
+cardinality and native guards remain active.
+
+All 68 records replay at batch sizes 1 and 32. Six extension records have an
+explicit DAR type-contract difference, declared in
+`dar-extension-expectations.json`. The existing #710 contract and `UPSTREAM.md`
+treat Arrow extension metadata as result type information. Spark returns an
+empty scalar metadata map, while DAR retains the two extension keys. The tests
+keep both raw Spark maps and explicit DAR schemas, prove that only those two
+keys differ, and label the difference in each observation. All other fields,
+rows and evaluation counts remain exact. This exception is not a claim of
+complete Spark metadata parity.
+
+Run the supplemental target from the standalone workspace:
+
+```sh
+cargo +1.96.0 test --locked --workspace --test single_row_correlated -- --nocapture --test-threads=1
+```

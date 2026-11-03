@@ -1,4 +1,4 @@
-//! Spark output aliases retain their public metadata through execution.
+//! Spark output aliases preserve exact public and executed metadata stages.
 
 use std::collections::BTreeSet;
 
