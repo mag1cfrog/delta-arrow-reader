@@ -135,6 +135,7 @@ async fn spark_configuration_preserves_native_nested_case() -> TestResult {
         ] {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
             let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+            assert_eq!(expected["phase"], "encode", "{sql}");
             assert_eq!(actual, expected, "{sql}, after Spark={after_spark}");
         }
     }

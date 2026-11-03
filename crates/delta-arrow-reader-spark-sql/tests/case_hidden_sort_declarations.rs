@@ -28,12 +28,6 @@ const REFERENCES: &[&str] = &[
 ];
 const INHERITED_CASES: &[(&str, &str, &str, u64)] = &[
     (
-        "numeric-pruning-original",
-        "array_numeric_pruned_value_coercion",
-        "case_nested_mixed",
-        828,
-    ),
-    (
         "new-boundaries",
         "generated_output_name_no_order",
         "case_parent_mixed",
@@ -216,11 +210,6 @@ async fn hidden_sort_output_declarations_match_spark() -> TestResult {
                                 "struct(CASE WHEN true THEN subquery ELSE NULL END AS x)"
                             )),
                         )],
-                        (Some(828), "analyzed") => vec![(
-                            "/fields/0/type/containsNull".to_owned(),
-                            Some(json!(true)),
-                            Some(json!(false)),
-                        )],
                         (Some(867), "executed_before_collect" | "executed") => vec![(
                             "/fields/0/type/fields/0/metadata/source".to_owned(),
                             None,
@@ -266,7 +255,7 @@ async fn hidden_sort_output_declarations_match_spark() -> TestResult {
     }
     assert_eq!(identities.len(), 86);
     assert_eq!(comparisons, 172);
-    assert_eq!(strict_matches, 156);
+    assert_eq!(strict_matches, 160);
     let expected_inherited = INHERITED_CASES
         .iter()
         .flat_map(|(package, id, input, _)| {

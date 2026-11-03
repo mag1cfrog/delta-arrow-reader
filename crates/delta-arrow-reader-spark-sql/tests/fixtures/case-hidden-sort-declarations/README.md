@@ -21,14 +21,13 @@ compares the raw row sequence for records carrying `ordered: true`.
 
 ## Inherited differences
 
-The replay reports 156 strict Spark matches and 16 inherited differences. It emits
+The replay requires 160 strict Spark matches and 12 inherited differences. It emits
 the original `matches: false` results, then checks the exact differing paths and
 values below. All other schema fields, rows, required order, errors and completion
 phases must match. Missing metadata keys remain distinct from JSON null values.
 
 | Case | Required inherited difference | Owner | Observations |
 | --- | --- | --- | ---: |
-| `array_numeric_pruned_value_coercion` | Analyzed `/fields/0/type/containsNull`: Spark `true`, DAR `false`; both physical schemas match. | [#828](https://github.com/mag1cfrog/delta-arrow-reader/issues/828) | 4 |
 | `generated_output_name_no_order`, `generated_output_name_hidden_order` | All three compared stages retain DAR's `subquery` label where Spark uses `scalarsubquery(required)`, at `/fields/0/name`. | [#790](https://github.com/mag1cfrog/delta-arrow-reader/issues/790) | 8 |
 | `numeric_dead_wide_arm_no_order` | Both physical stages retain `/fields/0/type/fields/0/metadata/source = "case-id"`; Spark has no such key. The analyzed schema matches. | [#867](https://github.com/mag1cfrog/delta-arrow-reader/issues/867) | 4 |
 

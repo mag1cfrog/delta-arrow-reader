@@ -1036,6 +1036,7 @@ fn coerce_arguments_for_signature<F: UDFCoercionExt>(
 }
 
 fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
+    let spark_case = case.is_spark_searched();
     // Given expressions like:
     //
     // CASE a1
@@ -1121,6 +1122,15 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
             },
         )?;
 
+    let coerce_result = |value: Box<Expr>| {
+        // Declaration-only casts would keep dead Spark arms' nested fields after pruning.
+        if spark_case && then_else_coerce_type.contains(&value.get_type(schema)?) {
+            Ok(*value)
+        } else {
+            value.cast_to(&then_else_coerce_type, schema)
+        }
+    };
+
     // do cast if found common coercible types
     let case_expr = case
         .expr
@@ -1142,13 +1152,13 @@ fn coerce_case_expression(case: Case, schema: &DFSchema) -> Result<Case> {
                     Box::new(e),
                 )
             })?;
-            let then = then.cast_to(&then_else_coerce_type, schema)?;
+            let then = coerce_result(then)?;
             Ok((Box::new(when), Box::new(then)))
         })
         .collect::<Result<Vec<_>>>()?;
     let else_expr = case
         .else_expr
-        .map(|expr| expr.cast_to(&then_else_coerce_type, schema))
+        .map(coerce_result)
         .transpose()?
         .map(Box::new);
 

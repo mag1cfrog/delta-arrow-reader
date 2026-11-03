@@ -1620,8 +1620,13 @@ impl TreeNodeRewriter for Simplifier<'_> {
                 && case.when_then_expr.iter()
                     .any(|(when, _)| is_true(when.as_ref()) || is_false(when.as_ref()) || is_null(when.as_ref())) =>
             {
+                // A synthesized NULL keeps the complete Spark result type, including nested fields.
+                let out_type = if case.is_spark_searched() {
+                    info.get_data_type(&Expr::Case(case.clone()))?
+                } else {
+                    info.get_data_type(&case.when_then_expr[0].1)?
+                };
                 let Case { expr, when_then_expr, mut else_expr } = case;
-                let out_type = info.get_data_type(&when_then_expr[0].1)?;
                 let mut new_when_then_expr = Vec::with_capacity(when_then_expr.len());
 
                 for (when, then) in when_then_expr.into_iter() {
