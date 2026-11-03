@@ -25,13 +25,22 @@ From the repository root, run:
 cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_nested_declarations -- --test-threads=1 --nocapture
 ```
 
-The `required_condition_error` record in ANSI mode has an independently inherited
-phase difference: Spark raises `CAST_INVALID_INPUT` while obtaining its optimized
-schema, corresponding to DAR's `create_physical_plan`; historical DAR observations
-raise the same condition at `collect`. The replay keeps the original expectation
-and reports the exact comparison. Its owner is constant-condition evaluation in
-Spark expression preparation, outside the nested declaration paths. No generic
-OneRow or shared constant-folding repair belongs to this fixture's source slice.
+The replay requires 194 strict Spark matches and two exact inherited observations
+for [#870](https://github.com/mag1cfrog/delta-arrow-reader/issues/870). They are
+`fields/required_condition_error`, input `literal`, ANSI `true`, at batches 1 and
+32. Spark raises `CAST_INVALID_INPUT` while obtaining its optimized schema,
+corresponding to DAR's `create_physical_plan`; DAR raises the same condition at
+`collect`. The complete records are unchanged between the test-only baseline
+`da3be4b9` and source candidate `1e4451c8`.
+
+The replay retains the original Spark expectation and emits `matches: false` for
+both observations. It then checks every observed field, row value, error, phase,
+comparison flag and identity against the pre-change record. All three observed
+schemas equal Spark's recorded analyzed schema. A changed or resolved inherited
+difference fails the assertion and requires review. Issue #870 owns eager
+constant-condition evaluation in Spark expression preparation, outside the nested
+declaration paths. No generic OneRow or shared constant-folding repair belongs to
+this source slice.
 
 ## Sources and reproduction
 
