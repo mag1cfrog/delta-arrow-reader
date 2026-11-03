@@ -1001,7 +1001,7 @@ async fn reviewed_if_declarations_match_exact_spark_stages() -> TestResult {
     Ok(())
 }
 
-async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestResult {
+async fn replay_alias_schema_stages(raw: &str, count: usize) -> TestResult {
     let records = raw
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -1013,6 +1013,7 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
     for case in &records[1..] {
         assert!(identities.insert((
             case["id"].as_str().ok_or("missing ID")?,
+            case.get("input").and_then(Value::as_str),
             case["ansi"].as_bool().ok_or("missing ANSI mode")?,
         )));
         assert!(case.get("error").is_none());
@@ -1074,6 +1075,15 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
                 }
             }
             rows.sort_by_key(|row| json!(row).to_string());
+            eprintln!(
+                "alias_schema_stages: {}",
+                json!({"id":case["id"],"input":case["input"],"ansi":case["ansi"],
+                    "batch_size":batch_size,"matches":public == case["public_schema"]
+                        && executed == case["executed_schema_after_collect"]
+                        && json!(rows) == case["expected"]["rows"],
+                    "expected":case,"actual":{"public_schema":public,
+                        "executed_schema":executed,"rows":rows}})
+            );
             for (stage, actual, expected) in [
                 ("public schema", public, &case["public_schema"]),
                 (
@@ -1098,7 +1108,7 @@ async fn replay_positive_alias_schema_stages(raw: &str, count: usize) -> TestRes
 
 #[tokio::test]
 async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    replay_positive_alias_schema_stages(
+    replay_alias_schema_stages(
         include_str!("fixtures/review-710-positive-alias-spark.jsonl"),
         24,
     )
@@ -1107,7 +1117,7 @@ async fn positive_aliases_match_public_and_executed_spark_schemas() -> TestResul
 
 #[tokio::test]
 async fn nested_positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    replay_positive_alias_schema_stages(
+    replay_alias_schema_stages(
         include_str!("fixtures/review-710-nested-positive-alias-spark.jsonl"),
         12,
     )
@@ -1116,7 +1126,7 @@ async fn nested_positive_aliases_match_public_and_executed_spark_schemas() -> Te
 
 #[tokio::test]
 async fn extracted_positive_aliases_match_public_and_executed_spark_schemas() -> TestResult {
-    replay_positive_alias_schema_stages(
+    replay_alias_schema_stages(
         include_str!("fixtures/review-710-nested-positive-alias-forms-spark.jsonl"),
         24,
     )
@@ -1200,5 +1210,177 @@ async fn collection_errors_cannot_hide_physical_schema_mismatches() -> TestResul
         "physical schema mismatch was hidden by collection error: {result:?}"
     );
     assert!(result.unwrap_err().to_string().contains("executed schema"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn correlated_scalar_aliases_match_public_and_executed_spark_schemas() -> TestResult {
+    let raw = include_str!("fixtures/correlated-scalar-metadata-stages/scope-spark.jsonl");
+    let seed =
+        include_str!("fixtures/correlated-scalar-metadata-stages/original-scope-spark.jsonl");
+    assert!(
+        raw.starts_with(seed),
+        "original 24 observations were rewritten"
+    );
+    let records = raw
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 36);
+    assert_eq!(seed.lines().count() - 1, 24);
+    assert!(
+        records[0]["spark_build"]
+            .as_str()
+            .ok_or("missing Spark build")?
+            .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
+    );
+    for case in &records[1..] {
+        assert!(
+            [
+                "correlated_direct_outer_alias",
+                "struct_direct_child_alias",
+                "struct_positive_child_alias",
+                "struct_unary_positive_child_alias",
+                "correlated_struct_inner_alias",
+                "correlated_direct_inner_alias",
+            ]
+            .contains(&case["id"].as_str().ok_or("missing ID")?)
+        );
+        assert!(
+            ["struct_mixed", "struct_nulls", "struct_empty"]
+                .contains(&case["input"].as_str().ok_or("missing input")?)
+        );
+    }
+    replay_alias_schema_stages(raw, 36).await
+}
+
+
+#[tokio::test]
+async fn hidden_order_columns_preserve_recorded_comparison_rows() -> TestResult {
+    use arrow::array::AsArray;
+    use arrow::datatypes::{DataType, TimestampMicrosecondType};
+
+    let cases = include_str!("fixtures/nullif-types-spark.jsonl")
+        .lines()
+        .chain(include_str!("fixtures/conditional-spark.jsonl").lines())
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|case| {
+            matches!(
+                case["id"].as_str(),
+                Some("int_double_columns" | "ifnull_timestamp_column" | "nvl_date_column")
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 10);
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        for case in &cases {
+            let sql = case["sql"].as_str().ok_or("missing SQL")?;
+            assert!(sql.ends_with("ORDER BY k"));
+            let query = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                    session_timezone: case["timezone"].as_str().unwrap_or("UTC").into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let public = capture_schema(
+                query.logical_plan.schema().fields(),
+                Some(&query.column_names),
+            )?;
+            let physical = query.create_physical_plan(&session).await?;
+            let schema = physical.schema();
+            let executed = capture_schema(schema.fields(), None)?;
+            for field in schema.fields() {
+                if let DataType::Timestamp(_, Some(timezone)) = field.data_type() {
+                    assert_eq!(
+                        timezone.as_ref(),
+                        case["timezone"].as_str().unwrap_or("UTC")
+                    );
+                }
+            }
+            let mut rows = Vec::new();
+            for batch in collect(physical, session.task_ctx()).await? {
+                validate_batch(schema.as_ref(), &batch)?;
+                for row in 0..batch.num_rows() {
+                    rows.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|column| {
+                                if !column.is_null(row)
+                                    && matches!(column.data_type(), DataType::Timestamp(..))
+                                {
+                                    Ok(json!(
+                                        column
+                                            .as_primitive::<TimestampMicrosecondType>()
+                                            .value(row)
+                                            .to_string()
+                                    ))
+                                } else {
+                                    encode_value(column.as_ref(), row)
+                                }
+                            })
+                            .collect::<TestResult<Vec<_>>>()?,
+                    );
+                }
+            }
+            if public != case["expected"]["schema"]
+                || executed != case["expected"]["schema"]
+                || json!(rows) != case["expected"]["rows"]
+            {
+                differences.push(format!(
+                    "{} ANSI={} timezone={} batch={batch_size}: expected {}, got {}",
+                    case["id"],
+                    case["ansi"],
+                    case["timezone"],
+                    case["expected"],
+                    json!({"public_schema":public,"physical_schema":executed,"rows":rows})
+                ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+
+#[tokio::test]
+async fn map_factories_retain_throwing_argument_errors() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for (value, condition) in [
+        ("CAST('bad' AS INT)", "Cannot cast string 'bad' to value of Int32 type"),
+        ("1 DIV 0", "Divide by zero error"),
+    ] {
+        for expression in [
+            format!("MAP('k', {value})"),
+            format!("MAP_FROM_ARRAYS(ARRAY('k'), ARRAY({value}))"),
+            format!("MAP_FROM_ENTRIES(ARRAY(STRUCT('k' AS named_key, {value} AS named_value)))"),
+        ] {
+            let sql = format!("SELECT (SELECT {expression}) AS r");
+            let case = json!({"sql":sql,"ansi":true,"expected":{"condition":condition}});
+            let result = compare_case(&session, &case).await;
+            assert!(has_engine_condition(&result, condition), "{sql}: {result:?}");
+        }
+    }
     Ok(())
 }

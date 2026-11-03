@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "purpose": "Independent valid-query compatibility check for nested CASE nullability; MAP recursion is an explicit compatibility control, not a claimed missing guard.",
+  "review_head": "8f8f53e988b9d8523b3f9bd5b487edcb02a2c270",
+  "comparison_base": "d1885226f91ccc2bf326e4d9276f2ac8153a0a04",
+  "reference_observations": 8,
+  "dar_comparisons": 16,
+  "source_reference_sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2",
+  "files": [
+    {
+      "path": "capture_declaration_compatibility.py",
+      "bytes": 4723,
+      "sha256": "58e521274bd62c84070c4eff7f5a1d77e5dafd04f9f3ea83cd87a1c568178985"
+    },
+    {
+      "path": "declaration_compatibility_probe.rs",
+      "bytes": 9456,
+      "sha256": "2c8067711e8e6df465b6914f6c2cf80cbe28d8b72efd0c917b4e7600e5d1573f"
+    },
+    {
+      "path": "inputs-and-cases.json",
+      "bytes": 8080,
+      "sha256": "2b60cfd233af4ee6b843d58b540eb7553efdee54e101af996a9c7c9724a72e49"
+    },
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    },
+    {
+      "path": "sources/scope-spark.jsonl",
+      "bytes": 84957,
+      "sha256": "5d05c103ece4c6b5df6cb5ef48d20fcfd970d01e981b2e3bd73844a66779def2"
+    },
+    {
+      "path": "sources/spark_inputs.rs",
+      "bytes": 5746,
+      "sha256": "ebf5352be9f1bfeba0d5ca5da3fe68182eafd51c996a7913a630df2ef365e002"
+    },
+    {
+      "path": "sources/spark_results.rs",
+      "bytes": 9421,
+      "sha256": "f876f433b600b86fff322feafadd89932d737408439892d78812621fd2737d7c"
+    }
+  ],
+  "checks": [
+    "All Python sources parse without engine imports",
+    "Exact four shapes by two ANSI modes",
+    "Original populated provider declaration and rows preserved",
+    "Source snapshot lengths and hashes verified",
+    "MAP output encoder NULL/STRUCT/entry pairs self-check passed without Spark",
+    "DAR probe manually traced: full MAP schema, recursive entry values, exact metadata, all rows and batches; per-case failures retain phase and continue",
+    "No engines or product/worktree mutations by reviewer"
+  ],
+  "output_format": "MAP values use ordered key/value pairs, preserving every entry; outer rows sort without deduplication. Complete Spark schema JSON is compared exactly and complete Arrow physical Debug schema is retained.",
+  "recipe": {
+    "capture_cwd": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-declaration-compatibility-probes",
+    "spark": [
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-declaration-compatibility-probes/capture_declaration_compatibility.py",
+      "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-declaration-compatibility-probes/compatibility-spark.jsonl"
+    ],
+    "dar_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/correlated-scalar-declaration-compatibility-probes/declaration_compatibility_probe.rs",
+    "dar_target": "declaration_compatibility_probe",
+    "dar_args": [
+      "cargo",
+      "+1.96.0",
+      "test",
+      "--locked",
+      "--workspace",
+      "--test",
+      "declaration_compatibility_probe",
+      "--",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "placement": "Root copies immutable dar_source into tests/declaration_compatibility_probe.rs in its disposable engine checkout. Absolute module paths use frozen support snapshots.",
+    "required_pair": [
+      "d1885226f91ccc2bf326e4d9276f2ac8153a0a04",
+      "8f8f53e988b9d8523b3f9bd5b487edcb02a2c270"
+    ]
+  }
+}

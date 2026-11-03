@@ -1,0 +1,188 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "source_head": "611192e5e2a77c7eb98c31b15fbaf716f956b827",
+  "product_head": "5bce7951cf8665b9a6d44c1c57d36a8425fc83af",
+  "source_reference_sha256": "bbb5ff0502904421fea62e502d92dffcf4f226f74754aad5f12ce8d86f87c668",
+  "observations": 8,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 16,
+  "inputs": [
+    {
+      "name": "metadata_inputs",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "origin": "outer",
+              "comment": "source id"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "plain_string_values",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "origin": "outer"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "{\"n\":1}"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "null"
+        ]
+      ]
+    },
+    {
+      "name": "extension_values",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "{\"n\":1}"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "2",
+          "null"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "group": "ordering_diagnostic",
+      "id": "integer_hidden_order",
+      "input": "metadata_inputs",
+      "ansi": true,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_inputs p ORDER BY p.id"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "plain_string_no_order",
+      "input": "plain_string_values",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM plain_string_values p"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "plain_string_hidden_order",
+      "input": "plain_string_values",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM plain_string_values p ORDER BY p.id"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "extension_no_order",
+      "input": "extension_values",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "integer_hidden_order",
+      "input": "metadata_inputs",
+      "ansi": false,
+      "sql": "SELECT p.id AS direct_id,(SELECT p.id) AS scalar_id FROM metadata_inputs p ORDER BY p.id"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "plain_string_no_order",
+      "input": "plain_string_values",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM plain_string_values p"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "plain_string_hidden_order",
+      "input": "plain_string_values",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM plain_string_values p ORDER BY p.id"
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "extension_no_order",
+      "input": "extension_values",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    }
+  ]
+}
