@@ -13,6 +13,48 @@ use serde_json::{Value, json};
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
+/// Observe native schemas, rows and the exact failure phase, including expected errors.
+#[allow(dead_code, reason = "Integration tests select individual shared observers.")]
+pub(crate) async fn capture_native_query_observation(
+    session: &SessionContext,
+    sql: &str,
+) -> TestResult<Value> {
+    let mut phase = "sql";
+    let mut public = None;
+    let mut before = None;
+    let mut executed = None;
+    let result: TestResult<Vec<Vec<Value>>> = async {
+        let frame = session.sql(sql).await?;
+        phase = "public_schema";
+        public = Some(capture_schema(frame.schema().fields(), None)?);
+        phase = "create_physical_plan";
+        let physical = frame.create_physical_plan().await?;
+        phase = "physical_schema";
+        before = Some(capture_schema(physical.schema().fields(), None)?);
+        let batches = collect(physical.clone(), session.task_ctx()).await;
+        phase = "executed_schema";
+        let schema = physical.schema();
+        executed = Some(capture_schema(schema.fields(), None)?);
+        phase = "collect";
+        let batches = batches?;
+        phase = "encode";
+        let mut rows = Vec::new();
+        for batch in batches {
+            validate_batch(schema.as_ref(), &batch)?;
+            for row in 0..batch.num_rows() {
+                rows.push(batch.columns().iter().map(|column|
+                    encode_value(column.as_ref(), row)
+                ).collect::<TestResult<Vec<_>>>()?);
+            }
+        }
+        rows.sort_by_key(|row| json!(row).to_string());
+        Ok(rows)
+    }.await;
+    Ok(json!({"public_schema":public,"before_collect":before,"physical_schema":executed,
+        "rows":result.as_ref().ok(),"error":result.as_ref().err().map(ToString::to_string),
+        "phase":phase}))
+}
+
 pub(crate) async fn capture_spark_query_result(
     session: &SessionContext,
     case: &Value,
@@ -56,6 +98,98 @@ pub(crate) async fn capture_spark_query_observation(
     rows.sort_by_key(|row| json!(row).to_string());
     Ok(json!({"result":{"schema":public_schema,"rows":rows},
         "physical_schema":physical_schema}))
+}
+
+/// Compare exact recorded stages, complete rows, and the required engine error phase.
+#[allow(dead_code, reason = "Integration tests select individual shared observers.")]
+pub(crate) async fn compare_exact_spark_query_stages(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<Value> {
+    let mut phase = "resolve";
+    let mut public = None;
+    let mut before = None;
+    let mut executed = None;
+    let actual: TestResult<Vec<Vec<Value>>> = async {
+        let query = plan_query(
+            session,
+            case["sql"].as_str().ok_or("missing SQL")?,
+            &SparkSqlOptions {
+                ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+                session_timezone: case["timezone"].as_str().unwrap_or("UTC").into(),
+                ..SparkSqlOptions::default()
+            },
+        )
+        .await?;
+        phase = "public_schema";
+        if query.column_names.len() != query.logical_plan.schema().fields().len() {
+            return Err("public field count differs from output names".into());
+        }
+        public = Some(capture_schema(
+            query.logical_plan.schema().fields(),
+            Some(&query.column_names),
+        )?);
+        phase = "create_physical_plan";
+        let physical = query.create_physical_plan(session).await?;
+        phase = "physical_schema";
+        before = Some(capture_schema(
+            physical.schema().fields(), None,
+        )?);
+        let batches = collect(physical.clone(), session.task_ctx()).await;
+        phase = "executed_schema";
+        let schema = physical.schema();
+        executed = Some(capture_schema(schema.fields(), None)?);
+        phase = "collect";
+        let batches = batches?;
+        phase = "encode";
+        let mut rows = Vec::new();
+        for batch in batches {
+            validate_batch(schema.as_ref(), &batch)?;
+            for row in 0..batch.num_rows() {
+                rows.push(
+                    batch
+                        .columns()
+                        .iter()
+                        .map(|column| encode_value(column.as_ref(), row))
+                        .collect::<TestResult<Vec<_>>>()?,
+                );
+            }
+        }
+        rows.sort_by_key(|row| json!(row).to_string());
+        Ok(rows)
+    }.await;
+    let public_matches = case["schema_stages"].get("analyzed")
+        .is_none_or(|expected| public.as_ref() == Some(expected));
+    let before_matches = case["schema_stages"].get("executed_before_collect")
+        .is_none_or(|expected| before.as_ref() == Some(expected));
+    let executed_matches = case["schema_stages"].get("executed")
+        .is_none_or(|expected| executed.as_ref() == Some(expected));
+    let rows_match = case["expected"].get("rows")
+        .is_none_or(|expected| actual.as_ref().is_ok_and(|rows| json!(rows) == *expected));
+    let error_matches = if let Some(condition) = case["expected"]["condition"].as_str() {
+        let expected_phase = match case["spark_error_phase"].as_str() {
+            Some("sql") => "resolve",
+            // DAR creates the optimized logical plan inside create_physical_plan.
+            Some("optimized" | "optimized_schema") => "create_physical_plan",
+            Some("collect") => "collect",
+            other => return Err(format!("unsupported reference error phase: {other:?}").into()),
+        };
+        phase == expected_phase && actual.as_ref().err().is_some_and(|error| {
+            error.to_string().contains(&format!("[{condition}]"))
+        })
+    } else {
+        actual.is_ok()
+    };
+    let matches = public_matches && before_matches && executed_matches
+        && rows_match && error_matches;
+    Ok(json!({
+        "public_schema":public, "before_collect":before, "physical_schema":executed,
+        "rows":actual.as_ref().ok(), "native_phase":phase,
+        "error":actual.as_ref().err().map(ToString::to_string),
+        "public_matches":public_matches, "before_matches":before_matches,
+        "physical_matches":executed_matches, "rows_match":rows_match,
+        "error_matches":error_matches, "matches":matches,
+    }))
 }
 
 pub(crate) fn validate_physical_schema(
@@ -118,6 +252,7 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Boolean => json!("boolean"),
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
+        DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
             "elementType":spark_schema_type(field.data_type())?,"containsNull":field.is_nullable()}),

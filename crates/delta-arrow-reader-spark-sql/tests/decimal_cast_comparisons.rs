@@ -156,7 +156,6 @@ async fn decimal_cast_comparisons_match_spark() -> TestResult {
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records.len(), 153);
     let mut differences = Vec::new();
-    let mut retained_overflows = 0;
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -174,40 +173,7 @@ async fn decimal_cast_comparisons_match_spark() -> TestResult {
         for case in &records[1..] {
             let expected = &case["expected"];
             let actual = spark_comparison_rows(&session, case).await;
-            // #661: legacy narrowing fails even without a comparison rewrite.
-            let retained_overflow = match (case["ansi"].as_bool(), case["id"].as_str()) {
-                (Some(false), Some("overflow_TINYINT_CAST_False")) => {
-                    Some(("TINYINT", "value of 128 is out of range Int8"))
-                }
-                (Some(false), Some("overflow_SMALLINT_CAST_False")) => {
-                    Some(("SMALLINT", "value of 100000 is out of range Int16"))
-                }
-                _ => None,
-            };
-            if let Some((target, cause)) = retained_overflow {
-                retained_overflows += 1;
-                assert_eq!(expected["status"], "ok");
-                assert!(
-                    actual
-                        .expect_err("legacy cast gap changed")
-                        .to_string()
-                        .contains(cause)
-                );
-                let query = plan_query(
-                    &session,
-                    &format!("SELECT CAST(v AS {target}) AS value FROM overflow"),
-                    &SparkSqlOptions {
-                        ansi_mode: false,
-                        ..SparkSqlOptions::default()
-                    },
-                )
-                .await?;
-                let plan = query.create_physical_plan(&session).await?;
-                let error = collect(plan, session.task_ctx())
-                    .await
-                    .expect_err("direct cast gap changed");
-                assert!(error.to_string().contains(cause), "{error}");
-            } else if !matches_reference(case, &actual) {
+            if !matches_reference(case, &actual) {
                 differences.push(format!(
                     "Spark {} ANSI={} batch={batch_size}: expected={expected}; actual={actual:?}",
                     case["id"], case["ansi"]
@@ -230,7 +196,6 @@ async fn decimal_cast_comparisons_match_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(retained_overflows, 4);
     assert!(
         differences.is_empty(),
         "{} comparison differences:\n{}",
