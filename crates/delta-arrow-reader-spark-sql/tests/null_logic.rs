@@ -95,8 +95,7 @@ async fn null_logic_matches_spark_and_keeps_schema_stages_distinct() -> TestResu
                     spark_analyzed_nullable,
                     case["id"] != "schema_case_constant"
                 );
-                // Resolved native fields precede session analysis; exact parity is S07 work.
-                assert_eq!(actual["resolved_nullable"], true);
+                assert_eq!(actual["resolved_nullable"], spark_analyzed_nullable);
                 assert_eq!(
                     actual["physical_nullable"],
                     expected["optimized_nullable"][0]

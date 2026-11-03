@@ -327,12 +327,14 @@ IN/NOT IN, including empty, limited and correlated subqueries.
 
 The raw Spark results remain in the fixture. Exact pre-existing differences are
 recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches:
-unreachable CASE branches still widen analyzed nullability (#721), and an unused
-invalid inline CAST is pruned before its required error (#722). Six projected-IN
-observations retain SQL three-valued results that differ from Spark, including
+an unused invalid inline CAST is pruned before its required error (#722). The
+four `conditional_projection` and `conditional_empty` observations, in both ANSI
+modes, match Spark after the literal-TRUE CASE declaration repair (#721).
+Six projected-IN observations retain SQL three-valued results that differ from
+Spark, including
 NULL-left/empty-subquery behavior in legacy mode. These remain unresolved #142
-cases and do not extend its approved four-case historical policy. In total, 111
-observations match Spark and 11 retain exact baseline differences. The retained-gap
+cases and do not extend its approved four-case historical policy. In total, 115
+observations match Spark and 7 retain exact baseline differences. The retained-gap
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
 
@@ -775,20 +777,20 @@ batches of 1 and 32, comparing exact values, names, types and the six required
 ANSI cast failures. A list match must beat a NULL entry; a miss with a NULL
 entry remains NULL. Skipped and required dynamic casts test list evaluation.
 
-The schema controls record each stage separately. Native `logical_plan` fields
-are resolved before session analysis and optimization; they are not Spark's
-analyzed schema. The values below are the output field's `nullable` flag:
+The schema controls record each stage separately. DAR `logical_plan` fields
+resolve before session analysis and optimization. The test compares them with
+Spark's analyzed fields. The values below are the output field's `nullable` flag:
 
-| Control | Spark analyzed | Spark optimized | Native resolved | Native physical |
+| Control | Spark analyzed | Spark optimized | DAR resolved | DAR physical |
 | --- | --- | --- | --- | --- |
-| Constant true CASE with a NULL else branch | false | false | true | false |
+| Constant true CASE with a NULL else branch | false | false | false | false |
 | Constant true IF with a NULL else branch | true | false | true | false |
 | IF with a nullable column condition | true | true | true | true |
 
-All three controls return the captured values and INT type. The tests preserve
-the conservative native resolved field while checking optimizer narrowing and
-live NULL output. Exact schema-nullability parity remains #149/S07 work; these
-stage observations do not claim that parity.
+All three controls return the captured values and INT type. The tests compare
+resolved nullability with Spark analyzed nullability and physical nullability
+with Spark optimized nullability, including live NULL output. These three
+controls do not establish general schema-nullability parity.
 
 ## Boolean operand evaluation
 
