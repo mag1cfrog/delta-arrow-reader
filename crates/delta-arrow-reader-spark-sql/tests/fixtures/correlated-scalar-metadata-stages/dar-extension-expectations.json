@@ -352,6 +352,116 @@
           }
         ]
       }
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "extension_no_order",
+      "ansi": true,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "group": "ordering_diagnostic",
+      "id": "extension_no_order",
+      "ansi": false,
+      "sql": "SELECT p.value AS direct_value,(SELECT p.value) AS scalar_value FROM extension_values p",
+      "dar_public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": ""
+            }
+          }
+        ]
+      },
+      "dar_executed_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "direct_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          },
+          {
+            "name": "scalar_value",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "ARROW:extension:name": "arrow.json",
+              "ARROW:extension:metadata": "",
+              "origin": "outer"
+            }
+          }
+        ]
+      }
     }
   ]
 }

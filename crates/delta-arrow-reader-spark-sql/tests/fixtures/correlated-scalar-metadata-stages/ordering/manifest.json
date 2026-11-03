@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "observations": 8,
+  "dar_comparisons": 16,
+  "purpose": "Hidden ORDER BY projection versus integer/plain-string/Arrow-extension source metadata.",
+  "execution": "No author engines. Root owns serial reference capture.",
+  "files": [
+    {
+      "path": "capture_ordering_metadata_stages.py",
+      "bytes": 3553,
+      "sha256": "bda8cdf41374696c0ba4feb792a6599967a6d148e7a78d8a5b5e4a09f1e328f8"
+    },
+    {
+      "path": "diagnostic-inputs-and-cases.json",
+      "bytes": 4733,
+      "sha256": "d891b599971be4d8d624fada7cd475b658df3b32fd97c2375db5f0a0013ea2c2"
+    },
+    {
+      "path": "sources/capture_correlated_scalar_metadata_stages.py",
+      "bytes": 7553,
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    }
+  ]
+}

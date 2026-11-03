@@ -38,7 +38,7 @@ fn references() -> TestResult<Vec<Value>> {
 }
 
 fn scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
-    let records = include_str!(
+    let mut records = include_str!(
         "fixtures/correlated-scalar-metadata-stages/supplement/supplement-spark.jsonl"
     )
     .lines()
@@ -47,6 +47,23 @@ fn scalar_metadata_stage_records() -> TestResult<Vec<Value>> {
     assert_eq!(records.len() - 1, 68);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records[0]["timezone"], "UTC");
+    let ordering = include_str!(
+        "fixtures/correlated-scalar-metadata-stages/ordering/ordering-spark.jsonl"
+    )
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<Vec<Value>, _>>()?;
+    assert_eq!(ordering.len() - 1, 8);
+    let inputs = records[0]["inputs"].as_array_mut().ok_or("missing inputs")?;
+    for input in ordering[0]["inputs"].as_array().ok_or("missing ordering inputs")? {
+        if let Some(existing) = inputs.iter().find(|existing| existing["name"] == input["name"]) {
+            assert_eq!(existing, input);
+        } else {
+            inputs.push(input.clone());
+        }
+    }
+    records.extend(ordering.into_iter().skip(1));
+    assert_eq!(records.len() - 1, 76);
     Ok(records)
 }
 
@@ -70,7 +87,7 @@ async fn scalar_metadata_stages_and_arrow_extension_contract_match() -> TestResu
     let exceptions = extension_contract["cases"]
         .as_array()
         .ok_or("missing extension expectations")?;
-    assert_eq!(exceptions.len(), 6);
+    assert_eq!(exceptions.len(), 8);
     for exception in exceptions {
         let case = records[1..]
             .iter()
@@ -86,11 +103,18 @@ async fn scalar_metadata_stages_and_arrow_extension_contract_match() -> TestResu
         ] {
             let mut schema = exception[dar].clone();
             assert_eq!(schema["fields"][1]["name"], "scalar_value");
-            assert_eq!(
-                schema["fields"][1]["metadata"],
-                json!({"ARROW:extension:name":"arrow.json","ARROW:extension:metadata":""})
-            );
-            schema["fields"][1]["metadata"] = json!({});
+            for (key, value) in [
+                ("ARROW:extension:name", "arrow.json"),
+                ("ARROW:extension:metadata", ""),
+            ] {
+                assert_eq!(schema["fields"][1]["metadata"][key], value);
+                if case[spark]["fields"][1]["metadata"].get(key).is_none() {
+                    schema["fields"][1]["metadata"]
+                        .as_object_mut()
+                        .ok_or("missing extension metadata")?
+                        .remove(key);
+                }
+            }
             assert_eq!(schema, case[spark]);
         }
     }
@@ -167,8 +191,8 @@ async fn scalar_metadata_stages_and_arrow_extension_contract_match() -> TestResu
             comparisons += 1;
         }
     }
-    assert_eq!(comparisons, 136);
-    assert_eq!(extension_comparisons, 12);
+    assert_eq!(comparisons, 152);
+    assert_eq!(extension_comparisons, 16);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

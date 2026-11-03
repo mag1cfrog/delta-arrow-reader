@@ -109,3 +109,19 @@ Run the supplemental target from the standalone workspace:
 ```sh
 cargo +1.96.0 test --locked --workspace --test single_row_correlated -- --nocapture --test-threads=1
 ```
+
+The eight unchanged records in `ordering/ordering-spark.jsonl` isolate the
+hidden ORDER BY projection, SHA256
+`99524f0fde161eed42e29ce35daec1503bcde6af711682907b87c5470b9b4ce2`.
+An integer or plain STRING scalar selected through the extra projection keeps
+empty metadata. The same plain STRING without that projection regains source
+metadata. An extension STRING without the projection also regains source
+metadata, including the extension keys. The projection boundary explains the
+executed difference; it does not depend on the input's string or integer type.
+
+The shared supplemental replay visits all 76 records at both batch sizes,
+giving 152 comparisons. Its provider union checks shared declarations for
+equality and adds only the new plain STRING provider. The two extension records
+without ORDER BY have explicit DAR public extension fields and exact Spark
+executed fields. This brings the declared type-contract cases to eight; all
+other schema properties and result rows remain unchanged.
