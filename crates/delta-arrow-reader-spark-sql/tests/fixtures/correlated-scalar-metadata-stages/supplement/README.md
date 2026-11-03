@@ -1,8 +1,5 @@
 # Supplemental scalar metadata stages
 
-This is the frozen capture-preparation note. The parent README describes the
-completed independent capture and its current replay.
-
 This source package prepares independent Spark observations for #818. No engine
 has run for this package. The repository's test-only commit is
 `d1e7a104049e6589ce40d05beafb771e072248c4`; its product source remains
