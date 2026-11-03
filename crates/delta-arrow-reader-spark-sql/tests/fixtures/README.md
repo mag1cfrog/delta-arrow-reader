@@ -761,11 +761,14 @@ Boolean expressions, columns and scalar subqueries remain valid. Simple CASE,
 IF(NULL, ...) and unused result expressions keep their separate behavior.
 
 Eight unique untyped-NULL queries come from the frozen replay, giving sixteen
-ANSI observations. Fresh Spark captures reject all of them during analysis.
-Their exact replay IDs now require planning errors in `reviewed-corrections.json`;
-the original compressed captures remain unchanged. A live invalid INT cast
-still fails with the existing Arrow cast message instead of Spark's error code.
-The test requires that specific cast cause; diagnostic-code parity remains S07.
+ANSI observations. The [exact historical recapture](conditional-error-identifiers/historical-case-conditions-spark.jsonl)
+rejects all sixteen with `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE` during SQL
+analysis on pinned Spark 4.2.0. Each record maps its full historical ID, SQL,
+ANSI mode, batch size and source-line hash; the header pins the corpus,
+manifest, capture script and shared helper hashes. Their sixteen existing
+`reviewed-corrections.json` entries add only that condition prefix, preserving
+the planning-error status and CASE message body. The original compressed
+captures remain unchanged.
 
 ## NULL comparisons and schema stages
 

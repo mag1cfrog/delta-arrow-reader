@@ -7,6 +7,7 @@ These fixtures cover issue [#860](https://github.com/mag1cfrog/delta-arrow-reade
 | File | Source and scope |
 | --- | --- |
 | `original-case-errors-spark.jsonl` | Ten original CASE records copied without changes, including the two empty-provider controls and the original capture header. The header describes the original full corpus. |
+| `historical-case-conditions-spark.jsonl` | Sixteen exact historical untyped-NULL CASE queries recaptured with their full replay IDs, SQL, ANSI modes, batch sizes and source hashes. |
 | `conditional-error-identifiers-spark.jsonl` | 92 independent Spark observations from `manifest.json`: CASE guards, explicit user messages, NULL messages, dead branches, empty providers, and connected internal diagnostics. |
 | `assertion-and-internal-controls-spark.jsonl` | 76 independent observations from `assertion-and-internal-controls-manifest.json`: 32 assertion queries and six internal SQL probes in each ANSI mode. |
 | `internal-error-controls-before.jsonl` | 48 local observations from the RED commit `b858918c`. This preserves internal schemas, rows, failure phases, and error bodies; it is a local preservation fixture. |
