@@ -46,6 +46,41 @@ python tests/fixtures/case-explicit-else/capture_historical_case_else_spark.py \
     "$case_else_capture_dir/historical-spark.jsonl"
 ```
 
+## CASE literal TRUE result fields
+
+`case-reachable-fields/case-result-nullability-spark.jsonl` is byte-identical to
+the original 324-record #721 capture. Its SHA256 is
+`d8879718bc3c8e50ce73475ea00c2280c34567c72463df2611cb588aa601a464`.
+The header pins Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, both ANSI modes, all input fields
+and rows, and the original capture script and manifest hashes.
+
+`case_reachable_fields.rs` selects 24 original direct CASE IDs. Twenty-three
+cover mixed, NULL-only and empty providers in both ANSI modes; the metadata
+control has four original records on mixed and empty providers. These 142
+selected records run at batches 1 and 32 for 284 comparisons through the
+existing strict stage observer and provider loader. The other 182 raw records
+remain unchanged and are outside this slice's acceptance.
+
+The selected cases place required and nullable results before, at and after
+the first literal TRUE. They retain FALSE, typed-NULL, folded and unknown
+guards, ELSE/no ELSE, actual NULLs, simple CASE, source metadata and required
+or discarded cast failures. Complete analyzed and physical fields, rows and
+recorded error phases remain required. There are no diagnostic aliases.
+Native SQL controls compare configured and unconfigured full observations
+before and after a Spark query.
+
+The unchanged capture script and manifest are available at commit
+`7b8a5cf022543560263f2882df35a5a0b7736ec0` under the original fixture directory:
+`capture_case_result_nullability_spark.py` has SHA256
+`f561c1f0640096cfa326980fb54e0d37492c2156385554a24c28cb55dcdeb55c`, and
+`case-result-nullability-cases.json` has SHA256
+`e2e9d8848f76042e24ef437625473507c055ad4d29bec37bef00b8bd3f223274`.
+This extraction uses the independent recorded outcomes; it does not recapture
+or rewrite them. The production change is the Spark-marked nullability arm
+from `e8e0d982` / `2337b79d`. This is a partial #721 delivery and a producer
+prerequisite for the discarded-CASE control retained by constant STRUCT #849.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
