@@ -2254,9 +2254,16 @@ metadata map. Identical-source controls retain the child's original metadata.
 These references complement the existing duplicate STRUCT and MAP constructor
 fixtures without replacing their observations or required native cast failures.
 
+`array-struct-admission-spark.jsonl` preserves 20 further observations for
+recursive name admission. NULL values, ARRAY/STRUCT wrappers, comma-containing
+names and unequal duplicate layouts retain their captured errors. Matching
+controls retain every child position. `array-struct-constructor-case-spark.jsonl`
+adds eight successes for case-insensitive names, including first spelling,
+nested ARRAYs, a leading NULL MAP value and distinct duplicate positions.
+
 The constructor tests in `duplicate_struct_casts.rs` compare every public and
 executed field before and after collection and every row, at batch sizes 1 and
-32. The new references add 156 comparisons. The shared observer validates actual
+32. The new references add 212 comparisons. The shared observer validates actual
 Arrow batches and records each panic as a failed comparison. The positional
 contract tests also check recursive STRUCT/List declarations, native primitive
 List and nested leaf conversion policies, and mismatched field names. Comma-bearing
@@ -2265,5 +2272,7 @@ names remain distinct sequences, and MAP admission failures retain their cause.
 ```sh
 python tests/fixtures/capture_array_struct_declarations_spark.py /tmp/array-struct-declarations-spark.jsonl
 python tests/fixtures/capture_array_struct_metadata_spark.py /tmp/array-struct-metadata-spark.jsonl
+python tests/fixtures/capture_array_struct_followup_admission_spark.py /tmp/array-struct-admission-spark.jsonl
+python tests/fixtures/capture_array_struct_constructor_case_spark.py /tmp/array-struct-constructor-case-spark.jsonl
 cargo test --locked --workspace --test duplicate_struct_casts --test duplicate_struct_cast_contracts --test map_constructor_nullability
 ```

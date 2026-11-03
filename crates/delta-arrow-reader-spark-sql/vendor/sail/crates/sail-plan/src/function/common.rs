@@ -21,6 +21,7 @@ use sail_function::scalar::spark_cast_numeric_to_decimal::{
     DecimalCastMode, SparkCastNumericToDecimal,
 };
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_struct_rename::{SparkStructRename, align_constructor_struct_field_names};
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
 use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIES};
 
@@ -31,6 +32,21 @@ use crate::function::comparison::{
     temporal_comparison_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+
+pub(crate) fn prepare_constructor_struct_fields(
+    arguments: Vec<expr::Expr>,
+    schema: &DFSchema,
+    admission_context: &str,
+) -> PlanResult<Vec<expr::Expr>> {
+    let data_types = arguments.iter().map(|argument| argument.get_type(schema))
+        .collect::<datafusion_common::Result<Vec<_>>>()?;
+    let renamed_types = align_constructor_struct_field_names(&data_types)
+        .map_err(|error| error.context(admission_context))?;
+    Ok(arguments.into_iter().zip(data_types).zip(renamed_types)
+        .map(|((argument, actual), renamed)| if actual == renamed { argument } else {
+            ScalarUDF::from(SparkStructRename::new(renamed)).call(vec![argument])
+        }).collect())
+}
 
 pub(crate) fn drop_inherited_column_metadata(expression: expr::Expr) -> expr::Expr {
     set_result_metadata(expression, vec![])

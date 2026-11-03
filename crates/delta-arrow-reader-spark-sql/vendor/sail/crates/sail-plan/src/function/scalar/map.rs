@@ -13,7 +13,7 @@ use sail_function::scalar::map::str_to_map::StrToMap;
 
 use crate::config::MapKeyDedupPolicy;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{ScalarFunction, ScalarFunctionInput, prepare_constructor_struct_fields};
 
 fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     use crate::function::common::ScalarFunctionBuilder as F;
@@ -32,6 +32,8 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .iter()
         .map(|[key, value]| (key.clone(), value.clone()))
         .unzip();
+    let values = prepare_constructor_struct_fields(values, schema.as_ref(),
+        "[DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES] MAP values must have compatible STRUCT declarations")?;
     let value_types = values.iter().map(|value| value.get_type(schema.as_ref()))
         .collect::<datafusion_common::Result<Vec<_>>>()?;
     if value_types.len() > 1 && value_types.iter().all(|value| matches!(value, DataType::Struct(_))) {

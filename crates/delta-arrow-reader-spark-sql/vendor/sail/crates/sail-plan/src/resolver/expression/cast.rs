@@ -2,7 +2,7 @@
 use std::ops::{Div, Mul};
 use std::sync::Arc;
 
-use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
+use arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
 use sail_common::spec;
@@ -22,7 +22,7 @@ use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
-use sail_function::scalar::spark_struct_rename::SparkStructRename;
+use sail_function::scalar::spark_struct_rename::{SparkStructRename, build_rename_target_type};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
 use sail_function::scalar::variant::spark_variant_get::SparkVariantGet;
@@ -348,74 +348,6 @@ fn needs_struct_field_rename(from: &DataType, to: &DataType) -> bool {
     }
 }
 
-/// Build a target type that has the names from `to` but the data types from
-/// `from`. The result is what `SparkStructRename` produces; the subsequent
-/// regular CAST then handles any leaf-type conversion.
-fn build_rename_target_type(from: &DataType, to: &DataType) -> DataType {
-    match (from, to) {
-        (DataType::Struct(src_fields), DataType::Struct(tgt_fields))
-            if src_fields.len() == tgt_fields.len() =>
-        {
-            let fields: Fields = src_fields
-                .iter()
-                .zip(tgt_fields.iter())
-                .map(|(src, tgt)| {
-                    Arc::new(
-                        Field::new(
-                            tgt.name(),
-                            build_rename_target_type(src.data_type(), tgt.data_type()),
-                            src.is_nullable(),
-                        )
-                        .with_metadata(src.metadata().clone()),
-                    )
-                })
-                .collect();
-            DataType::Struct(fields)
-        }
-        (DataType::List(src), DataType::List(tgt)) => DataType::List(Arc::new(
-            Field::new(
-                tgt.name(),
-                build_rename_target_type(src.data_type(), tgt.data_type()),
-                src.is_nullable(),
-            )
-            .with_metadata(src.metadata().clone()),
-        )),
-        (DataType::LargeList(src), DataType::LargeList(tgt)) => DataType::LargeList(Arc::new(
-            Field::new(
-                tgt.name(),
-                build_rename_target_type(src.data_type(), tgt.data_type()),
-                src.is_nullable(),
-            )
-            .with_metadata(src.metadata().clone()),
-        )),
-        (DataType::FixedSizeList(src, sa), DataType::FixedSizeList(tgt, _)) => {
-            DataType::FixedSizeList(
-                Arc::new(
-                    Field::new(
-                        tgt.name(),
-                        build_rename_target_type(src.data_type(), tgt.data_type()),
-                        src.is_nullable(),
-                    )
-                    .with_metadata(src.metadata().clone()),
-                ),
-                *sa,
-            )
-        }
-        (DataType::Map(src, sorted), DataType::Map(tgt, _)) => DataType::Map(
-            Arc::new(
-                Field::new(
-                    tgt.name(),
-                    build_rename_target_type(src.data_type(), tgt.data_type()),
-                    src.is_nullable(),
-                )
-                .with_metadata(src.metadata().clone()),
-            ),
-            *sorted,
-        ),
-        // Leaves: keep the source data type unchanged.
-        _ => from.clone(),
-    }
-}
 
 fn day_time_field_to_microseconds(field: spec::IntervalFieldType) -> i64 {
     match field {
@@ -525,7 +457,7 @@ mod strict_integer_cast_tests {
     use super::*;
     use crate::config::PlanConfig;
     use datafusion::arrow::array::{ArrayRef, LargeStringArray, StringArray, StringViewArray};
-    use datafusion::arrow::datatypes::Schema;
+    use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::datasource::MemTable;
     use datafusion::prelude::{SessionConfig, SessionContext};
@@ -651,7 +583,7 @@ mod floating_string_cast_tests {
     use super::*;
     use crate::config::PlanConfig;
     use datafusion::arrow::array::{ArrayRef, LargeStringArray, StringArray, StringViewArray};
-    use datafusion::arrow::datatypes::Schema;
+    use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::datasource::MemTable;
     use datafusion::prelude::{SessionConfig, SessionContext};
