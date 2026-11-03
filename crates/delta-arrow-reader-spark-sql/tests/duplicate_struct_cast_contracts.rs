@@ -258,3 +258,37 @@ fn constructor_struct_union_compares_complete_field_name_sequences() -> TestResu
     }
     Ok(())
 }
+
+#[test]
+fn spark_array_merges_list_struct_metadata_and_validates_names() -> TestResult {
+    use datafusion::logical_expr::ScalarUDFImpl;
+    use sail_function::scalar::array::spark_array::SparkArray;
+
+    let array = SparkArray::new();
+    let child = |source: &str| DataType::Struct(vec![
+        Field::new("x", DataType::Int32, true)
+            .with_metadata([("source".to_owned(), source.to_owned())].into()),
+    ].into());
+    let list = |value| DataType::List(Arc::new(Field::new_list_field(value, true)));
+    let left = list(child("left"));
+    let right = list(child("right"));
+    let expected = list(DataType::Struct(vec![Field::new("x", DataType::Int32, true)].into()));
+    assert_eq!(array.coerce_types(&[left.clone(), right])?, vec![expected.clone(), expected]);
+    assert_eq!(array.coerce_types(&[left.clone(), left.clone()])?, vec![left.clone(), left]);
+
+    let left = DataType::Struct(vec![
+        Field::new("a,b", DataType::Int32, true),
+        Field::new("c", DataType::Int32, true),
+        Field::new("a", DataType::Int32, false),
+    ].into());
+    let right = DataType::Struct(vec![
+        Field::new("a", DataType::Int32, false),
+        Field::new("b,c", DataType::Int32, true),
+        Field::new("a", DataType::Int32, false),
+    ].into());
+    assert_eq!(comparison_coercion(&left, &right), None);
+    let error = array.coerce_types(&[left, right])
+        .expect_err("ARRAY must reject different complete STRUCT name sequences");
+    assert!(error.to_string().contains("[DATATYPE_MISMATCH.DATA_DIFF_TYPES]"));
+    Ok(())
+}
