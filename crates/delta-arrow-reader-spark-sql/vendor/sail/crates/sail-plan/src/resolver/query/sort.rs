@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_recursion::async_recursion;
@@ -6,7 +7,7 @@ use datafusion_common::Column;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_expr::expr::{Alias, Sort};
 use datafusion_expr::{
-    Aggregate, Expr, Extension, LogicalPlan, LogicalPlanBuilder, Projection, Window,
+    Aggregate, Expr, Extension, LogicalPlan, LogicalPlanBuilder, Projection, Window, cast,
 };
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -29,6 +30,16 @@ impl PlanResolver<'_> {
         let input = self
             .resolve_query_plan_with_hidden_fields(input, state)
             .await?;
+        let mut case_outputs = HashSet::new();
+        if let LogicalPlan::Projection(project) = &input {
+            for (expression, column) in project.expr.iter().zip(project.schema.columns()) {
+                if expression.exists(|expression| {
+                    Ok(matches!(expression, Expr::Case(case) if case.is_spark_searched()))
+                })? {
+                    case_outputs.insert(column);
+                }
+            }
+        }
         let sorts = self
             .resolve_query_sort_orders_by_plan(&input, &order, state)
             .await?;
@@ -41,6 +52,12 @@ impl PlanResolver<'_> {
                 .into_iter()
                 .zip(project.schema.iter())
                 .map(|(expression, (qualifier, field))| {
+                    // This reference retains a CASE's nested declaration; outer nullability stays live.
+                    let expression = if matches!(&expression, Expr::Column(column) if case_outputs.contains(column))
+                        && field.data_type().is_nested()
+                    {
+                        cast(expression, field.data_type().clone())
+                    } else { expression };
                     preserve_result_field_metadata(expression, field)
                     .alias_qualified(qualifier.cloned(), field.name())
                 })
