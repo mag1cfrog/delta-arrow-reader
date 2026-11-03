@@ -33,7 +33,8 @@ use crate::function::comparison::{
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
-pub(crate) fn prepare_constructor_struct_fields(
+/// Validate resolver-compatible STRUCT names and insert positional rename expressions.
+pub(crate) fn align_constructor_struct_arguments(
     arguments: Vec<expr::Expr>,
     schema: &DFSchema,
     admission_context: &str,
