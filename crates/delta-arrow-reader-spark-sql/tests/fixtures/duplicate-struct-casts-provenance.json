@@ -1,0 +1,32 @@
+{
+  "issue": 826,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "test_only_head": "8977667e",
+  "reference": "duplicate-struct-casts-spark.jsonl",
+  "reference_bytes": 183373,
+  "reference_sha256": "8b6f01d374c4944e6f594e517b379cd7332542fe3d04d2082c1839d3d7cdb1bd",
+  "capture_script": "capture_duplicate_struct_casts_spark.py",
+  "capture_script_sha256": "a51d2192fe96fdd56a11679b7c1bc53c326c23d65d2d1a1d2b3978d7389a9514",
+  "source_files": [
+    {
+      "path": "correlated-scalar-metadata-stages/map-interactions/sources/capture_correlated_scalar_metadata_stages.py",
+      "sha256": "eec46731f3b271c2603d97bbe8ce582554e16b50eb5da8b03e0872a8651949e7"
+    },
+    {
+      "path": "correlated-scalar-metadata-stages/map-interactions/sources/capture_floating_group_keys_spark.py",
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911"
+    }
+  ],
+  "observations": 68,
+  "dar_batch_sizes": [
+    1,
+    32
+  ],
+  "dar_comparisons": 136,
+  "map_encoding": "entry_pairs",
+  "struct_encoding": "positional_fields",
+  "row_multiplicity": "preserved",
+  "reference_mutations": []
+}

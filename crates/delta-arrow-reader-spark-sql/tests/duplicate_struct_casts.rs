@@ -9,6 +9,7 @@ use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use futures_util::FutureExt;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -53,7 +54,7 @@ async fn duplicate_struct_casts_match_spark() -> TestResult {
         for case in &records[1..] {
             let mut actual = json!({});
             let mut phase = "resolve";
-            let observed: TestResult = async {
+            let observed = std::panic::AssertUnwindSafe(async {
                 let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?,
                     &SparkSqlOptions { ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
                         session_timezone: "UTC".into(), ..SparkSqlOptions::default() }).await?;
@@ -83,22 +84,28 @@ async fn duplicate_struct_casts_match_spark() -> TestResult {
                 rows.sort_by_key(|row| json!(row).to_string());
                 actual["batches"] = json!(batch_observations);
                 actual["rows"] = json!(rows);
-                Ok(())
-            }.await;
+                Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+            }).catch_unwind().await;
             let matches = match &observed {
-                Ok(()) if case.get("error").is_none() => {
+                Ok(Ok(())) if case.get("error").is_none() => {
                     actual["public_schema"] == case["public_schema"]
                         && actual["executed_schema_before_collect"] == case["executed_schema_before_collect"]
                         && actual["executed_schema_after_collect"] == case["executed_schema_after_collect"]
                         && actual["rows"] == case["expected"]["rows"]
                 }
-                Ok(()) => false,
-                Err(error) => {
+                Ok(Ok(())) => false,
+                Ok(Err(error)) => {
                     let engine_error = error.downcast_ref::<DataFusionError>().is_some();
                     actual["error"] = json!({"message":error.to_string(), "phase":phase,
                         "engine_error":engine_error});
                     case["error"]["condition"].as_str().is_some_and(|condition|
                         engine_error && error.to_string().contains(&format!("[{condition}]")))
+                }
+                Err(panic) => {
+                    actual["panic"] = json!({"phase":phase,
+                        "message":panic.downcast_ref::<String>().cloned().or_else(||
+                            panic.downcast_ref::<&str>().map(|message| (*message).to_owned()))});
+                    false
                 }
             };
             if let Some(output) = &mut output {

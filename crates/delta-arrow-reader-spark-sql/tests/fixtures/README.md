@@ -2215,3 +2215,24 @@ array constructor.
 python tests/fixtures/capture_map_constructor_nullability_spark.py /tmp/map-constructor-nullability-spark.jsonl
 cargo test --locked --workspace --test map_constructor_nullability
 ```
+
+## Duplicate STRUCT casts
+
+`duplicate-struct-casts-spark.jsonl` contains 68 Spark 4.2.0 observations from
+revision `32f7299601108917fb01920a54e084595b7b3bf8`, in UTC and both ANSI modes.
+It preserves duplicate field positions during MAP value widening, direct CAST
+and TRY_CAST, and nested ARRAY, STRUCT and MAP casts. Mixed, all-null and empty
+providers also exercise distinct child values, metadata and positional renaming.
+The provenance file pins the unchanged reference, capture script and helpers.
+
+`duplicate_struct_casts.rs` compares complete public and executed fields and
+rows at batch sizes 1 and 32, validating every returned batch. Its observer
+records each panic as a failed comparison before continuing with the remaining
+cases. `duplicate_struct_cast_contracts.rs` checks shared scalar and array casts,
+each child's validation, strict and safe conversion errors, metadata-only
+declarations, and native unique-name matching and array construction.
+
+```sh
+python tests/fixtures/capture_duplicate_struct_casts_spark.py /tmp/duplicate-struct-casts-spark.jsonl
+cargo test --locked --workspace --test duplicate_struct_casts --test duplicate_struct_cast_contracts
+```
