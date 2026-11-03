@@ -83,9 +83,12 @@ fn array_compact_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 }
 
 fn array_compact_generic<O: OffsetSizeTrait>(list: &GenericListArray<O>) -> Result<ArrayRef> {
-    let values = list.values();
-    let values_nulls = values.logical_nulls();
     let offsets = list.offsets();
+    let first = offsets[0].as_usize();
+    let last = offsets[list.len()].as_usize();
+    // A sliced list retains backing values outside its visible offset range.
+    let values = list.values().slice(first, last - first);
+    let values_nulls = values.logical_nulls();
 
     // Build a boolean filter mask for the flattened values array.
     // We keep a value if its parent row is not null AND the value itself is not null.
@@ -96,8 +99,8 @@ fn array_compact_generic<O: OffsetSizeTrait>(list: &GenericListArray<O>) -> Resu
     let mut total_kept: usize = 0;
 
     for i in 0..list.len() {
-        let start = offsets[i].as_usize();
-        let end = offsets[i + 1].as_usize();
+        let start = offsets[i].as_usize() - first;
+        let end = offsets[i + 1].as_usize() - first;
 
         if list.is_null(i) {
             // Null row: mark all values in the range as not kept.
@@ -131,4 +134,82 @@ fn array_compact_generic<O: OffsetSizeTrait>(list: &GenericListArray<O>) -> Resu
         new_values,
         list.nulls().cloned(),
     )?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use datafusion::arrow::array::{Int32Array, ListArray};
+    use datafusion::arrow::buffer::NullBuffer;
+    use datafusion::arrow::datatypes::Field;
+
+    #[test]
+    fn array_compact_keeps_visible_sliced_values_and_fields() -> Result<()> {
+        let field = Arc::new(
+            Field::new_list_field(DataType::Int32, true)
+                .with_metadata([("origin".into(), "compact-slice".into())].into()),
+        );
+        let nulls = Some(NullBuffer::from(vec![
+            true, true, false, true, true, true, true,
+        ]));
+        let input = ListArray::try_new(
+            field.clone(),
+            OffsetBuffer::from_lengths([2, 3, 2, 0, 2, 1, 1]),
+            Arc::new(Int32Array::from(vec![
+                Some(900),
+                Some(901),
+                Some(3),
+                None,
+                Some(4),
+                Some(700),
+                Some(701),
+                None,
+                None,
+                Some(800),
+                Some(99),
+            ])),
+            nulls.clone(),
+        )?;
+        let expected = ListArray::try_new(
+            field.clone(),
+            OffsetBuffer::from_lengths([2, 2, 0, 0, 0, 1, 1]),
+            Arc::new(Int32Array::from(vec![900, 901, 3, 4, 800, 99])),
+            nulls,
+        )?;
+        for data_type in [DataType::List(field.clone()), DataType::LargeList(field)] {
+            let input = compute::cast(&input, &data_type)?;
+            let expected = compute::cast(&expected, &data_type)?;
+            for (offset, len) in [
+                (0, 7),
+                (1, 5),
+                (1, 1),
+                (2, 1),
+                (3, 1),
+                (4, 1),
+                (5, 1),
+                (3, 0),
+            ] {
+                let argument = input.slice(offset, len);
+                let arg_field = Arc::new(Field::new("a", data_type.clone(), true));
+                let actual = SparkArrayCompact::new()
+                    .invoke_with_args(ScalarFunctionArgs {
+                        args: vec![ColumnarValue::Array(argument)],
+                        arg_fields: vec![arg_field.clone()],
+                        number_rows: len,
+                        return_field: arg_field,
+                        config_options: Arc::default(),
+                    })?
+                    .into_array(len)?;
+                actual.to_data().validate_full()?;
+                assert_eq!(actual.data_type(), &data_type);
+                assert_eq!(
+                    actual.as_ref(),
+                    expected.slice(offset, len).as_ref(),
+                    "{data_type} offset={offset} len={len}"
+                );
+            }
+        }
+        Ok(())
+    }
 }
