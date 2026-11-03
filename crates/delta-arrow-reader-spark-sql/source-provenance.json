@@ -1041,7 +1041,7 @@
         {
           "path": "src/type_coercion/binary.rs",
           "registry_source_sha256": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
-          "change": "Use one merged STRUCT child declaration for constructor arguments and keep matching field-name sequences positional, including nested duplicate names."
+          "change": "Use one merged STRUCT child declaration for constructor arguments, compare complete field-name sequences and retain matching duplicate positions recursively; reject ambiguous unmatched duplicate-name comparison layouts before name lookup."
         }
       ],
       "omitted_files": {

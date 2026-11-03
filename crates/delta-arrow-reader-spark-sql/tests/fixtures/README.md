@@ -2258,8 +2258,9 @@ The constructor tests in `duplicate_struct_casts.rs` compare every public and
 executed field before and after collection and every row, at batch sizes 1 and
 32. The new references add 156 comparisons. The shared observer validates actual
 Arrow batches and records each panic as a failed comparison. The positional
-contract test also checks recursive STRUCT/List declarations and rejects
-mismatched field names.
+contract tests also check recursive STRUCT/List declarations, native primitive
+List and nested leaf conversion policies, and mismatched field names. Comma-bearing
+names remain distinct sequences, and MAP admission failures retain their cause.
 
 ```sh
 python tests/fixtures/capture_array_struct_declarations_spark.py /tmp/array-struct-declarations-spark.jsonl

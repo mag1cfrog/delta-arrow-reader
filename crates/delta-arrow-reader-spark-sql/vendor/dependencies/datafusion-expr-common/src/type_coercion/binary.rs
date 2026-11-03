@@ -1269,6 +1269,12 @@ fn struct_coercion(
                 return coerce_struct_by_position(lhs_fields, rhs_fields, coerce_fn);
             }
 
+            if lhs_fields.iter().map(|field| field.name()).collect::<HashSet<_>>().len() != lhs_fields.len()
+                || rhs_fields.iter().map(|field| field.name()).collect::<HashSet<_>>().len() != rhs_fields.len()
+            {
+                return None;
+            }
+
             // If the two structs have exactly the same set of field names (possibly in
             // different order), prefer name-based coercion. Otherwise fall back to
             // positional coercion which preserves backward compatibility.
@@ -1292,18 +1298,8 @@ fn struct_coercion(
     }
 }
 
-/// Return true if every left-field name exists in the right fields (and lengths are equal).
-///
-/// # Assumptions
-/// **This function assumes field names within each struct are unique.** This assumption is safe
-/// because field name uniqueness is enforced at multiple levels:
-/// - **Arrow level:** `StructType` construction enforces unique field names at the schema level
-/// - **DataFusion level:** SQL parser rejects duplicate field names in `CREATE TABLE` and struct type definitions
-/// - **Runtime level:** `StructArray::try_new()` validates field uniqueness
-///
-/// Therefore, we don't need to handle degenerate cases like:
-/// - `struct<c1 int> -> struct<c1 int, c1 int>` (target has duplicate field names)
-/// - `struct<c1 int, c1 int> -> struct<c1 int>` (source has duplicate field names)
+/// Return true if every left-field name exists in the equally sized right fields.
+/// The caller validates unique names before choosing name-based coercion.
 fn fields_have_same_names(lhs_fields: &Fields, rhs_fields: &Fields) -> bool {
     // Debug assertions: field names should be unique within each struct
     #[cfg(debug_assertions)]

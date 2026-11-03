@@ -10,9 +10,9 @@ use datafusion::arrow::array::{
 use datafusion::arrow::buffer::OffsetBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::utils::SingleRowListArrayBuilder;
-use datafusion_common::{Result, plan_datafusion_err, plan_err};
+use datafusion_common::{DFSchema, Result, plan_datafusion_err, plan_err};
 use datafusion_expr::type_coercion::binary::{
-    comparison_coercion, try_type_union_resolution_with_struct,
+    comparison_coercion, try_type_union_resolution_with_struct, type_union_resolution,
 };
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, TypeSignature,
@@ -145,9 +145,18 @@ impl ScalarUDFImpl for SparkArray {
                 let coerced_type = match (&acc, x) {
                     (DataType::Struct(_), DataType::Struct(_)) => {
                         try_type_union_resolution_with_struct(&[acc.clone(), x.clone()])
-                            .ok()
-                            .and_then(|types| types.into_iter().next())
-                            .or_else(|| comparison_coercion(&acc, x))
+                            .map_err(|error| error.context(
+                                "[DATATYPE_MISMATCH.DATA_DIFF_TYPES] ARRAY elements must have compatible STRUCT declarations"))?
+                            .into_iter().next()
+                    }
+                    _ if acc.is_list() && x.is_list() => {
+                        let compared = comparison_coercion(&acc, x);
+                        // Merge declarations only when the existing leaf conversion stays identical.
+                        type_union_resolution(&[x.clone(), acc.clone()])
+                            .filter(|merged| compared.as_ref().is_some_and(|compared|
+                                compared.equals_datatype(merged)
+                                    && DFSchema::datatype_is_semantically_equal(compared, merged)))
+                            .or(compared)
                     }
                     _ => comparison_coercion(&acc, x),
                 };

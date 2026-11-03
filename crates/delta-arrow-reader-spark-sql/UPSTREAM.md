@@ -208,8 +208,11 @@ Shared STRUCT union resolution gives every constructor argument the same child
 declarations before concatenation. Fields combine nullability and clear inherited
 metadata through the existing coercion policy. Identical input declarations keep
 their metadata. Recursive coercion uses child positions when the complete name
-sequence matches, including duplicate names. Spark ARRAY uses this shared merge
-for aligned STRUCT arguments before its existing comparison-coercion fallback.
+sequence matches, including duplicate names. Spark ARRAY retains STRUCT admission
+failures instead of falling through to ambiguous name lookup. Nested Lists reuse
+native merged declarations only when comparison coercion selects the same storage
+type, nullability and STRUCT names. MAP classifies failures at its STRUCT-value
+admission boundary; both constructor errors retain their underlying cause.
 Native MakeArray retains its primitive coercion and conversion errors. The same
 union resolution also serves native COALESCE and DataFusion Spark IF. The
 [constructor references](tests/fixtures/README.md#array-and-map-struct-declarations)

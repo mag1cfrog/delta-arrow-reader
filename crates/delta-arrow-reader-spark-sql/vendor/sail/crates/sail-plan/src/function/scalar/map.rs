@@ -4,6 +4,7 @@ use std::sync::Arc;
 use datafusion::arrow::datatypes::{DataType, FieldRef, Fields};
 use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
+use datafusion_expr::type_coercion::binary::try_type_union_resolution_with_struct;
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::map::map_entries::SparkMapEntries;
@@ -31,6 +32,12 @@ fn map(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .iter()
         .map(|[key, value]| (key.clone(), value.clone()))
         .unzip();
+    let value_types = values.iter().map(|value| value.get_type(schema.as_ref()))
+        .collect::<datafusion_common::Result<Vec<_>>>()?;
+    if value_types.len() > 1 && value_types.iter().all(|value| matches!(value, DataType::Struct(_))) {
+        try_type_union_resolution_with_struct(&value_types).map_err(|error| error.context(
+            "[DATATYPE_MISMATCH.CREATE_MAP_VALUE_DIFF_TYPES] MAP values must have compatible STRUCT declarations"))?;
+    }
     let value_contains_null = values.iter().try_fold(false, |nullable, value| {
         Ok::<_, PlanError>(nullable || value.nullable(schema.as_ref())?)
     })?;
