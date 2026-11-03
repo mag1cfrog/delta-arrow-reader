@@ -10,8 +10,12 @@ The cases cover Boolean and DATE arrays, STRUCT children, nested arrays,
 true/false/NULL and column conditions, missing ELSE, empty providers, selected
 and dead error branches, and numeric widening. The pruned BIGINT/INT array case
 requires both the common public declaration and the selected branch's BIGINT
-value conversion. Native DataFusion CASE is compared before and after a Spark
-query runs in the configured session.
+value conversion. Native DataFusion CASE uses registered nested columns in three
+rows and an empty provider. Ten expressions run at both batch sizes, before and
+after a Spark query in the configured session, for 80 complete native/configured
+observation pairs. Each native query must succeed and return the provider's row
+count; every field, value, error and completion phase must match its configured
+counterpart.
 
 ## Replay
 
