@@ -10,8 +10,8 @@ required and optional STRUCT fields, and numeric coercion.
 From the repository root, run:
 
 ```sh
-cargo test --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_hidden_sort_declarations -- --nocapture
-cargo test --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_reachable_fields -- --nocapture
+cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_hidden_sort_declarations -- --test-threads=1 --nocapture
+cargo test --locked --workspace --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test case_reachable_fields -- --test-threads=1 --nocapture
 ```
 
 The second test retains all 324 original CASE records at both batch sizes.
@@ -19,10 +19,29 @@ The hidden-sort test checks analyzed fields, both recorded physical schemas,
 complete rows, Arrow batch validity, and declared nonnullable fields. It also
 compares the raw row sequence for records carrying `ordered: true`.
 
+## Inherited differences
+
+The replay reports 156 strict Spark matches and 16 inherited differences. It emits
+the original `matches: false` results, then checks the exact differing paths and
+values below. All other schema fields, rows, required order, errors and completion
+phases must match. Missing metadata keys remain distinct from JSON null values.
+
+| Case | Required inherited difference | Owner | Observations |
+| --- | --- | --- | ---: |
+| `array_numeric_pruned_value_coercion` | Analyzed `/fields/0/type/containsNull`: Spark `true`, DAR `false`; both physical schemas match. | [#828](https://github.com/mag1cfrog/delta-arrow-reader/issues/828) | 4 |
+| `generated_output_name_no_order`, `generated_output_name_hidden_order` | All three compared stages retain DAR's `subquery` label where Spark uses `scalarsubquery(required)`, at `/fields/0/name`. | [#790](https://github.com/mag1cfrog/delta-arrow-reader/issues/790) | 8 |
+| `numeric_dead_wide_arm_no_order` | Both physical stages retain `/fields/0/type/fields/0/metadata/source = "case-id"`; Spark has no such key. The analyzed schema matches. | [#867](https://github.com/mag1cfrog/delta-arrow-reader/issues/867) | 4 |
+
+Each case runs in both ANSI modes and at both batch sizes. The generated-name
+hidden-sort case must also match Spark's nested `nullable: true` declaration;
+its name difference cannot hide a nullability regression. A changed or resolved
+inherited difference fails the test and requires reviewing its assertion.
+
 ## Raw sources and selection
 
-`delivery-packages.json` lists the six raw files in `references/`, their hashes,
-and the selected IDs. Files remain whole and unchanged. Selection happens in the
+`delivery-packages.json` lists the pinned Spark build, the six raw files in
+`references/`, their hashes and counts, the selected IDs, and the capture script
+and manifest hashes. Files remain whole and unchanged. Selection happens in the
 test; expected names, types, nullability, metadata, rows and errors are read from
 the original records. The package name and complete record distinguish identities
 that share a short ID.
@@ -53,10 +72,7 @@ python capture_spark.py /tmp/case-hidden-sort-fresh.jsonl --manifest cases.json
 The output must be a fresh path. The script verifies Spark's version, build
 revision and UTC timezone, registers the recorded providers, and captures both
 ANSI modes. `cases.json` supplies the 12 definitions and exact provider data.
-Its preparatory `reference_status` text is preserved in the raw header;
-`spark-capture-v1-result.json` records the completed capture, and
-`spark-independent-audit-v1.json` checks its 24 records and 96 stage schemas.
-
-`source-inventory.json` and `provenance/capture-source.json` record the capture
-script and historical raw-source provenance. Their absolute source paths identify
-the original capture workspace; replay uses only files committed here.
+Its preparatory `reference_status` text is preserved verbatim in the raw header.
+The reference contains the completed capture's 24 records and 96 stage schemas.
+Historical headers retain their original capture paths and labels; replay uses
+only files committed here.
