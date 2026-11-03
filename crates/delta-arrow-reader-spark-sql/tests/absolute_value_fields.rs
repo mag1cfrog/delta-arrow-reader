@@ -12,8 +12,10 @@ mod spark_inputs;
 mod spark_results;
 use spark_results::TestResult;
 
-const ABS_REFERENCE: &str = include_str!("fixtures/abs-result-fields/abs-result-fields-spark.jsonl");
-const PREPARATION_REFERENCE: &str = include_str!("fixtures/abs-result-fields/preparation/abs-preparation-spark.jsonl");
+const ABS_REFERENCE: &str =
+    include_str!("fixtures/abs-result-fields/abs-result-fields-spark.jsonl");
+const PREPARATION_REFERENCE: &str =
+    include_str!("fixtures/abs-result-fields/preparation/abs-preparation-spark.jsonl");
 
 fn references(fixture: &str, count: usize) -> TestResult<Vec<Value>> {
     let records = fixture
@@ -21,7 +23,10 @@ fn references(fixture: &str, count: usize) -> TestResult<Vec<Value>> {
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
     assert_eq!(records.len() - 1, count);
     let mut identities = std::collections::BTreeSet::new();
     for case in &records[1..] {
@@ -30,9 +35,20 @@ fn references(fixture: &str, count: usize) -> TestResult<Vec<Value>> {
             case["ansi"].as_bool().ok_or("missing ANSI")?,
         )));
         if case["expected"]["condition"].is_null() {
-            assert_eq!(case["expected"]["schema"], case["schema_stages"]["analyzed"]);
-            for stage in ["analyzed", "optimized", "executed_before_collect", "executed"] {
-                assert!(case["schema_stages"][stage].is_object(), "missing {stage}: {case}");
+            assert_eq!(
+                case["expected"]["schema"],
+                case["schema_stages"]["analyzed"]
+            );
+            for stage in [
+                "analyzed",
+                "optimized",
+                "executed_before_collect",
+                "executed",
+            ] {
+                assert!(
+                    case["schema_stages"][stage].is_object(),
+                    "missing {stage}: {case}"
+                );
             }
             assert!(case["expected"]["rows"].is_array());
         }
@@ -55,11 +71,18 @@ async fn replay_references(fixture: &str, count: usize, label: &str) -> TestResu
     let mut differences = Vec::new();
     let mut comparisons = 0;
     for batch_size in [1, 32] {
-        let session = SessionContext::new_with_state(configure_spark_sql(
-            SessionStateBuilder::new().with_default_features().with_config(
-                SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
-            ),
-        ).build());
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             comparisons += 1;
@@ -73,7 +96,9 @@ async fn replay_references(fixture: &str, count: usize, label: &str) -> TestResu
                         differences.push(format!("expected={case}, actual={comparison}"));
                     }
                 }
-                Err(error) => differences.push(format!("case={case}, batch={batch_size}, observer error={error}")),
+                Err(error) => differences.push(format!(
+                    "case={case}, batch={batch_size}, observer error={error}"
+                )),
             }
         }
     }

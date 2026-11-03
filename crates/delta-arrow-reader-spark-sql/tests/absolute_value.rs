@@ -38,7 +38,11 @@ async fn abs_rejects_wrong_arity_before_unused_subqueries_are_removed() -> TestR
                     )),
                     "{sql}: {error}"
                 );
-                assert!(error.to_string().contains("[WRONG_NUM_ARGS.WITHOUT_SUGGESTION]"));
+                assert!(
+                    error
+                        .to_string()
+                        .contains("[WRONG_NUM_ARGS.WITHOUT_SUGGESTION]")
+                );
             }
         }
     }
@@ -55,13 +59,24 @@ async fn abs_rejects_invalid_types_before_dead_case_branches_are_removed() -> Te
             "SELECT abs(true) AS r",
             "SELECT CASE WHEN true THEN 7 ELSE abs(true) END AS r",
         ] {
-            let Err(error) = plan_query(&session, sql, &SparkSqlOptions {
-                ansi_mode,
-                ..SparkSqlOptions::default()
-            }).await else {
+            let Err(error) = plan_query(
+                &session,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await
+            else {
                 return Err(format!("Invalid ABS input reached physical planning: {sql}").into());
             };
-            assert!(error.to_string().contains("[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE]"), "{sql}: {error}");
+            assert!(
+                error
+                    .to_string()
+                    .contains("[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE]"),
+                "{sql}: {error}"
+            );
         }
     }
     Ok(())

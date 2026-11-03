@@ -2135,7 +2135,9 @@ fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
 fn spark_abs(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ansi_mode = input.function_context.plan_config.ansi_mode;
     let udf = SparkAbs::new(ansi_mode);
-    let argument_types = input.arguments.iter()
+    let argument_types = input
+        .arguments
+        .iter()
         .map(|argument| argument.get_type(input.function_context.schema))
         .collect::<Result<Vec<_>, _>>()?;
     udf.coerce_types(&argument_types).map_err(|error| {
@@ -2149,10 +2151,13 @@ fn spark_abs(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let udf = ScalarUDF::from(udf);
     // Expose the implicit string CAST's nullable field before native type coercion.
     let arguments = if argument_types[0].is_string() {
-        vec![ScalarUDF::from(SparkCastStringToFloat::try_new(
-            DataType::Float64,
-            !ansi_mode,
-        )?).call(input.arguments)]
+        vec![
+            ScalarUDF::from(SparkCastStringToFloat::try_new(
+                DataType::Float64,
+                !ansi_mode,
+            )?)
+            .call(input.arguments),
+        ]
     } else {
         input.arguments
     };

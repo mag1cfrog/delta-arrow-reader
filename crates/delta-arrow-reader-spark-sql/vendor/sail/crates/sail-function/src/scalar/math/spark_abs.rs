@@ -8,8 +8,8 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::datatypes::{
     DataType, DurationMicrosecondType, DurationMillisecondType, DurationNanosecondType,
-    DurationSecondType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type, IntervalDayTimeType,
-    IntervalMonthDayNanoType, IntervalUnit, IntervalYearMonthType, TimeUnit,
+    DurationSecondType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
+    IntervalDayTimeType, IntervalMonthDayNanoType, IntervalUnit, IntervalYearMonthType, TimeUnit,
 };
 use datafusion::functions::math::expr_fn::abs;
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, internal_err};
@@ -552,7 +552,10 @@ mod tests {
                 assert_abs_argument_error(udf.return_type(&vec![DataType::Int32; count]), count)?;
                 assert_abs_argument_error(
                     udf.return_field_from_args(ReturnFieldArgs {
-                        arg_fields: &vec![Arc::new(Field::new("input", DataType::Int32, false)); count],
+                        arg_fields: &vec![
+                            Arc::new(Field::new("input", DataType::Int32, false));
+                            count
+                        ],
                         scalar_arguments: &vec![None; count],
                     }),
                     count,
@@ -579,7 +582,10 @@ mod tests {
     fn abs_result_fields_follow_input_nullability_without_metadata() -> Result<()> {
         for ansi in [false, true] {
             let udf = SparkAbs::new(ansi);
-            assert_eq!(udf.coerce_types(&[DataType::Null])?, vec![DataType::Float64]);
+            assert_eq!(
+                udf.coerce_types(&[DataType::Null])?,
+                vec![DataType::Float64]
+            );
             for data_type in [
                 DataType::Int8,
                 DataType::Int16,
@@ -626,10 +632,7 @@ mod tests {
             let Err(expected) = udf.return_type(&[DataType::Boolean]) else {
                 return exec_err!("ABS accepted a Boolean type");
             };
-            assert_eq!(
-                error.to_string(),
-                expected.to_string(),
-            );
+            assert_eq!(error.to_string(), expected.to_string(),);
         }
         Ok(())
     }
