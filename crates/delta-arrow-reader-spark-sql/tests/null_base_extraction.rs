@@ -141,20 +141,52 @@ fn matches_planning_error(error: &DataFusionError, case: &Value) -> bool {
     let DataFusionError::External(source) = error else { return false; };
     let Some(PlanError::AnalysisError(message)) = source.downcast_ref::<PlanError>() else { return false; };
     let Some(condition) = case["expected"]["condition"].as_str() else { return false; };
-    let child = if case["id"] == "duplicate_struct" { "item" } else { "missing" };
-    matches!(condition, "INVALID_EXTRACT_BASE_FIELD_TYPE" | "FIELD_NOT_FOUND" | "AMBIGUOUS_REFERENCE_TO_FIELDS" | "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-        && message.starts_with(&format!("cannot resolve attribute: [{condition}] field {child:?} "))
+    let parameters = &case["error"]["parameters"];
+    let cause = match condition {
+        "INVALID_EXTRACT_BASE_FIELD_TYPE" => {
+            let data_type = match parameters["other"].as_str() {
+                Some("\"VOID\"") => "Null",
+                Some("\"INT\"") => "Int32",
+                _ => return false,
+            };
+            format!("field \"missing\" cannot be extracted from {data_type}")
+        }
+        "FIELD_NOT_FOUND" if parameters["fieldName"] == "`missing`" && parameters["fields"] == "`other`" => {
+            "field \"missing\" is absent from STRUCT fields [\"other\"]".into()
+        }
+        "AMBIGUOUS_REFERENCE_TO_FIELDS" if parameters["field"] == "`item`" && parameters["count"] == "2" => {
+            "field \"item\" matches multiple STRUCT children".into()
+        }
+        "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE" if case["id"] == "scalar_array_base"
+            && parameters["inputType"] == "\"STRING\""
+            && parameters["inputSql"] == "\"missing\""
+            && parameters["requiredType"] == "\"INTEGRAL\"" => {
+            "field \"missing\" requires a STRUCT array element, got Int32".into()
+        }
+        _ => return false,
+    };
+    message == &format!("cannot resolve attribute: [{condition}] {cause}")
 }
 
 #[test]
-fn error_checks_require_the_actual_resolver_cause_and_requested_field() {
-    let case = json!({"id":"null_lambda_base","expected":{"condition":"INVALID_EXTRACT_BASE_FIELD_TYPE"}});
-    let message = "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field \"missing\" cannot be extracted from Null";
-    assert!(matches_planning_error(&DataFusionError::External(Box::new(PlanError::AnalysisError(message.into()))), &case));
-    assert!(!matches_planning_error(&DataFusionError::Plan(message.into()), &case));
-    for wrong in [message.replace("missing", "other"), format!("unrelated: {message}")] {
-        assert!(!matches_planning_error(&DataFusionError::External(Box::new(PlanError::AnalysisError(wrong))), &case));
+fn error_checks_require_the_actual_resolver_type_fields_and_selector_cause() -> TestResult {
+    let references = records(REFERENCE)?;
+    for (id, message, cause, wrong_cause) in [
+        ("null_lambda_base", "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field \"missing\" cannot be extracted from Null", "from Null", "from Int32"),
+        ("scalar_base", "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field \"missing\" cannot be extracted from Int32", "from Int32", "from Null"),
+        ("missing_struct", "cannot resolve attribute: [FIELD_NOT_FOUND] field \"missing\" is absent from STRUCT fields [\"other\"]", "[\"other\"]", "[\"unrelated\"]"),
+        ("duplicate_struct", "cannot resolve attribute: [AMBIGUOUS_REFERENCE_TO_FIELDS] field \"item\" matches multiple STRUCT children", "multiple", "no"),
+        ("scalar_array_base", "cannot resolve attribute: [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] field \"missing\" requires a STRUCT array element, got Int32", "got Int32", "got Null"),
+    ] {
+        let case = references[1..].iter().find(|case| case["id"] == id).ok_or("missing control")?;
+        let wrong = message.replace(cause, wrong_cause);
+        assert!(matches_planning_error(&DataFusionError::External(Box::new(PlanError::AnalysisError(message.into()))), case));
+        assert!(!matches_planning_error(&DataFusionError::Plan(message.into()), case));
+        for wrong in [wrong, message.replace("field \"", "field \"unrelated_"), format!("unrelated: {message}")] {
+            assert!(!matches_planning_error(&DataFusionError::External(Box::new(PlanError::AnalysisError(wrong))), case));
+        }
     }
+    Ok(())
 }
 
 async fn compare_cases(source: &str, count: usize) -> TestResult {
@@ -253,7 +285,9 @@ async fn null_extraction_leaves_native_sql_fields_rows_and_failures_unchanged() 
     for sql in queries { expected.push(native_snapshot(&native, sql).await?); }
     assert!(expected[0].0.starts_with("success:"));
     assert_eq!(expected[0].1.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
-    assert!(expected[0].1[0].column(0).is_null(0));
+    let native_null = expected[0].1[0].column(0);
+    assert_eq!(native_null.data_type(), &DataType::Null);
+    assert_eq!(spark_results::encode_value(native_null.as_ref(), 0)?, Value::Null);
     assert!(expected[1].0.starts_with("success:"));
     assert!(!expected[2].0.starts_with("success:") && expected[2].0.contains("Cannot access field at argument 1: type Int64 is not Struct, Map, or Null"));
     assert!(!expected[3].0.starts_with("success:") && expected[3].0.contains("Cannot cast string 'bad' to value of Int32 type"));
