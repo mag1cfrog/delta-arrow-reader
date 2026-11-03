@@ -77,6 +77,46 @@ mod tests {
     use arrow::array::{Array, ArrayRef, Int32Array, ListArray, NullArray};
     use arrow::datatypes::{Field, Int32Type};
     use datafusion_common::config::ConfigOptions;
+    use datafusion_expr::ReturnFieldArgs;
+
+    #[test]
+    fn result_fields_include_array_element_and_lookup_nullability() -> Result<()> {
+        for array_nullable in [false, true] {
+            for element_nullable in [false, true] {
+                for lookup_nullable in [false, true] {
+                    let element =
+                        Arc::new(Field::new_list_field(DataType::Int32, element_nullable));
+                    for storage in [
+                        DataType::List(element.clone()),
+                        DataType::LargeList(element.clone()),
+                        DataType::FixedSizeList(element.clone(), 1),
+                        DataType::ListView(element.clone()),
+                        DataType::LargeListView(element),
+                    ] {
+                        let fields = [
+                            Arc::new(
+                                Field::new("array", storage, array_nullable)
+                                    .with_metadata([("origin".into(), "input".into())].into()),
+                            ),
+                            Arc::new(Field::new("lookup", DataType::Int32, lookup_nullable)),
+                        ];
+                        let result =
+                            ArrayContains::default().return_field_from_args(ReturnFieldArgs {
+                                arg_fields: &fields,
+                                scalar_arguments: &[None, None],
+                            })?;
+                        assert_eq!(result.data_type(), &DataType::Boolean);
+                        assert_eq!(
+                            result.is_nullable(),
+                            array_nullable || element_nullable || lookup_nullable
+                        );
+                        assert!(result.metadata().is_empty());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn null_results_cover_the_input_batch() -> Result<()> {
