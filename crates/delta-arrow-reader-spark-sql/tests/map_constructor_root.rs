@@ -147,18 +147,36 @@ async fn null_sensitive_map_consumers_preserve_spark_evaluation() -> TestResult 
             if case.get("error").is_some() {
                 assert_eq!(case["error"]["condition"], "DUPLICATED_MAP_KEY");
                 assert_eq!(case["error"]["phase"], "execute");
-                let query = plan_query(&session, case["sql"].as_str().ok_or("missing SQL")?,
-                    &SparkSqlOptions { ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
-                        session_timezone: "UTC".into(), ..SparkSqlOptions::default() }).await?;
-                assert_eq!(capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?,
-                    case["public_schema"]);
+                let query = plan_query(
+                    &session,
+                    case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions {
+                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                        session_timezone: "UTC".into(),
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
+                assert_eq!(
+                    capture_schema(
+                        query.logical_plan.schema().fields(),
+                        Some(&query.column_names)
+                    )?,
+                    case["public_schema"]
+                );
                 let physical = query.create_physical_plan(&session).await?;
-                assert_eq!(capture_schema(physical.schema().fields(), None)?,
-                    case["executed_schema_before_collect"]);
-                let error = collect(physical, session.task_ctx()).await
+                assert_eq!(
+                    capture_schema(physical.schema().fields(), None)?,
+                    case["executed_schema_before_collect"]
+                );
+                let error = collect(physical, session.task_ctx())
+                    .await
                     .expect_err("the selected MAP must reject duplicate keys during collection");
-                assert!(matches!(error.find_root(), DataFusionError::Execution(message)
-                    if message.contains("[DUPLICATED_MAP_KEY]")), "{error}");
+                assert!(
+                    matches!(error.find_root(), DataFusionError::Execution(message)
+                    if message.contains("[DUPLICATED_MAP_KEY]")),
+                    "{error}"
+                );
             } else {
                 let stages = json!({"sql":case["sql"],"ansi":case["ansi"],
                     "expected":case["expected"],"schema_stages":{
@@ -166,7 +184,10 @@ async fn null_sensitive_map_consumers_preserve_spark_evaluation() -> TestResult 
                         "executed_before_collect":case["executed_schema_before_collect"],
                         "executed":case["executed_schema_after_collect"]}});
                 let actual = compare_exact_spark_query_stages(&session, &stages).await?;
-                assert_eq!(actual["matches"], true, "batch={batch_size}: {case}: {actual}");
+                assert_eq!(
+                    actual["matches"], true,
+                    "batch={batch_size}: {case}: {actual}"
+                );
             }
         }
     }
