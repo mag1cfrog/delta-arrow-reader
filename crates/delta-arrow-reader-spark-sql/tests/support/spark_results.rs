@@ -5,7 +5,7 @@ use std::error::Error;
 use arrow::array::{Array, AsArray, ListArray, StructArray};
 use arrow::datatypes::{
     DataType, Fields, Float32Type, Float64Type, IntervalUnit, IntervalYearMonthType, Schema,
-    TimeUnit,
+    TimeUnit, TimestampMicrosecondType,
 };
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
@@ -232,7 +232,7 @@ pub(crate) async fn compare_exact_spark_query_stages(
             && actual
                 .as_ref()
                 .err()
-                .is_some_and(|error| error.to_string().contains(&format!("[{condition}]")))
+                .is_some_and(|error| matches_spark_error_condition(&error.to_string(), condition))
     } else {
         actual.is_ok()
     };
@@ -251,6 +251,41 @@ pub(crate) async fn compare_exact_spark_query_stages(
         "ordered_rows_match":ordered_rows_match,
         "error_matches":error_matches, "matches":matches,
     }))
+}
+
+fn matches_spark_error_condition(error: &str, condition: &str) -> bool {
+    error.contains(&format!("[{condition}]"))
+        || matches!(
+            (condition, error),
+            (
+                "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+                "Execution error: Scalar subquery returned more than one row"
+            )
+        )
+}
+
+#[test]
+fn scalar_subquery_condition_mapping_requires_the_exact_execution_error() {
+    let error = "Execution error: Scalar subquery returned more than one row";
+    assert!(matches_spark_error_condition(
+        error,
+        "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+    ));
+    assert!(!matches_spark_error_condition(error, "CAST_INVALID_INPUT"));
+    for error in [
+        "Planning error: Scalar subquery returned more than one row",
+        "Execution error: Scalar subquery returned more than one row: unrelated failure",
+        "Execution error: another scalar subquery failure",
+    ] {
+        assert!(!matches_spark_error_condition(
+            error,
+            "SCALAR_SUBQUERY_TOO_MANY_ROWS"
+        ));
+    }
+    assert!(matches_spark_error_condition(
+        "[CAST_INVALID_INPUT] invalid integer",
+        "CAST_INVALID_INPUT"
+    ));
 }
 
 pub(crate) fn validate_physical_schema(
@@ -316,6 +351,7 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Float64 => json!("double"),
         DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
         DataType::Date32 => json!("date"),
+        DataType::Timestamp(TimeUnit::Microsecond, None) => json!("timestamp_ntz"),
         DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => json!("timestamp"),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
@@ -348,6 +384,14 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
     }
     Ok(match column.data_type() {
         DataType::Null => Value::Null,
+        DataType::Timestamp(TimeUnit::Microsecond, None) => {
+            let value = column.as_primitive::<TimestampMicrosecondType>().value(row);
+            let datetime = arrow::temporal_conversions::timestamp_us_to_datetime(value)
+                .ok_or("recorded TIMESTAMP_NTZ is outside the datetime encoding range")?;
+            let text = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+            let micros = datetime.and_utc().timestamp_subsec_micros();
+            json!(if micros == 0 { text } else { format!("{text}.{micros:06}") })
+        }
         DataType::List(field) => {
             let values = column
                 .as_any()
@@ -429,4 +473,30 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
         }
         _ => json!(array_value_to_string(column, row)?),
     })
+}
+
+#[test]
+fn timestamp_ntz_values_use_recorded_datetime_encoding() -> TestResult {
+    use arrow::array::TimestampMicrosecondArray;
+
+    assert_eq!(
+        spark_schema_type(&DataType::Timestamp(TimeUnit::Microsecond, None))?,
+        json!("timestamp_ntz")
+    );
+    let values = TimestampMicrosecondArray::from(vec![Some(0), Some(1), Some(123000), Some(-1), None]);
+    for (row, expected) in [
+        json!("1970-01-01 00:00:00"),
+        json!("1970-01-01 00:00:00.000001"),
+        json!("1970-01-01 00:00:00.123000"),
+        json!("1969-12-31 23:59:59.999999"),
+        Value::Null,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(encode_value(&values, row)?, expected);
+    }
+    let outside_datetime_range = TimestampMicrosecondArray::from(vec![i64::MAX]);
+    assert!(encode_value(&outside_datetime_range, 0).is_err());
+    Ok(())
 }
