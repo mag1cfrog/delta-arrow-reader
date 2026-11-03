@@ -1,0 +1,42 @@
+{
+  "purpose": "Exact independent stage fields for the 68 unchanged date-day correlated/lambda/closed-lambda cases; original expected rows and errors are not replaced.",
+  "reference_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/date-day-metadata-stages-d178-spark-v2.jsonl",
+  "reference_file": "date-day-metadata-stages-spark.jsonl",
+  "reference_bytes": 96810,
+  "reference_sha256": "cf39f105e932a2d9b9e1c0632684376252f3508e10e2440349fc1176124540aa",
+  "capture_script_sha256": "352e14f67c806101d13bddf638d8bed42aa21158b210d5ab5bcb1bfd67a7c8a9",
+  "capture_manifest_sha256": "f36fd38facf39a30b4d056f471eefdebd4628efa2eb6bafd677aaae2c254744d",
+  "observations": 68,
+  "successes": 33,
+  "errors": 35,
+  "success_metadata_stage_changes": 12,
+  "root_capture_exit": 0,
+  "first_failed_capture_log": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/date-day-metadata-stages-d178-spark-capture-v1.log",
+  "original_fixtures": [
+    {
+      "path": "../date-day-arithmetic-spark.jsonl",
+      "bytes": 83721,
+      "sha256": "091bc906c04bae318c525863875c8b5abd6470b84726d0bbd6b17a3066dfe52b"
+    },
+    {
+      "path": "../date-day-admission-probes-spark.jsonl",
+      "bytes": 14571,
+      "sha256": "8ba1066501163acc489e43587ad861917eca700702b87348dfaba8d9a0c6ba04"
+    },
+    {
+      "path": "../date-day-correlated-spark.jsonl",
+      "bytes": 6879,
+      "sha256": "8b45bfc6737c7e3725febd7efe3ad71a3970b64c35e0602fb911103828a6031f"
+    },
+    {
+      "path": "../date-day-lambda-spark.jsonl",
+      "bytes": 8173,
+      "sha256": "0b2fb628b8f5bffdc9d8697d1861d56c44c62a98845c49a9e29aa59fad50a160"
+    },
+    {
+      "path": "../date-day-closed-lambda-spark.jsonl",
+      "bytes": 2939,
+      "sha256": "6af61070a8af3d7d5ef59b2b658b214868ccf80133204b727f6d0f6edf1b75da"
+    }
+  ]
+}

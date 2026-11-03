@@ -1,5 +1,8 @@
 //! Integer-day DATE arithmetic preserves the entire Date32 representation.
 
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
 use arrow::array::{Array, AsArray};
 use arrow::datatypes::{DataType, Date32Type, Field};
 use datafusion::execution::SessionStateBuilder;
@@ -33,15 +36,28 @@ pub(crate) async fn capture_date_result(
         },
     )
     .await?;
+    assert_eq!(query.column_names, ["r"]);
+    let resolved_field = query.logical_plan.schema().field(0);
+    if let Some(expected) = case.get("public_schema") {
+        let mut field = capture_field(resolved_field)?;
+        field["name"] = json!(query.column_names[0]);
+        assert_eq!(json!({"type":"struct","fields":[field]}), *expected);
+    }
     let physical = query.create_physical_plan(session).await?;
     let physical_schema = physical.schema();
-    assert_eq!(query.column_names, ["r"]);
     assert_eq!(physical_schema.fields().len(), 1);
     let physical_field = physical_schema.field(0);
-    let resolved_field = query.logical_plan.schema().field(0);
     assert_eq!(physical_field.name(), &query.column_names[0]);
     assert_eq!(resolved_field.data_type(), physical_field.data_type());
-    assert_eq!(resolved_field.metadata(), physical_field.metadata());
+    if let Some(expected) = case.get("executed_schema_before_collect") {
+        // Correlated scalar inlining can restore the generated marker after analysis.
+        assert_eq!(
+            json!({"type":"struct","fields":[capture_field(physical_field)?]}),
+            *expected
+        );
+    } else {
+        assert_eq!(resolved_field.metadata(), physical_field.metadata());
+    }
     // Folding can narrow a physical field while the analyzed declaration stays nullable.
     assert!(!physical_field.is_nullable() || resolved_field.is_nullable());
     let physical_control = matches!(
@@ -71,7 +87,7 @@ pub(crate) async fn capture_date_result(
     let mut field = capture_field(comparison_field)?;
     field["name"] = json!(query.column_names[0]);
     let mut rows = Vec::new();
-    for batch in collect(physical, session.task_ctx()).await? {
+    for batch in collect(Arc::clone(&physical), session.task_ctx()).await? {
         assert_eq!(batch.schema(), physical_schema);
         let column = batch.column(0);
         assert!(physical_field.is_nullable() || column.null_count() == 0);
@@ -82,6 +98,12 @@ pub(crate) async fn capture_date_result(
             let value = capture_value(column.as_ref(), row)?;
             rows.push(vec![value]);
         }
+    }
+    if let Some(expected) = case.get("executed_schema_after_collect") {
+        assert_eq!(
+            json!({"type":"struct","fields":[capture_field(physical.schema().field(0))?]}),
+            *expected
+        );
     }
     rows.sort_by_key(|row| json!(row).to_string());
     Ok(json!({
@@ -136,6 +158,40 @@ fn capture_value(column: &dyn Array, row: usize) -> TestResult<Value> {
 
 #[tokio::test]
 async fn date_day_arithmetic_matches_spark() -> TestResult {
+    let stages = include_str!("fixtures/date-day-metadata-stages/date-day-metadata-stages-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(stages[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        stages[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(stages[0]["timezone"], "UTC");
+    assert_eq!(stages.len() - 1, 68);
+    let mut stage_identities = BTreeSet::new();
+    for case in &stages[1..] {
+        assert!(stage_identities.insert((
+            case["sql"].as_str().ok_or("missing SQL")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+        assert_eq!(case["original_matches"], true);
+        if case.get("error").is_some() {
+            assert_eq!(case["error"]["condition"], case["expected"]["condition"]);
+        } else {
+            assert_eq!(case["observed"], case["expected"]);
+            assert_eq!(case["public_schema"], case["analyzed_schema"]);
+            assert_eq!(
+                case["optimized_schema"],
+                case["executed_schema_before_collect"]
+            );
+            assert_eq!(
+                case["optimized_schema"],
+                case["executed_schema_after_collect"]
+            );
+        }
+    }
+    let mut stage_comparisons = 0;
     let mut differences = Vec::new();
     for (capture, count, encoding) in [
         (
@@ -189,6 +245,15 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
                 register_recorded_inputs(&session, &records[0], batch_size)?;
             }
             for case in &records[1..] {
+                let stage = stages[1..].iter().find(|stage| {
+                    stage["sql"] == case["sql"] && stage["ansi"] == case["ansi"]
+                });
+                if let Some(stage) = stage {
+                    assert_eq!(stage["id"], case["id"]);
+                    assert_eq!(stage["expected"], case["expected"]);
+                    stage_comparisons += 1;
+                }
+                let case = stage.unwrap_or(case);
                 let actual = capture_date_result(&session, case).await;
                 eprintln!(
                     "date-day observation: {}",
@@ -218,6 +283,7 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
             }
         }
     }
+    assert_eq!(stage_comparisons, 136);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
