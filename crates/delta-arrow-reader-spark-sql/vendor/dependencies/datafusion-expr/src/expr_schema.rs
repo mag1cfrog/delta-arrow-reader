@@ -284,6 +284,19 @@ impl ExprSchemable for Expr {
             Expr::Column(c) => input_schema.nullable(c),
             Expr::OuterReferenceColumn(field, _) => Ok(field.is_nullable()),
             Expr::Literal(value, _) => Ok(value.is_null()),
+            Expr::Case(case) if case.is_spark_searched() => {
+                let mut nullable = false;
+                for (when, then) in &case.when_then_expr {
+                    nullable |= then.nullable(input_schema)?;
+                    if matches!(when.as_ref(), Expr::Literal(ScalarValue::Boolean(Some(true)), _)) {
+                        return Ok(nullable);
+                    }
+                }
+                match &case.else_expr {
+                    Some(value) => Ok(nullable || value.nullable(input_schema)?),
+                    None => Ok(true),
+                }
+            }
             Expr::Case(case) => {
                 let nullable_then = case
                     .when_then_expr

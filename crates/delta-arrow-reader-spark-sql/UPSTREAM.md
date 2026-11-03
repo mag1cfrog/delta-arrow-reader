@@ -292,6 +292,15 @@ The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
 CASE successes with independently confirmed planning failures.
 
+Spark-marked CASE declarations count original THEN nullability through the first
+literal TRUE guard. Later results and ELSE do not contribute after that guard;
+without one, THEN and ELSE declarations remain nullable when any result is
+nullable, and a missing ELSE remains nullable. FALSE, typed-NULL and nonliteral
+guards retain their original result declarations. The
+[reachable-result references](tests/fixtures/README.md#case-literal-true-result-fields)
+cover this bounded #721 behavior. Validation, result types, metadata, branch
+storage and execution retain their existing paths; wider #721 work remains open.
+
 Collection sizes retain native length calculations and checked INT casts.
 SIZE/CARDINALITY apply the selected legacy NULL rule to the computed length;
 ARRAY_SIZE always preserves NULL. The [size references](tests/fixtures/README.md#collection-sizes)

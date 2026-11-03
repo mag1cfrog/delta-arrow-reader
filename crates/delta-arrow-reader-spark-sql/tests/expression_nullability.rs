@@ -43,7 +43,7 @@ async fn values_preserve_input_guarantees_and_recorded_gaps() -> TestResult {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(gaps.len(), 11);
+    assert_eq!(gaps.len(), 7);
     check_spark_reference(
         include_str!("fixtures/values-nullability-spark.jsonl"),
         122,

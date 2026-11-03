@@ -46,6 +46,41 @@ python tests/fixtures/case-explicit-else/capture_historical_case_else_spark.py \
     "$case_else_capture_dir/historical-spark.jsonl"
 ```
 
+## CASE literal TRUE result fields
+
+`case-reachable-fields/case-result-nullability-spark.jsonl` is byte-identical to
+the original 324-record #721 capture. Its SHA256 is
+`d8879718bc3c8e50ce73475ea00c2280c34567c72463df2611cb588aa601a464`.
+The header pins Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, both ANSI modes, all input fields
+and rows, and the original capture script and manifest hashes.
+
+`case_reachable_fields.rs` selects 24 original direct CASE IDs. Twenty-three
+cover mixed, NULL-only and empty providers in both ANSI modes; the metadata
+control has four original records on mixed and empty providers. These 142
+selected records run at batches 1 and 32 for 284 comparisons through the
+existing strict stage observer and provider loader. The other 182 raw records
+remain unchanged and are outside this slice's acceptance.
+
+The selected cases place required and nullable results before, at and after
+the first literal TRUE. They retain FALSE, typed-NULL, folded and unknown
+guards, ELSE/no ELSE, actual NULLs, simple CASE, source metadata and required
+or discarded cast failures. Complete analyzed and physical fields, rows and
+recorded error phases remain required. There are no diagnostic aliases.
+Native SQL controls compare configured and unconfigured full observations
+before and after a Spark query.
+
+The unchanged capture script and manifest are available at commit
+`7b8a5cf022543560263f2882df35a5a0b7736ec0` under the original fixture directory:
+`capture_case_result_nullability_spark.py` has SHA256
+`f561c1f0640096cfa326980fb54e0d37492c2156385554a24c28cb55dcdeb55c`, and
+`case-result-nullability-cases.json` has SHA256
+`e2e9d8848f76042e24ef437625473507c055ad4d29bec37bef00b8bd3f223274`.
+This extraction uses the independent recorded outcomes; it does not recapture
+or rewrite them. The production change is the Spark-marked nullability arm
+from `e8e0d982` / `2337b79d`. This is a partial #721 delivery and a producer
+prerequisite for the discarded-CASE control retained by constant STRUCT #849.
+
 ## Integer-day DATE arithmetic
 
 `date-day-arithmetic-spark.jsonl` contains 296 independent Spark 4.2.0
@@ -292,12 +327,14 @@ IN/NOT IN, including empty, limited and correlated subqueries.
 
 The raw Spark results remain in the fixture. Exact pre-existing differences are
 recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches:
-unreachable CASE branches still widen analyzed nullability (#721), and an unused
-invalid inline CAST is pruned before its required error (#722). Six projected-IN
-observations retain SQL three-valued results that differ from Spark, including
+an unused invalid inline CAST is pruned before its required error (#722). The
+four `conditional_projection` and `conditional_empty` observations, in both ANSI
+modes, match Spark after the literal-TRUE CASE declaration repair (#721).
+Six projected-IN observations retain SQL three-valued results that differ from
+Spark, including
 NULL-left/empty-subquery behavior in legacy mode. These remain unresolved #142
-cases and do not extend its approved four-case historical policy. In total, 111
-observations match Spark and 11 retain exact baseline differences. The retained-gap
+cases and do not extend its approved four-case historical policy. In total, 115
+observations match Spark and 7 retain exact baseline differences. The retained-gap
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
 
@@ -740,20 +777,20 @@ batches of 1 and 32, comparing exact values, names, types and the six required
 ANSI cast failures. A list match must beat a NULL entry; a miss with a NULL
 entry remains NULL. Skipped and required dynamic casts test list evaluation.
 
-The schema controls record each stage separately. Native `logical_plan` fields
-are resolved before session analysis and optimization; they are not Spark's
-analyzed schema. The values below are the output field's `nullable` flag:
+The schema controls record each stage separately. DAR `logical_plan` fields
+resolve before session analysis and optimization. The test compares them with
+Spark's analyzed fields. The values below are the output field's `nullable` flag:
 
-| Control | Spark analyzed | Spark optimized | Native resolved | Native physical |
+| Control | Spark analyzed | Spark optimized | DAR resolved | DAR physical |
 | --- | --- | --- | --- | --- |
-| Constant true CASE with a NULL else branch | false | false | true | false |
+| Constant true CASE with a NULL else branch | false | false | false | false |
 | Constant true IF with a NULL else branch | true | false | true | false |
 | IF with a nullable column condition | true | true | true | true |
 
-All three controls return the captured values and INT type. The tests preserve
-the conservative native resolved field while checking optimizer narrowing and
-live NULL output. Exact schema-nullability parity remains #149/S07 work; these
-stage observations do not claim that parity.
+All three controls return the captured values and INT type. The tests compare
+resolved nullability with Spark analyzed nullability and physical nullability
+with Spark optimized nullability, including live NULL output. These three
+controls do not establish general schema-nullability parity.
 
 ## Boolean operand evaluation
 
