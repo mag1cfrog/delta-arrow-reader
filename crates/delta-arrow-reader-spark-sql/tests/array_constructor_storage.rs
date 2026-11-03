@@ -74,8 +74,8 @@ fn spark_array_matches_native_outer_list_storage() -> TestResult {
         for child in children {
             for (offset, length) in [(0, 3), (1, 2), (1, 0)] {
                 let child = child.slice(offset, length);
-                let arg_fields =
-                    vec![Arc::new(Field::new("input", child.data_type().clone(), true)); 2];
+                let input_field = Arc::new(Field::new("input", child.data_type().clone(), true));
+                let arg_fields = vec![input_field; 2];
                 let functions: [&dyn ScalarUDFImpl; 2] = [&MakeArray::new(), &SparkArray::new()];
                 let mut results = Vec::new();
                 for function in functions {
