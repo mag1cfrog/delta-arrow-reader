@@ -48,8 +48,14 @@ impl PlanResolver<'_> {
         if !needs_projection_expansion(&named_expr.expr)
             && (metadata.is_some() || !inherits_alias_metadata(&named_expr.expr))
         {
-            // Empty unsupplied fields can inherit source metadata after simplification.
-            if metadata.is_some() || !named_expr.expr.to_field(schema)?.1.metadata().is_empty() {
+            // Empty fields may regain source metadata after simplification. Unresolved
+            // fields retain this boundary through aggregate rewriting and projection validation.
+            if metadata.is_some()
+                || !named_expr
+                    .expr
+                    .to_field(schema)
+                    .is_ok_and(|(_, field)| field.metadata().is_empty())
+            {
                 named_expr.expr = drop_inherited_column_metadata(named_expr.expr);
             }
             named_expr.metadata.retain(|(key, _)| {

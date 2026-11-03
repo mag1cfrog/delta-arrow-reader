@@ -1,0 +1,732 @@
+{
+  "issue": 710,
+  "contract": "Spark 4.2.0 declares these exact IF results nullable in public/analyzed schemas and nonnullable after optimization/execution. Only the historical logical_nullable field is replaced; every row, type, name, physical flag and execution state is retained.",
+  "historical_fixture": "accepted-runtime.jsonl.gz",
+  "historical_sha256": "4a6de91a60bd9d6db19e8c373e33e45bb393f9f767316d88c41547edd612a271",
+  "spark_reference": "generated-alias-metadata-accepted-if-spark.jsonl",
+  "spark_reference_sha256": "663dcef97e8b77c7d823a3a49fa336c929c694477f5e6c27c78c71f740e4d50e",
+  "capture_script": "capture_generated_alias_metadata_accepted_if_spark.py",
+  "capture_script_sha256": "17441b5e8e3558de8e1c59312eb847f0530152af580c236c24d61ae40e35b7a7",
+  "changes": [
+    {
+      "id": "replay/cast-scalar-cast-cases/10/tinyint_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/19/smallint_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/28/int_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/37/bigint_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/46/overflow_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT)),CAST(7 AS INT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/55/modulo_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS INT) % CAST(0 AS INT)),CAST(7 AS INT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/64/double_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT 7D / 0D),CAST(7 AS DOUBLE)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Float64"
+        ],
+        "rows": [
+          [
+            "7.0"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Float64"
+        ],
+        "rows": [
+          [
+            "7.0"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/73/decimal_if_true",
+      "ansi": true,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2))),CAST(7 AS DECIMAL(23,13))) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Decimal128(23, 13)"
+        ],
+        "rows": [
+          [
+            "7.0000000000000"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Decimal128(23, 13)"
+        ],
+        "rows": [
+          [
+            "7.0000000000000"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/10/tinyint_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/19/smallint_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/28/int_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/37/bigint_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)),CAST(7 AS BIGINT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int64"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/46/overflow_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT)),CAST(7 AS INT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/55/modulo_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS INT) % CAST(0 AS INT)),CAST(7 AS INT)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Int32"
+        ],
+        "rows": [
+          [
+            "7"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/64/double_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT 7D / 0D),CAST(7 AS DOUBLE)) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Float64"
+        ],
+        "rows": [
+          [
+            "7.0"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Float64"
+        ],
+        "rows": [
+          [
+            "7.0"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    },
+    {
+      "id": "replay/cast-scalar-cast-cases/73/decimal_if_false",
+      "ansi": false,
+      "sql": "SELECT IF(CAST(NULL AS BOOLEAN),(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2))),CAST(7 AS DECIMAL(23,13))) AS r",
+      "old": {
+        "status": "ok",
+        "types": [
+          "Decimal128(23, 13)"
+        ],
+        "rows": [
+          [
+            "7.0000000000000"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          false
+        ],
+        "physical_nullable": [
+          false
+        ]
+      },
+      "new": {
+        "status": "ok",
+        "types": [
+          "Decimal128(23, 13)"
+        ],
+        "rows": [
+          [
+            "7.0000000000000"
+          ]
+        ],
+        "output_names": [
+          "r"
+        ],
+        "logical_nullable": [
+          true
+        ],
+        "physical_nullable": [
+          false
+        ]
+      }
+    }
+  ]
+}

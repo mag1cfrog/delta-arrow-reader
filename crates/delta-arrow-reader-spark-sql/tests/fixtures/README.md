@@ -2488,6 +2488,15 @@ must reject successful queries and schema mismatches before any later error.
 Every reused capture script and raw reference is byte-identical to its source
 at commit `1df41b7a1b4eaad3843b9f14fc6d12c68bed2e1c`.
 
+`generated-alias-metadata-reviewed-contracts.json` records sixteen exact IF
+corrections with complete old/new outcomes, SQL, ANSI mode and capture hashes.
+Their independent Spark public fields are nullable; optimized/executed fields
+are nonnullable. Paired observations at both batch sizes confirm that only the
+public logical-nullability flag changes. The correction map adds these sixteen
+entries without altering existing entries, rows, types, names, execution state
+or physical declarations. The historical accepted-runtime archive remains
+byte-identical to the SHA256 pinned in that manifest.
+
 ```sh
 cargo test --locked --workspace --test generated_alias_metadata
 cargo test --locked --workspace supplied_alias_metadata_survives_projection_and_aggregate_planning
