@@ -1,0 +1,39 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "records": 98,
+  "comparisons": 196,
+  "batch_sizes": [
+    1,
+    32
+  ],
+  "capture_script": "capture_spark.py",
+  "capture_script_sha256": "c1d730a9f9c84e82a1ac2fc30b2ddd36738c55ddb7f7288a124b01781269752e",
+  "packages": [
+    {
+      "package": "fields",
+      "reference": "spark.jsonl",
+      "records": 74,
+      "sha256": "659f04a7fea99b4cff95a4e6320ecd17ef4cfb6e515823be6fb68514c992b971",
+      "capture_manifest": "cases.json",
+      "capture_manifest_sha256": "9c4c356a0d7aaf06049d441f4163f342bd8b1362f591b47679f01d78d8be84d2"
+    },
+    {
+      "package": "pruning",
+      "reference": "pruning-spark.jsonl",
+      "records": 22,
+      "sha256": "9dab6d28be3d5197a3fd48b8299b2f12af1467020c246a1a6cf47b1a15210b29",
+      "capture_manifest": "pruning-boundaries.json",
+      "capture_manifest_sha256": "1774c6f225f5d94115da9a8539edbcb328bcd1d3abc7b17c24182e16e9ef4263"
+    },
+    {
+      "package": "numeric-pruning",
+      "reference": "numeric-pruning-spark.jsonl",
+      "records": 2,
+      "sha256": "71e6c66aa31123954e0638bf6d09746178db9ccd8cdc0230220dcce2e55eb745",
+      "capture_manifest": "numeric-pruning.json",
+      "capture_manifest_sha256": "464a9998655289b9b4d0a7d410365102032b02df071d794d2f83488a0bd363ea"
+    }
+  ]
+}
