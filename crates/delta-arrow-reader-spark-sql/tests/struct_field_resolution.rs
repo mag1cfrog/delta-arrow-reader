@@ -96,6 +96,13 @@ fn field_resolution_partitions_preserve_all_parent_records() -> TestResult {
             "identifier_generated",
         ],
     )?;
+    assert_partition(
+        include_str!("fixtures/struct-extraction-boundaries-review-v3-spark.jsonl"),
+        include_str!("fixtures/struct-extraction-boundaries-803-spark.jsonl"),
+        10,
+        6,
+        &["null_local_base", "null_computed_base", "map_lambda_base"],
+    )?;
     Ok(())
 }
 
@@ -139,6 +146,7 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 | "missing_deep"
                 | "lambda_field_missing"
                 | "missing_identifier"
+                | "null_lambda_base"
                 | "missing_bracket"
                 | "missing_computed"
                 | "missing_qualified"
@@ -161,6 +169,8 @@ fn matches_planning_error(error: &DataFusionError, id: &str, condition: &str) ->
                 | "duplicate_bracket"
                 | "duplicate_computed"
                 | "lambda_field_duplicate"
+                | "map_struct_missing_lambda"
+                | "map_struct_duplicate_lambda"
                 | "array_bracket_duplicate"
                 | "duplicate_array_field" => "item",
                 "numeric_string_index" => "1",
@@ -383,6 +393,15 @@ async fn typed_lambda_fields_match_all_18_public_sql_references() -> TestResult 
     compare_cases(
         include_str!("fixtures/struct-field-lambdas-spark.jsonl"),
         18,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn map_and_null_lambda_boundaries_match_all_ten_owned_references() -> TestResult {
+    compare_cases(
+        include_str!("fixtures/struct-extraction-boundaries-803-spark.jsonl"),
+        10,
     )
     .await
 }
