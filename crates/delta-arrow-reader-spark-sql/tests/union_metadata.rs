@@ -59,6 +59,32 @@ async fn set_operation_metadata_controls_match_pinned_spark_stages() -> TestResu
     replay_set_operation_metadata(&records[0], &cases, "captured_controls").await
 }
 
+#[tokio::test]
+async fn union_metadata_barrier_matches_pinned_spark_stages() -> TestResult {
+    let records = include_str!("fixtures/union-metadata-barrier-stages/union-metadata-barrier-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 2);
+    assert_eq!(
+        records[0]["manifest_sha256"],
+        "2ace6e3617e960723354b7eb9a684998ccc9e6b520e810690249e1ad193c2d1a"
+    );
+    assert_eq!(
+        records[0]["capture_sha256"],
+        "4087af37211bdfb67a4d017cb5965f6a90a6e1fe0c7a0cc1bd8581546c673c70"
+    );
+    for case in &records[1..] {
+        assert_eq!(case["id"], "right_union_order_limit_metadata_barrier");
+        assert_eq!(
+            case["sql"],
+            "SELECT ABS(1) AS r UNION ALL (SELECT ABS(2) UNION ALL SELECT ABS(3) ORDER BY 1 LIMIT 1)"
+        );
+    }
+    let cases = records[1..].iter().collect::<Vec<_>>();
+    replay_set_operation_metadata(&records[0], &cases, "barrier_regression").await
+}
+
 async fn replay_set_operation_metadata(
     header: &Value,
     cases: &[&Value],
