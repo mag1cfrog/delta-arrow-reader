@@ -24,6 +24,8 @@ def main():
     assert len(definitions) == manifest["case_count"] == 162
     assert len({(case["id"], case["input"]) for case in definitions}) == len(definitions)
 
+    # Pinned PySpark otherwise rejects year-month values during client conversion.
+    os.environ["PYSPARK_YM_INTERVAL_LEGACY"] = "1"
     import pyspark
     from pyspark.sql import SparkSession, types
 
@@ -55,7 +57,9 @@ def main():
             return str(value)
 
         records = [{key: value for key, value in manifest.items() if key != "cases"}]
-        records[0].update({"spark_build": build, "capture_sha256": hashlib.sha256(
+        records[0].update({"spark_build": build, "interval_encoding": "month_count",
+                           "pyspark_ym_interval_legacy": os.environ["PYSPARK_YM_INTERVAL_LEGACY"],
+                           "capture_sha256": hashlib.sha256(
             Path(__file__).read_bytes()).hexdigest(), "manifest_sha256": hashlib.sha256(
                 manifest_path.read_bytes()).hexdigest()})
         for ansi in [True, False]:
@@ -63,21 +67,29 @@ def main():
             for definition in definitions:
                 record = dict(definition, ansi=ansi)
                 stages = {}
+                phase = "sql"
                 try:
                     frame = spark.sql(record["sql"])
                     execution = frame._jdf.queryExecution()
                     public_schema = frame.schema.jsonValue()
+                    phase = "analyzed_schema"
                     stages["analyzed"] = json.loads(execution.analyzed().schema().json())
+                    phase = "optimized_schema"
                     stages["optimized"] = json.loads(execution.optimizedPlan().schema().json())
+                    phase = "executed_schema"
                     stages["executed_before_collect"] = json.loads(
                         execution.executedPlan().schema().json())
+                    phase = "collect"
+                    collected = frame.collect()
+                    phase = "encode"
                     rows = [[encode(value, field.dataType) for value, field in zip(row, frame.schema)]
-                            for row in frame.collect()]
+                            for row in collected]
                     rows.sort(key=lambda row: json.dumps(row, separators=(",", ":")))
                     stages["executed"] = json.loads(execution.executedPlan().schema().json())
                     assert public_schema == stages["analyzed"]
                     record["expected"] = {"schema": public_schema, "rows": rows}
                 except Exception as error:
+                    assert phase != "encode", (record, error)
                     message = str(error)
                     condition = error.getCondition() if hasattr(error, "getCondition") else None
                     if condition is None:
@@ -90,6 +102,8 @@ def main():
                     }, (record, condition, message)
                     record["expected"] = {"condition": condition}
                     record["spark_error"] = message
+                    record["spark_error_phase"] = phase
+                    record["spark_error_class"] = type(error).__name__
                 record["schema_stages"] = stages
                 records.append(record)
         assert len(records) - 1 == manifest["observations"] == 324
