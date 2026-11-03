@@ -294,6 +294,14 @@ impl PlanResolver<'_> {
             {
                 try_cast(expr, cast_to_type)
             }
+            (DataType::Decimal128(_, _) | DataType::Decimal256(_, _), to, is_try)
+                if to.is_signed_integer() =>
+            {
+                let mode = if is_try { DecimalCastMode::Try }
+                    else if self.config.ansi_mode { DecimalCastMode::Ansi }
+                    else { DecimalCastMode::Legacy };
+                ScalarUDF::from(SparkDecimalCast::to_integer(to, mode)?).call(vec![expr])
+            }
             (_, to, true) => try_cast(expr, to),
             (_, to, _) => cast(expr, to),
         };

@@ -838,8 +838,7 @@ fn has_cast(expr: &Expr) -> Result<bool> {
                 || f.func.inner().is::<SparkNullIf>())))
 }
 
-// Preserve string and Decimal-to-Decimal failures before local pruning.
-// Other numeric casts retain the existing arithmetic precheck.
+// Preserve fallible string and Decimal casts before local pruning.
 fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) -> Result<bool> {
     expr.exists(|expr| match expr {
         Expr::BinaryExpr(binary)
@@ -864,7 +863,7 @@ fn early_cast(expr: &Expr, schema: &DFSchemaRef, spark_comparison_errors: bool) 
         {
             Ok(matches!(f.args.as_slice(), [expr]
                 if !null_literal(expr) && row_expression(expr, true)?
-                    && matches!(expr.get_type(schema)?, DataType::Decimal128(_, _))))
+                    && matches!(expr.get_type(schema)?, DataType::Decimal128(_, _) | DataType::Decimal256(_, _))))
         }
         Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkNullIf>() =>
