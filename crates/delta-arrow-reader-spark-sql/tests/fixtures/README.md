@@ -2098,7 +2098,8 @@ and Map-to-STRUCT case-varied/missing/duplicate checks. The exact complement is
 four ordinary NULL extraction records owned by #815 and two nonnullable literal
 Map records owned by #816. The latter baseline fails physical planning; it is
 not a passing runtime control. Both issues remain children of #156. The partition
-assertion retains every raw line and assigns no parity credit to these six gaps.
+assertion retains every raw line. The #815 suite below actively replays its four
+records; the two Map observations remain a separate pending #816 obligation.
 Use `capture_struct_extraction_boundaries_review_v3_spark.py` to recollect the
 complete reference, including those pending cases.
 
@@ -2159,8 +2160,11 @@ the original ten #803 records, four #815 records and two pending #816 Map
 records. The full original capture and existing #803 partition remain intact.
 Native SQL controls compare complete logical/physical declarations, returned
 batches and failure causes before Spark configuration and before/after a Spark
-NULL extraction. These checks are a test-first acceptance suite; adding the
-references alone does not establish compatibility.
+NULL extraction. Ordinary attributes and computed/bracket extraction admit
+NULL-typed bases through the existing native get_field inference/execution.
+Dotted typed-lambda paths keep strict NULL-base validation throughout their
+nested tail. The Spark resolver suppresses a computed NULL base before calling
+get_field, matching the captured Spark rule without changing native SQL.
 
 Recollect to a fresh path using the existing pinned PySpark 4.2.0/Java 21 setup:
 

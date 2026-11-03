@@ -194,11 +194,18 @@ impl PlanResolver<'_> {
             }
         };
         if let ScalarValue::Utf8(Some(field_name)) = &extraction {
+            // Spark's computed NULL extraction skips evaluating its base.
+            let expr = if data_type.is_null() {
+                lit(ScalarValue::Null)
+            } else {
+                expr
+            };
             let expr = Self::resolve_potentially_nested_field(
                 expr,
                 &data_type,
                 std::slice::from_ref(field_name),
                 schema,
+                true,
             )?;
             return Ok(NamedExpr::new(vec![name], expr));
         }
