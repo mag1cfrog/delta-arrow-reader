@@ -154,10 +154,12 @@ async fn map_constructor_preserves_required_numeric_cast_failures() -> TestResul
             }).await?;
             let error = query.create_physical_plan(&session).await
                 .expect_err("MAP must retain its required numeric cast failure");
-            let DataFusionError::ArrowError(arrow::error::ArrowError::CastError(actual), _) =
-                error.find_root() else {
-                    return Err(format!("{sql}: unexpected failure: {error}").into());
-                };
+            let DataFusionError::ArrowError(arrow_error, _) = error.find_root() else {
+                return Err(format!("{sql}: unexpected failure: {error}").into());
+            };
+            let arrow::error::ArrowError::CastError(actual) = arrow_error.as_ref() else {
+                return Err(format!("{sql}: unexpected Arrow failure: {error}").into());
+            };
             assert_eq!(actual, cause, "{sql}, batch={batch_size}");
         }
     }
