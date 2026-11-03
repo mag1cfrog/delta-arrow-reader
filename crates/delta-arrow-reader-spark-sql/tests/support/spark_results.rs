@@ -3,7 +3,7 @@
 use std::error::Error;
 
 use arrow::array::{Array, AsArray, ListArray, StructArray};
-use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema, TimeUnit};
+use arrow::datatypes::{DataType, Fields, Float32Type, Float64Type, Schema, TimeUnit, TimestampMicrosecondType};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
 use datafusion::physical_plan::collect;
@@ -128,10 +128,10 @@ pub(crate) fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
         DataType::Int64 => json!("long"),
         DataType::Boolean => json!("boolean"),
         DataType::Date32 => json!("date"),
+        DataType::Timestamp(TimeUnit::Microsecond, None) => json!("timestamp_ntz"),
         DataType::Float32 => json!("float"),
         DataType::Float64 => json!("double"),
         DataType::Decimal128(precision, scale) => json!(format!("decimal({precision},{scale})")),
-        DataType::Date32 => json!("date"),
         DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => json!("timestamp"),
         DataType::Utf8 => json!("string"),
         DataType::List(field) => json!({"type":"array",
@@ -164,6 +164,14 @@ pub(crate) fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> 
     }
     Ok(match column.data_type() {
         DataType::Null => Value::Null,
+        DataType::Timestamp(TimeUnit::Microsecond, None) => {
+            let value = column.as_primitive::<TimestampMicrosecondType>().value(row);
+            let datetime = arrow::temporal_conversions::timestamp_us_to_datetime(value)
+                .ok_or("recorded TIMESTAMP_NTZ is outside the datetime encoding range")?;
+            let text = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+            let micros = datetime.and_utc().timestamp_subsec_micros();
+            json!(if micros == 0 { text } else { format!("{text}.{micros:06}") })
+        }
         DataType::List(field) => {
             let values = column
                 .as_any()
@@ -279,4 +287,20 @@ mod tests {
         assert_eq!(encode_value(&lists, 1)?, json!([]));
         Ok(())
     }
+}
+
+#[test]
+fn timestamp_ntz_values_use_recorded_datetime_encoding() -> TestResult {
+    use arrow::array::TimestampMicrosecondArray;
+    let values = TimestampMicrosecondArray::from(vec![Some(0), Some(1), Some(123000), Some(-1), None]);
+    for (row, expected) in [
+        json!("1970-01-01 00:00:00"),
+        json!("1970-01-01 00:00:00.000001"),
+        json!("1970-01-01 00:00:00.123000"),
+        json!("1969-12-31 23:59:59.999999"),
+        Value::Null,
+    ].into_iter().enumerate() {
+        assert_eq!(encode_value(&values, row)?, expected);
+    }
+    Ok(())
 }
