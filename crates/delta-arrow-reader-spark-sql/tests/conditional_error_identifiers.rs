@@ -30,12 +30,11 @@ fn session(batch_size: usize) -> SessionContext {
 
 #[tokio::test]
 async fn original_case_errors_keep_identifiers_bodies_and_phases() -> TestResult {
-    let records = include_str!(
-        "fixtures/conditional-error-identifiers/original-case-errors-spark.jsonl"
-    )
-    .lines()
-    .map(serde_json::from_str::<Value>)
-    .collect::<Result<Vec<_>, _>>()?;
+    let records =
+        include_str!("fixtures/conditional-error-identifiers/original-case-errors-spark.jsonl")
+            .lines()
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records.len() - 1, 10);
     let mut differences = Vec::new();
@@ -45,7 +44,9 @@ async fn original_case_errors_keep_identifiers_bodies_and_phases() -> TestResult
         for case in &records[1..] {
             let actual = spark_results::compare_exact_spark_query_stages(&session, case).await?;
             if actual["matches"] != true {
-                differences.push(format!("batch={batch_size}, expected={case}, actual={actual}"));
+                differences.push(format!(
+                    "batch={batch_size}, expected={case}, actual={actual}"
+                ));
             }
             if let Some(error) = actual["error"].as_str() {
                 let body = if case["id"] == "required_raise_else" {
@@ -54,7 +55,9 @@ async fn original_case_errors_keep_identifiers_bodies_and_phases() -> TestResult
                     "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] CASE WHEN condition must be BOOLEAN, got Null"
                 };
                 if !error.ends_with(body) {
-                    differences.push(format!("batch={batch_size}, expected body={body:?}, actual={actual}"));
+                    differences.push(format!(
+                        "batch={batch_size}, expected body={body:?}, actual={actual}"
+                    ));
                 }
             }
         }
@@ -85,14 +88,24 @@ async fn native_conditions_and_errors_stay_unchanged_after_spark_planning() -> T
             "SELECT CASE WHEN true THEN 1 WHEN NULL THEN 2 ELSE 3 END AS r",
             "SELECT 1 / 0 AS r",
             "SELECT ARRAY[7][3] AS r",
-        ].into_iter().enumerate() {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
             let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
-            eprintln!("CONDITIONAL_ERROR_NATIVE_OBSERVATION {}", json!({
-                "sql":sql, "after_spark":after_spark, "native":expected, "configured":actual,
-            }));
+            eprintln!(
+                "CONDITIONAL_ERROR_NATIVE_OBSERVATION {}",
+                json!({
+                    "sql":sql, "after_spark":after_spark, "native":expected, "configured":actual,
+                })
+            );
             if after_spark {
-                assert_eq!((&expected, &actual), (&before[index].0, &before[index].1), "{sql}");
+                assert_eq!(
+                    (&expected, &actual),
+                    (&before[index].0, &before[index].1),
+                    "{sql}"
+                );
             } else {
                 before.push((expected.clone(), actual.clone()));
             }
@@ -129,21 +142,27 @@ async fn conditional_error_identifiers_and_internal_guards() -> TestResult {
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         register_ordered_null_first_messages(&session)?;
         for case in &records[1..] {
-            let comparison = spark_results::compare_exact_spark_query_stages(&session, case).await?;
-            eprintln!("CONDITIONAL_ERROR_OBSERVATION {}", json!({
-                "id":case["id"], "input":case["input"], "ansi":case["ansi"],
-                "batch":batch_size, "observation":comparison,
-            }));
+            let comparison =
+                spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            eprintln!(
+                "CONDITIONAL_ERROR_OBSERVATION {}",
+                json!({
+                    "id":case["id"], "input":case["input"], "ansi":case["ansi"],
+                    "batch":batch_size, "observation":comparison,
+                })
+            );
             match preserves_inherited_diagnostic(case, &comparison, batch_size) {
                 Ok(true) => continue,
-                Ok(false) => {},
+                Ok(false) => {}
                 Err(error) => {
                     differences.push(format!("internal guard: {case}, {error}"));
                     continue;
                 }
             }
             if comparison["matches"] != true {
-                differences.push(format!("batch={batch_size}, expected={case}, actual={comparison}"));
+                differences.push(format!(
+                    "batch={batch_size}, expected={case}, actual={comparison}"
+                ));
             }
             if let Some(error) = comparison["error"].as_str() {
                 if case["expected"]["condition"] == "USER_RAISED_EXCEPTION" {
@@ -153,10 +172,14 @@ async fn conditional_error_identifiers_and_internal_guards() -> TestResult {
                         .split_once(" SQLSTATE:")
                         .ok_or("missing independent SQLSTATE boundary")?;
                     if !error.ends_with(expected_body) {
-                        differences.push(format!("expected body={expected_body:?}, actual={comparison}"));
+                        differences.push(format!(
+                            "expected body={expected_body:?}, actual={comparison}"
+                        ));
                     }
                 } else if error.contains("[USER_RAISED_EXCEPTION]") {
-                    differences.push(format!("internal failure became a user error: {comparison}"));
+                    differences.push(format!(
+                        "internal failure became a user error: {comparison}"
+                    ));
                 }
             }
         }
@@ -177,7 +200,10 @@ fn register_ordered_null_first_messages(session: &SessionContext) -> TestResult 
         "messages_null_first",
         RecordBatch::try_from_iter([
             ("id", Arc::new(Int32Array::from(vec![0, 1])) as ArrayRef),
-            ("message", Arc::new(StringArray::from(vec![None, Some("after-null")])) as ArrayRef),
+            (
+                "message",
+                Arc::new(StringArray::from(vec![None, Some("after-null")])) as ArrayRef,
+            ),
         ])?,
     )?;
     Ok(())
@@ -199,18 +225,31 @@ fn preserves_inherited_diagnostic(case: &Value, actual: &Value, batch: usize) ->
         }
         return Ok(true);
     }
-    if !matches!(case["id"].as_str(), Some("internal_division" | "internal_index" | "internal_element" | "internal_insert")) {
+    if !matches!(
+        case["id"].as_str(),
+        Some("internal_division" | "internal_index" | "internal_element" | "internal_insert")
+    ) {
         return Ok(false);
     }
-    let records = include_str!("fixtures/conditional-error-identifiers/internal-error-controls-before.jsonl")
-        .lines()
-        .skip(1)
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    let before = records.iter().find(|before| before["id"] == case["id"]
-        && before["input"] == case["input"] && before["ansi"] == case["ansi"]
-        && before["batch"] == batch).ok_or("missing internal baseline guard")?;
-    for (field, expected) in before["observation"].as_object().ok_or("missing baseline observation")? {
+    let records =
+        include_str!("fixtures/conditional-error-identifiers/internal-error-controls-before.jsonl")
+            .lines()
+            .skip(1)
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+    let before = records
+        .iter()
+        .find(|before| {
+            before["id"] == case["id"]
+                && before["input"] == case["input"]
+                && before["ansi"] == case["ansi"]
+                && before["batch"] == batch
+        })
+        .ok_or("missing internal baseline guard")?;
+    for (field, expected) in before["observation"]
+        .as_object()
+        .ok_or("missing baseline observation")?
+    {
         if actual[field] != *expected {
             return Err(format!("{field}: expected {expected}, got {}", actual[field]).into());
         }
@@ -238,7 +277,10 @@ async fn public_raise_error_keeps_supported_arrow_strings_and_empty_inputs() -> 
                     let query = plan_query(
                         &session,
                         "SELECT RAISE_ERROR(message) AS r FROM arrow_messages",
-                        &SparkSqlOptions { ansi_mode, ..SparkSqlOptions::default() },
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..SparkSqlOptions::default()
+                        },
                     )
                     .await?;
                     let public = query.logical_plan.schema().field(0);
@@ -252,9 +294,13 @@ async fn public_raise_error_keeps_supported_arrow_strings_and_empty_inputs() -> 
                         assert_eq!(actual?.iter().map(RecordBatch::num_rows).sum::<usize>(), 0);
                     } else {
                         let error = actual.err().ok_or("required Arrow message did not raise")?;
-                        assert!(error.to_string().ends_with(&format!(
-                            "Execution error: [USER_RAISED_EXCEPTION] {}", message.unwrap_or("null")
-                        )), "{data_type:?}, ANSI={ansi_mode}: {error}");
+                        assert!(
+                            error.to_string().ends_with(&format!(
+                                "Execution error: [USER_RAISED_EXCEPTION] {}",
+                                message.unwrap_or("null")
+                            )),
+                            "{data_type:?}, ANSI={ansi_mode}: {error}"
+                        );
                     }
                 }
             }
@@ -311,20 +357,34 @@ async fn public_assertions_keep_null_conditions_messages_and_empty_inputs() -> T
         spark_inputs::register_recorded_inputs(&session, &records[0], 32)?;
         for case in &records[1..] {
             let actual = spark_results::compare_exact_spark_query_stages(&session, case).await?;
-            eprintln!("ASSERTION_ERROR_OBSERVATION {}", json!({
-                "id":case["id"], "input":case["input"], "ansi":case["ansi"],
-                "batch":batch_size, "observation":actual,
-            }));
+            eprintln!(
+                "ASSERTION_ERROR_OBSERVATION {}",
+                json!({
+                    "id":case["id"], "input":case["input"], "ansi":case["ansi"],
+                    "batch":batch_size, "observation":actual,
+                })
+            );
             // The two internal SQL probes are retained as raw diagnostics for separate owners.
-            if case["id"].as_str().ok_or("missing ID")?.starts_with("assert_") {
+            if case["id"]
+                .as_str()
+                .ok_or("missing ID")?
+                .starts_with("assert_")
+            {
                 if actual["matches"] != true {
-                    differences.push(format!("batch={batch_size}, expected={case}, actual={actual}"));
+                    differences.push(format!(
+                        "batch={batch_size}, expected={case}, actual={actual}"
+                    ));
                 }
                 if case["expected"]["condition"] == "USER_RAISED_EXCEPTION" {
-                    let (body, _) = case["spark_error"].as_str()
-                        .ok_or("missing independent error body")?.split_once(" SQLSTATE:")
+                    let (body, _) = case["spark_error"]
+                        .as_str()
+                        .ok_or("missing independent error body")?
+                        .split_once(" SQLSTATE:")
                         .ok_or("missing independent SQLSTATE boundary")?;
-                    if !actual["error"].as_str().is_some_and(|error| error.ends_with(body)) {
+                    if !actual["error"]
+                        .as_str()
+                        .is_some_and(|error| error.ends_with(body))
+                    {
                         differences.push(format!("expected body={body:?}, actual={actual}"));
                     }
                 }
@@ -348,7 +408,10 @@ fn user_raise_error_uses_the_first_null_and_accepts_zero_rows() -> TestResult {
 
     let function = RaiseError::new_user_error();
     for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
-        let array = cast(&StringArray::from(vec![None, Some("after-null")]), &data_type)?;
+        let array = cast(
+            &StringArray::from(vec![None, Some("after-null")]),
+            &data_type,
+        )?;
         let scalar = ScalarValue::Utf8(None).cast_to(&data_type)?;
         for (value, rows) in [
             (ColumnarValue::Array(array.clone()), 2),
@@ -370,7 +433,10 @@ fn user_raise_error_uses_the_first_null_and_accepts_zero_rows() -> TestResult {
                 empty.to_data().validate_full()?;
             } else {
                 let error = actual.err().ok_or("required NULL message did not raise")?;
-                assert_eq!(error.to_string(), "Execution error: [USER_RAISED_EXCEPTION] null");
+                assert_eq!(
+                    error.to_string(),
+                    "Execution error: [USER_RAISED_EXCEPTION] null"
+                );
             }
         }
     }
@@ -381,7 +447,9 @@ fn user_raise_error_uses_the_first_null_and_accepts_zero_rows() -> TestResult {
         return_field: Arc::new(Field::new("raise_error", DataType::Null, true)),
         config_options: Default::default(),
     });
-    assert!(matches!(invalid, Err(datafusion::common::DataFusionError::Internal(message))
-        if message == "raise_error expects a single UTF-8 string argument"));
+    assert!(
+        matches!(invalid, Err(datafusion::common::DataFusionError::Internal(message))
+        if message == "raise_error expects a single UTF-8 string argument")
+    );
     Ok(())
 }
