@@ -644,4 +644,60 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn typed_lambda_fields_use_the_same_child_validation() -> PlanResult<()> {
+        let session = SessionContext::new();
+        let resolver = PlanResolver::new(&session, Arc::new(PlanConfig::default()));
+        let schema = Arc::new(DFSchema::empty());
+        for (data_type, condition) in [
+            (
+                DataType::Struct(
+                    vec![Arc::new(Field::new("Item", DataType::Int32, true))].into(),
+                ),
+                None,
+            ),
+            (
+                DataType::Struct(
+                    vec![Arc::new(Field::new("other", DataType::Int32, true))].into(),
+                ),
+                Some("[FIELD_NOT_FOUND]"),
+            ),
+            (
+                DataType::Struct(
+                    vec![
+                        Arc::new(Field::new("item", DataType::Int32, true)),
+                        Arc::new(Field::new("ITEM", DataType::Int32, true)),
+                    ]
+                    .into(),
+                ),
+                Some("[AMBIGUOUS_REFERENCE_TO_FIELDS]"),
+            ),
+            (DataType::Int32, Some("[INVALID_EXTRACT_BASE_FIELD_TYPE]")),
+        ] {
+            let mut state = PlanResolverState::new();
+            let field = Arc::new(Field::new("x", data_type, true));
+            let mut scope = state.enter_lambda_scope(vec![("x".into(), Some(field.clone()))]);
+            let resolved = resolver.resolve_expression_attribute(
+                ["x", "item"].into(),
+                false,
+                &schema,
+                scope.state(),
+            );
+            if let Some(condition) = condition {
+                assert!(matches!(resolved,
+                    Err(PlanError::AnalysisError(message))
+                        if message.contains(condition) && message.contains("field \"item\"")));
+            } else {
+                assert_eq!(
+                    resolved?.expr,
+                    get_field().call(vec![
+                        expr::Expr::LambdaVariable(LambdaVariable::new("x".into(), Some(field))),
+                        lit("Item"),
+                    ]),
+                );
+            }
+        }
+        Ok(())
+    }
 }
