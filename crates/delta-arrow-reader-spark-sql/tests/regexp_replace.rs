@@ -59,16 +59,6 @@ fn known_utf16_empty_matches(actual: &Value, expected: &Value, id: &str) -> bool
     actual["rows"] == json!([[native]]) && expected["rows"] == json!([[spark]])
 }
 
-fn known_case_nullability_721(actual: &Value, expected: &Value, id: &str) -> bool {
-    matches!(id, "guarded_case" | "guarded_literal")
-        && actual["rows"] == expected["rows"]
-        && actual["physical_schema"] == expected["physical_schema"]
-        && actual["analyzed_schema"]
-            == json!({"type":"struct","fields":[{"name":"r","type":"string","nullable":true,"metadata":{}}]})
-        && expected["analyzed_schema"]
-            == json!({"type":"struct","fields":[{"name":"r","type":"string","nullable":false,"metadata":{}}]})
-}
-
 // Match the independent Java diagnostic to its native parser category.
 fn native_pattern_cause(expected: &Value) -> Option<(&str, &str)> {
     let cause = expected["java_causes"].as_array()?.last()?;
@@ -263,6 +253,7 @@ fn known_shared_fields(actual: &Value, expected: &Value, id: &str) -> bool {
 #[tokio::test]
 async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestResult {
     let mut compared = 0;
+    let mut exact_case_results = 0;
     let mut required_error_fields_compared = 0;
     let mut external_error_fields_compared = 0;
     let mut admission_errors_compared = 0;
@@ -338,8 +329,6 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         if expected.get("analyzed_schema").is_some() { "required_error" } else { "required_admission_error" }
                     } else if error.is_none() && known_shared_fields(&observed, expected, id) {
                         "external_shared_fields_710_791"
-                    } else if error.is_none() && known_case_nullability_721(&observed, expected, id) {
-                        "external_case_nullability_721"
                     } else if (id == "regexp_replace_literal_named_group" && error.is_none()
                         && observed["analyzed_schema"] == expected["analyzed_schema"] && observed["physical_schema"] == expected["physical_schema"]
                         && observed["rows"] == json!([["a-b"]]) && expected["rows"] == json!([["-b"]]))
@@ -363,6 +352,9 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         differences.push(format!("{id} ANSI={} representation={representation} batch={batch_size}: expected {expected}, observed {observed}",case["ansi"]));
                         "difference"
                     };
+                    if matches!(id, "guarded_case" | "guarded_literal") && status == "exact" {
+                        exact_case_results += 1;
+                    }
                     if status.starts_with("external_") {
                         *external.entry(status).or_default() += 1;
                     }
@@ -395,7 +387,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
         Some(&36)
     );
     assert_eq!(external.get("external_java_pattern_779"), Some(&12));
-    assert_eq!(external.get("external_case_nullability_721"), Some(&24));
+    assert_eq!(exact_case_results, 24);
     eprintln!(
         "C06 replacement compared {compared}; error analyzed fields required={required_error_fields_compared} external={external_error_fields_compared}; admission errors={admission_errors_compared}; position analysis unavailable={position_analysis_unavailable}; error physical reference unavailable={error_physical_reference_unavailable}; external {external:?}; differences {}",
         differences.len()
