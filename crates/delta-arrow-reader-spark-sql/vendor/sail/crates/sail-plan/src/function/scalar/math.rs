@@ -45,6 +45,7 @@ use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
 use sail_function::scalar::misc::raise_error::RaiseError;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 
@@ -2133,8 +2134,34 @@ fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
 
 fn spark_abs(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let ansi_mode = input.function_context.plan_config.ansi_mode;
-    let udf = ScalarUDF::from(SparkAbs::new(ansi_mode));
-    Ok(udf.call(input.arguments))
+    let udf = SparkAbs::new(ansi_mode);
+    let argument_types = input
+        .arguments
+        .iter()
+        .map(|argument| argument.get_type(input.function_context.schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    udf.coerce_types(&argument_types).map_err(|error| {
+        let condition = if argument_types.len() != 1 {
+            "WRONG_NUM_ARGS.WITHOUT_SUGGESTION"
+        } else {
+            "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"
+        };
+        PlanError::invalid(format!("[{condition}] {error}"))
+    })?;
+    let udf = ScalarUDF::from(udf);
+    // Expose the implicit string CAST's nullable field before native type coercion.
+    let arguments = if argument_types[0].is_string() {
+        vec![
+            ScalarUDF::from(SparkCastStringToFloat::try_new(
+                DataType::Float64,
+                !ansi_mode,
+            )?)
+            .call(input.arguments),
+        ]
+    } else {
+        input.arguments
+    };
+    Ok(udf.call(arguments))
 }
 
 fn spark_bin(input: ScalarFunctionInput) -> PlanResult<Expr> {

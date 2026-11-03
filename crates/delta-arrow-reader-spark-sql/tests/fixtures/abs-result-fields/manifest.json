@@ -1,0 +1,593 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "float_encoding": "ieee754_bits",
+  "inputs": [
+    {
+      "name": "abs_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "b",
+            "type": "byte",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "s",
+            "type": "short",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "n",
+            "type": "decimal(10,2)",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "w",
+            "type": "decimal(38,18)",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "bfc00000",
+          "bff8000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "80000000",
+          "8000000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "7fc00000",
+          "7ff8000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "ff800000",
+          "fff0000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ]
+      ]
+    },
+    {
+      "name": "abs_required_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "b",
+            "type": "byte",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "s",
+            "type": "short",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "n",
+            "type": "decimal(10,2)",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "w",
+            "type": "decimal(38,18)",
+            "nullable": false,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "abs_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "b",
+            "type": "byte",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "s",
+            "type": "short",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "n",
+            "type": "decimal(10,2)",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "w",
+            "type": "decimal(38,18)",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "bfc00000",
+          "bff8000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "80000000",
+          "8000000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "7fc00000",
+          "7ff8000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          "-7",
+          "-7",
+          "-7",
+          "-7",
+          "ff800000",
+          "fff0000000000000",
+          "-1.25",
+          "-1.250000000000000000"
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "abs_nullable_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "b",
+            "type": "byte",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "s",
+            "type": "short",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "n",
+            "type": "decimal(10,2)",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          },
+          {
+            "name": "w",
+            "type": "decimal(38,18)",
+            "nullable": true,
+            "metadata": {
+              "source": "abs_input",
+              "discard": "yes"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "abs_limits",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "b",
+            "type": "byte",
+            "nullable": false,
+            "metadata": {
+              "source": "minimum"
+            }
+          },
+          {
+            "name": "s",
+            "type": "short",
+            "nullable": false,
+            "metadata": {
+              "source": "minimum"
+            }
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source": "minimum"
+            }
+          },
+          {
+            "name": "l",
+            "type": "long",
+            "nullable": false,
+            "metadata": {
+              "source": "minimum"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-128",
+          "-32768",
+          "-2147483648",
+          "-9223372036854775808"
+        ]
+      ]
+    },
+    {
+      "name": "abs_strings",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "valid",
+            "type": "string",
+            "nullable": false,
+            "metadata": {
+              "source": "string"
+            }
+          },
+          {
+            "name": "invalid",
+            "type": "string",
+            "nullable": false,
+            "metadata": {
+              "source": "string"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "-1.5",
+          "bad"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "literals",
+      "sql": "SELECT abs(CAST(-1.25 AS TINYINT)) AS b,abs(CAST(-1.25 AS SMALLINT)) AS s,abs(CAST(-1.25 AS INT)) AS i,abs(CAST(-1.25 AS BIGINT)) AS l,abs(CAST(-1.25 AS FLOAT)) AS f,abs(CAST(-1.25 AS DOUBLE)) AS d,abs(CAST(-1.25 AS DECIMAL(10,2))) AS n,abs(CAST(-1.25 AS DECIMAL(38,18))) AS w"
+    },
+    {
+      "id": "typed_nulls",
+      "sql": "SELECT abs(CAST(NULL AS TINYINT)) AS b,abs(CAST(NULL AS SMALLINT)) AS s,abs(CAST(NULL AS INT)) AS i,abs(CAST(NULL AS BIGINT)) AS l,abs(CAST(NULL AS FLOAT)) AS f,abs(CAST(NULL AS DOUBLE)) AS d,abs(CAST(NULL AS DECIMAL(10,2))) AS n,abs(CAST(NULL AS DECIMAL(38,18))) AS w"
+    },
+    {
+      "id": "untyped_null",
+      "sql": "SELECT abs(NULL) AS r"
+    },
+    {
+      "id": "abs_required",
+      "sql": "SELECT abs(b) AS b,abs(s) AS s,abs(i) AS i,abs(l) AS l,abs(f) AS f,abs(d) AS d,abs(n) AS n,abs(w) AS w FROM abs_required"
+    },
+    {
+      "id": "abs_required_empty",
+      "sql": "SELECT abs(b) AS b,abs(s) AS s,abs(i) AS i,abs(l) AS l,abs(f) AS f,abs(d) AS d,abs(n) AS n,abs(w) AS w FROM abs_required_empty"
+    },
+    {
+      "id": "abs_nullable",
+      "sql": "SELECT abs(b) AS b,abs(s) AS s,abs(i) AS i,abs(l) AS l,abs(f) AS f,abs(d) AS d,abs(n) AS n,abs(w) AS w FROM abs_nullable"
+    },
+    {
+      "id": "abs_nullable_empty",
+      "sql": "SELECT abs(b) AS b,abs(s) AS s,abs(i) AS i,abs(l) AS l,abs(f) AS f,abs(d) AS d,abs(n) AS n,abs(w) AS w FROM abs_nullable_empty"
+    },
+    {
+      "id": "b_minimum_literal",
+      "sql": "SELECT abs(CAST(-128 AS TINYINT)) AS r"
+    },
+    {
+      "id": "b_minimum_column",
+      "sql": "SELECT abs(b) AS r FROM abs_limits"
+    },
+    {
+      "id": "s_minimum_literal",
+      "sql": "SELECT abs(CAST(-32768 AS SMALLINT)) AS r"
+    },
+    {
+      "id": "s_minimum_column",
+      "sql": "SELECT abs(s) AS r FROM abs_limits"
+    },
+    {
+      "id": "i_minimum_literal",
+      "sql": "SELECT abs(CAST(-2147483648 AS INT)) AS r"
+    },
+    {
+      "id": "i_minimum_column",
+      "sql": "SELECT abs(i) AS r FROM abs_limits"
+    },
+    {
+      "id": "l_minimum_literal",
+      "sql": "SELECT abs(CAST(-9223372036854775808 AS BIGINT)) AS r"
+    },
+    {
+      "id": "l_minimum_column",
+      "sql": "SELECT abs(l) AS r FROM abs_limits"
+    },
+    {
+      "id": "valid_string_literal",
+      "sql": "SELECT abs('-1.5') AS r"
+    },
+    {
+      "id": "invalid_string_literal",
+      "sql": "SELECT abs('bad') AS r"
+    },
+    {
+      "id": "valid_string_column",
+      "sql": "SELECT abs(valid) AS r FROM abs_strings"
+    },
+    {
+      "id": "invalid_string_column",
+      "sql": "SELECT abs(invalid) AS r FROM abs_strings"
+    },
+    {
+      "id": "boolean_input",
+      "sql": "SELECT abs(true) AS r"
+    },
+    {
+      "id": "zero_arguments",
+      "sql": "SELECT abs() AS r"
+    },
+    {
+      "id": "two_arguments",
+      "sql": "SELECT abs(1,2) AS r"
+    }
+  ],
+  "observations": 44
+}

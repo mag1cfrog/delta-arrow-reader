@@ -30,6 +30,7 @@ use crate::function::scalar::math::{
 };
 use datafusion::functions::math::round::RoundFunc;
 use sail_function::scalar::array::array_contains::ArrayContains;
+use sail_function::scalar::math::spark_abs::SparkAbs;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
@@ -152,7 +153,8 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
         matches!(expr, Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo))
         || integer_divide_args(expr, schema).is_some_and(|(_, _, ansi)| ansi)
         || matches!(expr, Expr::ScalarFunction(f)
-            if f.func.inner().is::<SparkCheckedArithmetic>()
+            if f.func.inner().is::<SparkAbs>()
+                || f.func.inner().is::<SparkCheckedArithmetic>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkDecimalCast>()

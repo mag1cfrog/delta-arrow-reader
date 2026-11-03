@@ -8,8 +8,8 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::datatypes::{
     DataType, DurationMicrosecondType, DurationMillisecondType, DurationNanosecondType,
-    DurationSecondType, Int8Type, Int16Type, Int32Type, Int64Type, IntervalDayTimeType,
-    IntervalMonthDayNanoType, IntervalUnit, IntervalYearMonthType, TimeUnit,
+    DurationSecondType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
+    IntervalDayTimeType, IntervalMonthDayNanoType, IntervalUnit, IntervalYearMonthType, TimeUnit,
 };
 use datafusion::functions::math::expr_fn::abs;
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, internal_err};
@@ -17,7 +17,7 @@ use datafusion_expr::interval_arithmetic::Interval;
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::sort_properties::{ExprProperties, SortProperties};
 use datafusion_expr::{
-    ColumnarValue, Expr, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
 
@@ -77,7 +77,7 @@ impl ScalarUDFImpl for SparkAbs {
         };
         match arg_type {
             t if t.is_numeric() => Ok(vec![t.clone()]),
-            DataType::Null => Ok(vec![DataType::Null]),
+            DataType::Null => Ok(vec![DataType::Float64]),
             DataType::Interval(_) | DataType::Duration(_) => Ok(vec![arg_type.clone()]),
             DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
                 Ok(vec![DataType::Float64])
@@ -90,25 +90,26 @@ impl ScalarUDFImpl for SparkAbs {
         }
     }
 
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let types = args
+            .arg_fields
+            .iter()
+            .map(|field| field.data_type().clone())
+            .collect::<Vec<_>>();
+        Ok(Arc::new(Field::new(
+            self.name(),
+            self.return_type(&types)?,
+            args.arg_fields.iter().any(|field| field.is_nullable()),
+        )))
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [arg] = args.args.as_slice() else {
             return Err(invalid_arg_count_exec_err("abs", (1, 1), args.args.len()));
         };
-        // Float/Decimal/UInt/Null have no ANSI overflow concerns; delegate to
-        // DataFusion's built-in abs so the kernel stays correct even on
-        // bypass paths where `simplify` has not rewritten the call.
-        if matches!(
-            arg.data_type(),
-            DataType::Float32
-                | DataType::Float64
-                | DataType::Decimal128(_, _)
-                | DataType::Decimal256(_, _)
-                | DataType::UInt8
-                | DataType::UInt16
-                | DataType::UInt32
-                | DataType::UInt64
-                | DataType::Null
-        ) {
+        // Signed integers keep Spark's ANSI overflow policy; other numerics use native kernels.
+        let data_type = arg.data_type();
+        if (data_type.is_numeric() && !data_type.is_signed_integer()) || data_type.is_null() {
             return datafusion::functions::math::abs::AbsFunc::new().invoke_with_args(args);
         }
         let return_dtype = args.return_field.data_type().clone();
@@ -451,18 +452,14 @@ impl ScalarUDFImpl for SparkAbs {
         }
 
         let dt = info.get_data_type(arg)?;
-        match dt {
-            // Keep in invoke_with_args: interval/duration, and signed integers
-            // (where invoke branches on self.ansi_mode between wrapping_abs and
-            // checked_abs to honour Spark's ANSI semantics).
-            DataType::Interval(_)
-            | DataType::Duration(_)
-            | DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64 => Ok(ExprSimplifyResult::Original(args)),
-            // Floats, decimals, unsigned, null: no ANSI overflow concern — delegate.
-            _ => Ok(ExprSimplifyResult::Simplified(abs(args.one()?))),
+        // Keep the Spark field contract while invoke_with_args selects the kernel.
+        if dt.is_numeric()
+            || dt.is_null()
+            || matches!(dt, DataType::Interval(_) | DataType::Duration(_))
+        {
+            Ok(ExprSimplifyResult::Original(args))
+        } else {
+            Ok(ExprSimplifyResult::Simplified(abs(args.one()?)))
         }
     }
 
@@ -493,7 +490,7 @@ mod tests {
     use super::*;
     use datafusion::arrow::datatypes::Field;
     use datafusion_common::{DFSchema, exec_err};
-    use datafusion_expr::lit;
+    use datafusion_expr::{ReturnFieldArgs, lit};
 
     fn abs_arguments(args: Vec<ColumnarValue>, data_type: DataType) -> ScalarFunctionArgs {
         ScalarFunctionArgs {
@@ -531,6 +528,16 @@ mod tests {
             let udf = SparkAbs::new(ansi);
             for count in [0, 2] {
                 assert_abs_argument_error(udf.return_type(&vec![DataType::Int32; count]), count)?;
+                assert_abs_argument_error(
+                    udf.return_field_from_args(ReturnFieldArgs {
+                        arg_fields: &vec![
+                            Arc::new(Field::new("input", DataType::Int32, false));
+                            count
+                        ],
+                        scalar_arguments: &vec![None; count],
+                    }),
+                    count,
+                )?;
                 assert_abs_argument_error(udf.coerce_types(&vec![DataType::Int32; count]), count)?;
                 assert_abs_argument_error(udf.simplify(vec![lit(-1i32); count], &info), count)?;
                 assert_abs_argument_error(
@@ -545,6 +552,65 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_abs_argument_error(udf.output_ordering(&properties), count)?;
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn abs_result_fields_follow_input_nullability_without_metadata() -> Result<()> {
+        for ansi in [false, true] {
+            let udf = SparkAbs::new(ansi);
+            assert_eq!(
+                udf.coerce_types(&[DataType::Null])?,
+                vec![DataType::Float64]
+            );
+            for data_type in [
+                DataType::Int8,
+                DataType::Int16,
+                DataType::Int32,
+                DataType::Int64,
+                DataType::UInt8,
+                DataType::UInt16,
+                DataType::UInt32,
+                DataType::UInt64,
+                DataType::Float32,
+                DataType::Float64,
+                DataType::Decimal128(10, 2),
+                DataType::Decimal256(38, 18),
+                DataType::Interval(IntervalUnit::YearMonth),
+                DataType::Interval(IntervalUnit::DayTime),
+                DataType::Interval(IntervalUnit::MonthDayNano),
+                DataType::Duration(TimeUnit::Second),
+                DataType::Duration(TimeUnit::Millisecond),
+                DataType::Duration(TimeUnit::Microsecond),
+                DataType::Duration(TimeUnit::Nanosecond),
+                DataType::Null,
+            ] {
+                for nullable in [false, true] {
+                    let input = Arc::new(
+                        Field::new("input", data_type.clone(), nullable)
+                            .with_metadata([("source".into(), "discard".into())].into()),
+                    );
+                    let actual = udf.return_field_from_args(ReturnFieldArgs {
+                        arg_fields: &[input],
+                        scalar_arguments: &[None],
+                    })?;
+                    assert_eq!(actual.data_type(), &data_type);
+                    assert_eq!(actual.is_nullable(), nullable);
+                    assert!(actual.metadata().is_empty());
+                }
+            }
+            let input = Arc::new(Field::new("input", DataType::Boolean, false));
+            let Err(error) = udf.return_field_from_args(ReturnFieldArgs {
+                arg_fields: &[input],
+                scalar_arguments: &[None],
+            }) else {
+                return exec_err!("ABS accepted a Boolean field");
+            };
+            let Err(expected) = udf.return_type(&[DataType::Boolean]) else {
+                return exec_err!("ABS accepted a Boolean type");
+            };
+            assert_eq!(error.to_string(), expected.to_string(),);
         }
         Ok(())
     }
