@@ -102,9 +102,15 @@ async fn case_retains_branches_and_validates_conditions_before_results() -> Plan
         assert_eq!(
             resolved.when_then_expr,
             vec![
-                (Box::new(lit(false)), Box::new(cast(lit(1_i32), DataType::Int64))),
+                (
+                    Box::new(lit(false)),
+                    Box::new(cast(lit(1_i32), DataType::Int64))
+                ),
                 (Box::new(lit(true)), Box::new(lit(2_i64))),
-                (Box::new(lit(false)), Box::new(cast(lit(3_i32), DataType::Int64))),
+                (
+                    Box::new(lit(false)),
+                    Box::new(cast(lit(3_i32), DataType::Int64))
+                ),
             ]
         );
         assert_eq!(
