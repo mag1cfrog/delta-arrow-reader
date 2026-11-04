@@ -3,24 +3,27 @@
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, ArrayRef, AsArray, DictionaryArray, GenericListArray, Int8Array, Int32Array,
-    NullArray, OffsetSizeTrait, RunArray, UnionArray,
+    Array, ArrayRef, AsArray, DictionaryArray, GenericListArray, Int8Array, Int32Array, NullArray,
+    OffsetSizeTrait, RunArray, UnionArray,
 };
 use arrow::buffer::{NullBuffer, OffsetBuffer};
 use arrow::datatypes::{DataType, Field, Int8Type, Int32Type, UnionFields};
 use arrow::error::ArrowError;
 
 fn encoded_integer_at(array: &dyn Array, row: usize) -> Result<Option<i32>, ArrowError> {
-    if array.logical_nulls().is_some_and(|nulls| nulls.is_null(row)) {
+    if array
+        .logical_nulls()
+        .is_some_and(|nulls| nulls.is_null(row))
+    {
         return Ok(None);
     }
     match array.data_type() {
         DataType::Int32 => Ok(Some(array.as_primitive::<Int32Type>().value(row))),
         DataType::Dictionary(_, _) => {
             let dictionary = array.as_dictionary::<Int8Type>();
-            let key = dictionary.key(row).ok_or_else(|| {
-                ArrowError::InvalidArgumentError("missing dictionary key".into())
-            })?;
+            let key = dictionary
+                .key(row)
+                .ok_or_else(|| ArrowError::InvalidArgumentError("missing dictionary key".into()))?;
             encoded_integer_at(dictionary.values().as_ref(), key)
         }
         DataType::RunEndEncoded(_, _) => {
@@ -40,7 +43,8 @@ fn encoded_integer_at(array: &dyn Array, row: usize) -> Result<Option<i32>, Arro
     }
 }
 
-fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
+fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> Result<(), ArrowError>
+{
     let union_fields = UnionFields::try_new(
         vec![0, 1],
         vec![
@@ -173,7 +177,9 @@ fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> R
                         values.clone(),
                         None,
                     );
-                    let context = format!("{id} offset={offset} len={length} parent_null={parent_null} element_nullable={element_nullable}");
+                    let context = format!(
+                        "{id} offset={offset} len={length} parent_null={parent_null} element_nullable={element_nullable}"
+                    );
                     if !element_nullable && null_count != 0 {
                         for result in [result, empty] {
                             let error = result.err().ok_or_else(|| {
@@ -181,7 +187,10 @@ fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> R
                                     "accepted a logical NULL: {context}"
                                 ))
                             })?;
-                            assert!(error.to_string().contains("Non-nullable field"), "{context}: {error}");
+                            assert!(
+                                error.to_string().contains("Non-nullable field"),
+                                "{context}: {error}"
+                            );
                         }
                         continue;
                     }
@@ -193,7 +202,10 @@ fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> R
                         }
                     };
                     list.to_data().validate_full()?;
-                    assert_eq!(list.data_type(), &GenericListArray::<O>::DATA_TYPE_CONSTRUCTOR(field));
+                    assert_eq!(
+                        list.data_type(),
+                        &GenericListArray::<O>::DATA_TYPE_CONSTRUCTOR(field)
+                    );
                     assert!(Arc::ptr_eq(list.values(), &values), "{context}");
                     assert!(list.offsets().ptr_eq(&offsets), "{context}");
                     assert_eq!(list.nulls(), nulls.as_ref(), "{context}");
@@ -214,13 +226,32 @@ fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> R
     let values: ArrayRef = Arc::new(Int32Array::from(vec![3, 4]));
     let field = Arc::new(Field::new("entry", DataType::Int32, false));
     for (field, offsets, nulls, message) in [
-        (field.clone(), OffsetBuffer::from_lengths([3]), None, "Max offset"),
-        (field, OffsetBuffer::from_lengths([2]), Some(NullBuffer::new_valid(2)), "Incorrect length of null buffer"),
-        (Arc::new(Field::new("entry", DataType::Int64, false)), OffsetBuffer::from_lengths([2]), None, "expected data type"),
+        (
+            field.clone(),
+            OffsetBuffer::from_lengths([3]),
+            None,
+            "Max offset",
+        ),
+        (
+            field,
+            OffsetBuffer::from_lengths([2]),
+            Some(NullBuffer::new_valid(2)),
+            "Incorrect length of null buffer",
+        ),
+        (
+            Arc::new(Field::new("entry", DataType::Int64, false)),
+            OffsetBuffer::from_lengths([2]),
+            None,
+            "expected data type",
+        ),
     ] {
         let error = GenericListArray::<O>::try_new(field, offsets, values.clone(), nulls)
             .err()
-            .ok_or_else(|| ArrowError::InvalidArgumentError(format!("accepted invalid constructor input: {message}")))?;
+            .ok_or_else(|| {
+                ArrowError::InvalidArgumentError(format!(
+                    "accepted invalid constructor input: {message}"
+                ))
+            })?;
         assert!(error.to_string().contains(message), "{error}");
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
@@ -238,10 +269,7 @@ fn large_list_constructor_uses_logical_child_nulls() -> Result<(), ArrowError> {
 }
 
 fn assert_nonzero_dense_union_nulls<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
-    let fields = UnionFields::try_new(
-        vec![7],
-        vec![Field::new("integer", DataType::Int32, true)],
-    )?;
+    let fields = UnionFields::try_new(vec![7], vec![Field::new("integer", DataType::Int32, true)])?;
     let mut failures = Vec::new();
     for value in [Some(3), None] {
         let values: ArrayRef = Arc::new(UnionArray::try_new(

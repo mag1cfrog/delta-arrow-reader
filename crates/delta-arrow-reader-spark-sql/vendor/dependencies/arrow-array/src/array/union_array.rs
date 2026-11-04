@@ -799,18 +799,23 @@ unsafe impl Array for UnionArray {
         };
 
         if fields.len() <= 1 {
-            return self.fields.iter().enumerate().find_map(|(type_id, field_opt)| {
-                field_opt
-                    .as_ref()
-                    .and_then(|field| field.logical_nulls())
-                    .map(|logical_nulls| {
-                        if self.is_dense() {
-                            self.gather_nulls(vec![(type_id as i8, logical_nulls)]).into()
-                        } else {
-                            logical_nulls
-                        }
-                    })
-            });
+            return self
+                .fields
+                .iter()
+                .enumerate()
+                .find_map(|(type_id, field_opt)| {
+                    field_opt
+                        .as_ref()
+                        .and_then(|field| field.logical_nulls())
+                        .map(|logical_nulls| {
+                            if self.is_dense() {
+                                self.gather_nulls(vec![(type_id as i8, logical_nulls)])
+                                    .into()
+                            } else {
+                                logical_nulls
+                            }
+                        })
+                });
         }
 
         let logical_nulls = self.fields_logical_nulls();
