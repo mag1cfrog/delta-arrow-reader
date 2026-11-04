@@ -508,7 +508,7 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
         }
     }
 
-    fn phase_observation<T, E: std::fmt::Display>(result: &Result<T, E>) -> Value {
+    fn take_phase_observation<T, E: std::fmt::Display>(result: &Result<T, E>) -> Value {
         json!({
             "simplifications":SIMPLIFICATIONS.swap(0, Ordering::SeqCst),
             "invocations":INVOCATIONS.swap(0, Ordering::SeqCst),
@@ -521,6 +521,7 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
     );
     let mut differences = Vec::new();
     let mut completed = std::collections::BTreeSet::new();
+    let mut opaque_simplifications = std::collections::BTreeMap::new();
     for volatile in [false, true] {
         for fail in [false, true] {
             session.register_udf(ScalarUDF::from(SliceBoundary { volatile, fail }));
@@ -573,7 +574,7 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                             },
                         )
                         .await;
-                        observation["planning"] = phase_observation(&query);
+                        observation["planning"] = take_phase_observation(&query);
                         let query = query?;
                         observation["public_schema"] = spark_results::capture_schema(
                             query.logical_plan.schema().fields(),
@@ -581,7 +582,7 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                         )?;
                         phase = "physical";
                         let physical = query.create_physical_plan(&session).await;
-                        observation["physical"] = phase_observation(&physical);
+                        observation["physical"] = take_phase_observation(&physical);
                         let physical = physical?;
                         let schema = physical.schema();
                         observation["physical_schema"] =
@@ -589,7 +590,7 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                         phase = "collect";
                         let batches =
                             datafusion::physical_plan::collect(physical, session.task_ctx()).await;
-                        observation["collection"] = phase_observation(&batches);
+                        observation["collection"] = take_phase_observation(&batches);
                         let batches = batches?;
                         phase = "encode";
                         let mut rows = Vec::new();
@@ -626,6 +627,14 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                     };
                     let runtime_invocations = observation["collection"]["invocations"].as_u64();
                     let expected_error = reached && fail;
+                    let simplifications = ["planning", "physical", "collection"]
+                        .map(|phase| observation[phase]["simplifications"].clone());
+                    let simplifications_match = if volatile {
+                        opaque_simplifications.get(&(id, ansi, fail)) == Some(&simplifications)
+                    } else {
+                        opaque_simplifications.insert((id, ansi, fail), simplifications);
+                        true
+                    };
                     let outcome_matches = if expected_error {
                         phase == "collect"
                             && observation["error"].as_str().is_some_and(|error| {
@@ -635,6 +644,7 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                         phase == "encode" && result.is_ok() && observation["rows"] == expected_rows
                     };
                     if !outcome_matches
+                        || !simplifications_match
                         || observation.get("panic").is_some()
                         || observation["planning"]["invocations"] != 0
                         || observation["physical"]["invocations"] != 0
