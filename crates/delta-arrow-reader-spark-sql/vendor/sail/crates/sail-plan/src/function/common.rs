@@ -237,6 +237,19 @@ pub(crate) fn without_metadata_annotations(mut expression: &expr::Expr) -> &expr
     expression
 }
 
+pub(crate) fn without_inherited_column_metadata(mut expression: &expr::Expr) -> &expr::Expr {
+    while let expr::Expr::ScalarFunction(function) = expression
+        && let Some(annotation) = function.func.inner().downcast_ref::<SparkResultMetadata>()
+        && annotation.metadata == FieldMetadata::default()
+        && annotation.lifetime == ResultMetadataLifetime::Permanent
+        && annotation.hidden_sort_output_type.is_none()
+        && let [value] = function.args.as_slice()
+    {
+        expression = value;
+    }
+    expression
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum ResultMetadataLifetime {
     Permanent,
@@ -2278,6 +2291,31 @@ fn metadata_value_analysis_uses_implementation_identity() {
     )
     .call(vec![value]);
     assert_eq!(without_metadata_annotations(&user_function), &user_function);
+    assert_eq!(
+        without_inherited_column_metadata(&user_function),
+        &user_function
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn plain_metadata_clearing_peel_preserves_other_annotations() {
+    use datafusion_expr::col;
+
+    let value = col("k");
+    let plain = drop_inherited_column_metadata(drop_inherited_column_metadata(value.clone()));
+    assert_eq!(without_inherited_column_metadata(&plain), &value);
+    let field = Arc::new(Field::new("k", DataType::Int32, true));
+    for annotation in [
+        set_result_metadata(value.clone(), vec![("source".into(), "stored".into())]),
+        drop_inherited_column_metadata_for_analysis(value.clone()),
+        drop_scalar_subquery_metadata(value.clone(), &field),
+        preserve_hidden_sort_output_declaration(value, &field),
+    ] {
+        assert_eq!(without_inherited_column_metadata(&annotation), &annotation);
+        let plain = drop_inherited_column_metadata(annotation.clone());
+        assert_eq!(without_inherited_column_metadata(&plain), &annotation);
+    }
 }
 
 #[cfg(test)]

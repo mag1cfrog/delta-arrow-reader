@@ -26,6 +26,9 @@ use crate::function::common::{
     restore_inlined_scalar_metadata, without_metadata_annotations,
 };
 use crate::function::float_keys::NormalizeNestedFloatKeys;
+use crate::function::result_coercion::{
+    has_coalesce_declaration_cast, prune_coalesce_declaration_cast,
+};
 use crate::function::scalar::conditional::SparkNullIf;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
@@ -45,7 +48,7 @@ use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToIntege
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::struct_function::StructFunction;
 
-/// Prepare Spark expressions while preserving constant STRUCT declarations and early errors.
+/// Prepare Spark nested result declarations and early expression errors.
 #[derive(Debug)]
 pub struct PrepareSparkExpressions;
 
@@ -276,6 +279,7 @@ impl PrepareSparkExpressions {
         let mut has_null_sensitive_comparison = false;
         let mut has_groups = false;
         let mut has_constant_struct = false;
+        let mut has_coalesce_declaration_casts = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
                 && !aggregate
@@ -294,6 +298,9 @@ impl PrepareSparkExpressions {
                     Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
                         && row_expression(expr, false)?)
                 })?;
+                has_coalesce_declaration_casts |= is_spark_query && expr.exists(|expr| {
+                    Ok(has_coalesce_declaration_cast(expr))
+                })?;
                 check_cast |= has_cast(expr)?;
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
@@ -304,7 +311,7 @@ impl PrepareSparkExpressions {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -317,6 +324,7 @@ impl PrepareSparkExpressions {
             && !check_groups
             && !has_null_sensitive_comparison
             && !has_constant_struct
+            && !has_coalesce_declaration_casts
         {
             return Ok(plan);
         }
@@ -327,8 +335,8 @@ impl PrepareSparkExpressions {
             has_groups,
             has_null_sensitive_comparison,
         };
-        let plan = if has_constant_struct {
-            prepare.fold_constant_structs(plan)?
+        let plan = if has_constant_struct || has_coalesce_declaration_casts {
+            prepare.prepare_nested_result_declarations(plan)?
         } else {
             plan
         };
@@ -1410,12 +1418,27 @@ impl Prepare {
             .data)
     }
 
-    fn fold_constant_structs(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn prepare_nested_result_declarations(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         Ok(plan.transform_up_with_subqueries(|node| {
+            let schema = match &node {
+                LogicalPlan::TableScan(scan) => Arc::new(DFSchema::try_from_qualified_schema(
+                    scan.table_name.clone(), &scan.source.schema(),
+                )?),
+                _ => Arc::new(datafusion_expr::utils::merge_schema(&node.inputs())),
+            };
+            let info = datafusion_expr::simplify::SimplifyContext::builder()
+                .with_schema(schema)
+                .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                .build();
             let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
             node.map_expressions(|expr| {
                 let name = names.save(&expr);
                 Ok(expr.transform_down(|expr| {
+                    let prepared = prune_coalesce_declaration_cast(expr, &info)?;
+                    if prepared.transformed {
+                        return Ok(prepared);
+                    }
+                    let expr = prepared.data;
                     if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
                         || !row_expression(&expr, false)?
                     {

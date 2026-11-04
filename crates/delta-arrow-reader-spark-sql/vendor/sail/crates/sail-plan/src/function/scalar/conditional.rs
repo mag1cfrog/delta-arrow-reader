@@ -12,7 +12,8 @@ use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
-    coerce_result_values, common_result_type_with_strings, is_temporal_type,
+    coerce_coalesce_result_values, coerce_if_result_values, coerce_result_values,
+    common_result_type_with_strings, is_nested_result_type, is_temporal_type,
 };
 
 mod nullif;
@@ -133,7 +134,7 @@ fn if_expr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let (when_expr, then_expr, else_expr) = arguments.three()?;
     let (then_expr, else_expr) =
-        coerce_result_values(vec![then_expr, else_expr], &function_context)?.two()?;
+        coerce_if_result_values(vec![then_expr, else_expr], &function_context)?.two()?;
     Ok(expr::Expr::Case(expr::Case {
         expr: None,
         when_then_expr: vec![(Box::new(when_expr), Box::new(then_expr))],
@@ -146,7 +147,7 @@ fn coalesce(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         arguments,
         function_context,
     } = input;
-    let arguments = coerce_result_values(arguments, &function_context)?;
+    let arguments = coerce_coalesce_result_values(arguments, &function_context)?;
     Ok(expr_fn::coalesce(arguments))
 }
 
@@ -154,7 +155,8 @@ fn ifnull(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let (left, right) = input.arguments.two()?;
     let schema = input.function_context.schema;
     let data_types = [left.get_type(schema)?, right.get_type(schema)?];
-    if data_types.iter().any(is_temporal_type)
+    if data_types.iter().any(is_nested_result_type)
+        || data_types.iter().any(is_temporal_type)
         || common_numeric_type(&data_types, input.function_context.plan_config.ansi_mode).is_some()
         || common_result_type_with_strings(
             &data_types,

@@ -4352,6 +4352,7 @@ dependencies = [
  "datafusion-spark",
  "either",
  "half",
+ "icu_casemap",
  "lazy_static",
  "parquet-variant-compute",
  "rand 0.10.2",

@@ -2504,3 +2504,51 @@ byte-identical to the SHA256 pinned in that manifest.
 cargo test --locked --workspace --test generated_alias_metadata
 cargo test --locked --workspace supplied_alias_metadata_survives_projection_and_aggregate_planning
 ```
+
+## Recursive conditional results
+
+`conditional_nested.rs` replays independent Spark 4.2.0 references at revision
+`32f7299601108917fb01920a54e084595b7b3bf8` in UTC. The seven original files
+retain 178 records, including both ANSI modes, for 356 comparisons at batch
+sizes 1 and 32:
+
+| Fixture | Records |
+| --- | ---: |
+| `conditional-nested-spark.jsonl` | 12 |
+| `conditional-nested-supplement-spark.jsonl` | 110 |
+| `conditional-nested-order-spark.jsonl` | 16 |
+| `conditional-nested-boundaries-spark.jsonl` | 10 |
+| `conditional-nested-set-operations-spark.jsonl` | 10 |
+| `conditional-nested-null-children-spark.jsonl` | 4 |
+| `conditional-nested-coalesce-controls-spark.jsonl` | 16 |
+
+The records cover ARRAY/STRUCT common types, field names and shape, numeric and
+temporal conversions, selected and discarded branches, provider NULL children,
+stored metadata, empty inputs and required subquery errors. The replay checks
+complete public and executed fields, rows, Arrow validity and exact error
+conditions and phases. The observer maps only the exact native scalar-subquery
+cardinality execution message to `SCALAR_SUBQUERY_TOO_MANY_ROWS`.
+
+`conditional-nested-if-spark.jsonl` adds four unchanged IF references, or eight
+comparisons, for Boolean and DATE array declarations.
+`conditional-nested-if-coalesce-spark.jsonl` adds four references and eight
+comparisons with an outer COALESCE around those IF expressions. They check that
+COALESCE pruning retains IF's nested declaration.
+
+`conditional-nested-unicode-spark.jsonl` retains 66 references and 132 comparisons
+for case-insensitive STRUCT field names. Its header records the JDK 21 runtime
+and 17 direct resolver pairs. The queries cover Latin case pairs, dotted and
+dotless I, sigma, sharp S and supplementary letters, plus different names,
+incompatible shapes and full-case expansions. These additions bring the replay
+to 252 references and 504 comparisons without changing the original seven files.
+
+Native controls use registered ARRAY/STRUCT columns and core CASE/COALESCE
+queries, require successful observations, and compare complete schemas and rows
+before and after a Spark query. A separate incompatible ARRAY/STRUCT CASE checks
+native admission errors. The volatile-function controls in
+`conditional_evaluation.rs` check selected rows and argument call counts.
+
+```sh
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_nested
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_evaluation conditional_arguments_run_once_only_where_needed
+```

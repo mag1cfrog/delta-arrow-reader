@@ -14,6 +14,7 @@ use super::spark_results::TestResult;
 
 fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
     Ok(match value.as_str() {
+        Some("void") => DataType::Null,
         Some("float") => DataType::Float32,
         Some("double") => DataType::Float64,
         Some("byte") => DataType::Int8,
@@ -156,5 +157,23 @@ pub(crate) fn register_recorded_inputs(
             Arc::new(MemTable::try_new(schema, partitions)?),
         )?;
     }
+    Ok(())
+}
+
+#[test]
+fn recorded_void_children_decode_as_null() -> TestResult {
+    let data_type = decode_recorded_data_type(&serde_json::json!({
+        "type": "array", "elementType": "void", "containsNull": true
+    }))?;
+    let DataType::List(field) = &data_type else {
+        return Err("expected list".into());
+    };
+    assert_eq!(field.data_type(), &DataType::Null);
+    let value = decode_recorded_value(&serde_json::json!([null]), &data_type)?;
+    let ScalarValue::List(values) = value else {
+        return Err("expected list value".into());
+    };
+    assert_eq!(values.value(0).data_type(), &DataType::Null);
+    assert_eq!(values.value(0).len(), 1);
     Ok(())
 }

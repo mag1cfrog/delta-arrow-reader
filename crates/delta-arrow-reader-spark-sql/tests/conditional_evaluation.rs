@@ -344,6 +344,18 @@ async fn conditional_arguments_run_once_only_where_needed() -> TestResult {
                     vec![None; 4],
                 ),
             ]);
+            for function in ["COALESCE", "IFNULL", "NVL"] {
+                cases.push((
+                    format!("CAST({function}(CASE WHEN a IS NOT NULL THEN NAMED_STRUCT('x',CAST(count_first(a) AS STRING)) END,NAMED_STRUCT('x',COALESCE(count_second(b),7))).x AS INT)"),
+                    [2, 2, 0],
+                    vec![Some(1), Some(2), Some(3), Some(7)],
+                ));
+                cases.push((
+                    format!("{function}(NAMED_STRUCT('x',count_first(a)),NAMED_STRUCT('x',COALESCE(count_second(b),7))).x"),
+                    [4, 0, 0],
+                    vec![Some(1), None, Some(3), None],
+                ));
+            }
             for (left_type, right_type) in [
                 ("DECIMAL(38,20)", "BIGINT"),
                 ("DECIMAL(10,2)", "DECIMAL(8,3)"),
