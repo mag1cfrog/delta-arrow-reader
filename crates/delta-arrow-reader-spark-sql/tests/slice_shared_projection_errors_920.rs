@@ -156,7 +156,11 @@ fn projection_bindings(plan: &Arc<dyn ExecutionPlan>, path: Vec<usize>) -> TestR
             let [producer] = boundary_children.as_slice() else {
                 return Err("an input-sort boundary must have exactly one producer".into());
             };
-            assert_eq!(input.schema(), producer.schema(), "sort preserves every bound output index");
+            assert_eq!(
+                input.schema(),
+                producer.schema(),
+                "sort preserves every bound output index"
+            );
             *producer
         } else {
             input
@@ -448,7 +452,11 @@ async fn shared_projections_and_retained_input_sort_match_spark() -> TestResult 
                 "one actual shared producer"
             );
             let sorted = case["id"] == "logical_sort_below_outer_slice";
-            assert_eq!(plan["input_sort_boundaries"], if sorted { 1 } else { 0 }, "only the original input sort becomes an execution boundary");
+            assert_eq!(
+                plan["input_sort_boundaries"],
+                if sorted { 1 } else { 0 },
+                "only the original input sort becomes an execution boundary"
+            );
             assert_eq!(
                 plan["prefix_producers"],
                 if sorted { 0 } else { 1 },

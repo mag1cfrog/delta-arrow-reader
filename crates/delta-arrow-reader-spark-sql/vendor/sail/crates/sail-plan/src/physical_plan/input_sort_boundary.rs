@@ -123,7 +123,10 @@ mod tests {
         let input: Arc<dyn ExecutionPlan> = Arc::new(EmptyExec::new(schema));
         let Some(ordering) = LexOrdering::new(vec![PhysicalSortExpr {
             expr: Arc::new(Column::new("sort_key", 1)),
-            options: SortOptions { descending: true, nulls_first: false },
+            options: SortOptions {
+                descending: true,
+                nulls_first: false,
+            },
         }]) else {
             return internal_err!("test requires an ordering");
         };
@@ -131,25 +134,46 @@ mod tests {
         let projection = |input| -> Result<Arc<dyn ExecutionPlan>> {
             Ok(Arc::new(ProjectionExec::try_new(
                 vec![
-                    (Arc::new(Column::new("array_value", 2)) as Arc<dyn PhysicalExpr>, "renamed_array".to_owned()),
-                    (Arc::new(Column::new("sort_key", 1)) as Arc<dyn PhysicalExpr>, "renamed_key".to_owned()),
-                    (Arc::new(Column::new("other", 3)) as Arc<dyn PhysicalExpr>, "renamed_other".to_owned()),
+                    (
+                        Arc::new(Column::new("array_value", 2)) as Arc<dyn PhysicalExpr>,
+                        "renamed_array".to_owned(),
+                    ),
+                    (
+                        Arc::new(Column::new("sort_key", 1)) as Arc<dyn PhysicalExpr>,
+                        "renamed_key".to_owned(),
+                    ),
+                    (
+                        Arc::new(Column::new("other", 3)) as Arc<dyn PhysicalExpr>,
+                        "renamed_other".to_owned(),
+                    ),
                 ],
                 input,
             )?))
         };
         let options = ConfigOptions::default();
-        let ordinary = ProjectionPushdown::new().optimize(
-            projection(Arc::new(sort.clone()))?, &options,
-        )?;
-        assert!(ordinary.downcast_ref::<SortExec>().is_some(), "ordinary Sort must still swap");
-        assert!(ordinary.children()[0].downcast_ref::<ProjectionExec>().is_some());
+        let ordinary =
+            ProjectionPushdown::new().optimize(projection(Arc::new(sort.clone()))?, &options)?;
+        assert!(
+            ordinary.downcast_ref::<SortExec>().is_some(),
+            "ordinary Sort must still swap"
+        );
+        assert!(
+            ordinary.children()[0]
+                .downcast_ref::<ProjectionExec>()
+                .is_some()
+        );
 
         let boundary: Arc<dyn ExecutionPlan> = Arc::new(InputSortBoundaryExec::new(sort));
         let rebuilt = boundary.clone().with_new_children(vec![input.clone()])?;
         assert_eq!(rebuilt.schema(), boundary.schema());
-        assert!(matches!(rebuilt.required_input_distribution().as_slice(), [Distribution::UnspecifiedDistribution]));
-        assert_eq!(rebuilt.properties().output_ordering(), boundary.properties().output_ordering());
+        assert!(matches!(
+            rebuilt.required_input_distribution().as_slice(),
+            [Distribution::UnspecifiedDistribution]
+        ));
+        assert_eq!(
+            rebuilt.properties().output_ordering(),
+            boundary.properties().output_ordering()
+        );
         assert!(boundary.clone().with_new_children(vec![]).is_err());
         let reset = rebuilt.reset_state()?;
         assert_eq!(reset.name(), "InputSortBoundaryExec");
@@ -160,7 +184,11 @@ mod tests {
             protected = ProjectionPushdown::new().optimize(protected, &options)?;
             assert!(protected.downcast_ref::<ProjectionExec>().is_some());
             assert_eq!(protected.children()[0].name(), "InputSortBoundaryExec");
-            assert!(protected.children()[0].children()[0].downcast_ref::<EmptyExec>().is_some());
+            assert!(
+                protected.children()[0].children()[0]
+                    .downcast_ref::<EmptyExec>()
+                    .is_some()
+            );
         }
         Ok(())
     }
