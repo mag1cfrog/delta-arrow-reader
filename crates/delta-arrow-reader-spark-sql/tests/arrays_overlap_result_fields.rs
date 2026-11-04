@@ -205,7 +205,7 @@ async fn assert_arrays_overlap_result_records(
     Ok(())
 }
 
-// These exact resolver diagnostics predate Spark condition tags.
+// The resolver reports these input errors without Spark condition tags.
 fn apply_arrays_overlap_diagnostic_alias(case: &Value, comparison: &mut Value) {
     let diagnostic = match (case["expected"]["condition"].as_str(), case["sql"].as_str()) {
         (
