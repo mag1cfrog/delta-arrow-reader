@@ -186,3 +186,108 @@ async fn slice_null_evaluation_preserves_original_references() -> TestResult {
     assert_eq!(identities, expected);
     compare_null_evaluation(&records, &cases).await
 }
+
+#[tokio::test]
+async fn slice_null_evaluation_matches_fresh_spark_capture() -> TestResult {
+    let manifest: Value =
+        serde_json::from_str(include_str!("fixtures/slice-null-evaluation/manifest.json"))?;
+    let records = include_str!("fixtures/slice-null-evaluation/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(manifest["scenario_count"], 49);
+    assert_eq!(manifest["observation_count"], 98);
+    assert_eq!(manifest["ansi_modes"], json!([true, false]));
+    assert_eq!(records.len(), 99);
+    assert_eq!(records[0]["group"], "slice-881-null-evaluation-current-v1");
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(
+        records[0]["source_commit"],
+        "085986ca2a53d8e249222ecd4052ea884386a203"
+    );
+    assert_eq!(records[0]["provider_input_roundtrip_checked"], true);
+    for key in [
+        "spark_version",
+        "spark_revision",
+        "timezone",
+        "group",
+        "source_commit",
+        "inputs",
+        "input_encoding",
+    ] {
+        assert_eq!(records[0][key], manifest[key], "{key}");
+    }
+    assert_eq!(
+        records[0]["capture_sha256"],
+        manifest["capture_script_sha256"]
+    );
+    let identities = records[1..]
+        .iter()
+        .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
+        .collect::<Vec<_>>();
+    assert_eq!(json!(identities), manifest["identities"]);
+    let original = include_str!("fixtures/slice-parent-fields-spark.jsonl")
+        .lines()
+        .skip(1)
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut outcomes = (0, 0);
+    for case in &records[1..] {
+        let definition = manifest["scenarios"]
+            .as_array()
+            .ok_or("missing scenarios")?
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("missing scenario")?;
+        for (key, value) in definition.as_object().ok_or("missing definition")? {
+            assert_eq!(&case[key], value, "{} {key}", case["id"]);
+        }
+        let stages = &case["schema_stages"];
+        assert!(stages["public"].is_object());
+        assert_eq!(stages["public"], stages["resolved"]);
+        assert_eq!(stages["public"], stages["analyzed"]);
+        if let Some(physical) = stages.get("physical") {
+            assert_eq!(physical, &stages["executed_before_collect"]);
+        }
+        if case["expected"]["condition"].is_string() {
+            outcomes.1 += 1;
+            assert_eq!(case["query_failure_kind"], "sql_error");
+            assert_eq!(
+                case["expected"]["condition"],
+                case["spark_error_details"]["condition"]
+            );
+        } else {
+            outcomes.0 += 1;
+            assert!(case["expected"]["rows"].is_array());
+            assert_eq!(case["expected"]["schema"], stages["public"]);
+            assert!(case.get("query_failure_kind").is_none());
+        }
+        if case["id"]
+            .as_str()
+            .is_some_and(|id| ORIGINAL_IDS.contains(&id))
+        {
+            let reference = original
+                .iter()
+                .find(|reference| {
+                    reference["id"] == case["id"] && reference["ansi"] == case["ansi"]
+                })
+                .ok_or("missing original reference")?;
+            for key in ["sql", "expected"] {
+                assert_eq!(case[key], reference[key], "{} {key}", case["id"]);
+            }
+            for (stage, schema) in reference["schema_stages"]
+                .as_object()
+                .ok_or("missing original schema stages")?
+            {
+                assert_eq!(&stages[stage], schema, "{} {stage}", case["id"]);
+            }
+        }
+    }
+    assert_eq!(outcomes, (61, 37));
+    let cases = records[1..].iter().collect::<Vec<_>>();
+    compare_null_evaluation(&records, &cases).await
+}

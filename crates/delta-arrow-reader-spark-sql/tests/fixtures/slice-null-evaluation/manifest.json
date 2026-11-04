@@ -1,0 +1,1106 @@
+{
+  "group": "slice-881-null-evaluation-current-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "source_commit": "085986ca2a53d8e249222ecd4052ea884386a203",
+  "capture_script_sha256": "ca28180f7c344a5d41d03ff0a1587db32fb819748e93f55b35d3838973108db5",
+  "input_encoding": "JSON null for NULL; signed canonical decimal strings for INT32; JSON strings for STRING; nested JSON arrays for rows/ARRAY; result BOOLEAN is true/false string",
+  "provenance": {
+    "baseline_files": {
+      "crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-parent-fields-spark.jsonl": "b65e5418d3fcdf99ba6730bd3079f03f2854c1bfd9a1856ae9caeea42304cbfd",
+      "crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-parameters/reachability/capture_spark.py": "9942ea26617a0fe332d119dd5e6d8680e7ef2d1752489bb24963e310fa138cd7",
+      "crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-parameters/reachability/references/capture_spark_880.py": "e6eec5d94ed2755689629296bf13113272133f931f16ce268962c594d789abd2"
+    },
+    "reuse": "Canonical integer/string/array encoding and staged Spark observation format. No baseline DAR behavior is used as an oracle. Four inherited SQL strings are copied without expected outcomes. The capture is self-contained."
+  },
+  "scope": "SLICE NULL suppression versus reachable operand and parameter errors; literal/provider NULL frontiers; connected ISNULL/CASE; zero rows and earlier-row error priority. No signed-coordinate, ARRAY_COMPACT, unary, or shared-folding expansion.",
+  "scenario_count": 49,
+  "observation_count": 98,
+  "inputs": [
+    {
+      "name": "slice_input",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "bad"
+        ]
+      ]
+    },
+    {
+      "name": "slice_eval",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "l",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "array_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "start_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          "1",
+          "1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "1",
+          [
+            "10",
+            null,
+            "30"
+          ],
+          null,
+          "1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "2",
+          [
+            "10",
+            null,
+            "30"
+          ],
+          "1",
+          null,
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "3",
+          [
+            "10",
+            null,
+            "30"
+          ],
+          "1",
+          "2",
+          "10",
+          "1",
+          "2"
+        ],
+        [
+          "4",
+          null,
+          "0",
+          "-1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "5",
+          [
+            "10"
+          ],
+          null,
+          "-1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "6",
+          [
+            "10"
+          ],
+          "0",
+          null,
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "7",
+          [
+            "10"
+          ],
+          "0",
+          "-1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "8",
+          [
+            "10"
+          ],
+          "1",
+          "-1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "9",
+          null,
+          null,
+          null,
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "10",
+          null,
+          "1",
+          "1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "11",
+          [
+            "10",
+            null,
+            "30"
+          ],
+          null,
+          "1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "12",
+          [
+            "10",
+            null,
+            "30"
+          ],
+          "1",
+          null,
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ]
+      ]
+    },
+    {
+      "name": "slice_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "l",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "array_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "start_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "slice_priority",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "array_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "start_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "10",
+          "0",
+          "1"
+        ],
+        [
+          "1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "2",
+          "10",
+          "1",
+          "-1"
+        ],
+        [
+          "3",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ]
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "null_array_bad_start",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), CAST(text AS INT), 1) AS r FROM slice_input WHERE k = 0",
+      "ordered": false,
+      "family": "inherited_881",
+      "consumer": "direct"
+    },
+    {
+      "id": "bad_array_null_start",
+      "sql": "SELECT SLICE(ARRAY(CAST(text AS INT)), CAST(NULL AS INT), 1) AS r FROM slice_input WHERE k = 0",
+      "ordered": false,
+      "family": "inherited_881",
+      "consumer": "direct"
+    },
+    {
+      "id": "bad_array_null_start_is_null",
+      "sql": "SELECT ISNULL(SLICE(ARRAY(CAST(text AS INT)), CAST(NULL AS INT), 1)) AS r FROM slice_input WHERE k = 0",
+      "ordered": false,
+      "family": "inherited_881",
+      "consumer": "is_null"
+    },
+    {
+      "id": "constant_bad_array_null_start",
+      "sql": "SELECT SLICE(ARRAY(CAST('bad' AS INT)), CAST(NULL AS INT), 1) AS r",
+      "ordered": false,
+      "family": "inherited_881",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_array_bad_start_and_length",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), CAST('start_bad' AS INT), CAST('length_bad' AS INT)) AS r",
+      "ordered": false,
+      "family": "literal_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_start_bad_array_and_length",
+      "sql": "SELECT SLICE(ARRAY(CAST('array_bad' AS INT)), CAST(NULL AS INT), CAST('length_bad' AS INT)) AS r",
+      "ordered": false,
+      "family": "literal_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_length_bad_array_and_start",
+      "sql": "SELECT SLICE(ARRAY(CAST('array_bad' AS INT)), CAST('start_bad' AS INT), CAST(NULL AS INT))",
+      "ordered": false,
+      "family": "literal_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_array_live_start_and_length",
+      "sql": "SELECT k, SLICE(CAST(NULL AS ARRAY<INT>), CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_eval ORDER BY k",
+      "ordered": true,
+      "family": "literal_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_start_live_array_and_length",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), CAST(NULL AS INT), CAST(length_text AS INT)) AS r FROM slice_eval WHERE k = 0 ORDER BY k",
+      "ordered": true,
+      "family": "literal_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_length_live_array_and_start",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), CAST(start_text AS INT), CAST(NULL AS INT)) AS r FROM slice_eval WHERE k = 0 ORDER BY k",
+      "ordered": true,
+      "family": "literal_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_mixed_repeated_nulls",
+      "sql": "SELECT k, SLICE(a, s, l) AS r FROM slice_eval WHERE k IN (0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12) ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_array_live_start_and_length",
+      "sql": "SELECT k, SLICE(a, CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_eval WHERE k IN (0, 10) ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_start_live_length",
+      "sql": "SELECT k, SLICE(a, s, CAST(length_text AS INT)) AS r FROM slice_eval WHERE k IN (1, 11) ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_array_before_provider_null_start",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), s, 1) AS r FROM slice_eval WHERE k = 1 ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_array_before_provider_null_length",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), 1, l) AS r FROM slice_eval WHERE k = 2 ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_start_before_provider_null_length",
+      "sql": "SELECT k, SLICE(a, CAST(start_text AS INT), l) AS r FROM slice_eval WHERE k = 2 ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_array_constant_start_and_length",
+      "sql": "SELECT k, SLICE(a, CAST('start_bad' AS INT), CAST('length_bad' AS INT)) AS r FROM slice_eval WHERE k = 0 ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_start_constant_length",
+      "sql": "SELECT k, SLICE(a, s, CAST('length_bad' AS INT)) AS r FROM slice_eval WHERE k = 1 ORDER BY k",
+      "ordered": true,
+      "family": "runtime_frontier",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_all_cast_priority",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_eval WHERE k = 0 ORDER BY k",
+      "ordered": true,
+      "family": "live_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_start_length_cast_priority",
+      "sql": "SELECT k, SLICE(a, CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_eval WHERE k = 1 ORDER BY k",
+      "ordered": true,
+      "family": "live_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_length_cast_control",
+      "sql": "SELECT k, SLICE(a, s, CAST(length_text AS INT)) AS r FROM slice_eval WHERE k = 2 ORDER BY k",
+      "ordered": true,
+      "family": "live_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_array_cast_control",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), 1, 1) AS r FROM slice_eval WHERE k = 0 ORDER BY k",
+      "ordered": true,
+      "family": "live_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_start_cast_control",
+      "sql": "SELECT k, SLICE(a, CAST(start_text AS INT), 1) AS r FROM slice_eval WHERE k = 1 ORDER BY k",
+      "ordered": true,
+      "family": "live_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "constant_all_cast_priority",
+      "sql": "SELECT SLICE(ARRAY(CAST('array_bad' AS INT)), CAST('start_bad' AS INT), CAST('length_bad' AS INT)) AS r",
+      "ordered": false,
+      "family": "constant_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "constant_start_length_cast_priority",
+      "sql": "SELECT SLICE(ARRAY(10), CAST('start_bad' AS INT), CAST('length_bad' AS INT)) AS r",
+      "ordered": false,
+      "family": "constant_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "constant_length_cast_control",
+      "sql": "SELECT SLICE(ARRAY(10), 1, CAST('length_bad' AS INT)) AS r",
+      "ordered": false,
+      "family": "constant_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_array_invalid_parameters",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), 0, -1) AS r",
+      "ordered": false,
+      "family": "parameter_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_start_negative_length",
+      "sql": "SELECT SLICE(ARRAY(10), CAST(NULL AS INT), -1) AS r",
+      "ordered": false,
+      "family": "parameter_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_length_zero_start",
+      "sql": "SELECT SLICE(ARRAY(10), 0, CAST(NULL AS INT)) AS r",
+      "ordered": false,
+      "family": "parameter_null",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_live_zero_start_negative_length",
+      "sql": "SELECT SLICE(ARRAY(10), 0, -1) AS r",
+      "ordered": false,
+      "family": "parameter_live",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_live_negative_length",
+      "sql": "SELECT SLICE(ARRAY(10), 1, -1) AS r",
+      "ordered": false,
+      "family": "parameter_live",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_live_zero_start_negative_length",
+      "sql": "SELECT k, SLICE(a, s, l) AS r FROM slice_eval WHERE k = 7 ORDER BY k",
+      "ordered": true,
+      "family": "parameter_live",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_live_negative_length",
+      "sql": "SELECT k, SLICE(a, s, l) AS r FROM slice_eval WHERE k = 8 ORDER BY k",
+      "ordered": true,
+      "family": "parameter_live",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_zero_start_bad_length",
+      "sql": "SELECT k, SLICE(a, s, CAST(length_text AS INT)) AS r FROM slice_eval WHERE k = 7 ORDER BY k",
+      "ordered": true,
+      "family": "parameter_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_negative_length_bad_start",
+      "sql": "SELECT k, SLICE(a, CAST(start_text AS INT), l) AS r FROM slice_eval WHERE k = 8 ORDER BY k",
+      "ordered": true,
+      "family": "parameter_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "constant_zero_start_bad_length",
+      "sql": "SELECT SLICE(ARRAY(10), 0, CAST('length_bad' AS INT)) AS r",
+      "ordered": false,
+      "family": "parameter_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "constant_negative_length_bad_array",
+      "sql": "SELECT SLICE(ARRAY(CAST('array_bad' AS INT)), 1, -1) AS r",
+      "ordered": false,
+      "family": "parameter_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "live_bad_array_invalid_parameters",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), s, l) AS r FROM slice_eval WHERE k = 7 ORDER BY k",
+      "ordered": true,
+      "family": "parameter_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_nulls_is_null",
+      "sql": "SELECT k, ISNULL(SLICE(a, s, l)) AS r FROM slice_eval WHERE k IN (0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12) ORDER BY k",
+      "ordered": true,
+      "family": "connected_consumers",
+      "consumer": "is_null"
+    },
+    {
+      "id": "live_start_null_length_is_null",
+      "sql": "SELECT k, ISNULL(SLICE(a, CAST(start_text AS INT), l)) AS r FROM slice_eval WHERE k = 2 ORDER BY k",
+      "ordered": true,
+      "family": "connected_consumers",
+      "consumer": "is_null"
+    },
+    {
+      "id": "case_selected_null_slice",
+      "sql": "SELECT k, CASE WHEN k = 0 THEN SLICE(ARRAY(CAST(array_text AS INT)), CAST(NULL AS INT), 1) ELSE ARRAY(1) END AS r FROM slice_eval WHERE k IN (0, 3) ORDER BY k",
+      "ordered": true,
+      "family": "connected_consumers",
+      "consumer": "case"
+    },
+    {
+      "id": "case_live_start_null_length",
+      "sql": "SELECT k, CASE WHEN ISNULL(SLICE(a, CAST(start_text AS INT), l)) THEN 1 ELSE 0 END AS r FROM slice_eval WHERE k = 2 ORDER BY k",
+      "ordered": true,
+      "family": "connected_consumers",
+      "consumer": "case"
+    },
+    {
+      "id": "zero_provider_all_casts",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_empty ORDER BY k",
+      "ordered": true,
+      "family": "zero_rows",
+      "consumer": "direct"
+    },
+    {
+      "id": "zero_constant_bad_array_null_start",
+      "sql": "SELECT k, SLICE(ARRAY(CAST('array_bad' AS INT)), CAST(NULL AS INT), 1) AS r FROM slice_empty ORDER BY k",
+      "ordered": true,
+      "family": "zero_rows",
+      "consumer": "direct"
+    },
+    {
+      "id": "zero_constant_all_casts",
+      "sql": "SELECT k, SLICE(ARRAY(CAST('array_bad' AS INT)), CAST('start_bad' AS INT), CAST('length_bad' AS INT)) AS r FROM slice_empty ORDER BY k",
+      "ordered": true,
+      "family": "zero_rows",
+      "consumer": "direct"
+    },
+    {
+      "id": "zero_constant_zero_start_null_length",
+      "sql": "SELECT k, SLICE(ARRAY(10), 0, CAST(NULL AS INT)) AS r FROM slice_empty ORDER BY k",
+      "ordered": true,
+      "family": "zero_rows",
+      "consumer": "direct"
+    },
+    {
+      "id": "zero_constant_zero_start_live_length",
+      "sql": "SELECT k, SLICE(ARRAY(10), 0, 1) AS r FROM slice_empty ORDER BY k",
+      "ordered": true,
+      "family": "zero_rows",
+      "consumer": "direct"
+    },
+    {
+      "id": "rows_zero_start_before_later_fallible_operands",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_priority WHERE k IN (0, 1) ORDER BY k",
+      "ordered": true,
+      "family": "row_priority",
+      "consumer": "direct"
+    },
+    {
+      "id": "rows_negative_length_before_later_fallible_operands",
+      "sql": "SELECT k, SLICE(ARRAY(CAST(array_text AS INT)), CAST(start_text AS INT), CAST(length_text AS INT)) AS r FROM slice_priority WHERE k IN (2, 3) ORDER BY k",
+      "ordered": true,
+      "family": "row_priority",
+      "consumer": "direct"
+    }
+  ],
+  "identities": [
+    {
+      "id": "null_array_bad_start",
+      "ansi": true
+    },
+    {
+      "id": "bad_array_null_start",
+      "ansi": true
+    },
+    {
+      "id": "bad_array_null_start_is_null",
+      "ansi": true
+    },
+    {
+      "id": "constant_bad_array_null_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_array_bad_start_and_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_start_bad_array_and_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_length_bad_array_and_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_array_live_start_and_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_start_live_array_and_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_length_live_array_and_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_mixed_repeated_nulls",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_array_live_start_and_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_start_live_length",
+      "ansi": true
+    },
+    {
+      "id": "live_array_before_provider_null_start",
+      "ansi": true
+    },
+    {
+      "id": "live_array_before_provider_null_length",
+      "ansi": true
+    },
+    {
+      "id": "live_start_before_provider_null_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_array_constant_start_and_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_start_constant_length",
+      "ansi": true
+    },
+    {
+      "id": "live_all_cast_priority",
+      "ansi": true
+    },
+    {
+      "id": "live_start_length_cast_priority",
+      "ansi": true
+    },
+    {
+      "id": "live_length_cast_control",
+      "ansi": true
+    },
+    {
+      "id": "live_array_cast_control",
+      "ansi": true
+    },
+    {
+      "id": "live_start_cast_control",
+      "ansi": true
+    },
+    {
+      "id": "constant_all_cast_priority",
+      "ansi": true
+    },
+    {
+      "id": "constant_start_length_cast_priority",
+      "ansi": true
+    },
+    {
+      "id": "constant_length_cast_control",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_array_invalid_parameters",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_length_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_live_zero_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_live_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_live_zero_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_live_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "live_zero_start_bad_length",
+      "ansi": true
+    },
+    {
+      "id": "live_negative_length_bad_start",
+      "ansi": true
+    },
+    {
+      "id": "constant_zero_start_bad_length",
+      "ansi": true
+    },
+    {
+      "id": "constant_negative_length_bad_array",
+      "ansi": true
+    },
+    {
+      "id": "live_bad_array_invalid_parameters",
+      "ansi": true
+    },
+    {
+      "id": "provider_nulls_is_null",
+      "ansi": true
+    },
+    {
+      "id": "live_start_null_length_is_null",
+      "ansi": true
+    },
+    {
+      "id": "case_selected_null_slice",
+      "ansi": true
+    },
+    {
+      "id": "case_live_start_null_length",
+      "ansi": true
+    },
+    {
+      "id": "zero_provider_all_casts",
+      "ansi": true
+    },
+    {
+      "id": "zero_constant_bad_array_null_start",
+      "ansi": true
+    },
+    {
+      "id": "zero_constant_all_casts",
+      "ansi": true
+    },
+    {
+      "id": "zero_constant_zero_start_null_length",
+      "ansi": true
+    },
+    {
+      "id": "zero_constant_zero_start_live_length",
+      "ansi": true
+    },
+    {
+      "id": "rows_zero_start_before_later_fallible_operands",
+      "ansi": true
+    },
+    {
+      "id": "rows_negative_length_before_later_fallible_operands",
+      "ansi": true
+    },
+    {
+      "id": "null_array_bad_start",
+      "ansi": false
+    },
+    {
+      "id": "bad_array_null_start",
+      "ansi": false
+    },
+    {
+      "id": "bad_array_null_start_is_null",
+      "ansi": false
+    },
+    {
+      "id": "constant_bad_array_null_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_array_bad_start_and_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_start_bad_array_and_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_length_bad_array_and_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_array_live_start_and_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_start_live_array_and_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_length_live_array_and_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_mixed_repeated_nulls",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_array_live_start_and_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_start_live_length",
+      "ansi": false
+    },
+    {
+      "id": "live_array_before_provider_null_start",
+      "ansi": false
+    },
+    {
+      "id": "live_array_before_provider_null_length",
+      "ansi": false
+    },
+    {
+      "id": "live_start_before_provider_null_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_array_constant_start_and_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_start_constant_length",
+      "ansi": false
+    },
+    {
+      "id": "live_all_cast_priority",
+      "ansi": false
+    },
+    {
+      "id": "live_start_length_cast_priority",
+      "ansi": false
+    },
+    {
+      "id": "live_length_cast_control",
+      "ansi": false
+    },
+    {
+      "id": "live_array_cast_control",
+      "ansi": false
+    },
+    {
+      "id": "live_start_cast_control",
+      "ansi": false
+    },
+    {
+      "id": "constant_all_cast_priority",
+      "ansi": false
+    },
+    {
+      "id": "constant_start_length_cast_priority",
+      "ansi": false
+    },
+    {
+      "id": "constant_length_cast_control",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_array_invalid_parameters",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_length_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_live_zero_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_live_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_live_zero_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_live_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "live_zero_start_bad_length",
+      "ansi": false
+    },
+    {
+      "id": "live_negative_length_bad_start",
+      "ansi": false
+    },
+    {
+      "id": "constant_zero_start_bad_length",
+      "ansi": false
+    },
+    {
+      "id": "constant_negative_length_bad_array",
+      "ansi": false
+    },
+    {
+      "id": "live_bad_array_invalid_parameters",
+      "ansi": false
+    },
+    {
+      "id": "provider_nulls_is_null",
+      "ansi": false
+    },
+    {
+      "id": "live_start_null_length_is_null",
+      "ansi": false
+    },
+    {
+      "id": "case_selected_null_slice",
+      "ansi": false
+    },
+    {
+      "id": "case_live_start_null_length",
+      "ansi": false
+    },
+    {
+      "id": "zero_provider_all_casts",
+      "ansi": false
+    },
+    {
+      "id": "zero_constant_bad_array_null_start",
+      "ansi": false
+    },
+    {
+      "id": "zero_constant_all_casts",
+      "ansi": false
+    },
+    {
+      "id": "zero_constant_zero_start_null_length",
+      "ansi": false
+    },
+    {
+      "id": "zero_constant_zero_start_live_length",
+      "ansi": false
+    },
+    {
+      "id": "rows_zero_start_before_later_fallible_operands",
+      "ansi": false
+    },
+    {
+      "id": "rows_negative_length_before_later_fallible_operands",
+      "ansi": false
+    }
+  ],
+  "verifier_script_sha256": "25d286ff2671c67a315bf601988f00f389d77f944f06b373c4eed653f7292d20"
+}
