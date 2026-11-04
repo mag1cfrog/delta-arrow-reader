@@ -2685,14 +2685,57 @@ strictly in both ANSI modes and at both batch sizes.
 `slice-parameters/spark-reference.jsonl` adds 308 independent Spark observations
 for 154 scenarios in both ANSI modes, with SHA256
 `d3d5001f84003b5756483f8f2699100746b1fd105ffcf92d8a974c219abafeb0`.
-The test compares all 616 batch identities. It requires complete Spark parity
-for 596 and retains 20 exact signed-coordinate/boundary comparisons owned by
-#894. `slice-parameters/inherited-controls.jsonl` stores their ten complete
-baseline objects from `bbecae8d`, with the full raw reference for each identity.
+The test requires complete Spark parity for all 616 batch identities, including
+signed-coordinate and boundary results. It has no inherited allowance.
 The parameter tests cover zero starts, negative lengths, numeric error priority,
 NULL masks, required/nullable fields, constant and provider evaluation stages,
 empty providers and CASE reachability. Required unary lengths use the #895
 negation field correction. The owned #880 cases have no inherited allowance.
+
+`slice-coordinates/` adds ten independent Spark observations for five scenarios,
+with raw reference SHA256
+`f27e12f8e9c867dcdb5133417d12e988025b232270797a27570b36a039195017`.
+The capture source SHA256 is
+`7626fac85ff1e8e061dd900e084f5402554737d41e1aff837112c0f3d1f2b79a`;
+the input-only manifest SHA256 is
+`22efa15c8747d026ce97c3e03a2157e9f16c78db113c98c1e2817f28f551e834`.
+The portable package retains its exact capture, manifest, verifier, decoder and
+provider-header sources. It preserves all seven schema stages, raw plans,
+collected row order and complete fields. Mixed literal/provider operands return
+the last element with INT_MAX length, while a fully folded negative-last call
+returns an empty array. Eight ordered nullable rows cover negative tails, NULL
+elements and arguments, empty arrays, and INT_MIN start with zero length.
+
+`slice_coordinate_results.rs` combines these ten records with the ten original
+signed-coordinate records for 40 coordinate comparisons at batches 1 and 32. It
+requires every comparison flag and every available recorded schema stage, and
+emits all query outcomes before aggregate failure. Its literal/provider result
+assertions retain the independent Spark discriminators without inherited
+allowances. Local tests also cover all four list input layouts, complete
+element fields, nested literal folding and opaque runtime Scalar operands.
+Runtime layout checks retain immediate element metadata. The constant fixture
+constructs List/LargeList scalars directly for three input declarations:
+required Int32 elements, nullable Int32 elements, and nullable Struct elements
+with named required/nullable child fields carrying metadata. All six cases check
+the complete input and output types, valid Arrow data and the interpreted empty
+result. The pre-existing scalar list-cast loss of immediate element metadata is
+tracked separately in
+[#909](https://github.com/mag1cfrog/delta-arrow-reader/issues/909).
+Restoring required Struct elements across a list cast also fails on unchanged
+product and is tracked in
+[#910](https://github.com/mag1cfrog/delta-arrow-reader/issues/910).
+
+`slice-conditional-coordinates/` adds twelve independent Spark observations for
+six CASE scenarios, with raw SHA256
+`0c22220e5442eca3679cb876835d95a595f4aac8a5904e702bec3ce36a85cece`.
+The portable recapture preserves the frozen v2 SQL and provider inputs. Its
+verifier checked all twelve ordered results, complete stage maps, structured
+errors and error phases against the original raw before integration. The package
+archives the original v2 source and manifest and records all lineage hashes.
+Reached invalid literal branches fail during optimization, dead invalid branches
+return `[9]`, and a provider-dependent invalid branch fails during collection.
+The same driver compares these 24 batch identities with all nine flags and every
+recorded stage, for 64 strict comparisons in total.
 
 `slice-parameters/reachability/` preserves 24 further Spark observations, with
 raw reference SHA256
@@ -3147,6 +3190,20 @@ the original 206 references, four genuine volatile-producer references and
 `case_conversion.rs` runs all 1,356 configurations and compares complete
 successful fields and ordered rows. All 24 genuine-volatile and 96 new
 aliased/unaliased contexts are strict positive controls.
+
+`case-conversion-slice-spark.jsonl` adds six strict references for nested
+LOWER/UPPER over a constant SLICE and ARRAY_JOIN, with direct ARRAY and no-FROM
+controls. Its raw SHA256 is
+`c799fc6bc0f31f98ccbf3af1eb5fbad14c391e592eb8f5bd79c3743ad4556b46`.
+A focused test in `case_conversion.rs` checks all twelve ANSI/batch
+identities, every comparison flag and all seven schema stages. All queries
+return `ss`; the provider SLICE context must retain the intermediate Unicode
+expansion before nested case rewriting. The portable
+`capture_case_conversion_slice_spark.py` and its input-only manifest reuse the
+pinned coordinate encoding/error helpers through relative paths.
+`verify_case_conversion_slice_spark.py` verified the recapture against all six
+original frozen outcomes, stage maps, SQL and provider inputs. The new header
+records its own source and manifest hashes and the original capture lineage.
 
 The case regression gate also retains 126 complete current native negative
 receipts: 96 preexisting TRY_CAST field differences under #802, 24 preexisting

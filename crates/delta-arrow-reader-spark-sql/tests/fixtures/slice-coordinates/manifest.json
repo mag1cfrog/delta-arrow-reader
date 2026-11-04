@@ -1,0 +1,2013 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "input_encoding": "decimal integer strings; positional arrays/structs; JSON null",
+  "group": "slice-894-coordinates-current-v1",
+  "source_commit": "085986ca2a53d8e249222ecd4052ea884386a203",
+  "source_reference_sha256": "d3d5001f84003b5756483f8f2699100746b1fd105ffcf92d8a974c219abafeb0",
+  "scenario_count": 5,
+  "observation_count": 10,
+  "references": {
+    "references/capture_spark_880.py": "e6eec5d94ed2755689629296bf13113272133f931f16ce268962c594d789abd2",
+    "references/provider-header-880.json": "033c012b942218c8ff3731d17b36491c467467e996d439dacd2a7fd83a34678f"
+  },
+  "inputs": [
+    {
+      "name": "slice_input",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "1",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "0",
+          "0",
+          "0",
+          "bad"
+        ],
+        [
+          "2",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "3",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "-2147483648",
+          "0",
+          "-2147483648",
+          "bad"
+        ],
+        [
+          "4",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "2147483647",
+          "0",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "5",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "6",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-1",
+          "-1",
+          "-1",
+          "-1",
+          "bad"
+        ],
+        [
+          "7",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "5",
+          "-1",
+          "5",
+          "-1",
+          "bad"
+        ],
+        [
+          "8",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-5",
+          "-1",
+          "-5",
+          "-1",
+          "bad"
+        ],
+        [
+          "9",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2147483648",
+          "-1",
+          "-2147483648",
+          "-1",
+          "bad"
+        ],
+        [
+          "10",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "2147483647",
+          "-2147483648",
+          "2147483647",
+          "-2147483648",
+          "bad"
+        ],
+        [
+          "11",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "-2147483648",
+          "1",
+          "-2147483648",
+          "bad"
+        ],
+        [
+          "12",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "13",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-1",
+          "0",
+          "-1",
+          "0",
+          "bad"
+        ],
+        [
+          "14",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          "1",
+          "1",
+          "bad"
+        ],
+        [
+          "15",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "4",
+          "1",
+          "4",
+          "1",
+          "bad"
+        ],
+        [
+          "16",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "5",
+          "1",
+          "5",
+          "1",
+          "bad"
+        ],
+        [
+          "17",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "18",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-4",
+          "1",
+          "-4",
+          "1",
+          "bad"
+        ],
+        [
+          "19",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-5",
+          "1",
+          "-5",
+          "1",
+          "bad"
+        ],
+        [
+          "20",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "4",
+          "1",
+          "4",
+          "bad"
+        ],
+        [
+          "21",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "5",
+          "1",
+          "5",
+          "bad"
+        ],
+        [
+          "22",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "2147483647",
+          "1",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "23",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-4",
+          "2147483647",
+          "-4",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "24",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2147483648",
+          "0",
+          "-2147483648",
+          "0",
+          "bad"
+        ],
+        [
+          "25",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2147483648",
+          "1",
+          "-2147483648",
+          "1",
+          "bad"
+        ],
+        [
+          "26",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "2147483647",
+          "0",
+          "2147483647",
+          "0",
+          "bad"
+        ],
+        [
+          "27",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "2147483647",
+          "1",
+          "2147483647",
+          "1",
+          "bad"
+        ],
+        [
+          "28",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "4",
+          "2147483647",
+          "4",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "29",
+          [],
+          [],
+          [],
+          [],
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "30",
+          [],
+          [],
+          [],
+          [],
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "31",
+          [],
+          [],
+          [],
+          [],
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "32",
+          [],
+          [],
+          [],
+          [],
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "33",
+          [],
+          [],
+          [],
+          [],
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "34",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "35",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "36",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "37",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "38",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "39",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "40",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "41",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "42",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "43",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "44",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          null,
+          "1",
+          "bad"
+        ],
+        [
+          "45",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "-1",
+          null,
+          "-1",
+          "bad"
+        ],
+        [
+          "46",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "0",
+          null,
+          "0",
+          "bad"
+        ],
+        [
+          "47",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          "1",
+          null,
+          "bad"
+        ],
+        [
+          "48",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "1",
+          "0",
+          null,
+          "bad"
+        ],
+        [
+          "49",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          null,
+          null,
+          "bad"
+        ],
+        [
+          "50",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2",
+          "3",
+          "-2",
+          "3",
+          "bad"
+        ],
+        [
+          "51",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2",
+          "4",
+          "-2",
+          "4",
+          "bad"
+        ]
+      ]
+    },
+    {
+      "name": "slice_fields",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            "1",
+            null,
+            "3",
+            "4"
+          ],
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            null,
+            "2"
+          ],
+          "1",
+          "2",
+          "1",
+          "2",
+          "bad"
+        ],
+        [
+          "1",
+          [],
+          [],
+          null,
+          null,
+          "2",
+          "0",
+          null,
+          "0",
+          "2"
+        ],
+        [
+          "2",
+          [
+            "3",
+            "4"
+          ],
+          [
+            null,
+            null
+          ],
+          [],
+          [],
+          "-2",
+          "2",
+          "-2",
+          null,
+          "2"
+        ],
+        [
+          "3",
+          [
+            "5",
+            "6",
+            "7"
+          ],
+          [
+            null,
+            "6"
+          ],
+          [
+            "5"
+          ],
+          [
+            null,
+            null
+          ],
+          "8",
+          "5",
+          "8",
+          "5",
+          "2"
+        ]
+      ]
+    },
+    {
+      "name": "slice_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "slice_coordinate_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "slice_coordinate_nullable"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "1",
+            "2",
+            null,
+            "3"
+          ],
+          "-2",
+          "3"
+        ],
+        [
+          "1",
+          [
+            "1",
+            "2",
+            null,
+            "3"
+          ],
+          "-1",
+          "2147483647"
+        ],
+        [
+          "2",
+          [
+            "1",
+            "2",
+            null,
+            "3"
+          ],
+          "-2147483648",
+          "0"
+        ],
+        [
+          "3",
+          null,
+          "-2147483648",
+          "2147483647"
+        ],
+        [
+          "4",
+          [],
+          "-2147483648",
+          "0"
+        ],
+        [
+          "5",
+          [
+            "1",
+            "2",
+            null,
+            "3"
+          ],
+          null,
+          "2147483647"
+        ],
+        [
+          "6",
+          [
+            "1",
+            "2",
+            null,
+            "3"
+          ],
+          "-2147483648",
+          null
+        ],
+        [
+          "7",
+          [],
+          "-2",
+          "3"
+        ]
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "provider_array_literal_last_max_length",
+      "sql": "SELECT SLICE(a_nn, 4, 2147483647) AS r FROM slice_input WHERE k = 28",
+      "ordered": false
+    },
+    {
+      "id": "literal_array_provider_last_max_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), start, length) AS r FROM slice_input WHERE k = 28",
+      "ordered": false
+    },
+    {
+      "id": "literal_negative_last_max_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -1, 2147483647) AS r",
+      "ordered": false
+    },
+    {
+      "id": "provider_negative_last_max_length",
+      "sql": "SELECT SLICE(a_nn, -1, length) AS r FROM slice_input WHERE k = 28",
+      "ordered": false
+    },
+    {
+      "id": "nullable_boundary_coordinates",
+      "sql": "SELECT k, SLICE(a, start, length) AS sliced, ISNULL(SLICE(a, start, length)) AS is_null, STRUCT(SLICE(a, start, length) AS kept_name) AS nested_result FROM slice_coordinate_nullable ORDER BY k",
+      "ordered": true
+    }
+  ],
+  "identities": [
+    {
+      "id": "provider_array_literal_last_max_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_array_provider_last_max_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_last_max_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_negative_last_max_length",
+      "ansi": true
+    },
+    {
+      "id": "nullable_boundary_coordinates",
+      "ansi": true
+    },
+    {
+      "id": "provider_array_literal_last_max_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_array_provider_last_max_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_last_max_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_negative_last_max_length",
+      "ansi": false
+    },
+    {
+      "id": "nullable_boundary_coordinates",
+      "ansi": false
+    }
+  ],
+  "capture_script_sha256": "7626fac85ff1e8e061dd900e084f5402554737d41e1aff837112c0f3d1f2b79a"
+}

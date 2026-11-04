@@ -1,12 +1,10 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::Array;
-use datafusion::arrow::compute::kernels::numeric::{add_wrapping, sub_wrapping};
+use datafusion::arrow::array::{Array, AsArray, Int64Array, builder::Int64Builder};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
-use datafusion::physical_expr_common::datum::apply;
 use datafusion_common::cast::as_int64_array;
 use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
@@ -19,6 +17,7 @@ use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
 use datafusion_spark::function::array::expr_fn as array_fn;
 use sail_common::utils::string::SPARK_WHITESPACE_OR_ISO_CONTROL_CHARACTERS;
+use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::array::array_intersect::ArrayIntersect;
@@ -119,7 +118,7 @@ fn slice_expr(
     let output_type = array.get_type(schema.as_ref())?;
     let required_elements =
         array_element_field(&output_type).is_some_and(|field| !field.is_nullable());
-    let array = cast_list_value_nullability(array, schema, true)?;
+    let array = array.cast_to(&nullable_array_input_type(&output_type), schema.as_ref())?;
     let start = cast(start, DataType::Int64);
     let length = cast(length, DataType::Int64);
     Ok(cast(
@@ -133,7 +132,7 @@ fn slice_expr(
 }
 
 // Spark's result is NULL only when an array or numeric argument is NULL.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SparkArraySlice {
     native: Arc<ScalarUDF>,
     required_elements: bool,
@@ -146,6 +145,35 @@ impl SparkArraySlice {
     pub(crate) fn is_parameter_error(error: &DataFusionError) -> bool {
         matches!(error.find_root(), DataFusionError::Execution(message)
             if message == Self::START_ERROR || message == Self::LENGTH_ERROR)
+    }
+
+    fn validate_parameters(start: i64, length: i64) -> datafusion_common::Result<()> {
+        if start == 0 {
+            return exec_err!("{}", Self::START_ERROR);
+        }
+        if length < 0 {
+            return exec_err!("{}", Self::LENGTH_ERROR);
+        }
+        Ok(())
+    }
+
+    fn list_length(array: &dyn Array, row: usize) -> datafusion_common::Result<i64> {
+        Ok(match array.data_type() {
+            DataType::List(_) => i64::from(array.as_list::<i32>().value_length(row)),
+            DataType::LargeList(_) => array.as_list::<i64>().value_length(row),
+            DataType::ListView(_) => i64::from(array.as_list_view::<i32>().value_size(row)),
+            DataType::LargeListView(_) => array.as_list_view::<i64>().value_size(row),
+            DataType::FixedSizeList(_, size) => i64::from(*size),
+            other => return internal_err!("spark_slice requires a list, got {other}"),
+        })
+    }
+
+    fn start_index(start: i64, array_length: i64) -> i64 {
+        if start < 0 {
+            start + array_length
+        } else {
+            start - 1
+        }
     }
 }
 
@@ -166,9 +194,14 @@ impl ScalarUDFImpl for SparkArraySlice {
         true
     }
 
+    fn supports_constant_folding(&self) -> bool {
+        // Constant parents must not run generated bounds before SLICE's literal simplification.
+        false
+    }
+
     fn simplify(
         &self,
-        args: Vec<expr::Expr>,
+        mut args: Vec<expr::Expr>,
         info: &SimplifyContext,
     ) -> datafusion_common::Result<ExprSimplifyResult> {
         if args
@@ -184,6 +217,34 @@ impl ScalarUDFImpl for SparkArraySlice {
                 ScalarValue::try_new_null(&self.return_type(&types)?)?,
             )));
         }
+        if let [
+            expr::Expr::Literal(array, _),
+            expr::Expr::Literal(ScalarValue::Int64(Some(start)), _),
+            expr::Expr::Literal(ScalarValue::Int64(Some(length)), _),
+        ] = args.as_slice()
+            && Self::validate_parameters(*start, *length).is_ok()
+        {
+            let array = array.to_array()?;
+            let array_length = Self::list_length(array.as_ref(), 0)?;
+            let start_index = Self::start_index(*start, array_length);
+            if start_index >= 0
+                && start_index < array_length
+                && let (Ok(start_index), Ok(length)) =
+                    (i32::try_from(start_index), i32::try_from(*length))
+                && start_index.wrapping_add(length) < start_index
+            {
+                // Spark's interpreted Int32 endpoint wraps; its generated path clips instead.
+                args[2] = lit(0_i64);
+            }
+            let call = ScalarUDF::from(self.clone()).call(args.clone());
+            if let Ok(value) = LiteralEvaluator::new()
+                .evaluate(&call)
+                .and_then(|value| value.cast_to(array.data_type()))
+            {
+                return Ok(ExprSimplifyResult::Simplified(lit(value)));
+            }
+        }
+        // Invalid constants retain preparation's conditional error timing.
         Ok(ExprSimplifyResult::Original(args))
     }
 
@@ -210,7 +271,19 @@ impl ScalarUDFImpl for SparkArraySlice {
             ColumnarValue::Scalar(_) => 0,
             ColumnarValue::Array(_) => row,
         };
-        for row in 0..args.number_rows {
+        // Preserve scalar broadcasting without copying the array for each row.
+        let scalar_result = args
+            .args
+            .iter()
+            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+        let rows = if scalar_result {
+            args.number_rows.min(1)
+        } else {
+            args.number_rows
+        };
+        let mut native_starts = Int64Builder::with_capacity(rows);
+        let mut native_ends = Int64Builder::with_capacity(rows);
+        for row in 0..rows {
             let array_row = row_index(array, row);
             let start_row = row_index(start, row);
             let length_row = row_index(length, row);
@@ -218,21 +291,35 @@ impl ScalarUDFImpl for SparkArraySlice {
                 || starts.is_null(start_row)
                 || lengths.is_null(length_row)
             {
+                native_starts.append_null();
+                native_ends.append_null();
                 continue;
             }
-            if starts.value(start_row) == 0 {
-                return exec_err!("{}", Self::START_ERROR);
-            }
-            if lengths.value(length_row) < 0 {
-                return exec_err!("{}", Self::LENGTH_ERROR);
-            }
+            let start = starts.value(start_row);
+            let length = lengths.value(length_row);
+            Self::validate_parameters(start, length)?;
+            let array_length = Self::list_length(array_values.as_ref(), array_row)?;
+            let start_index = Self::start_index(start, array_length);
+            let (start, end) = if start_index < 0 || start_index >= array_length || length == 0 {
+                (1, 0)
+            } else {
+                (
+                    start_index + 1,
+                    start_index + length.min(array_length - start_index),
+                )
+            };
+            native_starts.append_value(start);
+            native_ends.append_value(end);
         }
-        let end = apply(start, length, add_wrapping)?;
-        args.args[2] = apply(
-            &end,
-            &ColumnarValue::Scalar(ScalarValue::Int64(Some(1))),
-            sub_wrapping,
-        )?;
+        let coordinate = |values: Int64Array| {
+            if scalar_result {
+                ColumnarValue::Scalar(ScalarValue::Int64(values.iter().next().flatten()))
+            } else {
+                ColumnarValue::Array(Arc::new(values))
+            }
+        };
+        args.args[1] = coordinate(native_starts.finish());
+        args.args[2] = coordinate(native_ends.finish());
         match self.native.invoke_with_args(args)? {
             ColumnarValue::Array(array)
                 if self.required_elements
@@ -694,7 +781,7 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }
 
     // The NULL probe only needs nullable inner arrays, not nullable output elements.
-    let nullable_array_type = nullable_array_probe_type(&array_type);
+    let nullable_array_type = nullable_array_input_type(&array_type);
     let nullable_array = cast(array.clone(), nullable_array_type.clone());
 
     // Cast the null-only array to the nullable type to match
@@ -723,7 +810,7 @@ fn array_element_field(data_type: &DataType) -> Option<&FieldRef> {
     }
 }
 
-fn nullable_array_probe_type(data_type: &DataType) -> DataType {
+fn nullable_array_input_type(data_type: &DataType) -> DataType {
     let Some(field) = array_element_field(data_type) else {
         return data_type.clone();
     };
@@ -1364,6 +1451,215 @@ mod tests {
                 assert!(!SparkArraySlice::is_parameter_error(&error));
             }
         }
+    }
+
+    #[test]
+    fn slice_coordinate_spans_preserve_list_layouts_and_fields() -> PlanResult<()> {
+        use arrow::array::{ArrayRef, Int32Array};
+        use arrow::buffer::OffsetBuffer;
+
+        let session = SessionContext::new();
+        for nullable in [false, true] {
+            let element = Arc::new(
+                Field::new("kept_element", DataType::Int32, nullable)
+                    .with_metadata([("source".into(), "coordinate-test".into())].into()),
+            );
+            let input = ListArray::try_new(
+                element.clone(),
+                OffsetBuffer::from_lengths([4]),
+                Arc::new(Int32Array::from(vec![1, 2, 2, 3])),
+                None,
+            )?;
+            for storage in [
+                DataType::List(element.clone()),
+                DataType::LargeList(element.clone()),
+                DataType::ListView(element.clone()),
+                DataType::LargeListView(element.clone()),
+            ] {
+                let array = arrow::compute::cast(&input, &storage)?;
+                let batch = RecordBatch::try_from_iter([("a", array)])?;
+                let schema = Arc::new(DFSchema::try_from(batch.schema())?);
+                for (start, length, expected) in [
+                    (-2_i64, 3_i64, vec![2, 3]),
+                    (i64::from(i32::MIN), 0, vec![]),
+                    (4, i64::from(i32::MAX), vec![3]),
+                ] {
+                    let expression = slice_expr(col("a"), lit(start), lit(length), &schema)?;
+                    let physical = session.create_physical_expr(expression, &schema)?;
+                    let result = physical.evaluate(&batch)?.into_array(1)?;
+                    result.to_data().validate_full()?;
+                    assert_eq!(result.data_type(), &storage);
+                    let values: ArrayRef = match &storage {
+                        DataType::List(_) => result.as_list::<i32>().value(0),
+                        DataType::LargeList(_) => result.as_list::<i64>().value(0),
+                        DataType::ListView(_) => result.as_list_view::<i32>().value(0),
+                        _ => result.as_list_view::<i64>().value(0),
+                    };
+                    assert_eq!(
+                        values.as_primitive::<Int32Type>().values().as_ref(),
+                        expected.as_slice()
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn slice_nested_constants_preserve_fields_and_interpreted_bounds() -> PlanResult<()> {
+        use arrow::array::{ArrayRef, Int32Array, StructArray};
+        use arrow::buffer::OffsetBuffer;
+        use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+
+        let schema = Arc::new(DFSchema::empty());
+        let primitive: ArrayRef = Arc::new(Int32Array::from(vec![1, 2, 2, 3]));
+        let children = vec![
+            Field::new("required_value", DataType::Int32, false)
+                .with_metadata([("source".into(), "constant-required-child".into())].into()),
+            Field::new("optional_value", DataType::Int32, true)
+                .with_metadata([("source".into(), "constant-optional-child".into())].into()),
+        ];
+        let struct_values: ArrayRef = Arc::new(StructArray::try_new(
+            children.into(),
+            vec![
+                primitive.clone(),
+                Arc::new(Int32Array::from(vec![Some(1), None, Some(2), Some(3)])),
+            ],
+            None,
+        )?);
+        // Prior scalar-cast gaps: immediate element metadata (#909), required Struct elements (#910).
+        for (element_nullable, values) in [
+            (false, primitive.clone()),
+            (true, primitive),
+            (true, struct_values),
+        ] {
+            let element = Arc::new(Field::new(
+                "kept_element",
+                values.data_type().clone(),
+                element_nullable,
+            ));
+            let input = ListArray::try_new(
+                element.clone(),
+                OffsetBuffer::from_lengths([4]),
+                values,
+                None,
+            )?;
+            for storage in [
+                DataType::List(element.clone()),
+                DataType::LargeList(element.clone()),
+            ] {
+                let input = arrow::compute::cast(&input, &storage)?;
+                let literal = match &storage {
+                    DataType::List(_) => {
+                        ScalarValue::List(Arc::new(input.as_list::<i32>().clone()))
+                    }
+                    _ => ScalarValue::LargeList(Arc::new(input.as_list::<i64>().clone())),
+                };
+                assert_eq!(literal.data_type(), storage);
+                literal.to_array()?.to_data().validate_full()?;
+                let inner = slice_expr(lit(literal), lit(-2_i64), lit(3_i64), &schema)?;
+                let outer = slice_expr(inner, lit(-1_i64), lit(i64::from(i32::MAX)), &schema)?;
+                let info = SimplifyContext::builder()
+                    .with_schema(schema.clone())
+                    .build();
+                let simplifier = ExprSimplifier::new(info);
+                let coerced = simplifier.coerce(outer, schema.as_ref())?;
+                let prepared = simplifier.simplify(coerced)?;
+                let expr::Expr::Literal(value, _) = prepared else {
+                    return Err(PlanError::internal("nested literal SLICE was not folded"));
+                };
+                assert_eq!(value.data_type(), storage);
+                let result = value.to_array()?;
+                result.to_data().validate_full()?;
+                let values = match result.data_type() {
+                    DataType::List(_) => result.as_list::<i32>().value(0),
+                    _ => result.as_list::<i64>().value(0),
+                };
+                assert!(values.is_empty());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn slice_opaque_runtime_scalars_keep_generated_bounds() -> PlanResult<()> {
+        use arrow::array::RecordBatchOptions;
+        use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+        use std::sync::LazyLock;
+
+        #[derive(Debug, PartialEq, Eq, Hash)]
+        struct RuntimeSliceOperand;
+
+        impl ScalarUDFImpl for RuntimeSliceOperand {
+            fn name(&self) -> &str {
+                "runtime_slice_operand"
+            }
+
+            fn signature(&self) -> &Signature {
+                static SIGNATURE: LazyLock<Signature> =
+                    LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+                &SIGNATURE
+            }
+
+            fn supports_constant_folding(&self) -> bool {
+                false
+            }
+
+            fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+                Ok(args[0].clone())
+            }
+
+            fn invoke_with_args(
+                &self,
+                args: ScalarFunctionArgs,
+            ) -> datafusion_common::Result<ColumnarValue> {
+                assert!(matches!(args.args[0], ColumnarValue::Scalar(_)));
+                Ok(args.args[0].clone())
+            }
+        }
+
+        let schema = Arc::new(DFSchema::empty());
+        let batch = RecordBatch::try_new_with_options(
+            schema.inner().clone(),
+            vec![],
+            &RecordBatchOptions::new().with_row_count(Some(32)),
+        )?;
+        let session = SessionContext::new();
+        let opaque = ScalarUDF::from(RuntimeSliceOperand);
+        for start in [4_i64, -1_i64] {
+            for operand in 0..3 {
+                let mut arguments = [
+                    lit(ScalarValue::List(ScalarValue::new_list(
+                        &[1_i32.into(), 2_i32.into(), 2_i32.into(), 3_i32.into()],
+                        &DataType::Int32,
+                        false,
+                    ))),
+                    lit(start),
+                    lit(i64::from(i32::MAX)),
+                ];
+                arguments[operand] = opaque.call(vec![arguments[operand].clone()]);
+                let [array, start, length] = arguments;
+                let expression = slice_expr(array, start, length, &schema)?;
+                let info = SimplifyContext::builder()
+                    .with_schema(schema.clone())
+                    .build();
+                let prepared = ExprSimplifier::new(info).simplify(expression)?;
+                let physical = session.create_physical_expr(prepared, &schema)?;
+                let value = physical.evaluate(&batch)?;
+                assert!(matches!(&value, ColumnarValue::Scalar(_)));
+                let result = value.to_array(1)?;
+                result.to_data().validate_full()?;
+                assert_eq!(
+                    result
+                        .as_list::<i32>()
+                        .value(0)
+                        .as_primitive::<Int32Type>()
+                        .values(),
+                    &[3]
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]

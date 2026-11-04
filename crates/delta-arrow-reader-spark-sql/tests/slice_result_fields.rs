@@ -89,11 +89,7 @@ const SLICE_COMPARISON_FLAGS: &[&str] = &[
     "error_matches",
 ];
 
-fn slice_parameters_match_issue_contract(
-    case: &Value,
-    comparison: &Value,
-    controls: &[Value],
-) -> bool {
+fn slice_parameter_comparison_matches(case: &Value, comparison: &Value) -> bool {
     if comparison["group"] != "slice-parameters-880-current-v1"
         || comparison["id"] != case["id"]
         || comparison["ansi"] != case["ansi"]
@@ -103,31 +99,9 @@ fn slice_parameters_match_issue_contract(
     {
         return false;
     }
-    if SLICE_COMPARISON_FLAGS
+    SLICE_COMPARISON_FLAGS
         .iter()
         .all(|flag| comparison[flag] == true)
-    {
-        return true;
-    }
-    // shortcut: #894 retains these exact signed-coordinate observations until its fix.
-    if !matches!(
-        case["id"].as_str(),
-        Some(
-            "literal_last_max_length"
-                | "literal_min_start_zero_length"
-                | "literal_negative_start_cross_end"
-                | "literal_negative_start_past_end"
-                | "provider_valid_boundaries"
-        )
-    ) {
-        return false;
-    }
-    let Some(control) = controls.iter().find(|control| {
-        control["issue"] == 894 && control["id"] == case["id"] && control["ansi"] == case["ansi"]
-    }) else {
-        return false;
-    };
-    spark_results::matches_inherited_query_observation(case, comparison, control)
 }
 
 #[tokio::test]
@@ -231,14 +205,6 @@ async fn slice_parameters_match_spark() -> TestResult {
         .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
         .collect::<Vec<_>>();
     assert_eq!(json!(identities), manifest["identities"]);
-    let controls = include_str!("fixtures/slice-parameters/inherited-controls.jsonl")
-        .lines()
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(controls.len(), 11);
-    assert_eq!(controls[0]["issues"], json!([894]));
-    assert_eq!(controls[0]["comparisons"], 20);
-    assert_eq!(controls[0]["batch_objects_identical_except_batch"], true);
     for case in &records[1..] {
         let definition = manifest["scenarios"]
             .as_array()
@@ -281,7 +247,7 @@ async fn slice_parameters_match_spark() -> TestResult {
                 batch_size,
             )));
             eprintln!("SLICE_PARAMETERS_OBSERVATION {comparison}");
-            if !slice_parameters_match_issue_contract(case, &comparison, &controls[1..]) {
+            if !slice_parameter_comparison_matches(case, &comparison) {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: expected={} stages={}, actual={comparison}",
                     case["id"], case["ansi"], case["expected"], case["schema_stages"]
@@ -291,110 +257,6 @@ async fn slice_parameters_match_spark() -> TestResult {
     }
     assert_eq!(completed.len(), 616);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
-    Ok(())
-}
-
-#[test]
-fn inherited_slice_controls_reject_new_differences() -> TestResult {
-    let references = include_str!("fixtures/slice-parameters/spark-reference.jsonl")
-        .lines()
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    let controls = include_str!("fixtures/slice-parameters/inherited-controls.jsonl")
-        .lines()
-        .skip(1)
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    let controls = controls.as_slice();
-    let mut identities = std::collections::BTreeSet::new();
-    for control in controls {
-        assert!(identities.insert((control["id"].to_string(), control["ansi"].to_string())));
-        let case = references
-            .iter()
-            .find(|case| case["id"] == control["id"] && case["ansi"] == control["ansi"])
-            .ok_or("missing inherited reference")?;
-        for batch_size in [1, 32] {
-            let mut comparison = control["observation"].clone();
-            comparison["batch"] = json!(batch_size);
-            assert!(slice_parameters_match_issue_contract(
-                case,
-                &comparison,
-                controls
-            ));
-            for key in comparison.as_object().ok_or("missing observation")?.keys() {
-                let mut wrong = comparison.clone();
-                wrong[key] = json!("new difference");
-                assert!(
-                    !slice_parameters_match_issue_contract(case, &wrong, controls),
-                    "{key}"
-                );
-            }
-            for (key, value) in [
-                ("batch", json!(2)),
-                (
-                    "ansi",
-                    json!(!case["ansi"].as_bool().ok_or("missing ANSI")?),
-                ),
-                ("panic", Value::Null),
-                ("extra", json!(true)),
-            ] {
-                let mut wrong = comparison.clone();
-                wrong[key] = value;
-                assert!(
-                    !slice_parameters_match_issue_contract(case, &wrong, controls),
-                    "{key}"
-                );
-            }
-            for stage in [
-                "/public_schema",
-                "/before_collect",
-                "/physical_schema",
-                "/optimized_schema",
-                "/optimized_observation/schema",
-                "/optimized_observation/raw_schema",
-            ] {
-                for (field, value) in [
-                    ("name", json!("wrong")),
-                    ("type", json!("string")),
-                    ("nullable", json!("wrong")),
-                    ("metadata", json!({"new":"difference"})),
-                ] {
-                    let pointer = format!("{stage}/fields/0/{field}");
-                    let mut wrong = comparison.clone();
-                    if let Some(actual) = wrong.pointer_mut(&pointer) {
-                        *actual = value;
-                        assert!(
-                            !slice_parameters_match_issue_contract(case, &wrong, controls),
-                            "{pointer}"
-                        );
-                    }
-                }
-            }
-            for key in [
-                "sql",
-                "family",
-                "consumer",
-                "expected",
-                "schema_stages",
-                "spark_error_phase",
-            ] {
-                let mut wrong = case.clone();
-                wrong[key] = json!("different reference");
-                assert!(
-                    !slice_parameters_match_issue_contract(&wrong, &comparison, controls),
-                    "{key}"
-                );
-            }
-        }
-    }
-    assert_eq!(identities.len(), 10);
-    assert_eq!(
-        controls
-            .iter()
-            .filter(|control| control["issue"] == 894)
-            .count(),
-        10
-    );
     Ok(())
 }
 

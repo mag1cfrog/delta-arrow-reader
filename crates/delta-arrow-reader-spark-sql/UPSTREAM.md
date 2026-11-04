@@ -776,10 +776,18 @@ later arguments through the shared scalar selection path, while reached
 constant argument failures retain their optimization stage. Selected arguments
 reuse lambda input projection before filtering, so unrelated sibling columns
 stay shared. Index rewrites preserve column and lambda-variable fields, and
-empty projections retain the selected row count. The native delegate
-still determines valid coordinates. Signed-coordinate gaps (#894) and two
-non-NULL batch error-priority observations (#902) retain exact inherited
-[result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).
+empty projections retain the selected row count. SLICE normalizes signed starts
+against each array's length and clips runtime lengths before passing bounded
+positive coordinates to the native delegate. Its closed-literal simplifier
+retains Spark's interpreted Int32 endpoint overflow, while runtime values use
+Spark's generated clipping behavior. The private adapter disables generic
+constant evaluation during logical simplification so constant parents cannot
+bypass that distinction.
+The existing logical simplifier prepares closed SLICE results before constant
+parameter validation, so CASE pruning uses the same interpreted bounds.
+The dedicated [coordinate references](tests/fixtures/README.md#arrays_overlap-floating-operands)
+and broad parameter suite require full parity. Two non-NULL batch error-priority
+observations (#902) retain their separate inherited controls.
 
 ### ARRAY_COMPACT result fields
 
@@ -877,6 +885,9 @@ value kernels remain in use. Separately registered BTRIM and native DataFusion
 SQL retain their existing declarations.
 
 Nested LOWER/UPPER calls follow Spark's case-conversion simplification order.
+Before removing an intermediate conversion, the existing expression simplifier
+prepares closed constants exposed by child UDF simplification. This retains
+expanding Unicode results when SLICE folds after generic constant evaluation.
 The private adapter preserves intermediate conversions on early local VALUES
 paths. For provider projections, a singly consumed deterministic opposite-case
 producer can use the outer conversion while keeping the existing projection
