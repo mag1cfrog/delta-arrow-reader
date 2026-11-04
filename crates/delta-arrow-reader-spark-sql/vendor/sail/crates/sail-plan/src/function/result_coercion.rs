@@ -19,9 +19,9 @@ use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::temporal_coercion::{cast_local_timestamp_expr_to_ltz, common_temporal_type};
 
 mod nested;
-pub(crate) use nested::cast_adds_nulls;
 pub(crate) use nested::{
-    has_coalesce_declaration_cast, is_nested_result_type, prune_coalesce_declaration_cast,
+    cast_nested_value, common_array_element_type, has_coalesce_declaration_cast,
+    is_nested_result_type, prune_coalesce_declaration_cast,
 };
 
 #[derive(PartialEq, Eq)]

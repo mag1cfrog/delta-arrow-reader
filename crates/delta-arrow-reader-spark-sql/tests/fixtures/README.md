@@ -2434,13 +2434,10 @@ Native ARRAY_HAS_ANY controls compare configured and unconfigured
 observations, including full fields and validated batches.
 
 The four `overlap_bad_implicit_cast` and `overlap_bad_implicit_cast_is_null`
-Spark errors remain unchanged in the shared fixture and owned by #840.
-They are excluded from #836's Spark comparison count. A separate retained
-conversion guard checks that the existing INT/STRING lowering stays nullable
-and does not discard its required cast failure through IS NULL in either ANSI
-mode. This guard does not claim Spark admission parity for that signature.
-Asymmetric common-element coercion, BINARY storage and floating equality/folding
-remain owned by #840 and #843.
+Spark errors remain unchanged in the shared fixture. The common-element tests
+assert their resolution errors strictly, including IS NULL consumers, separately
+from #836's original comparison count. Floating equality and normalization
+declarations remain owned by #843.
 
 The sail-plan storage control asserts nullable BOOLEAN declarations, empty
 result metadata, input/output Arrow validity and exact NULL/hit/miss values.
@@ -2454,6 +2451,81 @@ From this crate, replay the committed references and the storage control with:
 cargo test --locked --workspace --test arrays_overlap_result_fields -- --nocapture
 cargo test --locked --workspace -p sail-plan arrays_overlap_preserves_null_results_across_list_storage_and_slices
 ```
+
+## ARRAYS_OVERLAP common element types
+
+The same integration target replays the unchanged independent #840 references:
+
+| Fixture | Captured observations | SHA256 |
+| --- | --- | --- |
+| `arrays-overlap-narrowing-spark.jsonl` | 32 | `537c764f86b6d53fff251721aa843d803f15a58b36079842eb8b4e70ce530686` |
+| `arrays-overlap-coercion-result-fields-spark.jsonl` | 40 | `5c638e920ebc49e20fa3292402fb447577666558e8199c261ca74479bfad872d` |
+| `arrays-overlap-positive-coercion-result-fields-spark.jsonl` | 16 | `2369b5e20b1c147df9539ffce8237afe35c27d3367f61b7625b251c914f23033` |
+| `arrays-overlap-common-type-boundaries-spark.jsonl` | 32 | `b192c0318e4ab717c0476a5dde859d63ccf65bcd4f68525c31252885e4273557` |
+| `arrays-overlap-binary-admission-spark.jsonl` | 136 | `99cef97a0c945a2fe7b6f79cc623ace4ec704ed55d17ae4952eb7043a800c51b` |
+
+All headers pin Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8` and their capture source hashes.
+The temporal boundary file uses America/New_York; the others use UTC.
+Each reference group has a separate test so a failure in one group cannot
+suppress the remaining observations.
+
+The narrowing references cover both orders, literal and retained INT/BIGINT
+arrays, required direct/IS NULL outputs, safe matches and values outside INT's
+range. Common and positive records add nullable providers, NULL and empty arrays,
+NULL elements, nested ARRAY/STRUCT types, Decimal admission, FLOAT/INT precedence,
+logical STRING inputs and incompatible types. The boundary test selects all 16
+`dst_*` observations for NTZ/LTZ gap and overlap conversion. The raw file keeps
+its other 16 floating-equality observations unchanged for #843. The canonical
+NaN and decimal-zero records in the common fixture do not establish raw-bit
+floating equality.
+
+Full-stage common-type acceptance covers 38 of the common fixture's 40
+observations. Its two `nan`/ANSI observations have a separate regression test
+for complete values, public fields and successful completion with matching error
+flags at both batch sizes. Optimized floating declarations belong to #843.
+The test still emits the complete unmodified comparisons, including any false
+before/physical field flags, for all four NaN audit records. It preserves the
+common-type runtime regression guard without claiming optimized field parity.
+
+The BINARY capture contains 16 successful provider observations and 120
+independent resolution errors. Its frozen capture script SHA256 is
+`dd08cd2e9ea7fa61d5d5a334806c6868f3cd19c36bd73e57b26131916cc42dea`;
+its manifest SHA256 is
+`7114121a8b4d0f1ab4703f25652d0d2ec686533501b03162b6652687e5e7bfa0`.
+The header records actual provider schemas and rows after Spark checks their
+round trip against the supplied inputs. BINARY inputs use lowercase hexadecimal
+without a prefix: `""` means zero bytes and JSON null means NULL. Expected
+Boolean/STRUCT rows, complete schema stages and error conditions come from
+Spark/JVM observations. No expected output is derived from the Rust coercion
+helper.
+
+Required and nullable BINARY providers include both orders, direct/IS NULL/STRUCT
+consumers, hits/misses, NULL parents and elements, empties and zero rows. Nested
+ARRAY and STRUCT leaves include NULL STRUCTs. BINARY/STRING and INT/STRING
+admission statements isolate each order and consumer so one error cannot hide
+another expression's result. All errors retain their captured SQL phase and
+`DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES` condition.
+
+The storage replay uses those same captured logical expectations for all nine
+Binary/LargeBinary/BinaryView pairs, including nested and nullable providers.
+It covers canonical lists, mixed List/LargeList offsets and mixed
+ListView/LargeListView storage, batch sizes 1 and 32, two partitions and nonzero
+and empty slices. There are 864 successful-provider comparisons and 648
+provider-admission comparisons, with full fields, rows and Arrow validation.
+The original #836 five-layout control retains FixedSizeList coverage. These are
+Rust storage checks against logical Spark BINARY evidence; Spark does not
+describe Arrow storage layouts.
+
+The Sail converter unit `nested_identity_cast_restores_planned_fields_after_child_folding`
+checks exact planned metadata/nullability, unchanged values, nonzero and empty
+slices, and rejection of incompatible primitive and nested value types.
+
+The target strictly checks 544 canonical and 1,512 storage full-stage comparisons.
+The four NaN value/public-field/completion checks retain their full audit records,
+bringing the audit to 2,060 observations, plus six completed native ARRAY_HAS_ANY
+controls. Run it with the command above; the full workspace and connected
+conditional/set-operation checks remain part of validation.
 
 
 ## MAP constructor root

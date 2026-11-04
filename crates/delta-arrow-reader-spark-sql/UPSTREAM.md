@@ -657,17 +657,43 @@ parents use the separate declaration-preservation prerequisite #849.
 ### ARRAYS_OVERLAP declarations and empty arrays
 
 Spark ARRAYS_OVERLAP records its BOOLEAN result field before the synthetic
-nullable CASE and NULL probes. The field includes outer-array nullability,
-immediate nullable elements and the shared nested-cast nullability rule.
+nullable CASE and NULL probes. The field includes the original outer-array
+nullability and immediate nullable elements after input admission.
 A NULL outer array returns NULL; an empty array returns false before probing
-NULL elements in either operand order. Singleton probes reuse FLATTEN's
-List/LargeList storage adaptation, independent of a fixed input array width.
+NULL elements in either operand order. Singleton probes use List/LargeList
+storage, independent of a fixed input array width.
 Resolution rejects non-array operands and wrong arity before evaluation.
 
 The [result-field references](tests/fixtures/README.md#arrays_overlap-result-fields)
 retain complete declarations, values, error phases and native isolation.
-Common-element coercion/BINARY admission (#840) and floating equality/folding
-(#843) remain separate deliveries.
+Floating equality and normalization declarations remain a separate #843 change.
+
+### ARRAYS_OVERLAP common element coercion
+
+Both operands convert to an admitted common element type through the existing
+recursive ARRAY/STRUCT conversion. A private policy keeps tightest array element
+selection separate from conditional and set-operation result widening. The
+selection uses Spark's non-ANSI numeric precedence in both modes, cannot enlarge
+Decimal precision or scale, and validates each session's implicit array casts.
+NTZ/DATE-to-LTZ leaves reuse the existing session-timezone conversion, including
+named-zone gaps and overlaps. Existing conditional declaration pruning, field
+name matching and hidden-NULL handling remain in the shared implementation.
+
+Identity conversions retain their promised target type when folding refines a
+child's declarations. They restore compatible nullability and metadata through
+Arrow's existing cast and reject incompatible runtime value types. This keeps
+the physical array type consistent with the planned field without changing
+floating normalization or optimizer folding permissions.
+
+Binary, LargeBinary and BinaryView storage represent one logical BINARY element
+type. A bilateral binary guard restricts reuse of DataFusion's comparison
+coercion so BINARY/STRING pairs remain incompatible. Resolution rejects mixed
+INT/STRING and nested incompatible leaves, including IS NULL consumers, before
+evaluation. The original NULL/empty result expression, result-field adapter and
+native ARRAY_HAS_ANY registration remain separate from argument conversion.
+The [common-element references](tests/fixtures/README.md#arrays_overlap-common-element-types)
+cover independent fields, values, errors, numeric/temporal boundaries and logical
+BINARY observations replayed across Arrow storage representations.
 
 ### Projection metadata
 

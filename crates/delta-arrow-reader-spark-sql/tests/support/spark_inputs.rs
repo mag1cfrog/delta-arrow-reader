@@ -22,6 +22,7 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
         Some("integer") => DataType::Int32,
         Some("long") => DataType::Int64,
         Some("string") => DataType::Utf8,
+        Some("binary") => DataType::Binary,
         Some(decimal) if decimal.starts_with("decimal(") && decimal.ends_with(')') => {
             let (precision, scale) = decimal[8..decimal.len() - 1]
                 .split_once(',')
@@ -70,6 +71,22 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
         )?))),
         DataType::Utf8 => {
             ScalarValue::Utf8(Some(value.as_str().ok_or("missing string")?.to_owned()))
+        }
+        DataType::Binary => {
+            let hex = value.as_str().ok_or("missing binary hex")?;
+            if hex.len() % 2 != 0
+                || !hex
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err("invalid lowercase binary hex".into());
+            }
+            ScalarValue::Binary(Some(
+                (0..hex.len())
+                    .step_by(2)
+                    .map(|index| u8::from_str_radix(&hex[index..index + 2], 16))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
         }
         DataType::Int32 => {
             ScalarValue::Int32(Some(value.as_str().ok_or("missing integer")?.parse()?))
@@ -120,33 +137,38 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
     })
 }
 
+pub(crate) fn decode_recorded_batch(input: &Value) -> TestResult<RecordBatch> {
+    let DataType::Struct(fields) = decode_recorded_data_type(&input["schema"])? else {
+        return Err("expected input schema".into());
+    };
+    let rows = input["rows"].as_array().ok_or("missing rows")?;
+    let columns = fields
+        .iter()
+        .enumerate()
+        .map(|(index, field)| {
+            if rows.is_empty() {
+                Ok(new_empty_array(field.data_type()))
+            } else {
+                let values = rows
+                    .iter()
+                    .map(|row| decode_recorded_value(&row[index], field.data_type()))
+                    .collect::<TestResult<Vec<_>>>()?;
+                Ok(ScalarValue::iter_to_array(values)?)
+            }
+        })
+        .collect::<TestResult<Vec<ArrayRef>>>()?;
+    let schema = Arc::new(Schema::new(fields));
+    Ok(RecordBatch::try_new(schema, columns)?)
+}
+
 pub(crate) fn register_recorded_inputs(
     session: &SessionContext,
     metadata: &Value,
     batch_size: usize,
 ) -> TestResult {
     for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
-        let DataType::Struct(fields) = decode_recorded_data_type(&input["schema"])? else {
-            return Err("expected input schema".into());
-        };
-        let rows = input["rows"].as_array().ok_or("missing rows")?;
-        let columns = fields
-            .iter()
-            .enumerate()
-            .map(|(index, field)| {
-                if rows.is_empty() {
-                    Ok(new_empty_array(field.data_type()))
-                } else {
-                    let values = rows
-                        .iter()
-                        .map(|row| decode_recorded_value(&row[index], field.data_type()))
-                        .collect::<TestResult<Vec<_>>>()?;
-                    Ok(ScalarValue::iter_to_array(values)?)
-                }
-            })
-            .collect::<TestResult<Vec<ArrayRef>>>()?;
-        let schema = Arc::new(Schema::new(fields));
-        let batch = RecordBatch::try_new(schema.clone(), columns)?;
+        let batch = decode_recorded_batch(input)?;
+        let schema = batch.schema();
         let mut partitions = vec![Vec::new(); 2];
         for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
             partitions[chunk % 2]
@@ -156,6 +178,36 @@ pub(crate) fn register_recorded_inputs(
             input["name"].as_str().ok_or("missing table name")?,
             Arc::new(MemTable::try_new(schema, partitions)?),
         )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn recorded_binary_values_check_hex_and_preserve_bytes() -> TestResult {
+    use serde_json::json;
+
+    assert_eq!(
+        decode_recorded_data_type(&json!("binary"))?,
+        DataType::Binary
+    );
+    for (encoded, bytes) in [("00ff6162", vec![0, 255, 97, 98]), ("", vec![])] {
+        assert_eq!(
+            decode_recorded_value(&json!(encoded), &DataType::Binary)?,
+            ScalarValue::Binary(Some(bytes))
+        );
+    }
+    assert_eq!(
+        decode_recorded_value(&Value::Null, &DataType::Binary)?,
+        ScalarValue::Binary(None)
+    );
+    for encoded in [
+        json!("0"),
+        json!("gg"),
+        json!("0G"),
+        json!("\u{00e9}"),
+        json!(1),
+    ] {
+        assert!(decode_recorded_value(&encoded, &DataType::Binary).is_err());
     }
     Ok(())
 }
