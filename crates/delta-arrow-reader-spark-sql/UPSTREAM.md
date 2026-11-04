@@ -725,8 +725,10 @@ The [floating references](tests/fixtures/README.md#arrays_overlap-floating-opera
 require complete Spark fields, rows, errors and completion, including required
 SLICE operands. SLICE retains its source element declaration and derives parent
 nullability from the array, start and length arguments through a private native
-ArraySlice delegate. Its direct, STRUCT, ISNULL and overlap consumers share that
-declaration. Native ARRAY_SLICE registration and evaluation remain separate.
+ArraySlice delegate. It removes synthetic children stored under NULL list
+parents before restoring required element fields. Its direct, STRUCT, ISNULL
+and overlap consumers share that declaration. Native ARRAY_SLICE registration
+and evaluation remain separate.
 
 ### Projection metadata
 

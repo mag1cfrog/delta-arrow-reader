@@ -149,7 +149,17 @@ impl ScalarUDFImpl for SliceResultField {
         &self,
         args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
-        self.0.invoke_with_args(args)
+        match self.0.invoke_with_args(args)? {
+            ColumnarValue::Array(array)
+                if matches!(array.data_type(), DataType::List(_) | DataType::LargeList(_)) =>
+            {
+                // Native NULL rows hold a NULL child that cannot acquire a required element field.
+                Ok(ColumnarValue::Array(
+                    datafusion_common::utils::remove_list_null_values(&array)?,
+                ))
+            }
+            value => Ok(value),
+        }
     }
 }
 

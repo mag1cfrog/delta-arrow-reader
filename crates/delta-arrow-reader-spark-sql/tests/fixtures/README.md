@@ -2587,9 +2587,9 @@ required/nullable numeric arguments, literals, NULL and empty arrays, nested
 ARRAY/STRUCT fields and metadata, direct/STRUCT/ISNULL/overlap consumers and
 zero rows. Bounded parameter and fallible-operand controls retain the actual
 Spark conditions and phases. `slice_result_fields.rs` observes all 140 exact
-identities at batches 1 and 32 and checks six successful native ARRAY_SLICE
-queries against unconfigured DataFusion. Query failures remain observations so
-later identities still run.
+identities at batches 1 and 32, including the optimized logical schema, and
+checks six successful native ARRAY_SLICE queries against unconfigured
+DataFusion. Query failures remain observations so later identities still run.
 
 The Sail floating storage unit adds 240 evaluations across both widths/modes,
 both operand orders, five list-layout pairs and full/nonzero/empty slices. Those

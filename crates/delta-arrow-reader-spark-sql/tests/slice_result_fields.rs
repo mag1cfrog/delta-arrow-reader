@@ -1,9 +1,11 @@
 //! SLICE parent fields and bounded controls match independently captured Spark plans.
 
 use datafusion::execution::SessionStateBuilder;
+use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::configure_spark_sql;
+use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use futures_util::FutureExt;
+use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -78,6 +80,28 @@ async fn capture_slice_observation(
     }
 }
 
+async fn capture_slice_optimized_schema(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<Value> {
+    let query = plan_query(
+        session,
+        case["sql"].as_str().ok_or("missing SQL")?,
+        &SparkSqlOptions {
+            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+            session_timezone: "UTC".into(),
+            ..SparkSqlOptions::default()
+        },
+    )
+    .await?;
+    let mut state = session.state();
+    let extensions = &mut state.config_mut().options_mut().extensions;
+    extensions.insert(SparkSqlExpressionSemantics::default());
+    extensions.insert(PreserveAggregateStatisticsSchema::default());
+    let optimized = state.optimize(&query.logical_plan)?;
+    spark_results::capture_schema(optimized.schema().fields(), None)
+}
+
 #[tokio::test]
 async fn slice_parent_fields_match_spark() -> TestResult {
     let records = include_str!("fixtures/slice-parent-fields-spark.jsonl")
@@ -123,9 +147,18 @@ async fn slice_parent_fields_match_spark() -> TestResult {
         );
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let mut comparison = capture_slice_observation(
-                spark_results::compare_exact_spark_query_stages(&session, case),
-            )
+            let mut comparison = capture_slice_observation(async {
+                let mut comparison =
+                    spark_results::compare_exact_spark_query_stages(&session, case).await?;
+                let optimized = capture_slice_optimized_schema(&session, case).await;
+                comparison["optimized_matches"] =
+                    json!(optimized.as_ref().ok() == case["schema_stages"].get("optimized"));
+                comparison["optimized_schema"] =
+                    optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
+                comparison["optimized_error"] =
+                    json!(optimized.as_ref().err().map(ToString::to_string));
+                Ok(comparison)
+            })
             .await?;
             comparison["group"] = records[0]["group"].clone();
             comparison["id"] = case["id"].clone();
@@ -137,7 +170,7 @@ async fn slice_parent_fields_match_spark() -> TestResult {
                 batch_size,
             )));
             eprintln!("SLICE_PARENT_FIELDS_OBSERVATION {comparison}");
-            if comparison["matches"] != true {
+            if comparison["matches"] != true || comparison["optimized_matches"] != true {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: expected={} stages={}, actual={comparison}",
                     case["id"], case["ansi"], case["expected"], case["schema_stages"]
