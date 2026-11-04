@@ -71,9 +71,12 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
             let escape_char = extract_escape_char(escape, display_name)?;
             Ok(ScalarUDF::from(SparkLike::new(escape_char)).call(vec![value, pattern]))
         }
-        _ => Err(PlanError::invalid(format!(
-            "like/ilike expects 2 or 3 arguments, got {n}"
-        ))),
+        _ => {
+            let function_name = if case_insensitive { "ilike" } else { "like" };
+            Err(PlanError::invalid(format!(
+                "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires [2, 3] parameters but the actual number is {n}."
+            )))
+        }
     }?;
     Ok(match nullable {
         Some(nullable) => ScalarUDF::from(ILikeResult { nullable }).call(vec![result]),
