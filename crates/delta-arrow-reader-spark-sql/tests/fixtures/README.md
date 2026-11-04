@@ -2654,10 +2654,8 @@ strictly in both ANSI modes and at both batch sizes.
 `slice-parameters/spark-reference.jsonl` adds 308 independent Spark observations
 for 154 scenarios in both ANSI modes, with SHA256
 `d3d5001f84003b5756483f8f2699100746b1fd105ffcf92d8a974c219abafeb0`.
-The test compares all 616 batch identities. It requires complete Spark parity
-for 596 and retains 20 exact signed-coordinate/boundary comparisons owned by
-#894. `slice-parameters/inherited-controls.jsonl` stores their ten complete
-baseline objects from `bbecae8d`, with the full raw reference for each identity.
+The test requires complete Spark parity for all 616 batch identities, including
+signed-coordinate and boundary results. It has no inherited allowance.
 The parameter tests cover zero starts, negative lengths, numeric error priority,
 NULL masks, required/nullable fields, constant and provider evaluation stages,
 empty providers and CASE reachability. Required unary lengths use the #895
@@ -2682,7 +2680,7 @@ signed-coordinate records for 40 strict comparisons at batches 1 and 32. It
 requires every comparison flag and every available recorded schema stage, and
 emits all query outcomes before aggregate failure. Its literal/provider result
 assertions retain the independent Spark discriminators without inherited
-allowances. Local tests also cover all four native list layouts, complete
+allowances. Local tests also cover all four list input layouts, complete
 element fields, nested literal folding and opaque runtime Scalar operands.
 
 `slice-parameters/reachability/` preserves 24 further Spark observations, with

@@ -769,11 +769,11 @@ against each array's length and clips runtime lengths before passing bounded
 positive coordinates to the native delegate. Its closed-literal simplifier
 retains Spark's interpreted Int32 endpoint overflow, while runtime values use
 Spark's generated clipping behavior. The private adapter disables generic
-physical constant folding so constant parents cannot bypass that distinction.
+constant evaluation during logical simplification so constant parents cannot
+bypass that distinction.
 The dedicated [coordinate references](tests/fixtures/README.md#arrays_overlap-floating-operands)
-require full parity. The broad parameter suite retains exact signed-coordinate
-controls (#894), and two non-NULL batch error-priority observations (#902)
-retain their separate inherited controls.
+and broad parameter suite require full parity. Two non-NULL batch error-priority
+observations (#902) retain their separate inherited controls.
 
 ### ARRAY_COMPACT result fields
 
