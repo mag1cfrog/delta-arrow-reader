@@ -269,8 +269,11 @@ async fn compact_encoded_storage_boundaries() -> TestResult {
         let field = Arc::new(Field::new("a", input.data_type().clone(), false));
         let udf = SparkArrayCompact::new();
         let return_field = udf.return_field_from_args(ReturnFieldArgs { arg_fields: std::slice::from_ref(&field), scalar_arguments: &[None] })?;
-        let output = udf.invoke_with_args(ScalarFunctionArgs { args: vec![ColumnarValue::Array(input.clone())], arg_fields: vec![field.clone()], number_rows: 1, return_field, config_options: Arc::default() })?.into_array(1)?;
+        let expected_field = Field::new("r", DataType::List(required.clone()), false);
+        assert_eq!(return_field.as_ref().clone().with_name("r"), expected_field, "{id}");
+        let output = udf.invoke_with_args(ScalarFunctionArgs { args: vec![ColumnarValue::Array(input.clone())], arg_fields: vec![field.clone()], number_rows: 1, return_field: return_field.clone(), config_options: Arc::default() })?.into_array(1)?;
         output.to_data().validate_full()?;
+        assert_eq!(output.data_type(), return_field.data_type(), "{id}");
         let output = output.as_any().downcast_ref::<ListArray>().ok_or("expected list output")?;
         assert!(!output.is_null(0), "{id}");
         let integers = (0..output.value(0).len()).map(|row| encoded_integer_at(output.value(0).as_ref(), row)).collect::<TestResult<Vec<_>>>()?;
@@ -282,8 +285,19 @@ async fn compact_encoded_storage_boundaries() -> TestResult {
         let mut phase = "resolve";
         let public_result: TestResult<Value> = async {
             let query = plan_query(&session, "SELECT ARRAY_COMPACT(a) AS r FROM encoded_arrays", &SparkSqlOptions::default()).await?;
+            phase = "public_schema";
+            assert_eq!(query.column_names, vec!["r".to_owned()], "{id}");
+            assert_eq!(query.logical_plan.schema().fields().len(), query.column_names.len(), "{id}");
+            let public_fields = query.logical_plan.schema().fields().iter()
+                .zip(&query.column_names)
+                .map(|(field, name)| field.as_ref().clone().with_name(name))
+                .collect::<Vec<_>>();
+            assert_eq!(public_fields, vec![expected_field.clone()], "{id}");
             phase = "create_physical_plan";
             let physical = query.create_physical_plan(&session).await?;
+            phase = "physical_schema";
+            assert_eq!(physical.schema().fields().len(), query.column_names.len(), "{id}");
+            assert_eq!(physical.schema().field(0), &expected_field, "{id}");
             phase = "collect";
             let batches = collect(physical.clone(), session.task_ctx()).await?;
             let mut rows = Vec::new();
