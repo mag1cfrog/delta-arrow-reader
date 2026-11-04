@@ -25,7 +25,7 @@ use crate::expressions::{CastExpr, Column, Literal};
 use crate::scalar_function::ScalarFunctionExpr;
 use crate::utils::collect_columns;
 
-use arrow::array::{RecordBatch, RecordBatchOptions};
+use arrow::array::{ArrayRef, RecordBatch, RecordBatchOptions, new_empty_array};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion_common::stats::{ColumnStatistics, Precision};
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
@@ -36,7 +36,7 @@ use datafusion_common::{
 
 use datafusion_physical_expr_common::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_expr_common::metrics::ExpressionEvaluatorMetrics;
-use datafusion_physical_expr_common::physical_expr::fmt_sql;
+use datafusion_physical_expr_common::physical_expr::{RowEvaluationFailure, fmt_sql};
 use datafusion_physical_expr_common::sort_expr::{LexOrdering, PhysicalSortExpr};
 use datafusion_physical_expr_common::utils::evaluate_expressions_to_arrays_with_metrics;
 use indexmap::IndexMap;
@@ -785,6 +785,18 @@ pub struct Projector {
     expression_metrics: Option<ExpressionEvaluatorMetrics>,
 }
 
+/// A normal-schema projection batch preceding an optional owned row failure.
+///
+/// The batch contains exactly the rows before the failure, including NULLs.
+/// An opaque failure remains an outer error without a recoverable batch.
+#[derive(Debug)]
+pub struct ProjectedRowPrefix {
+    /// Real rows in the projector's complete output schema, excluding the failure.
+    pub batch: RecordBatch,
+    /// Failure at `batch.num_rows()`, retaining its original input row and cause.
+    pub failure: Option<RowEvaluationFailure>,
+}
+
 impl Projector {
     /// Construct the projector with metrics. After execution, related metrics will
     /// be tracked inside `ExecutionPlanMetricsSet`
@@ -831,6 +843,81 @@ impl Projector {
             RecordBatch::try_new(Arc::clone(&self.output_schema), arrays)
                 .map_err(Into::into)
         }
+    }
+
+    /// Evaluate each output once, retaining rows before the earliest localized
+    /// failure. Later outputs see only the still-reachable input prefix; ties
+    /// keep the earlier output's error. Opaque errors are returned unchanged.
+    /// Invalid prefix shapes and output-schema mismatches are returned as errors.
+    pub fn project_batch_until_error(
+        &self,
+        batch: &RecordBatch,
+    ) -> Result<ProjectedRowPrefix> {
+        let mut rows = batch.num_rows();
+        let mut failure = None;
+        let mut values = Vec::with_capacity(self.projection.exprs.len());
+        for (index, projection) in self.projection.exprs.iter().enumerate() {
+            let _timer = self
+                .expression_metrics
+                .as_ref()
+                .and_then(|m| m.scoped_timer(index));
+            let prefix;
+            let input = if rows == batch.num_rows() {
+                batch
+            } else {
+                prefix = batch.slice(0, rows);
+                &prefix
+            };
+            let output = projection.expr.evaluate_rows_until_error(input)?;
+            output.validate(rows)?;
+            if let Some(error) = output.failure {
+                rows = error.row_index;
+                failure = Some(error);
+            }
+            values.push(output.values);
+            if rows == 0 && failure.is_some() {
+                break;
+            }
+        }
+        let mut arrays = values
+            .into_iter()
+            .enumerate()
+            .map(|(index, value)| match value {
+                datafusion_expr::ColumnarValue::Array(array) => {
+                    Ok(if array.len() == rows {
+                        array
+                    } else {
+                        array.slice(0, rows)
+                    })
+                }
+                scalar => {
+                    // Scalar broadcast is part of this output's evaluation metric.
+                    let _timer = self
+                        .expression_metrics
+                        .as_ref()
+                        .and_then(|m| m.scoped_timer(index));
+                    scalar.into_array_of_size(rows)
+                }
+            })
+            .collect::<Result<Vec<ArrayRef>>>()?;
+        // Unreached outputs at row 0 need only their empty declaration. Building
+        // the batch still validates every evaluated output against its field.
+        arrays.extend(
+            self.output_schema
+                .fields()
+                .iter()
+                .skip(arrays.len())
+                .map(|field| new_empty_array(field.data_type())),
+        );
+        let options = RecordBatchOptions::new().with_row_count(Some(rows));
+        Ok(ProjectedRowPrefix {
+            batch: RecordBatch::try_new_with_options(
+                Arc::clone(&self.output_schema),
+                arrays,
+                &options,
+            )?,
+            failure,
+        })
     }
 
     pub fn output_schema(&self) -> &SchemaRef {
@@ -981,21 +1068,19 @@ pub fn update_expr(
                     .iter()
                     .enumerate()
                     .find_map(|(index, proj_expr)| {
-                        proj_expr.expr.downcast_ref::<Column>().and_then(
-                            |projected_column| {
+                        proj_expr
+                            .expr
+                            .downcast_ref::<Column>()
+                            .and_then(|projected_column| {
                                 (column.name().eq(projected_column.name())
                                     && column.index() == projected_column.index())
                                 .then(|| {
                                     state = RewriteState::RewrittenValid;
                                     Arc::new(Column::new(&proj_expr.alias, index)) as _
                                 })
-                            },
-                        )
+                            })
                     })
-                    .map_or_else(
-                        || Ok(Transformed::no(expr)),
-                        |c| Ok(Transformed::yes(c)),
-                    )
+                    .map_or_else(|| Ok(Transformed::no(expr)), |c| Ok(Transformed::yes(c)))
             }
         })
         .data()?;
@@ -2534,7 +2619,9 @@ pub(crate) mod tests {
         // Attempt to merge and expect an error
         let err_msg = base.try_merge(&top).unwrap_err().to_string();
         assert!(
-            err_msg.contains("Internal error: Column index 5 out of bounds for projected expressions of length 2"),
+            err_msg.contains(
+                "Internal error: Column index 5 out of bounds for projected expressions of length 2"
+            ),
             "Unexpected error message: {err_msg}",
         );
     }

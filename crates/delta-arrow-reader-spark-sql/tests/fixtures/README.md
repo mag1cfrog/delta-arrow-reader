@@ -2767,8 +2767,9 @@ Arrow cast cause.
 16 from the original references and 196 from the fresh capture. The
 [row-priority package](slice-row-priority-902/README.md) adds 48 strict comparisons
 for direct SLICE operand failures across input rows, including the exact failing
-CAST input. Shared projection error transport (#920) and logical sort error
-ordering (#919) remain separate work.
+CAST input. The [shared-projection package](slice-shared-projection-errors-920/README.md)
+adds 12 strict comparisons for repeated expressions, named aliases, and retained
+input sorts across both ANSI modes at batch sizes 1 and 32.
 
 Local tests also check custom element fields and metadata, required-element
 NULL storage, nonzero input slices, repeated and empty evaluation, alias

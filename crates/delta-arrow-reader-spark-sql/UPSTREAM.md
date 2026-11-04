@@ -816,10 +816,29 @@ parameter failures retain earlier output rows for a nested consumer. The
 require exact error causes at batch sizes 1 and 32. Ordinary/native evaluation
 and TRY casts retain their existing paths; opaque callback failures stay opaque.
 
-Shared producer projections still need separate prefix transport (#920), and
-preserving a user logical sort below SLICE remains separate work (#919). The
-expression-local prefix API does not change projection streams or claim general
-row localization for CASE, arithmetic/cast kernels, or higher-order functions.
+Spark planning follows actual optimized projection and alias bindings from a
+row-error-requesting expression to its computed producers. Admitted projections
+evaluate each output once and emit real preceding rows in their normal schema,
+then the original owned error, then terminate. An earlier SLICE error in that
+prefix takes priority. Opaque failures remain immediate errors. Native/default
+projections keep the ordinary batch path, and valid shared callbacks retain
+their original invocation count and batch shape.
+
+A pre-optimizer analyzer retains original input-sort boundaries as logical
+provenance, including after physical sort movement. Admission stops at those
+boundaries and operators without established row-domain transport. The markers
+allow logical column, filter, and limit pruning. When a marked input retains its
+physical SortExec, InputSortBoundaryExec owns that sort and exposes its producer
+as the optimizer child. This keeps the consumer above the sort through physical
+projection rewrites while retaining SortExec's execution, ordering, distribution,
+statistics, metrics, spilling, and state reset.
+The [shared-projection references](tests/fixtures/slice-shared-projection-errors-920/README.md)
+require all twelve repeated, named, and retained-input-sort comparisons to match
+Spark, including the original bad cast input. Sort placement does not force
+complete-input materialization: the existing already-ordered shortcut and fetch
+behavior remain. Logically removed sorts are not reconstructed. These APIs do
+not claim general row localization for CASE, arithmetic/cast kernels, or
+higher-order functions.
 
 ### ARRAY_COMPACT result fields
 
