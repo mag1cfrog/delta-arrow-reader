@@ -888,8 +888,14 @@ mod tests {
             OffsetBuffer::from_lengths([1; 3]), structure.clone(), None,
         )?);
         let target_outer = DataType::List(Arc::new(Field::new_list_field(target_struct.clone(), true)));
-        for (runtime, target) in [(values, target_list.clone()), (structure, target_struct), (outer, target_outer)] {
-            let conversion = ResultCast::new(&target, &target, &context)?;
+        let planned_outer = DataType::List(Arc::new(Field::new_list_field(target_struct.clone(), false)));
+        for (runtime, planned_source, target) in [
+            (values, target_list.clone(), target_list.clone()),
+            (structure, target_struct.clone(), target_struct),
+            (outer.clone(), target_outer.clone(), target_outer.clone()),
+            (outer, planned_outer, target_outer),
+        ] {
+            let conversion = ResultCast::new(&planned_source, &target, &context)?;
             for (offset, len) in [(0, 3), (1, 2), (1, 0)] {
                 let input = runtime.slice(offset, len);
                 let actual = conversion.cast_array(&input)?;
