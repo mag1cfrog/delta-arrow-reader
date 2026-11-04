@@ -1541,7 +1541,9 @@ mod tests {
                 let literal = lit(ScalarValue::try_from_array(input.as_ref(), 0)?);
                 let inner = slice_expr(literal, lit(-2_i64), lit(3_i64), &schema)?;
                 let outer = slice_expr(inner, lit(-1_i64), lit(i64::from(i32::MAX)), &schema)?;
-                let info = SimplifyContext::builder().with_schema(schema.clone()).build();
+                let info = SimplifyContext::builder()
+                    .with_schema(schema.clone())
+                    .build();
                 let prepared = ExprSimplifier::new(info).simplify(outer)?;
                 let expr::Expr::Literal(value, _) = prepared else {
                     return Err(PlanError::internal("nested literal SLICE was not folded"));
@@ -1618,7 +1620,9 @@ mod tests {
                 arguments[operand] = opaque.call(vec![arguments[operand].clone()]);
                 let [array, start, length] = arguments;
                 let expression = slice_expr(array, start, length, &schema)?;
-                let info = SimplifyContext::builder().with_schema(schema.clone()).build();
+                let info = SimplifyContext::builder()
+                    .with_schema(schema.clone())
+                    .build();
                 let prepared = ExprSimplifier::new(info).simplify(expression)?;
                 let physical = session.create_physical_expr(prepared, &schema)?;
                 let value = physical.evaluate(&batch)?;
@@ -1626,7 +1630,11 @@ mod tests {
                 let result = value.to_array(1)?;
                 result.to_data().validate_full()?;
                 assert_eq!(
-                    result.as_list::<i32>().value(0).as_primitive::<Int32Type>().values(),
+                    result
+                        .as_list::<i32>()
+                        .value(0)
+                        .as_primitive::<Int32Type>()
+                        .values(),
                     &[3]
                 );
             }
