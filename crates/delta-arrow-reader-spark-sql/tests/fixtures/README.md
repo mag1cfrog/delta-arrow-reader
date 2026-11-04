@@ -2676,7 +2676,7 @@ returns an empty array. Eight ordered nullable rows cover negative tails, NULL
 elements and arguments, empty arrays, and INT_MIN start with zero length.
 
 `slice_coordinate_results.rs` combines these ten records with the ten original
-signed-coordinate records for 40 strict comparisons at batches 1 and 32. It
+signed-coordinate records for 40 coordinate comparisons at batches 1 and 32. It
 requires every comparison flag and every available recorded schema stage, and
 emits all query outcomes before aggregate failure. Its literal/provider result
 assertions retain the independent Spark discriminators without inherited
@@ -2688,6 +2688,18 @@ Struct child fields with metadata, complete output types, valid Arrow data and
 the interpreted empty result. The pre-existing scalar list-cast loss of
 immediate element metadata is tracked separately in
 [#909](https://github.com/mag1cfrog/delta-arrow-reader/issues/909).
+
+`slice-conditional-coordinates/` adds twelve independent Spark observations for
+six CASE scenarios, with raw SHA256
+`0c22220e5442eca3679cb876835d95a595f4aac8a5904e702bec3ce36a85cece`.
+The portable recapture preserves the frozen v2 SQL and provider inputs. Its
+verifier checked all twelve ordered results, complete stage maps, structured
+errors and error phases against the original raw before integration. The package
+archives the original v2 source and manifest and records all lineage hashes.
+Reached invalid literal branches fail during optimization, dead invalid branches
+return `[9]`, and a provider-dependent invalid branch fails during collection.
+The same driver compares these 24 batch identities with all nine flags and every
+recorded stage, for 64 strict comparisons in total.
 
 `slice-parameters/reachability/` preserves 24 further Spark observations, with
 raw reference SHA256

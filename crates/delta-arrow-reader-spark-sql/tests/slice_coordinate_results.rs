@@ -29,6 +29,15 @@ const COORDINATE_CAPTURE_IDS: &[&str] = &[
     "nullable_boundary_coordinates",
 ];
 
+const CONDITIONAL_COORDINATE_CAPTURE_IDS: &[&str] = &[
+    "positive_overflow_invalid_start_then",
+    "positive_overflow_invalid_length_then",
+    "negative_overflow_invalid_start_then",
+    "positive_overflow_invalid_start_else",
+    "nonoverflow_invalid_start_then",
+    "provider_overflow_invalid_start_then",
+];
+
 fn load_parameter_capture_coordinates() -> TestResult<(Value, Vec<Value>)> {
     let manifest: Value =
         serde_json::from_str(include_str!("fixtures/slice-parameters/manifest.json"))?;
@@ -197,6 +206,77 @@ fn load_coordinate_capture() -> TestResult<(Value, Vec<Value>)> {
     Ok((header, records))
 }
 
+fn load_conditional_coordinate_capture() -> TestResult<(Value, Vec<Value>)> {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/slice-conditional-coordinates/manifest.json"
+    ))?;
+    let mut records = include_str!("fixtures/slice-conditional-coordinates/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(manifest["scenario_count"], 6);
+    assert_eq!(manifest["observation_count"], 12);
+    assert_eq!(records.len(), 13);
+    let header = records.remove(0);
+    for (key, value) in manifest.as_object().ok_or("missing conditional manifest")? {
+        assert_eq!(&header[key], value, "{key}");
+    }
+    let (coordinate_header, _) = load_coordinate_capture()?;
+    for key in ["spark_version", "spark_revision", "timezone"] {
+        assert_eq!(header[key], coordinate_header[key], "{key}");
+    }
+    assert_eq!(header["group"], "slice-894-conditional-coordinates-v1");
+    assert_eq!(header["process_timezone"], "UTC");
+    assert_eq!(header["provider_input_roundtrip_checked"], true);
+    assert_eq!(header["capture_sha256"], manifest["capture_script_sha256"]);
+    assert_eq!(
+        header["capture_sha256"],
+        "f4a887d7bb0fcaab7f3a47a17a189acb38f22bed3b096534fd194f17f9934d1e"
+    );
+    assert_eq!(
+        header["manifest_sha256"],
+        "22c9167c539405efbbc5f6deffe276d478b5b41e5fc46eb9f551176324956a28"
+    );
+    assert_eq!(
+        header["lineage"]["raw_sha256"],
+        "10816e70cc7dfd46dafbed53b48a35a018a31fb3092458e7a78647a69120a4ac"
+    );
+    let provider = coordinate_header["inputs"]
+        .as_array()
+        .ok_or("missing coordinate inputs")?
+        .iter()
+        .find(|input| input["name"] == "slice_fields")
+        .ok_or("missing conditional provider")?;
+    assert_eq!(header["inputs"], json!([provider]));
+    let identities = records
+        .iter()
+        .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
+        .collect::<Vec<_>>();
+    let expected = [true, false]
+        .into_iter()
+        .flat_map(|ansi| {
+            CONDITIONAL_COORDINATE_CAPTURE_IDS
+                .iter()
+                .map(move |id| json!({"id":id,"ansi":ansi}))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(identities, expected);
+    assert_eq!(json!(identities), manifest["identities"]);
+    for case in &records {
+        let definition = manifest["scenarios"]
+            .as_array()
+            .ok_or("missing conditional scenarios")?
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("missing conditional scenario")?;
+        for (key, value) in definition.as_object().ok_or("missing definition")? {
+            assert_eq!(&case[key], value, "{} {key}", case["id"]);
+        }
+        assert_eq!(case["timezone"], "UTC");
+    }
+    Ok((header, records))
+}
+
 #[test]
 fn parameter_capture_preserves_signed_coordinate_results() -> TestResult {
     let (_, records) = load_parameter_capture_coordinates()?;
@@ -288,11 +368,60 @@ fn coordinate_capture_preserves_literal_and_provider_results() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn conditional_capture_preserves_reached_branch_error_stages() -> TestResult {
+    let (_, records) = load_conditional_coordinate_capture()?;
+    for case in &records {
+        let (condition, phase, stages) = match case["id"].as_str() {
+            Some("positive_overflow_invalid_start_then" | "negative_overflow_invalid_start_then") => {
+                ("INVALID_PARAMETER_VALUE.START", "optimized_schema", 3)
+            }
+            Some("positive_overflow_invalid_length_then") => {
+                ("INVALID_PARAMETER_VALUE.LENGTH", "optimized_schema", 3)
+            }
+            Some("provider_overflow_invalid_start_then") => {
+                ("INVALID_PARAMETER_VALUE.START", "collect", 6)
+            }
+            Some("positive_overflow_invalid_start_else" | "nonoverflow_invalid_start_then") => {
+                assert!(case.get("spark_error").is_none());
+                assert_eq!(case["expected"]["rows"], json!([[["9"]]]));
+                assert_eq!(case["spark_collected_rows"], case["expected"]["rows"]);
+                ("", "", 7)
+            }
+            _ => return Err("unexpected conditional coordinate reference".into()),
+        };
+        if !condition.is_empty() {
+            assert_eq!(case["expected"], json!({"condition":condition}));
+            assert_eq!(case["spark_error_phase"], phase);
+            assert_eq!(case["spark_error_details"]["condition"], condition);
+            assert_eq!(case["spark_error_details"]["sql_state"], "22023");
+            assert_eq!(case["spark_error_details"]["metadata_errors"], json!([]));
+            assert!(case["spark_error"].as_str().is_some_and(|error| !error.is_empty()));
+            assert!(case["spark_error_traceback"].as_str().is_some_and(|trace| !trace.is_empty()));
+        }
+        assert_eq!(case["ordered"], true);
+        let schemas = case["schema_stages"].as_object().ok_or("missing stages")?;
+        assert_eq!(schemas.len(), stages);
+        assert_eq!(case["spark_plans"].as_object().map(|plans| plans.len()), Some(stages - 2));
+        for stage in [
+            "public", "resolved", "analyzed", "optimized", "physical",
+            "executed_before_collect", "executed",
+        ].into_iter().take(stages) {
+            assert_eq!(schemas[stage], schemas["public"], "{} {stage}", case["id"]);
+            if stage != "public" && stage != "resolved" {
+                assert!(case["spark_plans"][stage].as_str().is_some_and(|plan| !plan.is_empty()));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn slice_coordinate_results_match_independent_spark() -> TestResult {
     let groups = [
         load_parameter_capture_coordinates()?,
         load_coordinate_capture()?,
+        load_conditional_coordinate_capture()?,
     ];
     let mut completed = std::collections::BTreeSet::new();
     let mut differences = Vec::new();
@@ -387,7 +516,7 @@ async fn slice_coordinate_results_match_independent_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(completed.len(), 40);
+    assert_eq!(completed.len(), 64);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

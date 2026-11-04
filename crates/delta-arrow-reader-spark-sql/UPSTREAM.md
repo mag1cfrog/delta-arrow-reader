@@ -771,6 +771,8 @@ retains Spark's interpreted Int32 endpoint overflow, while runtime values use
 Spark's generated clipping behavior. The private adapter disables generic
 constant evaluation during logical simplification so constant parents cannot
 bypass that distinction.
+The existing logical simplifier prepares closed SLICE results before constant
+parameter validation, so CASE pruning uses the same interpreted bounds.
 The dedicated [coordinate references](tests/fixtures/README.md#arrays_overlap-floating-operands)
 and broad parameter suite require full parity. Two non-NULL batch error-priority
 observations (#902) retain their separate inherited controls.

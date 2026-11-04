@@ -11,6 +11,14 @@ raw hash, `10816e70cc7dfd46dafbed53b48a35a018a31fb3092458e7a78647a69120a4ac`.
 The original raw remains in the review evidence; the portable recapture has its
 own source hash, manifest hash, raw plans and tracebacks.
 
+The canonical `spark-reference.jsonl` is the portable recapture, with SHA256
+`0c22220e5442eca3679cb876835d95a595f4aac8a5904e702bec3ce36a85cece`.
+Its source SHA256 is
+`f4a887d7bb0fcaab7f3a47a17a189acb38f22bed3b096534fd194f17f9934d1e`,
+and its input manifest SHA256 is
+`22c9167c539405efbbc5f6deffe276d478b5b41e5fc46eb9f551176324956a28`.
+All twelve recorded outcomes were checked against frozen v2 before integration.
+
 From this directory, use the pinned Spark Python environment and a fresh output
 path:
 
