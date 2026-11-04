@@ -416,27 +416,42 @@ async fn slice_concat_coordinates_preserve_null_short_circuiting() -> TestResult
         CAST(CONCAT('', CAST(CAST(txt AS INT) AS STRING)) AS INT), \
         CAST(length_txt AS INT)) AS r FROM slice_concat_input ORDER BY k";
     for batch_size in [1, 32] {
-        let session = SessionContext::new_with_state(configure_spark_sql(
-            SessionStateBuilder::new().with_default_features().with_config(
-                SessionConfig::new().with_batch_size(batch_size),
-            ),
-        ).build());
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(SessionConfig::new().with_batch_size(batch_size)),
+            )
+            .build(),
+        );
         spark_inputs::register_recorded_inputs(&session, &header, batch_size)?;
         for ansi_mode in [true, false] {
             let query = delta_arrow_reader_spark_sql::plan_query(
-                &session, sql, &delta_arrow_reader_spark_sql::SparkSqlOptions {
-                    ansi_mode, ..Default::default()
+                &session,
+                sql,
+                &delta_arrow_reader_spark_sql::SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
                 },
-            ).await?;
+            )
+            .await?;
             let physical = query.create_physical_plan(&session).await?;
-            let plan = datafusion::physical_plan::displayable(physical.as_ref()).indent(true).to_string();
+            let plan = datafusion::physical_plan::displayable(physical.as_ref())
+                .indent(true)
+                .to_string();
             assert!(plan.contains("spark_concat_runtime"), "{plan}");
-            let actual = spark_results::capture_spark_query_result(&session, &json!({
-                "sql":sql, "ansi":ansi_mode,
-            })).await?;
-            assert_eq!(actual["rows"], json!([
-                ["0",null], ["1",["10"]], ["2",null], ["3",["31"]],
-            ]), "ANSI={ansi_mode} batch={batch_size}");
+            let actual = spark_results::capture_spark_query_result(
+                &session,
+                &json!({
+                    "sql":sql, "ansi":ansi_mode,
+                }),
+            )
+            .await?;
+            assert_eq!(
+                actual["rows"],
+                json!([["0", null], ["1", ["10"]], ["2", null], ["3", ["31"]],]),
+                "ANSI={ansi_mode} batch={batch_size}"
+            );
         }
     }
     Ok(())
@@ -483,42 +498,45 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
         );
         spark_inputs::register_recorded_inputs(&session, &header, batch_size)?;
         for ansi_mode in [true, false] {
-          for (sql, runtime_concat) in [(sql, false), (concat_sql, true)] {
-            let query = delta_arrow_reader_spark_sql::plan_query(
-                &session,
-                sql,
-                &delta_arrow_reader_spark_sql::SparkSqlOptions {
-                    ansi_mode,
-                    ..Default::default()
-                },
-            )
-            .await?;
-            let physical = query.create_physical_plan(&session).await?;
-            if runtime_concat {
-                let plan = datafusion::physical_plan::displayable(physical.as_ref()).indent(true).to_string();
-                assert!(plan.matches("spark_concat_runtime").count() >= 2, "{plan}");
-            }
-            let schema = physical.schema();
-            assert_eq!(
-                schema.field(1).metadata().get("probe").map(String::as_str),
-                Some("kept")
-            );
-            let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
-            let mut rows = Vec::new();
-            for batch in batches {
-                spark_results::validate_batch(schema.as_ref(), &batch)?;
-                for row in 0..batch.num_rows() {
-                    rows.push(
-                        batch
-                            .columns()
-                            .iter()
-                            .map(|column| spark_results::encode_value(column.as_ref(), row))
-                            .collect::<TestResult<Vec<_>>>()?,
-                    );
+            for (sql, runtime_concat) in [(sql, false), (concat_sql, true)] {
+                let query = delta_arrow_reader_spark_sql::plan_query(
+                    &session,
+                    sql,
+                    &delta_arrow_reader_spark_sql::SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                let physical = query.create_physical_plan(&session).await?;
+                if runtime_concat {
+                    let plan = datafusion::physical_plan::displayable(physical.as_ref())
+                        .indent(true)
+                        .to_string();
+                    assert!(plan.matches("spark_concat_runtime").count() >= 2, "{plan}");
                 }
+                let schema = physical.schema();
+                assert_eq!(
+                    schema.field(1).metadata().get("probe").map(String::as_str),
+                    Some("kept")
+                );
+                let batches =
+                    datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+                let mut rows = Vec::new();
+                for batch in batches {
+                    spark_results::validate_batch(schema.as_ref(), &batch)?;
+                    for row in 0..batch.num_rows() {
+                        rows.push(
+                            batch
+                                .columns()
+                                .iter()
+                                .map(|column| spark_results::encode_value(column.as_ref(), row))
+                                .collect::<TestResult<Vec<_>>>()?,
+                        );
+                    }
+                }
+                assert_eq!(json!(rows), expected, "ANSI={ansi_mode} batch={batch_size}");
             }
-            assert_eq!(json!(rows), expected, "ANSI={ansi_mode} batch={batch_size}");
-          }
         }
     }
     Ok(())
