@@ -17,12 +17,14 @@ use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
+use self::input_sort_boundary::InputSortBoundaryExec;
 use self::monotonic_id::MonotonicIdExec;
 use self::spark_partition_id::SparkPartitionIdExec;
 use crate::expression_errors::SparkSqlExpressionSemantics;
 use crate::function::scalar::lower_runtime_concat;
 use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
 
+mod input_sort_boundary;
 mod monotonic_id;
 mod spark_partition_id;
 
@@ -112,7 +114,14 @@ impl ExtensionPlanner for SparkExtensionPlanner {
                 );
             };
             match provenance {
-                ProjectionRowErrorNode::InputSortBoundary(_) => Arc::clone(input),
+                ProjectionRowErrorNode::InputSortBoundary(_) => {
+                    if let Some(sort) = input.downcast_ref::<SortExec>() {
+                        Arc::new(InputSortBoundaryExec::new(sort.clone()))
+                    } else {
+                        // shortcut: protect retained sorts; restore removed sorts when their live specification is retained.
+                        Arc::clone(input)
+                    }
+                }
                 ProjectionRowErrorNode::PrefixProducer(_) => {
                     let Some(projection) = input.downcast_ref::<ProjectionExec>() else {
                         return internal_err!(

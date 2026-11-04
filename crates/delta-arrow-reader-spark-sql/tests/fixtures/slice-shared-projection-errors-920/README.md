@@ -20,14 +20,21 @@ capture source hashes. Its mutation checks reject incomplete records. The raw
 reference SHA256 is
 bef5d407f51ae133ba0ba7537bf0cec326a058201c4a7782e46ec3fe198423c5.
 
-`slice_shared_projection_errors_920.rs` requires eight strict repeated/named
-comparisons. Three sorted controls also match Spark. The sorted ANSI-true,
-batch-1 control records the separate #919 difference: START instead of Spark's
-CAST. That comparison remains explicitly non-strict. All 12 comparisons retain
-complete fields, error causes, schema stages, and input observations.
+`slice_shared_projection_errors_920.rs` requires all 12 comparisons to match
+strictly: eight repeated/named comparisons and four retained-input-sort
+comparisons. ANSI mode retains the actual `array_bad` cast cause below the input
+sort at both batch sizes; non-ANSI mode retains START. Complete fields, error
+causes, schema stages, and input observations remain part of every comparison.
 
 The all-valid callback control asserts one actual shared computed producer,
 four one-key invocations at batch 1, one four-key invocation at batch 32, exact
 rows and fields, and no planning calls. Physical observations bind consumers to
 the producer's real output index and assert prefix-transport admission. Generated
 column names do not decide admission.
+
+`slice_input_sort_boundary.rs` checks valid sorted results from forward and
+reversed providers, exact callback batches, complete fields and Arrow storage,
+and ordinary output-sort and native DataFusion controls. The boundary delegates
+to the retained SortExec; its already-ordered shortcut and fetch behavior remain.
+This coverage does not claim unconditional full-input materialization or
+recovery of a sort removed during logical optimization.

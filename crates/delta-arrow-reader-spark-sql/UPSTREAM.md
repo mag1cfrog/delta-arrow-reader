@@ -822,14 +822,21 @@ prefix takes priority. Opaque failures remain immediate errors. Native/default
 projections keep the ordinary batch path, and valid shared callbacks retain
 their original invocation count and batch shape.
 
-A pre-optimizer analyzer retains original input-sort boundaries as plan-only
+A pre-optimizer analyzer retains original input-sort boundaries as logical
 provenance, including after physical sort movement. Admission stops at those
 boundaries and operators without established row-domain transport. The markers
-allow column, filter, and limit pruning and lower without a runtime wrapper.
+allow logical column, filter, and limit pruning. When a marked input retains its
+physical SortExec, InputSortBoundaryExec owns that sort and exposes its producer
+as the optimizer child. This keeps the consumer above the sort through physical
+projection rewrites while retaining SortExec's execution, ordering, distribution,
+statistics, metrics, spilling, and state reset.
 The [shared-projection references](tests/fixtures/slice-shared-projection-errors-920/README.md)
-keep the separate sorted batch-1 difference under #919 explicit. Preserving that
-input sort at execution remains separate work. These APIs do not claim general
-row localization for CASE, arithmetic/cast kernels, or higher-order functions.
+require all twelve repeated, named, and retained-input-sort comparisons to match
+Spark, including the original bad cast input. Sort placement does not force
+complete-input materialization: the existing already-ordered shortcut and fetch
+behavior remain. Logically removed sorts are not reconstructed. These APIs do
+not claim general row localization for CASE, arithmetic/cast kernels, or
+higher-order functions.
 
 ### ARRAY_COMPACT result fields
 

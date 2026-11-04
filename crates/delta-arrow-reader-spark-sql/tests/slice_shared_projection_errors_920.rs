@@ -1,5 +1,5 @@
 //! Shared computed projections retain Spark row-error priority and callback reuse.
-//! The separately tracked sorted batch-1 difference remains an explicit control.
+//! Retained input sorts stay below their row-error consumers.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -153,9 +153,23 @@ fn projection_bindings(plan: &Arc<dyn ExecutionPlan>, path: Vec<usize>) -> TestR
             );
             by_index.entry(index).or_default().push(usage.clone());
         }
+        let boundary_children = input.children();
+        let producer_input = if input.name() == "InputSortBoundaryExec" {
+            let [producer] = boundary_children.as_slice() else {
+                return Err("an input-sort boundary must have exactly one producer".into());
+            };
+            assert_eq!(
+                input.schema(),
+                producer.schema(),
+                "sort preserves every bound output index"
+            );
+            *producer
+        } else {
+            input
+        };
         let mut shared = Vec::new();
-        if let Some(producer) = input.downcast_ref::<ProjectionExec>() {
-            assert_eq!(input.schema(), parent.input().schema());
+        if let Some(producer) = producer_input.downcast_ref::<ProjectionExec>() {
+            assert_eq!(producer_input.schema(), parent.input().schema());
             for (index, consumers) in &by_index {
                 let expression = producer
                     .expr()
@@ -178,7 +192,7 @@ fn projection_bindings(plan: &Arc<dyn ExecutionPlan>, path: Vec<usize>) -> TestR
             "input_schema":spark_results::capture_schema(input.schema().fields(), None)?,
             "parent_schema":spark_results::capture_schema(parent.schema().fields(), None)?,
             "column_uses":uses,"shared_computed_producers":shared,
-            "binding_basis":"actual parent-child plan edge and column index, not common-expression field names"}));
+            "binding_basis":"actual column index through the schema-preserving input-sort boundary when present, not common-expression field names"}));
     }
     for (index, child) in plan.children().into_iter().enumerate() {
         let mut child_path = path.clone();
@@ -349,6 +363,7 @@ async fn plan_observation(session: &SessionContext, case: &Value) -> TestResult<
         },
         "optimizer_rules":state.optimizer().rules.iter().map(|rule| rule.name()).collect::<Vec<_>>(),
         "prefix_producers":bindings.iter().filter(|binding| binding["prefix_transport"] == true).count(),
+        "input_sort_boundaries":bindings.iter().filter(|binding| binding["input_operator"] == "InputSortBoundaryExec").count(),
         "projection_bindings":bindings,"shared_computed_projection_edges":shared,
         "shared_projection_status":if shared > 0 { "observed" } else { "unverified_absent_in_actual_plan" },
         "cse_origin":"inspect SQL and optimized logical plan; explicit query projections are not automatically attributed to CSE",
@@ -401,7 +416,7 @@ fn cast_input_matches(case: &Value, observation: &Value) -> bool {
 }
 
 #[tokio::test]
-async fn shared_projections_match_spark_and_input_sort_keeps_its_recorded_control() -> TestResult {
+async fn shared_projections_and_retained_input_sort_match_spark() -> TestResult {
     let raw = include_str!("fixtures/slice-shared-projection-errors-920/spark-reference.jsonl");
     let manifest_source = include_str!("fixtures/slice-shared-projection-errors-920/manifest.json");
     assert_eq!(source_sha256(manifest_source)?, MANIFEST_SHA256);
@@ -459,7 +474,7 @@ async fn shared_projections_match_spark_and_input_sort_keeps_its_recorded_contro
             ["3", "array_bad", "start_bad", "length_bad"]
         ])
     );
-    let mut known_sort_differences = Vec::new();
+    let mut differences = Vec::new();
     let mut completions = std::collections::BTreeSet::new();
     for batch in [1, 32] {
         let session = session(batch);
@@ -570,39 +585,17 @@ async fn shared_projections_match_spark_and_input_sort_keeps_its_recorded_contro
             );
             let sorted = case["id"] == "logical_sort_below_outer_slice";
             assert_eq!(
+                plan["input_sort_boundaries"],
+                if sorted { 1 } else { 0 },
+                "only the original input sort becomes an execution boundary"
+            );
+            assert_eq!(
                 plan["prefix_producers"],
                 if sorted { 0 } else { 1 },
                 "admission follows real lineage and retains the original logical sort boundary"
             );
-            if sorted && case["ansi"] == true && batch == 1 {
-                assert!(!strict, "#919 remains a separate known Spark difference");
-                assert_eq!(
-                    observation["error"],
-                    "Execution error: [INVALID_PARAMETER_VALUE.START] SLICE start must not be zero"
-                );
-                assert_eq!(observation["native_phase"], "collect");
-                for flag in FLAGS {
-                    let expected =
-                        !matches!(*flag, "matches" | "error_matches" | "cast_input_matches");
-                    assert_eq!(
-                        observation[*flag], expected,
-                        "known #919 control flag {flag}"
-                    );
-                }
-                assert!(input_matches);
-                assert!(
-                    observation["schema_stage_matches"]
-                        .as_object()
-                        .is_some_and(|stages| stages.len() == required.len()
-                            && stages.values().all(|value| value == true))
-                );
-                assert!(
-                    observation.get("observer_error").is_none()
-                        && observation.get("panic").is_none()
-                );
-                known_sort_differences.push(observation);
-            } else {
-                assert!(strict, "{observation}");
+            if !strict {
+                differences.push(observation);
             }
             assert!(completions.insert((
                 case["id"].as_str().ok_or("missing ID")?.to_owned(),
@@ -614,13 +607,9 @@ async fn shared_projections_match_spark_and_input_sort_keeps_its_recorded_contro
     assert_eq!(completions.len(), 12);
     eprintln!(
         "SLICE_920_PLAN_COMPLETION {}",
-        json!({"identities":completions,"comparisons":12,"strict_matches":11,"known_919_differences":known_sort_differences.len()})
+        json!({"identities":completions,"comparisons":12,"strict_matches":12-differences.len(),"known_919_differences":0})
     );
-    assert_eq!(
-        known_sort_differences.len(),
-        1,
-        "#919 is recorded, not a strict pass"
-    );
+    assert!(differences.is_empty(), "{}", json!(differences));
     Ok(())
 }
 
