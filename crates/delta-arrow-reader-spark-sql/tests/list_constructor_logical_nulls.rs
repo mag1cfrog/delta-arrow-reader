@@ -40,7 +40,7 @@ fn encoded_integer_at(array: &dyn Array, row: usize) -> Result<Option<i32>, Arro
     }
 }
 
-fn assert_list_child_contract<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
+fn assert_list_constructor_preserves_encoded_children<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
     let union_fields = UnionFields::try_new(
         vec![0, 1],
         vec![
@@ -139,7 +139,12 @@ fn assert_list_child_contract<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
     let mut failures = Vec::new();
     for (id, values, expected) in cases {
         values.to_data().validate_full()?;
-        for (offset, length) in [(0, values.len()), (1, values.len() - 2), (1, 0)] {
+        for (offset, length) in [
+            (0, values.len()),
+            (1, values.len() - 1),
+            (1, values.len() - 2),
+            (1, 0),
+        ] {
             let values = values.slice(offset, length);
             let expected = &expected[offset..offset + length];
             let actual = (0..length)
@@ -162,14 +167,22 @@ fn assert_list_child_contract<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
                         values.clone(),
                         nulls.clone(),
                     );
+                    let empty = GenericListArray::<O>::try_new(
+                        field.clone(),
+                        OffsetBuffer::from_lengths([]),
+                        values.clone(),
+                        None,
+                    );
                     let context = format!("{id} offset={offset} len={length} parent_null={parent_null} element_nullable={element_nullable}");
                     if !element_nullable && null_count != 0 {
-                        let error = result.err().ok_or_else(|| {
-                            ArrowError::InvalidArgumentError(format!(
-                                "accepted a logical NULL: {context}"
-                            ))
-                        })?;
-                        assert!(error.to_string().contains("Non-nullable field"), "{context}: {error}");
+                        for result in [result, empty] {
+                            let error = result.err().ok_or_else(|| {
+                                ArrowError::InvalidArgumentError(format!(
+                                    "accepted a logical NULL: {context}"
+                                ))
+                            })?;
+                            assert!(error.to_string().contains("Non-nullable field"), "{context}: {error}");
+                        }
                         continue;
                     }
                     let list = match result {
@@ -190,12 +203,7 @@ fn assert_list_child_contract<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
                         .map(|row| encoded_integer_at(child.as_ref(), row))
                         .collect::<Result<Vec<_>, _>>()?;
                     assert_eq!(actual, expected, "{context}");
-                    let empty = GenericListArray::<O>::try_new(
-                        Arc::new(Field::new("entry", values.data_type().clone(), element_nullable)),
-                        OffsetBuffer::from_lengths([]),
-                        values.clone(),
-                        None,
-                    )?;
+                    let empty = empty?;
                     empty.to_data().validate_full()?;
                     assert!(empty.is_empty());
                     assert!(Arc::ptr_eq(empty.values(), &values));
@@ -221,12 +229,12 @@ fn assert_list_child_contract<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
 
 #[test]
 fn list_constructor_uses_logical_child_nulls() -> Result<(), ArrowError> {
-    assert_list_child_contract::<i32>()
+    assert_list_constructor_preserves_encoded_children::<i32>()
 }
 
 #[test]
 fn large_list_constructor_uses_logical_child_nulls() -> Result<(), ArrowError> {
-    assert_list_child_contract::<i64>()
+    assert_list_constructor_preserves_encoded_children::<i64>()
 }
 
 fn assert_nonzero_dense_union_nulls<O: OffsetSizeTrait>() -> Result<(), ArrowError> {
