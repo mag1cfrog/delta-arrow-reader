@@ -697,14 +697,27 @@ async fn captured_sort_boundary_allows_column_filter_and_limit_pruning() -> Test
 
     let native = session
         .sql(
-            "SELECT ARRAY(CAST(array_text AS INT)) AS a, \
-        ARRAY(CAST(array_text AS INT)) AS b FROM wide_input",
+            "SELECT make_array(CAST(array_text AS INT)) AS a, \
+        make_array(CAST(array_text AS INT)) AS b FROM wide_input",
         )
         .await?
         .create_physical_plan()
         .await?;
+    let native_bindings = projection_bindings(&native, vec![])?;
+    assert_eq!(
+        native_bindings
+            .iter()
+            .map(|binding| {
+                binding["shared_computed_producers"]
+                    .as_array()
+                    .map_or(0, Vec::len)
+            })
+            .sum::<usize>(),
+        1,
+        "the native control retains one actual shared computed producer"
+    );
     assert!(
-        projection_bindings(&native, vec![])?
+        native_bindings
             .iter()
             .all(|binding| binding["prefix_transport"] == false),
         "ordinary native shared projections do not opt in"
