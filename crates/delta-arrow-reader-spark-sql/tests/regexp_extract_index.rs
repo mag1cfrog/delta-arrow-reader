@@ -100,6 +100,12 @@ async fn regexp_extract_index_retains_local_input_and_null_boundaries() -> TestR
         include_str!("fixtures/regexp-extract-index-local-frontier-spark.jsonl"), 18)], 18, 108).await
 }
 
+#[tokio::test]
+async fn regexp_extract_index_retains_bare_and_local_known_null_references() -> TestResult {
+    capture_references(&[("foldable_null", "regexp-extract-index-foldable-null-spark.jsonl",
+        include_str!("fixtures/regexp-extract-index-foldable-null-spark.jsonl"), 16)], 16, 96).await
+}
+
 async fn capture_references(fixtures: &[(&str, &str, &str, usize)], expected_references: usize,
     expected_observations: usize) -> TestResult {
     let stages: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-native-stages.json"))?;
