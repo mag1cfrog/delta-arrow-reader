@@ -187,7 +187,8 @@ fn retain_constant_group_value(expr: Expr) -> Expr {
         }
         Expr::ScalarFunction(mut function)
             if function.func.inner().is::<SparkComparisonFloat>()
-                || function.func.inner().is::<NormalizeNestedFloatKeys>() =>
+                || (function.func.inner().is::<NormalizeNestedFloatKeys>()
+                    && function.func.inner().supports_constant_folding()) =>
         {
             function.args.remove(0)
         }

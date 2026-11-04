@@ -48,6 +48,7 @@ use super::{
 };
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
+    without_metadata_annotations,
     FunctionContextInput, drop_inherited_column_metadata, without_inherited_column_metadata,
 };
 
@@ -317,7 +318,7 @@ fn same_value_type(source: &DataType, target: &DataType) -> bool {
     source == target
 }
 
-fn structurally_equal(left: &DataType, right: &DataType) -> bool {
+pub(crate) fn structurally_equal(left: &DataType, right: &DataType) -> bool {
     if let (Some(left), Some(right)) = (list_field(left), list_field(right)) {
         return structurally_equal(left.data_type(), right.data_type());
     }
@@ -419,6 +420,20 @@ pub(crate) fn cast_nested_value(
     Ok(drop_inherited_column_metadata(
         ScalarUDF::from(conversion).call(vec![argument]),
     ))
+}
+
+pub(crate) fn nested_result_cast_input(expression: &expr::Expr) -> Option<&expr::Expr> {
+    let expr::Expr::ScalarFunction(function) = without_metadata_annotations(expression) else {
+        return None;
+    };
+    if function.func.inner().is::<NestedResultCast>() {
+        match function.args.as_slice() {
+            [input] => Some(input),
+            _ => None,
+        }
+    } else {
+        None
+    }
 }
 
 fn coalesce_declaration_cast_input(expression: &expr::Expr) -> Option<&expr::Expr> {

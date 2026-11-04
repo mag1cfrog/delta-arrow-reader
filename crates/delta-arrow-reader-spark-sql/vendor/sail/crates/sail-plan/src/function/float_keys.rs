@@ -14,14 +14,90 @@ use datafusion_expr::{
     ScalarUDFImpl, Signature, Volatility,
 };
 
-use crate::function::common::SparkComparisonFloat;
+use crate::function::common::{
+    SparkComparisonFloat, literal_value_without_evaluation, without_metadata_annotations,
+};
+
+// Spark NormalizeFloatingNumbers distributes through constructors and conditionals;
+// other ARRAY values require a nonfoldable ArrayTransform before comparison.
+pub(crate) fn normalize_spark_float_array_comparison(
+    expression: Expr,
+    schema: &DFSchema,
+) -> Result<Expr> {
+    let expression = without_metadata_annotations(&expression).clone();
+    let data_type = expression.get_type(schema)?;
+    if !contains_float(&data_type) {
+        return Ok(expression);
+    }
+    // Spark's NULL STRUCT branch discards its field transforms; NULL ARRAY keeps ArrayTransform.
+    if matches!(&data_type, DataType::Struct(_))
+        && let Some(value) = literal_value_without_evaluation(&expression)
+        && value.is_null()
+    {
+        return Ok(datafusion_expr::lit(value));
+    }
+    Ok(match expression {
+        Expr::Alias(mut alias) => {
+            alias.expr = Box::new(normalize_spark_float_array_comparison(*alias.expr, schema)?);
+            Expr::Alias(alias)
+        }
+        Expr::ScalarFunction(mut function)
+            if function
+                .func
+                .inner()
+                .is::<sail_function::scalar::array::spark_array::SparkArray>()
+                || function
+                    .func
+                    .inner()
+                    .is::<sail_function::scalar::struct_function::StructFunction>()
+                || function
+                    .func
+                    .inner()
+                    .is::<datafusion::functions::core::coalesce::CoalesceFunc>() =>
+        {
+            function.args = function
+                .args
+                .into_iter()
+                .map(|arg| normalize_spark_float_array_comparison(arg, schema))
+                .collect::<Result<_>>()?;
+            Expr::ScalarFunction(function)
+        }
+        Expr::Case(mut case) => {
+            for (_, value) in &mut case.when_then_expr {
+                **value = normalize_spark_float_array_comparison(*value.clone(), schema)?;
+            }
+            if let Some(value) = &mut case.else_expr {
+                **value = normalize_spark_float_array_comparison(*value.clone(), schema)?;
+            }
+            Expr::Case(case)
+        }
+        expression if float_normalization_uses_array_transform(&data_type) => {
+            ScalarUDF::from(NormalizeNestedFloatKeys { foldable: false }).call(vec![expression])
+        }
+        expression => normalize_spark_float_key(expression, schema)?,
+    })
+}
+
+fn float_normalization_uses_array_transform(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::List(field)
+        | DataType::LargeList(field)
+        | DataType::FixedSizeList(field, _)
+        | DataType::ListView(field)
+        | DataType::LargeListView(field) => contains_float(field.data_type()),
+        DataType::Struct(fields) => fields
+            .iter()
+            .any(|field| float_normalization_uses_array_transform(field.data_type())),
+        _ => false,
+    }
+}
 
 pub(crate) fn normalize_spark_float_key(expression: Expr, schema: &DFSchema) -> Result<Expr> {
     let data_type = expression.get_type(schema)?;
     if matches!(data_type, DataType::Float32 | DataType::Float64) {
         Ok(ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![expression]))
     } else if contains_float(&data_type) {
-        Ok(ScalarUDF::from(NormalizeNestedFloatKeys).call(vec![expression]))
+        Ok(ScalarUDF::from(NormalizeNestedFloatKeys::default()).call(vec![expression]))
     } else {
         Ok(expression)
     }
@@ -41,7 +117,15 @@ fn contains_float(data_type: &DataType) -> bool {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub(crate) struct NormalizeNestedFloatKeys;
+pub(crate) struct NormalizeNestedFloatKeys {
+    foldable: bool,
+}
+
+impl Default for NormalizeNestedFloatKeys {
+    fn default() -> Self {
+        Self { foldable: true }
+    }
+}
 
 impl ScalarUDFImpl for NormalizeNestedFloatKeys {
     fn name(&self) -> &str {
@@ -52,6 +136,10 @@ impl ScalarUDFImpl for NormalizeNestedFloatKeys {
         static SIGNATURE: std::sync::LazyLock<Signature> =
             std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
         &SIGNATURE
+    }
+
+    fn supports_constant_folding(&self) -> bool {
+        self.foldable
     }
 
     fn return_type(&self, args: &[DataType]) -> Result<DataType> {
@@ -252,7 +340,7 @@ mod tests {
                             .with_metadata([("origin".into(), "provider".into())].into()),
                     );
                     let returned =
-                        NormalizeNestedFloatKeys.return_field_from_args(ReturnFieldArgs {
+                        NormalizeNestedFloatKeys::default().return_field_from_args(ReturnFieldArgs {
                             arg_fields: std::slice::from_ref(&field),
                             scalar_arguments: &[None],
                         })?;
@@ -270,7 +358,7 @@ mod tests {
                         return_field: field,
                         config_options: Arc::default(),
                     };
-                    let result = NormalizeNestedFloatKeys
+                    let result = NormalizeNestedFloatKeys::default()
                         .invoke_with_args(args)?
                         .into_array(len)?;
                     assert_eq!(result.as_struct().column(0).to_data(), expected.to_data());
@@ -285,7 +373,7 @@ mod tests {
                         let value = ScalarValue::try_from_array(&input, 0)?;
                         let field = Arc::new(Field::new("key", input.data_type().clone(), true));
                         let scalar =
-                            NormalizeNestedFloatKeys.invoke_with_args(ScalarFunctionArgs {
+                            NormalizeNestedFloatKeys::default().invoke_with_args(ScalarFunctionArgs {
                                 args: vec![ColumnarValue::Scalar(value)],
                                 arg_fields: vec![field.clone()],
                                 number_rows: 1,

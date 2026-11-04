@@ -186,7 +186,7 @@ pub(crate) fn materialize_metadata_literals(
         if let expr::Expr::ScalarFunction(function) = &expression
             && let Some(annotation) = function.func.inner().downcast_ref::<SparkResultMetadata>()
             && let [argument] = function.args.as_slice()
-            && let Some(value) = literal_metadata_value(argument)
+            && let Some(value) = literal_value_without_evaluation(argument)
             && let Ok((_, field)) = argument.to_field(&DFSchema::empty())
         {
             if annotation.lifetime == ResultMetadataLifetime::AnalysisOnly {
@@ -209,13 +209,13 @@ pub(crate) fn materialize_metadata_literals(
     })
 }
 
-fn literal_metadata_value(expression: &expr::Expr) -> Option<ScalarValue> {
+pub(crate) fn literal_value_without_evaluation(expression: &expr::Expr) -> Option<ScalarValue> {
     match without_metadata_annotations(expression) {
         expr::Expr::Literal(value, _) => Some(value.clone()),
-        expr::Expr::Alias(alias) => literal_metadata_value(&alias.expr),
+        expr::Expr::Alias(alias) => literal_value_without_evaluation(&alias.expr),
         expr::Expr::Cast(expr::Cast { expr, field })
         | expr::Expr::TryCast(expr::TryCast { expr, field }) => {
-            let value = literal_metadata_value(expr)?;
+            let value = literal_value_without_evaluation(expr)?;
             // Keep invalid casts for the normal analyzer/planner to reject.
             if value.is_null() && can_cast_types(&value.data_type(), field.data_type()) {
                 ScalarValue::try_new_null(field.data_type()).ok()
@@ -1341,7 +1341,7 @@ impl ScalarUDFImpl for NormalizeFloatArrayForSparkComparison {
                 .map(|value| value.data_type())
                 .collect::<Vec<_>>(),
         )?;
-        crate::function::float_keys::NormalizeNestedFloatKeys.invoke_with_args(args)
+        crate::function::float_keys::NormalizeNestedFloatKeys::default().invoke_with_args(args)
     }
 }
 
