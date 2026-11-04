@@ -1,11 +1,17 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use datafusion::arrow::datatypes::DataType;
+use std::sync::Arc;
+
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::functions::expr_fn;
 use datafusion::functions::regex::expr_fn as regex_fn;
 use datafusion::functions::regex::regexpcount::RegexpCountFunc;
 use datafusion::functions::regex::regexpinstr::RegexpInstrFunc;
+use datafusion::functions::string as native_string;
 use datafusion_common::{DFSchema, ScalarValue};
-use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast, when};
+use datafusion_expr::{
+    ColumnarValue, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, cast, expr, lit, try_cast, when,
+};
 use datafusion_functions_nested::expr_fn::array_element;
 use datafusion_spark::function::math::expr_fn as math_fn;
 use datafusion_spark::function::string::elt::SparkElt;
@@ -177,12 +183,65 @@ fn replace(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
     Ok(expr_fn::replace(str, substr, replacement))
 }
 
+/// Field policy for TRIM/LTRIM/RTRIM/LOWER/UPPER: every supplied argument can
+/// propagate NULL. Signature, output type, metadata and values remain native.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct NullPropagatingStringFunction(Arc<ScalarUDF>);
+
+impl ScalarUDFImpl for NullPropagatingStringFunction {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    fn aliases(&self) -> &[String] {
+        self.0.aliases()
+    }
+
+    fn signature(&self) -> &Signature {
+        self.0.signature()
+    }
+
+    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+        self.0.return_type(arg_types)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        // The resolver asks for metadata before ordinary signature validation.
+        if args.arg_fields.is_empty() {
+            return datafusion_common::plan_err!("{} requires at least one argument", self.name());
+        }
+        let nullable = args.arg_fields.iter().any(|field| field.is_nullable());
+        let field = self.0.return_field_from_args(args)?;
+        Ok(Arc::new(field.as_ref().clone().with_nullable(nullable)))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        self.0.invoke_with_args(args)
+    }
+}
+
+fn call_null_propagating_string(
+    function: Arc<ScalarUDF>,
+    arguments: Vec<expr::Expr>,
+) -> expr::Expr {
+    ScalarUDF::from(NullPropagatingStringFunction(function)).call(arguments)
+}
+
 fn lower(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-    Ok(expr_fn::lower(validate_utf8(input)?))
+    Ok(call_null_propagating_string(
+        native_string::lower(),
+        vec![validate_utf8(input)?],
+    ))
 }
 
 fn upper(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-    Ok(expr_fn::upper(validate_utf8(input)?))
+    Ok(call_null_propagating_string(
+        native_string::upper(),
+        vec![validate_utf8(input)?],
+    ))
 }
 
 fn startswith(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -399,7 +458,12 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("locate", F::custom(position)),
         ("lower", F::custom(lower)),
         ("lpad", F::var_arg(expr_fn::lpad)),
-        ("ltrim", F::var_arg(rev_args(expr_fn::ltrim))),
+        (
+            "ltrim",
+            F::var_arg(rev_args(|args| {
+                call_null_propagating_string(native_string::ltrim(), args)
+            })),
+        ),
         ("luhn_check", F::unary(string_fn::luhn_check)),
         ("make_valid_utf8", F::udf(MakeValidUtf8::new())),
         ("mask", F::udf(SparkMask::new())),
@@ -419,7 +483,12 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("replace", F::var_arg(replace)),
         ("right", F::binary(expr_fn::right)),
         ("rpad", F::var_arg(expr_fn::rpad)),
-        ("rtrim", F::var_arg(rev_args(expr_fn::rtrim))),
+        (
+            "rtrim",
+            F::var_arg(rev_args(|args| {
+                call_null_propagating_string(native_string::rtrim(), args)
+            })),
+        ),
         ("sentences", F::udf(SparkSentences::new())),
         ("soundex", F::udf(Soundex::new())),
         ("space", F::unary(space)),
@@ -434,7 +503,12 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("to_number", F::udf(SparkToNumber::new(false))),
         ("to_varchar", F::custom(to_char)),
         ("translate", F::ternary(expr_fn::translate)),
-        ("trim", F::var_arg(rev_args(expr_fn::trim))),
+        (
+            "trim",
+            F::var_arg(rev_args(|args| {
+                call_null_propagating_string(native_string::btrim(), args)
+            })),
+        ),
         ("try_to_binary", F::udf(SparkTryToBinary::new())),
         ("try_to_number", F::udf(SparkToNumber::new(true))),
         ("try_validate_utf8", F::custom(try_validate_utf8)),
