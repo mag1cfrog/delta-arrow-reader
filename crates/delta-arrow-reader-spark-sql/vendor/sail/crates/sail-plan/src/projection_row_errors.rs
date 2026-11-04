@@ -1,8 +1,8 @@
 //! Retain original input-sort boundaries and admit computed prefix producers.
 //!
 //! Admission follows optimized projection output bindings, including CSE and
-//! named aliases. A logical input sort blocks it even if physical planning later
-//! moves that sort above the requesting expression.
+//! named aliases. An original input sort blocks admission; retained sorts lower
+//! to execution boundaries below the requesting expression.
 
 use std::collections::{BTreeSet, HashSet};
 use std::fmt;
@@ -169,7 +169,7 @@ fn rewrite_requested_input(
     }
 }
 
-/// Plan-only provenance. Both variants preserve their current child's full schema.
+/// Logical provenance preserving the current child's complete schema.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd)]
 pub(crate) enum ProjectionRowErrorNode {
     /// An original logical sort stops requests from its output consumers.
