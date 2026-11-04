@@ -190,7 +190,8 @@ The local wrapper delegates the remaining result field and type to the pinned
 DataFusion Spark function; computed metadata stays empty. Required operands
 therefore keep required results in direct, STRUCT and NULL-predicate consumers.
 The existing kernel and captured ANSI configuration still control evaluation.
-Overflow error conditions and constant-error stages remain tracked in #896.
+The [unary result-field references](tests/fixtures/unary-negate-fields/README.md)
+retain overflow error conditions and constant-error stages under #896.
 
 For Spark queries, deterministic correlated scalar projections and aliases over
 a guaranteed one-row relation reuse the existing expression substitution even

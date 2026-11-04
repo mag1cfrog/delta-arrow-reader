@@ -188,35 +188,9 @@ async fn slice_parent_fields_match_spark() -> TestResult {
         );
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let mut comparison = capture_slice_observation(async {
-                let mut comparison =
-                    spark_results::compare_exact_spark_query_stages(&session, case).await?;
-                let optimized =
-                    spark_results::capture_spark_optimized_observation(&session, case).await;
-                comparison["optimized_matches"] = json!(match &optimized {
-                    Ok(observation) =>
-                        observation["names_match"] == true
-                            && Some(&observation["schema"])
-                                == case["schema_stages"].get("optimized"),
-                    Err(error) =>
-                        case["schema_stages"].get("optimized").is_none()
-                            && comparison["error_matches"] == true
-                            && matches!(
-                                comparison["native_phase"].as_str(),
-                                Some("resolve" | "create_physical_plan")
-                            )
-                            && comparison["error"].as_str() == Some(error.to_string().as_str()),
-                });
-                comparison["optimized_schema"] = optimized
-                    .as_ref()
-                    .map(|observation| observation["schema"].clone())
-                    .unwrap_or(Value::Null);
-                comparison["optimized_observation"] =
-                    optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
-                comparison["optimized_error"] =
-                    json!(optimized.as_ref().err().map(ToString::to_string));
-                Ok(comparison)
-            })
+            let mut comparison = capture_slice_observation(
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case),
+            )
             .await?;
             comparison["group"] = records[0]["group"].clone();
             comparison["id"] = case["id"].clone();

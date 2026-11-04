@@ -2647,6 +2647,10 @@ phases and flags, including the components improved by the declaration fix.
 Negative controls reject changed references, components, metadata, panic fields
 and extra keys. These inherited checks do not establish full SLICE parity.
 
+The two stored `negative_length_runtime` objects include the #895 unary
+negation field correction, covering four batch comparisons. Their complete
+schemas now match Spark; their parameter-error difference remains owned by #880.
+
 The local storage check verifies that nullable-element SLICE results retain the
 native hidden span under a NULL parent, while required-element results compact
 that span before the original cast. Both retain visible values, NULL parents,

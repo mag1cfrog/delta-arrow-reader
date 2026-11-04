@@ -12,6 +12,33 @@ mod spark_inputs;
 mod spark_results;
 use spark_results::TestResult;
 
+fn unary_negate_matches_spark_or_inherited_control(
+    case: &Value,
+    comparison: &Value,
+    controls: &[Value],
+) -> bool {
+    if comparison["group"] != "unary-negate-fields-current-v1"
+        || comparison["id"] != case["id"]
+        || comparison["ansi"] != case["ansi"]
+        || case["ansi"].as_bool().is_none()
+        || !matches!(comparison["batch"].as_u64(), Some(1 | 32))
+        || comparison.get("panic").is_some()
+    {
+        return false;
+    }
+    if comparison["matches"] == true && comparison["optimized_matches"] == true {
+        return true;
+    }
+    let Some(control) = controls.iter().find(|control| {
+        control["issue"] == 896
+            && control["id"] == case["id"]
+            && control["ansi"] == case["ansi"]
+    }) else {
+        return false;
+    };
+    spark_results::matches_inherited_query_observation(case, comparison, control)
+}
+
 #[tokio::test]
 async fn unary_negate_fields_match_spark() -> TestResult {
     let manifest: Value =
@@ -47,6 +74,13 @@ async fn unary_negate_fields_match_spark() -> TestResult {
             assert_eq!(&case[key], value, "{} {key}", case["id"]);
         }
     }
+    let controls = include_str!("fixtures/unary-negate-fields/inherited-controls.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(controls.len(), 13);
+    assert_eq!(controls[0]["issues"], json!([896]));
+    assert_eq!(controls[0]["batch_objects_identical_except_batch"], true);
     let mut differences = Vec::new();
     let mut completed = std::collections::BTreeSet::new();
     for batch_size in [1, 32] {
@@ -76,8 +110,13 @@ async fn unary_negate_fields_match_spark() -> TestResult {
                 case["ansi"].as_bool().ok_or("missing ANSI")?,
                 batch_size,
             )));
+            comparison["owned_matches"] = json!(unary_negate_matches_spark_or_inherited_control(
+                case,
+                &comparison,
+                &controls[1..],
+            ));
             eprintln!("UNARY_NEGATE_FIELDS_OBSERVATION {comparison}");
-            if comparison["matches"] != true || comparison["optimized_matches"] != true {
+            if comparison["owned_matches"] != true {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: expected={} stages={}, actual={comparison}",
                     case["id"], case["ansi"], case["expected"], case["schema_stages"]
@@ -87,6 +126,106 @@ async fn unary_negate_fields_match_spark() -> TestResult {
     }
     assert_eq!(completed.len(), 144);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[test]
+fn inherited_unary_overflow_controls_reject_new_differences() -> TestResult {
+    let references = include_str!("fixtures/unary-negate-fields/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let controls = include_str!("fixtures/unary-negate-fields/inherited-controls.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let controls = &controls[1..];
+    let mut identities = std::collections::BTreeSet::new();
+    for control in controls {
+        assert_eq!(control["issue"], 896);
+        assert_eq!(control["ansi"], true);
+        let id = control["id"].as_str().ok_or("missing ID")?;
+        assert!(identities.insert(id));
+        let case = references
+            .iter()
+            .find(|case| case["id"] == control["id"] && case["ansi"] == control["ansi"])
+            .ok_or("missing inherited reference")?;
+        assert_eq!(control["reference"], *case);
+        assert_eq!(case["expected"]["condition"], "ARITHMETIC_OVERFLOW");
+        assert_eq!(control["observation"]["matches"], false);
+        assert_eq!(control["observation"]["error_matches"], false);
+        for batch_size in [1, 32] {
+            let mut comparison = control["observation"].clone();
+            comparison["batch"] = json!(batch_size);
+            assert!(unary_negate_matches_spark_or_inherited_control(case, &comparison, controls));
+            for key in comparison.as_object().ok_or("missing observation")?.keys() {
+                let mut wrong = comparison.clone();
+                wrong[key] = json!("new difference");
+                assert!(!unary_negate_matches_spark_or_inherited_control(case, &wrong, controls), "{key}");
+            }
+            for (key, value) in [
+                ("batch", json!(2)),
+                ("ansi", json!(false)),
+                ("panic", Value::Null),
+                ("extra", json!(true)),
+                ("rows", json!([["wrong value"]])),
+                ("rows_raw", json!([["wrong value"]])),
+                ("error", json!("[ARITHMETIC_OVERFLOW] different failure")),
+                ("native_phase", json!("resolve")),
+            ] {
+                let mut wrong = comparison.clone();
+                wrong[key] = value;
+                assert!(!unary_negate_matches_spark_or_inherited_control(case, &wrong, controls), "{key}");
+            }
+            for stage in [
+                "/public_schema",
+                "/before_collect",
+                "/physical_schema",
+                "/optimized_schema",
+                "/optimized_observation/schema",
+                "/optimized_observation/raw_schema",
+            ] {
+                for field_path in ["fields/0", "fields/0/type/fields/0"] {
+                    for (field, value) in [
+                        ("name", json!("wrong")),
+                        ("type", json!("string")),
+                        ("nullable", json!("wrong")),
+                        ("metadata", json!({"new":"difference"})),
+                    ] {
+                        let pointer = format!("{stage}/{field_path}/{field}");
+                        let mut wrong = comparison.clone();
+                        if let Some(actual) = wrong.pointer_mut(&pointer) {
+                            *actual = if field == "nullable" {
+                                json!(!actual.as_bool().ok_or("invalid field nullability")?)
+                            } else {
+                                value
+                            };
+                            assert!(!unary_negate_matches_spark_or_inherited_control(case, &wrong, controls), "{pointer}");
+                        }
+                    }
+                }
+            }
+            for key in case.as_object().ok_or("missing reference")?.keys() {
+                let mut wrong = case.clone();
+                wrong[key] = json!("different reference");
+                assert!(!unary_negate_matches_spark_or_inherited_control(&wrong, &comparison, controls), "{key}");
+            }
+        }
+    }
+    assert_eq!(identities, std::collections::BTreeSet::from([
+        "required_operator_int_min_direct",
+        "required_operator_int_min_struct",
+        "required_function_int_min_direct",
+        "required_function_int_min_struct",
+        "nullable_operator_int_min_direct",
+        "nullable_operator_int_min_is_null",
+        "nullable_operator_int_min_struct",
+        "nullable_function_int_min_direct",
+        "nullable_function_int_min_is_null",
+        "nullable_function_int_min_struct",
+        "constant_int_min_operator",
+        "constant_int_min_function",
+    ]));
     Ok(())
 }
 
