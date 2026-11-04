@@ -3051,3 +3051,45 @@ Float64 values with Python's `repr`, as in the frozen reference.
 ```sh
 python tests/fixtures/recapture_string_binary_spark.py --input tests/fixtures/rng-one-partition-spark.jsonl --output /tmp/concat-rng-spark-fresh.jsonl
 ```
+
+## Trim and case fields
+
+`trim-case-fields-spark.jsonl` retains all 208 original trim/case observations
+selected from the independent 633-query string/binary capture. The selected
+SQL, inputs, expected fields, rows and errors are unchanged.
+`trim-case-connected-spark.jsonl` adds 76 references for LCASE/UCASE, metadata,
+CAST and arithmetic boundaries. `trim-case-controls-spark.jsonl` adds 66
+references for custom trim arguments, aliases, Unicode, NULL consumers and
+arity controls. `trim_case_fields.rs` runs all 350 records in three string
+representations at batch sizes 1 and 32, for 2,100 observations.
+
+The controls fixture contains 33 SQL cases and 66 ANSI observations. Its
+preserved `selection` object describes the earlier connected seed's 38 cases
+and 76 observations; `replay.observations` records this capture's 66 observations.
+
+Every successful record compares complete analyzed and physical schemas and
+ordered rows. The regression gate also retains 48 bounded native negative
+profiles in `trim-case-native-dependency-profiles.jsonl`: 24 nested-case value
+differences under #792 and 24 analyzed numeric CAST differences under #796.
+These profiles copy actual native schemas and rows from the recorded candidate
+capture, with its source and evidence hashes. Matching a profile keeps
+`strict_match=false` and `full_compatibility_pass=false`; it only confirms that
+the recorded incompatibility has not changed. Other success differences fail.
+
+The 36 zero-argument trim contexts under #795 require the exact observed native
+formatter fingerprint and also keep both compatibility flags false. The other
+132 arity contexts check their specific resolution causes without claiming
+Spark diagnostic identifiers or complete parity. All 2,100 observations remain
+in the output. A passing regression gate does not close #775 or waive its
+original complete-field/value acceptance requirements.
+
+Native SQL and BTRIM controls run before and after Spark queries. Direct Spark
+plans compare actual Arrow storage and values with native LOWER/UPPER and trim
+kernels for all case aliases, required/nullable/empty providers and sliced
+batches. Volatile counters check that planning does not evaluate arguments and
+execution evaluates each once.
+
+All captures record Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1+0, Python 3.12.14,
+loaded artifact hashes, UTC inputs and both ANSI modes. Recollect a fixture
+with the shared replayer and a fresh output path; it ignores expected fields.
