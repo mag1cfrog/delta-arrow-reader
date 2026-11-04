@@ -728,10 +728,13 @@ mod tests {
                         Arc::new(Field::new("v", data_type, index == nullable_index))
                     })
                     .collect::<Vec<_>>();
-                let output = udf.return_field_from_args(ReturnFieldArgs {
-                    arg_fields: &arg_fields,
-                    scalar_arguments: &vec![None; arity],
-                })?;
+                let output = ScalarUDFImpl::return_field_from_args(
+                    &udf,
+                    ReturnFieldArgs {
+                        arg_fields: &arg_fields,
+                        scalar_arguments: &vec![None; arity],
+                    },
+                )?;
                 assert_eq!(output.data_type(), &DataType::Utf8);
                 assert_eq!(output.is_nullable(), nullable_index < arity);
                 assert!(output.metadata().is_empty());
