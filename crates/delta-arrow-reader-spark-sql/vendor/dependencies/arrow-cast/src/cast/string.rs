@@ -191,24 +191,28 @@ fn parse_string_iter<
 fn parse_string_rows_iter<'a, P: Parser, I: Iterator<Item = Option<&'a str>>>(
     iter: I,
 ) -> (Vec<P::Native>, Option<StringParseFailure>) {
-    let mut failure = None;
-    let values = iter
-        .enumerate()
-        .map_while(|(row_index, value)| match value {
-            Some(value) => P::parse(value).or_else(|| {
-                failure = Some(StringParseFailure {
-                    row_index,
-                    error: ArrowError::CastError(format!(
-                        "Cannot cast string '{value}' to value of {} type",
-                        P::DATA_TYPE
-                    )),
-                });
-                None
-            }),
-            None => Some(P::Native::default()),
-        })
-        .collect();
-    (values, failure)
+    let mut values = Vec::new();
+    for value in iter {
+        let parsed = match value {
+            Some(value) => match P::parse(value) {
+                Some(parsed) => parsed,
+                None => {
+                    let row_index = values.len();
+                    let failure = StringParseFailure {
+                        row_index,
+                        error: ArrowError::CastError(format!(
+                            "Cannot cast string '{value}' to value of {} type",
+                            P::DATA_TYPE
+                        )),
+                    };
+                    return (values, Some(failure));
+                }
+            },
+            None => P::Native::default(),
+        };
+        values.push(parsed);
+    }
+    (values, None)
 }
 
 /// Casts generic string arrays to an ArrowTimestampType (TimeStampNanosecondArray, etc.)
