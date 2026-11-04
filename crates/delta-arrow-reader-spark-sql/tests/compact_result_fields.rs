@@ -194,3 +194,113 @@ async fn spark_compaction_preserves_successful_native_array_queries() -> TestRes
     }
     Ok(())
 }
+
+fn encoded_integer_at(array: &dyn arrow::array::Array, row: usize) -> TestResult<Option<i32>> {
+    use arrow::array::{AsArray, DictionaryArray, RunArray, UnionArray};
+    use arrow::datatypes::{DataType, Int8Type, Int32Type};
+
+    if array.logical_nulls().is_some_and(|nulls| nulls.is_null(row)) {
+        return Ok(None);
+    }
+    match array.data_type() {
+        DataType::Int32 => Ok(Some(array.as_primitive::<Int32Type>().value(row))),
+        DataType::Dictionary(_, _) => {
+            let dictionary = array.as_any().downcast_ref::<DictionaryArray<Int8Type>>().ok_or("expected Int8 dictionary")?;
+            encoded_integer_at(dictionary.values().as_ref(), dictionary.key(row).ok_or("missing dictionary key")?)
+        }
+        DataType::RunEndEncoded(_, _) => {
+            let runs = array.as_any().downcast_ref::<RunArray<Int32Type>>().ok_or("expected Int32 run ends")?;
+            encoded_integer_at(runs.values().as_ref(), runs.get_physical_index(row))
+        }
+        DataType::Union(_, _) => {
+            let union = array.as_any().downcast_ref::<UnionArray>().ok_or("expected union")?;
+            encoded_integer_at(union.child(union.type_id(row)).as_ref(), union.value_offset(row))
+        }
+        other => Err(format!("unexpected integer encoding: {other}").into()),
+    }
+}
+
+#[tokio::test]
+async fn compact_encoded_storage_boundaries() -> TestResult {
+    use std::sync::Arc;
+
+    use arrow::array::{Array, ArrayRef, DictionaryArray, Int8Array, Int32Array, ListArray, NullArray, RunArray, UnionArray};
+    use arrow::buffer::{NullBuffer, OffsetBuffer};
+    use arrow::datatypes::{DataType, Field, Int8Type, Int32Type, Schema, UnionFields};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::physical_plan::collect;
+    use datafusion::logical_expr::{ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_function::scalar::array::spark_array_compact::SparkArrayCompact;
+
+    let union_fields = UnionFields::try_new(
+        vec![0, 1],
+        vec![Field::new("integer", DataType::Int32, true), Field::new("unused", DataType::Null, true)],
+    )?;
+    let cases: [(&str, ArrayRef, ArrayRef, Vec<Option<i32>>); 3] = [
+        (
+            "inactive_null_union",
+            Arc::new(UnionArray::try_new(union_fields.clone(), vec![0, 0, 0, 0].into(), None, vec![Arc::new(Int32Array::from(vec![900, 3, 4, 800])), Arc::new(NullArray::new(4))])?),
+            Arc::new(UnionArray::try_new(union_fields, vec![1].into(), None, vec![Arc::new(Int32Array::from(vec![0])), Arc::new(NullArray::new(1))])?),
+            vec![Some(3), Some(4)],
+        ),
+        (
+            "sliced_hidden_null_run",
+            Arc::new(RunArray::<Int32Type>::try_new(&Int32Array::from(vec![1, 3, 4]), &Int32Array::from(vec![None, Some(3), None]))?),
+            Arc::new(RunArray::<Int32Type>::try_new(&Int32Array::from(vec![1]), &Int32Array::from(vec![None]))?),
+            vec![Some(3), Some(3)],
+        ),
+        (
+            "all_valid_dictionary_keys",
+            Arc::new(DictionaryArray::<Int8Type>::try_new(Int8Array::new(vec![0, 0, 1, 1].into(), Some(NullBuffer::new_valid(4))), Arc::new(Int32Array::from(vec![3, 4])))?),
+            Arc::new(DictionaryArray::<Int8Type>::try_new(Int8Array::from(vec![0]), Arc::new(Int32Array::from(vec![None])))?),
+            vec![Some(3), Some(4)],
+        ),
+    ];
+    for (id, values, visible_null, expected) in cases {
+        values.to_data().validate_full()?;
+        visible_null.to_data().validate_full()?;
+        assert_eq!(visible_null.logical_null_count(), 1, "{id}");
+        let element = Arc::new(Field::new_list_field(values.data_type().clone(), true));
+        let required = Arc::new(element.as_ref().clone().with_nullable(false));
+        assert!(ListArray::try_new(required.clone(), OffsetBuffer::from_lengths([1]), visible_null, None).is_err(), "{id}");
+        let input = Arc::new(ListArray::try_new(element, OffsetBuffer::from_lengths([1, 2, 1]), values, None)?.slice(1, 1));
+        input.to_data().validate_full()?;
+        let field = Arc::new(Field::new("a", input.data_type().clone(), false));
+        let udf = SparkArrayCompact::new();
+        let return_field = udf.return_field_from_args(ReturnFieldArgs { arg_fields: std::slice::from_ref(&field), scalar_arguments: &[None] })?;
+        let output = udf.invoke_with_args(ScalarFunctionArgs { args: vec![ColumnarValue::Array(input.clone())], arg_fields: vec![field.clone()], number_rows: 1, return_field, config_options: Arc::default() })?.into_array(1)?;
+        output.to_data().validate_full()?;
+        let output = output.as_any().downcast_ref::<ListArray>().ok_or("expected list output")?;
+        assert!(!output.is_null(0), "{id}");
+        let integers = (0..output.value(0).len()).map(|row| encoded_integer_at(output.value(0).as_ref(), row)).collect::<TestResult<Vec<_>>>()?;
+        assert_eq!(integers, expected, "{id}");
+        assert_eq!(output.values().logical_null_count(), 0, "{id}");
+        let required_constructor_error = ListArray::try_new(required, output.offsets().clone(), output.values().clone(), output.nulls().cloned()).err().map(|error| error.to_string());
+        let session = SessionContext::new_with_state(configure_spark_sql(SessionStateBuilder::new().with_default_features()).build());
+        session.register_batch("encoded_arrays", RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![input])?)?;
+        let mut phase = "resolve";
+        let public_result: TestResult<Value> = async {
+            let query = plan_query(&session, "SELECT ARRAY_COMPACT(a) AS r FROM encoded_arrays", &SparkSqlOptions::default()).await?;
+            phase = "create_physical_plan";
+            let physical = query.create_physical_plan(&session).await?;
+            phase = "collect";
+            let batches = collect(physical.clone(), session.task_ctx()).await?;
+            let mut rows = Vec::new();
+            for batch in batches {
+                spark_results::validate_batch(physical.schema().as_ref(), &batch)?;
+                let array = batch.column(0).as_any().downcast_ref::<ListArray>().ok_or("expected public list")?;
+                for row in 0..array.len() {
+                    assert!(!array.is_null(row), "{id}");
+                    let values = array.value(row);
+                    rows.push((0..values.len()).map(|row| encoded_integer_at(values.as_ref(), row)).collect::<TestResult<Vec<_>>>()?);
+                }
+            }
+            assert_eq!(rows, vec![expected.clone()], "{id}");
+            phase = "complete";
+            Ok(json!({"rows":rows,"public_fields":format!("{:?}", query.logical_plan.schema().fields()),"physical_fields":format!("{:?}", physical.schema().fields())}))
+        }.await;
+        eprintln!("ARRAY_COMPACT_STORAGE_OBSERVATION {}", json!({"id":id,"expected":expected,"direct_rows":[integers],"direct_valid":true,"logical_null_count":output.values().logical_null_count(),"storage_nullable":output.values().is_nullable(),"required_constructor_error":required_constructor_error,"visible_null_rejected":true,"public_phase":phase,"public":public_result.as_ref().ok(),"public_error":public_result.as_ref().err().map(ToString::to_string)}));
+    }
+    Ok(())
+}
