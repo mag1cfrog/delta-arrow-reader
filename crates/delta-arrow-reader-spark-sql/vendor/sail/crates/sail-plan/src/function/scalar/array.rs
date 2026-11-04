@@ -117,16 +117,16 @@ fn slice_expr(
     let length = cast(length, DataType::Int64);
     let end = start.clone() + length - lit(1_i64);
     Ok(cast(
-        ScalarUDF::from(SliceResultField(array_slice_udf())).call(vec![array, start, end]),
+        ScalarUDF::from(SparkArraySlice(array_slice_udf())).call(vec![array, start, end]),
         output_type,
     ))
 }
 
 // Spark's result is NULL only when an array or numeric argument is NULL.
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SliceResultField(Arc<ScalarUDF>);
+struct SparkArraySlice(Arc<ScalarUDF>);
 
-impl ScalarUDFImpl for SliceResultField {
+impl ScalarUDFImpl for SparkArraySlice {
     fn name(&self) -> &str {
         "spark_slice"
     }

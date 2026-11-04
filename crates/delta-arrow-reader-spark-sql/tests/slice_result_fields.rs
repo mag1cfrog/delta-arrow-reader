@@ -99,7 +99,7 @@ async fn capture_slice_optimized_schema(
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());
     let optimized = state.optimize(&query.logical_plan)?;
-    spark_results::capture_schema(optimized.schema().fields(), None)
+    spark_results::capture_schema(optimized.schema().fields(), Some(&query.column_names))
 }
 
 #[tokio::test]
