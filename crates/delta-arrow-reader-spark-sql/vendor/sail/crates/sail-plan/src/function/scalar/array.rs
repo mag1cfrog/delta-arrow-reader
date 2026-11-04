@@ -1370,7 +1370,6 @@ mod tests {
     fn slice_null_selection_preserves_storage_and_evaluates_active_rows_once() -> PlanResult<()> {
         use arrow::array::{ArrayRef, AsArray, Int32Array};
         use arrow::buffer::{NullBuffer, OffsetBuffer};
-        use arrow::datatypes::Schema;
         use std::sync::{LazyLock, Mutex};
 
         static CALLS: Mutex<Vec<(&'static str, i32)>> = Mutex::new(Vec::new());
