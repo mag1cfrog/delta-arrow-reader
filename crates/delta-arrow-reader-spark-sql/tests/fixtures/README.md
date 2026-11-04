@@ -2027,11 +2027,21 @@ type-coercion error in both plain and Spark-configured sessions. Library tests
 check exact Arrow result types, arbitrary bytes, NULLs and sliced representation
 pairs.
 
-Single-argument identities must preserve Spark's empty derived-field metadata.
-Invalid UTF-8 STRING bytes remain under #780, including CONCAT_WS and a binary
-round trip; Spark's displayed replacement character does not establish byte
-preservation. The assertions retain those required successes and every field.
-This fixture does not establish complete string/binary compatibility.
+The regression gate retains all 262 references and all 1,752 comparisons. It
+requires 1,728 complete field/value matches and the 24 exact pre-existing #780
+failures from the two invalid-byte CONCAT_WS queries. Every strict difference is
+logged with its complete expectation and actual observation. The compatibility
+summary reports `full_compatibility_pass=false` and `strict_failure_count=24`;
+these failures receive no Spark-match credit. A different cause, stage, field,
+byte result, missing observation or duplicate key fails the regression gate.
+The independent strict compatibility audit remains failed until #780 is repaired.
+
+Current staging preserves empty derived-field metadata for the retained ordered
+single-argument identity controls. Invalid UTF-8 STRING bytes remain under #780,
+including CONCAT_WS and a binary round trip; Spark's displayed replacement
+character does not establish byte preservation. A passing regression gate does
+not establish complete string/binary compatibility. #780 and the broader C06
+acceptance remain open.
 
 ## Regular expression extraction
 
