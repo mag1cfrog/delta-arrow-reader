@@ -57,7 +57,8 @@ pub struct ScalarFunctionExpr {
     return_field: FieldRef,
     config_options: Arc<ConfigOptions>,
     // Fixed by the UDF instance at planning time, avoiding a per-batch trait call.
-    short_circuit_null: bool,
+    short_circuit_first_arg_null: bool,
+    short_circuit_any_arg_null: bool,
     returns_first_non_null: bool,
 }
 
@@ -73,6 +74,35 @@ impl Debug for ScalarFunctionExpr {
 }
 
 impl ScalarFunctionExpr {
+    fn evaluate_null_short_circuit(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        use arrow::array::BooleanArray;
+
+        let mut active: Option<BooleanArray> = None;
+        let mut args = Vec::with_capacity(self.args.len());
+        for expr in &self.args {
+            let value = match &active {
+                Some(mask) => expr.evaluate_selection(batch, mask)?,
+                None => expr.evaluate(batch)?,
+            };
+            match &value {
+                ColumnarValue::Scalar(value) if value.is_null() => {
+                    active = Some(BooleanArray::from(vec![false; batch.num_rows()]));
+                }
+                ColumnarValue::Array(array) => {
+                    if let Some(nulls) = array.logical_nulls()
+                        && nulls.null_count() > 0
+                    {
+                        // Selection already restores NULLs for previously skipped rows.
+                        active = Some(BooleanArray::new(nulls.inner().clone(), None));
+                    }
+                }
+                _ => {}
+            }
+            args.push(value);
+        }
+        self.invoke_evaluated(batch, args)
+    }
+
     fn evaluate_first_non_null(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         use arrow::compute::{is_null, kernels::zip::zip};
 
@@ -103,8 +133,8 @@ impl ScalarFunctionExpr {
         Ok(result)
     }
 
-    // Invoked after argument evaluation, including selection for functions with
-    // a NULL-first-argument short circuit. Keep the normal result validation.
+    // Invoked after argument evaluation and any NULL selection.
+    // Keep the normal result validation.
     fn invoke_evaluated(
         &self,
         batch: &RecordBatch,
@@ -160,7 +190,8 @@ impl ScalarFunctionExpr {
     ) -> Self {
         Self {
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
-            short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
+            short_circuit_first_arg_null: fun.inner().short_circuits_on_null_first_arg(),
+            short_circuit_any_arg_null: fun.inner().short_circuits_on_any_null_argument(),
             fun,
             name: name.to_owned(),
             args,
@@ -196,7 +227,8 @@ impl ScalarFunctionExpr {
         let return_field = fun.return_field_from_args(ret_args)?;
         Ok(Self {
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
-            short_circuit_null: fun.inner().short_circuits_on_null_first_arg(),
+            short_circuit_first_arg_null: fun.inner().short_circuits_on_null_first_arg(),
+            short_circuit_any_arg_null: fun.inner().short_circuits_on_any_null_argument(),
             fun,
             name,
             args,
@@ -276,7 +308,8 @@ impl PartialEq for ScalarFunctionExpr {
             args,
             return_field,
             config_options,
-            short_circuit_null: _,     // derived from fun
+            short_circuit_first_arg_null: _,     // derived from fun
+            short_circuit_any_arg_null: _, // derived from fun
             returns_first_non_null: _, // derived from fun
         } = self;
         fun.eq(&o.fun)
@@ -297,7 +330,8 @@ impl Hash for ScalarFunctionExpr {
             args,
             return_field,
             config_options: _,         // expensive to hash, and often equal
-            short_circuit_null: _,     // derived from fun
+            short_circuit_first_arg_null: _,     // derived from fun
+            short_circuit_any_arg_null: _, // derived from fun
             returns_first_non_null: _, // derived from fun
         } = self;
         fun.hash(state);
@@ -323,9 +357,11 @@ impl PhysicalExpr for ScalarFunctionExpr {
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
-        // Empty batches skip the left input even when right-side selection is unnecessary.
+        // Empty batches skip all arguments on conditional evaluation paths.
         if batch.num_rows() == 0
-            && (self.returns_first_non_null || self.fun.inner().short_circuits_on_null_first_arg())
+            && (self.returns_first_non_null
+                || self.short_circuit_first_arg_null
+                || self.short_circuit_any_arg_null)
         {
             return Ok(ColumnarValue::Array(arrow::array::new_empty_array(
                 self.return_type(),
@@ -334,11 +370,14 @@ impl PhysicalExpr for ScalarFunctionExpr {
         if self.returns_first_non_null {
             return self.evaluate_first_non_null(batch);
         }
+        if self.short_circuit_any_arg_null {
+            return self.evaluate_null_short_circuit(batch);
+        }
         let Some(first) = self.args.first() else {
             return self.invoke_evaluated(batch, Vec::new());
         };
         let first = first.evaluate(batch)?;
-        if self.short_circuit_null {
+        if self.short_circuit_first_arg_null {
             use arrow::array::{Array, BooleanArray, new_null_array};
             use arrow::compute::{filter, filter_record_batch};
             use datafusion_physical_expr_common::utils::scatter;

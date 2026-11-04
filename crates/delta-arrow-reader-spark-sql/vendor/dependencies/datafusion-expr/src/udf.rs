@@ -876,6 +876,16 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
         false
     }
 
+    /// Whether each NULL argument skips later arguments for that row. The kernel
+    /// still receives the original rows; skipped scalar arguments can stay scalar.
+    /// Implementations must return NULL when any argument is NULL, regardless of
+    /// later argument values. Empty batches skip every argument.
+    /// Unlike `short_circuits`, this preserves eager constant folding; known
+    /// NULLs can be removed by `simplify` before folding their children.
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        false
+    }
+
     /// Whether this function returns the first non-NULL argument for each row.
     /// Physical evaluation visits each argument once, only for rows still NULL,
     /// instead of eagerly evaluating arguments and invoking the UDF kernel.
@@ -900,13 +910,16 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
     /// Implementations must ensure that the two returned `Vec`s are disjunct,
     /// and that each argument from `args` is present in one the two `Vec`s.
     ///
-    /// When overriding this function, [ScalarUDFImpl::short_circuits] must
-    /// be overridden to return `true`.
+    /// When overriding this function, `short_circuits` or
+    /// `short_circuits_on_any_null_argument` must return `true`.
     fn conditional_arguments<'a>(
         &self,
         args: &'a [Expr],
     ) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
-        if self.short_circuits() {
+        if self.short_circuits_on_any_null_argument() {
+            args.split_first()
+                .map(|(first, rest)| (vec![first], rest.iter().collect()))
+        } else if self.short_circuits() {
             Some((vec![], args.iter().collect()))
         } else {
             None
@@ -1176,6 +1189,10 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
 
     fn short_circuits_on_null_first_arg(&self) -> bool {
         self.inner.short_circuits_on_null_first_arg()
+    }
+
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        self.inner.short_circuits_on_any_null_argument()
     }
 
     fn returns_first_non_null_argument(&self) -> bool {
