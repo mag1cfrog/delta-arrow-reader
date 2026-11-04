@@ -31,6 +31,7 @@ use crate::function::result_coercion::{
 };
 use crate::function::scalar::SparkArraySlice;
 use crate::function::scalar::conditional::SparkNullIf;
+use crate::function::scalar::lower_runtime_substring;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
@@ -47,6 +48,7 @@ use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolea
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
 /// Prepare Spark nested result declarations and early expression errors.
@@ -273,6 +275,11 @@ impl PrepareSparkExpressions {
             .extensions
             .get::<SparkSqlExpressionSemantics>()
             .is_some();
+        let plan = if is_spark_query {
+            preserve_local_substrings(plan)?
+        } else {
+            plan
+        };
         let mut found = false;
         let mut check_arithmetic = false;
         let mut check_cast = false;
@@ -828,12 +835,94 @@ struct Prepare {
     has_null_sensitive_comparison: bool,
 }
 
+// Preserve the early local row-evaluation boundary before logical folding.
+// The classification never evaluates rows or callbacks.
+fn preserve_local_substrings(plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn expressions(exprs: &[Expr], columns: bool) -> Result<bool> {
+        exprs.iter().try_fold(true, |local, expr| {
+            Ok(local && row_expression_with_volatile(expr, columns, true)?)
+        })
+    }
+    fn local_input(plan: &LogicalPlan) -> Result<bool> {
+        match plan {
+            LogicalPlan::Values(values) => values
+                .values
+                .iter()
+                .try_fold(true, |local, row| Ok(local && expressions(row, false)?)),
+            LogicalPlan::EmptyRelation(_) => Ok(true),
+            LogicalPlan::Projection(project) => {
+                Ok(local_input(&project.input)? && expressions(&project.expr, true)?)
+            }
+            LogicalPlan::SubqueryAlias(alias) => local_input(&alias.input),
+            LogicalPlan::Filter(filter) => Ok(local_input(&filter.input)?
+                && row_expression_with_volatile(&filter.predicate, true, true)?),
+            LogicalPlan::Limit(limit) => {
+                let literal_count = |expr: &Expr| match expr {
+                    Expr::Literal(ScalarValue::Int32(Some(n)), _) => *n >= 0,
+                    Expr::Literal(ScalarValue::Int64(Some(n)), _) => *n >= 0,
+                    Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
+                        matches!(cast.expr.as_ref(), Expr::Literal(ScalarValue::Int32(Some(n)), _) if *n >= 0)
+                    }
+                    _ => false,
+                };
+                Ok(limit.skip.is_none()
+                    && limit.fetch.as_deref().is_some_and(literal_count)
+                    && local_input(&limit.input)?)
+            }
+            _ => Ok(false),
+        }
+    }
+    Ok(plan
+        .transform_up_with_subqueries(|node| {
+            let local = match &node {
+                LogicalPlan::Projection(project) => local_input(&project.input)?,
+                LogicalPlan::Filter(filter) => local_input(&filter.input)?,
+                _ => false,
+            };
+            if !local {
+                return Ok(Transformed::no(node));
+            }
+            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+            node.map_expressions(|expression| {
+                let name = names.save(&expression);
+                expression
+                    .transform_up(|expression| {
+                        lower_runtime_substring(expression).map_err(|error| {
+                            datafusion_common::DataFusionError::External(Box::new(error))
+                        })
+                    })
+                    .map(|expression| expression.update_data(|expression| name.restore(expression)))
+            })
+        })?
+        .data)
+}
+
+// Only substring's three closed argument lambdas participate in early local
+// conversion. Other higher-order functions retain their existing preparation.
+fn substring_argument_bodies(expr: &Expr) -> Result<Option<[&Expr; 3]>> {
+    SparkSubstring::closed_argument_bodies(expr)
+}
+
 // Physical row expressions only; aggregates, subqueries and outer references
 // require their own planning context. Volatile calls belong to execution, even
 // when their column inputs are already available as a local batch.
-fn row_expression(expr: &Expr, columns: bool) -> Result<bool> {
-    Ok(!expr.exists(|node| {
-        Ok(match node {
+pub(crate) fn row_expression(expr: &Expr, columns: bool) -> Result<bool> {
+    row_expression_with_volatile(expr, columns, false)
+}
+
+fn row_expression_with_volatile(expr: &Expr, columns: bool, allow_volatile: bool) -> Result<bool> {
+    let mut eligible = true;
+    expr.apply(|node| {
+        if let Some(bodies) = substring_argument_bodies(node)? {
+            for body in bodies {
+                if !row_expression_with_volatile(body, columns, allow_volatile)? {
+                    eligible = false;
+                    return Ok(TreeNodeRecursion::Stop);
+                }
+            }
+            return Ok(TreeNodeRecursion::Jump);
+        }
+        let unsupported = match node {
             Expr::Column(_) => !columns,
             Expr::Literal(_, _)
             | Expr::Alias(_)
@@ -855,10 +944,171 @@ fn row_expression(expr: &Expr, columns: bool) -> Result<bool> {
             | Expr::InList(_)
             | Expr::Like(_)
             | Expr::SimilarTo(_) => false,
-            Expr::ScalarFunction(_) => node.is_volatile_node(),
+            Expr::ScalarFunction(_) => !allow_volatile && node.is_volatile_node(),
             _ => true,
-        })
-    })?)
+        };
+        if unsupported {
+            eligible = false;
+            Ok(TreeNodeRecursion::Stop)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
+    })?;
+    Ok(eligible)
+}
+
+#[test]
+fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<()> {
+    use datafusion_expr::expr::{HigherOrderFunction, Lambda, LambdaVariable};
+    use datafusion_expr::{HigherOrderUDF, Volatility, col, create_udf};
+    use sail_function::scalar::datetime::convert_tz::{ConvertTz, ConvertTzLazy};
+
+    let lambda = |body| Expr::Lambda(Lambda::new(vec!["unused".into()], body));
+    let wrapper = |arguments| {
+        Expr::HigherOrderFunction(HigherOrderFunction::new(
+            Arc::new(HigherOrderUDF::new_from_impl(SparkSubstring::new())),
+            arguments,
+        ))
+    };
+    let closed = wrapper(vec![
+        lambda(lit("abc")),
+        lambda(lit(1_i64)),
+        lambda(lit(2_i64)),
+    ]);
+    assert!(substring_argument_bodies(&closed)?.is_some());
+    assert!(row_expression(&closed, false)?);
+    let column = wrapper(vec![
+        lambda(col("s")),
+        lambda(lit(1_i64)),
+        lambda(lit(2_i64)),
+    ]);
+    assert!(!row_expression(&column, false)?);
+    assert!(row_expression(&column, true)?);
+    for arguments in [
+        vec![lambda(lit("abc")), lambda(lit(1_i64))],
+        vec![lit("abc"), lambda(lit(1_i64)), lambda(lit(2_i64))],
+        vec![
+            lambda(Expr::LambdaVariable(LambdaVariable::new(
+                "unused".into(),
+                None,
+            ))),
+            lambda(lit(1_i64)),
+            lambda(lit(2_i64)),
+        ],
+    ] {
+        let malformed = wrapper(arguments);
+        assert!(substring_argument_bodies(&malformed)?.is_none());
+        assert!(!row_expression(&malformed, true)?);
+    }
+    let volatile = create_udf(
+        "volatile_substring_source",
+        vec![DataType::Utf8],
+        DataType::Utf8,
+        Volatility::Volatile,
+        Arc::new(|args| Ok(args[0].clone())),
+    );
+    let volatile = wrapper(vec![
+        lambda(volatile.call(vec![lit("abc")])),
+        lambda(lit(1_i64)),
+        lambda(lit(2_i64)),
+    ]);
+    assert!(substring_argument_bodies(&volatile)?.is_some());
+    assert!(!row_expression(&volatile, true)?);
+    assert!(row_expression_with_volatile(&volatile, true, true)?);
+    let other = Expr::HigherOrderFunction(HigherOrderFunction::new(
+        Arc::new(HigherOrderUDF::new_from_impl(ConvertTzLazy::new(
+            ConvertTz::new(false),
+        ))),
+        vec![lambda(lit("UTC")), lambda(lit("UTC")), lambda(lit(1_i64))],
+    ));
+    assert!(substring_argument_bodies(&other)?.is_none());
+    assert!(!row_expression(&other, true)?);
+    Ok(())
+}
+
+#[test]
+fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result<()> {
+    use datafusion::arrow::array::{ArrayRef, StringArray};
+    use datafusion::arrow::error::ArrowError;
+    use datafusion_common::DataFusionError;
+    use datafusion_expr::{ScalarUDF, cast, col};
+    use sail_function::scalar::collection::spark_concat::SparkConcat;
+
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        datafusion::arrow::datatypes::Field::new("s", DataType::Utf8, true),
+    ]))?);
+    let mut props = ExecutionProps::new();
+    props.config_options = Some(Arc::new(ConfigOptions::default()));
+    let prepare = Prepare {
+        props,
+        has_groups: false,
+        has_null_sensitive_comparison: false,
+    };
+    let source = datafusion_expr::expr_fn::when(lit(true), lit(ScalarValue::Utf8(None)))
+        .otherwise(col("s"))?;
+    let bad_position = cast(lit(1_i64) / lit(0_i64), DataType::Int64);
+    let marker = ScalarUDF::from(SparkSubstring::new().with_logical_arguments()).call(vec![
+        source.clone(),
+        bad_position.clone(),
+        lit(2_i64),
+    ]);
+    let prepared = prepare.precheck_expression(marker.clone(), &schema, false)?;
+    assert_eq!(prepared, marker);
+    assert!(!row_expression(&prepared, false)?);
+    let concat = ScalarUDF::from(SparkConcat::new().with_ordered_evaluation());
+    for args in [
+        vec![lit(ScalarValue::Utf8(None)), prepared.clone()],
+        vec![prepared.clone(), lit(ScalarValue::Utf8(None))],
+    ] {
+        let expression = prepare.precheck_expression(concat.call(args), &schema, false)?;
+        let error = prepare.check_expr(&expression, true).unwrap_err();
+        assert!(
+            matches!(error.find_root(), DataFusionError::ArrowError(cause, _)
+            if matches!(cause.as_ref(), ArrowError::DivideByZero))
+        );
+    }
+
+    // Factory-known NULL and whole/local parent masking keep their own paths.
+    let literal_null = ScalarUDF::from(
+        SparkSubstring::new()
+            .with_logical_arguments()
+            .with_known_null_argument(true),
+    )
+    .call(vec![
+        lit(ScalarValue::Utf8(None)),
+        bad_position.clone(),
+        lit(2_i64),
+    ]);
+    let literal_null = prepare.precheck_expression(literal_null, &schema, false)?;
+    assert!(matches!(&literal_null, Expr::Literal(value, _) if value.is_null()));
+    prepare.check_expr(&literal_null, true)?;
+
+    let constant_source = datafusion_expr::expr_fn::when(lit(true), lit(ScalarValue::Utf8(None)))
+        .otherwise(lit("abc"))?;
+    let constant = ScalarUDF::from(SparkSubstring::new().with_logical_arguments()).call(vec![
+        constant_source,
+        bad_position,
+        lit(2_i64),
+    ]);
+    let constant = lower_runtime_substring(constant)
+        .map_err(|error| DataFusionError::External(Box::new(error)))?
+        .data;
+    let constant = prepare.precheck_expression(constant, &schema, false)?;
+    prepare.check_expr(&constant, true)?;
+
+    let local = lower_runtime_substring(marker)
+        .map_err(|error| DataFusionError::External(Box::new(error)))?
+        .data;
+    let local = prepare.precheck_expression(local, &schema, true)?;
+    let batch = RecordBatch::try_new(
+        Arc::clone(schema.inner()),
+        vec![Arc::new(StringArray::from(vec!["abc"])) as ArrayRef],
+    )?;
+    let value = create_physical_expr(&local, &schema, &prepare.props)?
+        .evaluate(&batch)?
+        .into_array(1)?;
+    assert_eq!(value.null_count(), 1);
+    Ok(())
 }
 
 // Inline projection/alias chains over OneRowRelation without evaluating them.
@@ -1601,6 +1851,14 @@ impl Prepare {
                 } else {
                     expr
                 };
+                // Check the factory's nonconstant argument graph before CASE
+                // pruning can hide required constants behind a computed NULL.
+                if matches!(&expr, Expr::ScalarFunction(function)
+                    if function.func.inner().downcast_ref::<SparkSubstring>()
+                        .is_some_and(SparkSubstring::has_logical_arguments))
+                {
+                    return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
+                }
                 // Dead conditional parents can make a derived DIV column unused.
                 // Do not simplify arithmetic or Boolean parents before checking it.
                 if !local
@@ -1774,7 +2032,10 @@ impl Prepare {
         // Spark defers failed constant evaluation inside nonconstant CASE and
         // other conditional expressions. Subqueries still undergo optimization.
         let conditional = matches!(expr, Expr::Case(_))
-            || matches!(expr, Expr::ScalarFunction(f) if f.func.short_circuits());
+            || matches!(expr, Expr::ScalarFunction(f) if f.func.short_circuits()
+                && !f.func.inner().downcast_ref::<SparkSubstring>()
+                    .is_some_and(SparkSubstring::has_logical_arguments))
+            || substring_argument_bodies(expr)?.is_some();
         expr.apply_children(|child| {
             self.check_expr(child, constants && !conditional)?;
             Ok(TreeNodeRecursion::Continue)

@@ -2,6 +2,7 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
+use crate::scalar::string::spark_substring::SparkSubstring;
 use datafusion::arrow::array::{BooleanArray, StringArray};
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::compute::kernels::boolean::{is_null, or};
@@ -287,6 +288,16 @@ fn has_unfolded_constant_argument(args: &[Expr]) -> Result<bool> {
 // The caller has excluded folding-disabled extension contexts.
 // Summarize each child once so column-dependent chains take one syntax walk.
 fn concat_constant_state(expr: &Expr) -> Result<(bool, bool)> {
+    if let Some(bodies) = SparkSubstring::closed_argument_bodies(expr)? {
+        let mut constant = true;
+        let mut pending = false;
+        for body in bodies {
+            let (child_constant, child_pending) = concat_constant_state(body)?;
+            constant &= child_constant;
+            pending |= child_pending;
+        }
+        return Ok((constant, constant || pending));
+    }
     let mut constant = match expr {
         Expr::Literal(_, _)
         | Expr::Alias(_)
@@ -324,7 +335,12 @@ fn concat_constant_state(expr: &Expr) -> Result<(bool, bool)> {
     // short-circuit functions. Whole constant conditionals fold as one operand.
     if constant {
         pending = !matches!(expr, Expr::Literal(_, _));
-    } else if expr.short_circuits() && !matches!(expr, Expr::BinaryExpr(_)) {
+    } else if expr.short_circuits()
+        && !matches!(expr, Expr::BinaryExpr(_))
+        && !matches!(expr, Expr::ScalarFunction(function)
+            if function.func.inner().downcast_ref::<SparkSubstring>()
+                .is_some_and(SparkSubstring::has_logical_arguments))
+    {
         pending = false;
     }
     Ok((constant, pending))
