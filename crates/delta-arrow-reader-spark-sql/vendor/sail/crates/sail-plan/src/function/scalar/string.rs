@@ -8,6 +8,7 @@ use datafusion::functions::regex::regexpcount::RegexpCountFunc;
 use datafusion::functions::regex::regexpinstr::RegexpInstrFunc;
 use datafusion::functions::string as native_string;
 use datafusion::functions::string::{lower::LowerFunc, upper::UpperFunc};
+use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, ScalarValue};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
@@ -410,7 +411,6 @@ impl ScalarUDFImpl for NullPropagatingStringFunction {
             && self.is_case_conversion()
             && let [argument] = args.as_slice()
         {
-            // Constant evaluation precedes this hook, preserving literal case expansions.
             // Spark removes STRING casts first. Keep Arrow representation conversions
             // and their fields when bypassing the nested case conversion.
             let (argument, shells) = case_conversion_shells(argument, info.schema())?;
@@ -424,6 +424,16 @@ impl ScalarUDFImpl for NullPropagatingStringFunction {
                     })
                 && nested.args.len() == 1
             {
+                // Child UDF hooks can expose constants after the evaluator's first pass.
+                if crate::expression_errors::row_expression(argument, false)?
+                    && let Ok(literal @ expr::Expr::Literal(_, _)) =
+                        ExprSimplifier::new(info.clone()).simplify(argument.clone())
+                {
+                    let argument = rebuild_case_conversion_shells(shells, literal)?;
+                    return Ok(ExprSimplifyResult::Simplified(
+                        call_null_propagating_string(Arc::clone(&self.function), vec![argument]),
+                    ));
+                }
                 let argument = rebuild_case_conversion_shells(shells, nested.args[0].clone())?;
                 return Ok(ExprSimplifyResult::Simplified(
                     call_null_propagating_string(Arc::clone(&self.function), vec![argument]),
