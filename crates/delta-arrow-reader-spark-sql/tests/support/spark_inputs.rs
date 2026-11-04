@@ -195,7 +195,7 @@ fn recorded_binary_values_check_hex_and_preserve_bytes() -> TestResult {
         decode_recorded_value(&Value::Null, &DataType::Binary)?,
         ScalarValue::Binary(None)
     );
-    for encoded in [json!("0"), json!("gg"), json!("0G"), json!("\u00e9"), json!(1)] {
+    for encoded in [json!("0"), json!("gg"), json!("0G"), json!("\u{00e9}"), json!(1)] {
         assert!(decode_recorded_value(&encoded, &DataType::Binary).is_err());
     }
     Ok(())
