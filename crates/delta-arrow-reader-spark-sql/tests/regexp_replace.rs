@@ -13,6 +13,9 @@ use string_binary::{TestResult, capture_observation, capture_result, register_in
 #[path = "support/regexp_partition_layout.rs"]
 mod regexp_partition_layout;
 
+#[path = "support/regexp_capability.rs"]
+mod regexp_capability;
+
 fn session(batch_size: usize) -> SessionContext {
     SessionContext::new_with_state(
         configure_spark_sql(
@@ -45,22 +48,6 @@ fn schema_comparison(actual: &Value, expected: &Value, key: &str) -> &'static st
         (None, Some(_)) => "actual_unavailable",
         (None, None) => "unavailable",
     }
-}
-
-fn known_utf16_empty_matches(actual: &Value, expected: &Value, id: &str) -> bool {
-    if actual["analyzed_schema"] != expected["analyzed_schema"]
-        || actual["physical_schema"] != expected["physical_schema"]
-    {
-        return false;
-    }
-    let (native, spark) = match id {
-        "empty_supplementary" => ("XaX😀XbX", "XaX?X?XbX"),
-        "optional_supplementary"
-        | "nonempty_optional"
-        | "nonboundary_probe_retained_nonempty_optional" => ("<a><>😀<>b<>", "<a><>?<>?<>b<>"),
-        _ => return false,
-    };
-    actual["rows"] == json!([[native]]) && expected["rows"] == json!([[spark]])
 }
 
 // Match the independent Java diagnostic to its native parser category.
@@ -314,6 +301,16 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                             | "nonempty_split_dot"
                     );
                     let observed = capture_observation(&session, case).await?;
+                    let limit = regexp_capability::recorded_limit(
+                        fixture_name,
+                        case,
+                        representation,
+                        batch_size,
+                        &observed,
+                    );
+                    if !regexp_capability::completed_stages_are_retained(&observed) {
+                        differences.push(format!("{id}: missing completed native stage"));
+                    }
                     let error = observed["error"].as_str();
                     let analyzed_schema = observed
                         .get("analyzed_schema")
@@ -335,7 +332,8 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                     }
                     let status = if error.is_none() && complete_result_matches(&observed, expected) {
                         "exact"
-                    } else if physical_comparison != "difference" && error.is_some_and(|error| required_error_outcome_matches(error, analyzed_schema, expected)) {
+                    } else if !regexp_capability::has_recorded_case(fixture_name, case)
+                        && physical_comparison != "difference" && error.is_some_and(|error| required_error_outcome_matches(error, analyzed_schema, expected)) {
                         if expected.get("analyzed_schema").is_some() { "required_error" } else { "required_admission_error" }
                     } else if error.is_none() && known_like_name(&observed, expected, id) {
                         "external_like_name_791"
@@ -346,12 +344,18 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         error.contains("[INVALID_REGEXP_REPLACE]") && error.contains("java.lang.IllegalArgumentException: No group with name {missing}")
                     })) {
                         "external_sql_variable_substitution_789"
-                    } else if matches!(id, "position_supplementary_3" | "nonempty_split_dot") && physical_comparison != "difference" && analyzed_schema == Some(&expected["analyzed_schema"]) && expected["rows"] == json!([["a?XX"]]) && error.is_some_and(|error| error.contains("cannot start a native regex region inside a UTF-16 surrogate pair")) {
+                    } else if limit == Some("utf16_split_region")
+                        || (id == "position_supplementary_3"
+                            && case["sql"] == "SELECT regexp_replace('a😀b','.','X',3) AS r"
+                            && observed["analyzed_schema"] == expected["analyzed_schema"]
+                            && observed["physical_schema"] == expected["physical_schema"]
+                            && expected["rows"] == json!([["a?XX"]])
+                            && observed["error_stage"] == "execute"
+                            && error == Some("execute: Execution error: regexp_replace cannot start a native regex region inside a UTF-16 surrogate pair")) {
                         "external_java_utf16_region_798"
-                    } else if error.is_none() && known_utf16_empty_matches(&observed, expected, id) {
+                    } else if limit == Some("utf16_optional_advancement") {
                         "external_java_utf16_empty_match_798"
-                    } else if id == "anchored_last_newline" && expected["rows"] == json!([["a\n"]]) && error.is_none()
-                        && observed["analyzed_schema"] == expected["analyzed_schema"] && observed["physical_schema"] == expected["physical_schema"] && observed["rows"] == json!([["abc\n"]]) {
+                    } else if limit == Some("accepted_pattern_line_terminator") {
                         "external_java_pattern_779"
                     } else {
                         differences.push(format!("{id} ANSI={} representation={representation} batch={batch_size}: expected {expected}, observed {observed}",case["ansi"]));
@@ -425,7 +429,19 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
     Ok(())
 }
 
-fn known_nonboundary_mixed_optional(actual: &Value, expected: &Value, id: &str) -> bool {
+fn known_nonboundary_mixed_optional(actual: &Value, case: &Value) -> bool {
+    let expected = &case["expected"];
+    let Some(id) = case["id"].as_str() else {
+        return false;
+    };
+    let sql = match id {
+        "nonboundary_probe_column_mixed" => "SELECT k,regexp_replace(s,re,replacement) AS r FROM rr_nonboundary ORDER BY k",
+        "nonboundary_probe_column_position_2" => "SELECT k,regexp_replace(s,re,replacement,2) AS r FROM rr_nonboundary ORDER BY k",
+        _ => return false,
+    };
+    if case["sql"] != sql || !regexp_capability::completed_stages_are_retained(actual) {
+        return false;
+    }
     if actual["analyzed_schema"] != expected["analyzed_schema"]
         || actual["physical_schema"] != expected["physical_schema"]
     {
@@ -484,6 +500,16 @@ async fn regexp_replace_nonboundaries_match_spark_and_retain_adjacent_patterns()
                 let id = case["id"].as_str().ok_or("missing ID")?;
                 let expected = &case["expected"];
                 let actual = capture_observation(&session, case).await?;
+                let limit = regexp_capability::recorded_limit(
+                    "regexp-replace-nonboundary-spark.jsonl",
+                    case,
+                    representation,
+                    batch_size,
+                    &actual,
+                );
+                if !regexp_capability::completed_stages_are_retained(&actual) {
+                    differences.push(format!("{id}: missing completed native stage"));
+                }
                 let error = actual["error"].as_str();
                 let analyzed = actual
                     .get("analyzed_schema")
@@ -511,23 +537,13 @@ async fn regexp_replace_nonboundaries_match_spark_and_retain_adjacent_patterns()
                 )? {
                     external_partition_layout += 1;
                     "external_partition_layout_error"
-                } else if error.is_none() && known_utf16_empty_matches(&actual, expected, id) {
+                } else if limit == Some("utf16_optional_advancement") {
                     external_optional += 1;
                     "external_optional_utf16_798"
-                } else if error.is_none() && known_nonboundary_mixed_optional(&actual, expected, id)
-                {
+                } else if error.is_none() && known_nonboundary_mixed_optional(&actual, case) {
                     external_mixed += 1;
                     "external_mixed_optional_utf16_798"
-                } else if id == "nonboundary_probe_retained_nonempty_split_dot"
-                    && analyzed == Some(&expected["analyzed_schema"])
-                    && physical_comparison != "difference"
-                    && expected["rows"] == json!([["a?XX"]])
-                    && error.is_some_and(|error| {
-                        error.contains(
-                            "cannot start a native regex region inside a UTF-16 surrogate pair",
-                        )
-                    })
-                {
+                } else if limit == Some("utf16_split_region") {
                     external_region += 1;
                     "external_split_region_utf16_798"
                 } else {
@@ -560,6 +576,126 @@ async fn regexp_replace_nonboundaries_match_spark_and_retain_adjacent_patterns()
     assert_eq!(external_mixed, 24);
     assert_eq!(external_region, 12);
     assert_eq!(strict_differences, 54);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn regexp_native_capability_limits_retain_strict_spark_differences() -> TestResult {
+    use std::collections::{BTreeMap, HashSet};
+
+    let mut keys = HashSet::new();
+    let mut exact = 0;
+    let mut limits = BTreeMap::new();
+    let mut differences = Vec::new();
+    for (fixture, capture, references) in [
+        (
+            "regex-syntax-missing-spark.jsonl",
+            include_str!("fixtures/regex-syntax-missing-spark.jsonl"),
+            38,
+        ),
+        (
+            "regex-line-missing-spark.jsonl",
+            include_str!("fixtures/regex-line-missing-spark.jsonl"),
+            88,
+        ),
+        (
+            "regex-utf16-missing-spark.jsonl",
+            include_str!("fixtures/regex-utf16-missing-spark.jsonl"),
+            30,
+        ),
+        (
+            "regex-word-categories-spark.jsonl",
+            include_str!("fixtures/regex-word-categories-spark.jsonl"),
+            24,
+        ),
+    ] {
+        let records = capture
+            .split('\n')
+            .filter(|line| !line.is_empty())
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(records.len() - 1, references);
+        assert_eq!(records[0]["spark_version"], "4.2.0");
+        eprintln!(
+            "c06 regex capability header: {}",
+            json!({"fixture":fixture,"spark_capture_header":records[0],
+                "native_target_partitions":2,"native_session_timezone":"UTC",
+                "native_optimized_schema_available":false,"support_decision_approved":false})
+        );
+        for representation in 0..3 {
+            for batch_size in [1, 32] {
+                let session = session(batch_size);
+                register_inputs(&session, &records[0], representation, batch_size)?;
+                for case in &records[1..] {
+                    let key = json!({"fixture":fixture,"id":case["id"],"ansi":case["ansi"],
+                        "representation":representation,"batch_size":batch_size});
+                    assert!(keys.insert(key.to_string()), "duplicate observation {key}");
+                    let actual = capture_observation(&session, case).await?;
+                    let matches_reference =
+                        regexp_capability::complete_match(&actual, &case["expected"]);
+                    let limit = regexp_capability::recorded_limit(
+                        fixture,
+                        case,
+                        representation,
+                        batch_size,
+                        &actual,
+                    );
+                    if matches_reference {
+                        exact += 1;
+                        assert!(limit.is_none(), "a positive control cannot use a gap profile");
+                    } else if let Some(limit) = limit {
+                        *limits.entry(limit).or_insert(0) += 1;
+                    }
+                    if !regexp_capability::completed_stages_are_retained(&actual)
+                        || (!matches_reference && limit.is_none())
+                    {
+                        differences.push(format!("{key}: expected {}, observed {actual}", case["expected"]));
+                    }
+                    if fixture == "regex-word-categories-spark.jsonl"
+                        && case["id"] == "regexp_replace_nonboundary_literal"
+                    {
+                        assert_eq!(actual["rows"][0][1], json!("a|?|?|b"));
+                        assert_eq!(actual["rows"][0][1], case["expected"]["rows"][0][1]);
+                    }
+                    if fixture == "regex-word-categories-spark.jsonl"
+                        && case["id"] == "regexp_replace_nonboundary_column"
+                    {
+                        assert_eq!(actual["rows"][1], json!(["2", "a|?|?|b"]));
+                        assert_eq!(actual["rows"][1], case["expected"]["rows"][1]);
+                    }
+                    eprintln!(
+                        "c06 regex capability observation: {}",
+                        json!({"key":key,"sql":case["sql"],"known_limit":limit,
+                            "matches_reference":matches_reference,"full_compatibility_pass":false,
+                            "native_optimized_schema_available":false,
+                            "analyzed_comparison":schema_comparison(&actual,&case["expected"],"analyzed_schema"),
+                            "physical_comparison":schema_comparison(&actual,&case["expected"],"physical_schema"),
+                            "expected":case["expected"],"actual":actual})
+                    );
+                }
+            }
+        }
+    }
+    assert_eq!(keys.len(), 180 * 6);
+    assert_eq!(exact, 660);
+    assert_eq!(
+        limits,
+        BTreeMap::from([
+            ("accepted_pattern_line_terminator", 192),
+            ("java_only_lookbehind_syntax", 84),
+            ("malformed_pattern_diagnostic", 24),
+            ("native_unicode_word_classification", 96),
+            ("utf16_optional_advancement", 12),
+            ("utf16_split_region", 12),
+        ])
+    );
+    eprintln!(
+        "c06 regex capability summary: {}",
+        json!({"references":180,"observations":keys.len(),"exact":exact,
+            "strict_differences":420,"known_limits":limits,"unexpected_differences":differences.len(),
+            "full_compatibility_pass":false,"final_current_staging_replay_required":true})
+    );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
