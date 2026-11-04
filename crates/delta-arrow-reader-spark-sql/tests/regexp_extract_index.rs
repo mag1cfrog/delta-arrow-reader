@@ -200,9 +200,13 @@ async fn regexp_extract_index_checks_aliased_local_indices_before_limit_zero() -
     ];
     let session = SessionContext::new_with_state(
         configure_spark_sql(
-            SessionStateBuilder::new().with_default_features().with_config(
-                SessionConfig::new().with_batch_size(32).with_target_partitions(2),
-            ),
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(32)
+                        .with_target_partitions(2),
+                ),
         )
         .build(),
     );
@@ -217,39 +221,64 @@ async fn regexp_extract_index_checks_aliased_local_indices_before_limit_zero() -
         assert!(checked.insert((id, ansi)), "duplicate reference");
         let expected = &case["expected"];
         let actual = capture_observation(&session, case).await?;
-        assert_eq!(actual["analyzed_schema"], expected["analyzed_schema"], "{id} ANSI={ansi}");
-        assert!(actual["analyzed_arrow_schema"].as_str().is_some_and(|raw| !raw.is_empty()));
+        assert_eq!(
+            actual["analyzed_schema"], expected["analyzed_schema"],
+            "{id} ANSI={ansi}"
+        );
+        assert!(
+            actual["analyzed_arrow_schema"]
+                .as_str()
+                .is_some_and(|raw| !raw.is_empty())
+        );
         let identifier_match = if id == "index_limit_zero_local" && ansi {
             assert_eq!(expected["status"], "error");
             assert_eq!(expected["phase"], "optimized_schema");
             assert_eq!(expected["condition"], "CAST_OVERFLOW");
-            assert_eq!(expected["parameters"], json!({
-                "value":"4294967296L","sourceType":"\"BIGINT\"","targetType":"\"INT\"",
-                "ansiConfig":"\"spark.sql.ansi.enabled\""
-            }));
+            assert_eq!(
+                expected["parameters"],
+                json!({
+                    "value":"4294967296L","sourceType":"\"BIGINT\"","targetType":"\"INT\"",
+                    "ansiConfig":"\"spark.sql.ansi.enabled\""
+                })
+            );
             // This measured native boundary is independent of the draft stage profiles.
             assert_eq!(actual["error_stage"], "physical");
-            assert_eq!(actual["error"], "physical: preserve_spark_expression_errors\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32");
+            assert_eq!(
+                actual["error"],
+                "physical: preserve_spark_expression_errors\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+            );
             assert!(error_cause(&actual, expected));
             assert_eq!(availability(&actual, "physical_schema"), "null");
             assert_eq!(availability(&actual, "physical_arrow_schema"), "null");
             assert_eq!(availability(&actual, "rows"), "absent");
             // The missing Spark identifier remains a strict diagnostic difference under #922.
-            actual["error"].as_str().is_some_and(|error| error.contains("[CAST_OVERFLOW]"))
+            actual["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("[CAST_OVERFLOW]"))
         } else {
             assert_eq!(expected["status"], "ok");
             assert!(actual.get("error").is_none() && actual.get("error_stage").is_none());
-            assert_eq!(actual["physical_schema"], expected["physical_schema"], "{id} ANSI={ansi}");
-            assert!(actual["physical_arrow_schema"].as_str().is_some_and(|raw| !raw.is_empty()));
+            assert_eq!(
+                actual["physical_schema"], expected["physical_schema"],
+                "{id} ANSI={ansi}"
+            );
+            assert!(
+                actual["physical_arrow_schema"]
+                    .as_str()
+                    .is_some_and(|raw| !raw.is_empty())
+            );
             assert!(actual.get("rows").is_some());
             assert_eq!(actual.get("rows"), expected.get("rows"), "{id} ANSI={ansi}");
             true
         };
-        eprintln!("c06 alias boundary observation: {}", json!({
-            "id":id,"ansi":ansi,"sql":case["sql"],"actual":actual,
-            "diagnostic_identifier_match":identifier_match,"strict_reference_match":identifier_match,
-            "full_compatibility_pass":false
-        }));
+        eprintln!(
+            "c06 alias boundary observation: {}",
+            json!({
+                "id":id,"ansi":ansi,"sql":case["sql"],"actual":actual,
+                "diagnostic_identifier_match":identifier_match,"strict_reference_match":identifier_match,
+                "full_compatibility_pass":false
+            })
+        );
     }
     assert_eq!(checked.len(), selected.len() * 2);
     Ok(())
