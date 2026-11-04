@@ -1,0 +1,740 @@
+{
+  "group": "unary-negate-fields-current-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "scenario_count": 36,
+  "observation_count": 72,
+  "input_encoding": "decimal integer strings; positional arrays/structs; JSON null",
+  "reused_observer": "references/capture_spark_878.py",
+  "reused_observer_sha256": "85d335bbcba11c59e3fbd18dfe9283133de6d4fba2fcd461ffff8e2cac08e1f3",
+  "protected_880_sha256": {
+    "capture_spark.py": "e6eec5d94ed2755689629296bf13113272133f931f16ce268962c594d789abd2",
+    "manifest.json": "946249a428a88d17f99e5703bb71a9c27b824bc1cff20607ae1c83cbf76c74c0",
+    "spark-reference.jsonl": "d3d5001f84003b5756483f8f2699100746b1fd105ffcf92d8a974c219abafeb0"
+  },
+  "inputs": [
+    {
+      "name": "unary_input",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "required_int",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source_tag": "required_int",
+              "unit": "count"
+            }
+          },
+          {
+            "name": "nullable_int",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source_tag": "nullable_int",
+              "unit": "count"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "7",
+          "7"
+        ],
+        [
+          "1",
+          "-7",
+          null
+        ],
+        [
+          "2",
+          "-2147483648",
+          "-2147483648"
+        ],
+        [
+          "3",
+          "2147483647",
+          "-7"
+        ]
+      ]
+    },
+    {
+      "name": "unary_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "required_int",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "source_tag": "required_int",
+              "unit": "count"
+            }
+          },
+          {
+            "name": "nullable_int",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {
+              "source_tag": "nullable_int",
+              "unit": "count"
+            }
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "required_operator_ordinary_direct",
+      "sql": "SELECT -required_int AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "required",
+      "syntax": "operator",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "required_operator_ordinary_is_null",
+      "sql": "SELECT ISNULL(-required_int) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "required",
+      "syntax": "operator",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "required_operator_ordinary_struct",
+      "sql": "SELECT STRUCT(-required_int AS kept_name) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "required",
+      "syntax": "operator",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "required_operator_int_min_direct",
+      "sql": "SELECT -required_int AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "required",
+      "syntax": "operator",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "required_operator_int_min_is_null",
+      "sql": "SELECT ISNULL(-required_int) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "required",
+      "syntax": "operator",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "required_operator_int_min_struct",
+      "sql": "SELECT STRUCT(-required_int AS kept_name) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "required",
+      "syntax": "operator",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "empty_required_operator",
+      "sql": "SELECT -required_int AS computed, ISNULL(-required_int) AS is_null, STRUCT(-required_int AS kept_name) AS nested_result FROM unary_empty",
+      "family": "empty_provider",
+      "consumer": "combined",
+      "declaration": "required",
+      "syntax": "operator"
+    },
+    {
+      "id": "required_function_ordinary_direct",
+      "sql": "SELECT negative(required_int) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "required",
+      "syntax": "function",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "required_function_ordinary_is_null",
+      "sql": "SELECT ISNULL(negative(required_int)) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "required",
+      "syntax": "function",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "required_function_ordinary_struct",
+      "sql": "SELECT STRUCT(negative(required_int) AS kept_name) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "required",
+      "syntax": "function",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "required_function_int_min_direct",
+      "sql": "SELECT negative(required_int) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "required",
+      "syntax": "function",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "required_function_int_min_is_null",
+      "sql": "SELECT ISNULL(negative(required_int)) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "required",
+      "syntax": "function",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "required_function_int_min_struct",
+      "sql": "SELECT STRUCT(negative(required_int) AS kept_name) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "required",
+      "syntax": "function",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "empty_required_function",
+      "sql": "SELECT negative(required_int) AS computed, ISNULL(negative(required_int)) AS is_null, STRUCT(negative(required_int) AS kept_name) AS nested_result FROM unary_empty",
+      "family": "empty_provider",
+      "consumer": "combined",
+      "declaration": "required",
+      "syntax": "function"
+    },
+    {
+      "id": "source_required",
+      "sql": "SELECT required_int AS r FROM unary_input ORDER BY k",
+      "family": "source_metadata",
+      "consumer": "direct",
+      "declaration": "required",
+      "ordered": true
+    },
+    {
+      "id": "bigint_required_operator",
+      "sql": "SELECT -CAST(required_int AS BIGINT) AS computed, ISNULL(-CAST(required_int AS BIGINT)) AS is_null, STRUCT(-CAST(required_int AS BIGINT) AS kept_name) AS nested_result FROM unary_input ORDER BY k",
+      "family": "standalone_bigint",
+      "consumer": "combined",
+      "declaration": "required",
+      "syntax": "operator",
+      "ordered": true
+    },
+    {
+      "id": "bigint_required_function",
+      "sql": "SELECT negative(CAST(required_int AS BIGINT)) AS computed, ISNULL(negative(CAST(required_int AS BIGINT))) AS is_null, STRUCT(negative(CAST(required_int AS BIGINT)) AS kept_name) AS nested_result FROM unary_input ORDER BY k",
+      "family": "standalone_bigint",
+      "consumer": "combined",
+      "declaration": "required",
+      "syntax": "function",
+      "ordered": true
+    },
+    {
+      "id": "nullable_operator_ordinary_direct",
+      "sql": "SELECT -nullable_int AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "nullable_operator_ordinary_is_null",
+      "sql": "SELECT ISNULL(-nullable_int) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "nullable_operator_ordinary_struct",
+      "sql": "SELECT STRUCT(-nullable_int AS kept_name) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "nullable_operator_int_min_direct",
+      "sql": "SELECT -nullable_int AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "nullable_operator_int_min_is_null",
+      "sql": "SELECT ISNULL(-nullable_int) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "nullable_operator_int_min_struct",
+      "sql": "SELECT STRUCT(-nullable_int AS kept_name) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "empty_nullable_operator",
+      "sql": "SELECT -nullable_int AS computed, ISNULL(-nullable_int) AS is_null, STRUCT(-nullable_int AS kept_name) AS nested_result FROM unary_empty",
+      "family": "empty_provider",
+      "consumer": "combined",
+      "declaration": "nullable",
+      "syntax": "operator"
+    },
+    {
+      "id": "nullable_function_ordinary_direct",
+      "sql": "SELECT negative(nullable_int) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "nullable",
+      "syntax": "function",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "nullable_function_ordinary_is_null",
+      "sql": "SELECT ISNULL(negative(nullable_int)) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "nullable",
+      "syntax": "function",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "nullable_function_ordinary_struct",
+      "sql": "SELECT STRUCT(negative(nullable_int) AS kept_name) AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "nullable",
+      "syntax": "function",
+      "partition": "ordinary",
+      "ordered": true
+    },
+    {
+      "id": "nullable_function_int_min_direct",
+      "sql": "SELECT negative(nullable_int) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "direct",
+      "declaration": "nullable",
+      "syntax": "function",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "nullable_function_int_min_is_null",
+      "sql": "SELECT ISNULL(negative(nullable_int)) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "is_null",
+      "declaration": "nullable",
+      "syntax": "function",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "nullable_function_int_min_struct",
+      "sql": "SELECT STRUCT(negative(nullable_int) AS kept_name) AS r FROM unary_input WHERE k = 2",
+      "family": "standalone_int",
+      "consumer": "struct",
+      "declaration": "nullable",
+      "syntax": "function",
+      "partition": "int_min",
+      "ordered": false
+    },
+    {
+      "id": "empty_nullable_function",
+      "sql": "SELECT negative(nullable_int) AS computed, ISNULL(negative(nullable_int)) AS is_null, STRUCT(negative(nullable_int) AS kept_name) AS nested_result FROM unary_empty",
+      "family": "empty_provider",
+      "consumer": "combined",
+      "declaration": "nullable",
+      "syntax": "function"
+    },
+    {
+      "id": "source_nullable",
+      "sql": "SELECT nullable_int AS r FROM unary_input ORDER BY k",
+      "family": "source_metadata",
+      "consumer": "direct",
+      "declaration": "nullable",
+      "ordered": true
+    },
+    {
+      "id": "bigint_nullable_operator",
+      "sql": "SELECT -CAST(nullable_int AS BIGINT) AS computed, ISNULL(-CAST(nullable_int AS BIGINT)) AS is_null, STRUCT(-CAST(nullable_int AS BIGINT) AS kept_name) AS nested_result FROM unary_input ORDER BY k",
+      "family": "standalone_bigint",
+      "consumer": "combined",
+      "declaration": "nullable",
+      "syntax": "operator",
+      "ordered": true
+    },
+    {
+      "id": "bigint_nullable_function",
+      "sql": "SELECT negative(CAST(nullable_int AS BIGINT)) AS computed, ISNULL(negative(CAST(nullable_int AS BIGINT))) AS is_null, STRUCT(negative(CAST(nullable_int AS BIGINT)) AS kept_name) AS nested_result FROM unary_input ORDER BY k",
+      "family": "standalone_bigint",
+      "consumer": "combined",
+      "declaration": "nullable",
+      "syntax": "function",
+      "ordered": true
+    },
+    {
+      "id": "constant_int_min_operator",
+      "sql": "SELECT -CAST(-2147483648 AS INT) AS r",
+      "family": "constant_int_min",
+      "consumer": "direct",
+      "syntax": "operator"
+    },
+    {
+      "id": "constant_int_min_function",
+      "sql": "SELECT negative(CAST(-2147483648 AS INT)) AS r",
+      "family": "constant_int_min",
+      "consumer": "direct",
+      "syntax": "function"
+    }
+  ],
+  "identities": [
+    {
+      "id": "required_operator_ordinary_direct",
+      "ansi": true
+    },
+    {
+      "id": "required_operator_ordinary_is_null",
+      "ansi": true
+    },
+    {
+      "id": "required_operator_ordinary_struct",
+      "ansi": true
+    },
+    {
+      "id": "required_operator_int_min_direct",
+      "ansi": true
+    },
+    {
+      "id": "required_operator_int_min_is_null",
+      "ansi": true
+    },
+    {
+      "id": "required_operator_int_min_struct",
+      "ansi": true
+    },
+    {
+      "id": "empty_required_operator",
+      "ansi": true
+    },
+    {
+      "id": "required_function_ordinary_direct",
+      "ansi": true
+    },
+    {
+      "id": "required_function_ordinary_is_null",
+      "ansi": true
+    },
+    {
+      "id": "required_function_ordinary_struct",
+      "ansi": true
+    },
+    {
+      "id": "required_function_int_min_direct",
+      "ansi": true
+    },
+    {
+      "id": "required_function_int_min_is_null",
+      "ansi": true
+    },
+    {
+      "id": "required_function_int_min_struct",
+      "ansi": true
+    },
+    {
+      "id": "empty_required_function",
+      "ansi": true
+    },
+    {
+      "id": "source_required",
+      "ansi": true
+    },
+    {
+      "id": "bigint_required_operator",
+      "ansi": true
+    },
+    {
+      "id": "bigint_required_function",
+      "ansi": true
+    },
+    {
+      "id": "nullable_operator_ordinary_direct",
+      "ansi": true
+    },
+    {
+      "id": "nullable_operator_ordinary_is_null",
+      "ansi": true
+    },
+    {
+      "id": "nullable_operator_ordinary_struct",
+      "ansi": true
+    },
+    {
+      "id": "nullable_operator_int_min_direct",
+      "ansi": true
+    },
+    {
+      "id": "nullable_operator_int_min_is_null",
+      "ansi": true
+    },
+    {
+      "id": "nullable_operator_int_min_struct",
+      "ansi": true
+    },
+    {
+      "id": "empty_nullable_operator",
+      "ansi": true
+    },
+    {
+      "id": "nullable_function_ordinary_direct",
+      "ansi": true
+    },
+    {
+      "id": "nullable_function_ordinary_is_null",
+      "ansi": true
+    },
+    {
+      "id": "nullable_function_ordinary_struct",
+      "ansi": true
+    },
+    {
+      "id": "nullable_function_int_min_direct",
+      "ansi": true
+    },
+    {
+      "id": "nullable_function_int_min_is_null",
+      "ansi": true
+    },
+    {
+      "id": "nullable_function_int_min_struct",
+      "ansi": true
+    },
+    {
+      "id": "empty_nullable_function",
+      "ansi": true
+    },
+    {
+      "id": "source_nullable",
+      "ansi": true
+    },
+    {
+      "id": "bigint_nullable_operator",
+      "ansi": true
+    },
+    {
+      "id": "bigint_nullable_function",
+      "ansi": true
+    },
+    {
+      "id": "constant_int_min_operator",
+      "ansi": true
+    },
+    {
+      "id": "constant_int_min_function",
+      "ansi": true
+    },
+    {
+      "id": "required_operator_ordinary_direct",
+      "ansi": false
+    },
+    {
+      "id": "required_operator_ordinary_is_null",
+      "ansi": false
+    },
+    {
+      "id": "required_operator_ordinary_struct",
+      "ansi": false
+    },
+    {
+      "id": "required_operator_int_min_direct",
+      "ansi": false
+    },
+    {
+      "id": "required_operator_int_min_is_null",
+      "ansi": false
+    },
+    {
+      "id": "required_operator_int_min_struct",
+      "ansi": false
+    },
+    {
+      "id": "empty_required_operator",
+      "ansi": false
+    },
+    {
+      "id": "required_function_ordinary_direct",
+      "ansi": false
+    },
+    {
+      "id": "required_function_ordinary_is_null",
+      "ansi": false
+    },
+    {
+      "id": "required_function_ordinary_struct",
+      "ansi": false
+    },
+    {
+      "id": "required_function_int_min_direct",
+      "ansi": false
+    },
+    {
+      "id": "required_function_int_min_is_null",
+      "ansi": false
+    },
+    {
+      "id": "required_function_int_min_struct",
+      "ansi": false
+    },
+    {
+      "id": "empty_required_function",
+      "ansi": false
+    },
+    {
+      "id": "source_required",
+      "ansi": false
+    },
+    {
+      "id": "bigint_required_operator",
+      "ansi": false
+    },
+    {
+      "id": "bigint_required_function",
+      "ansi": false
+    },
+    {
+      "id": "nullable_operator_ordinary_direct",
+      "ansi": false
+    },
+    {
+      "id": "nullable_operator_ordinary_is_null",
+      "ansi": false
+    },
+    {
+      "id": "nullable_operator_ordinary_struct",
+      "ansi": false
+    },
+    {
+      "id": "nullable_operator_int_min_direct",
+      "ansi": false
+    },
+    {
+      "id": "nullable_operator_int_min_is_null",
+      "ansi": false
+    },
+    {
+      "id": "nullable_operator_int_min_struct",
+      "ansi": false
+    },
+    {
+      "id": "empty_nullable_operator",
+      "ansi": false
+    },
+    {
+      "id": "nullable_function_ordinary_direct",
+      "ansi": false
+    },
+    {
+      "id": "nullable_function_ordinary_is_null",
+      "ansi": false
+    },
+    {
+      "id": "nullable_function_ordinary_struct",
+      "ansi": false
+    },
+    {
+      "id": "nullable_function_int_min_direct",
+      "ansi": false
+    },
+    {
+      "id": "nullable_function_int_min_is_null",
+      "ansi": false
+    },
+    {
+      "id": "nullable_function_int_min_struct",
+      "ansi": false
+    },
+    {
+      "id": "empty_nullable_function",
+      "ansi": false
+    },
+    {
+      "id": "source_nullable",
+      "ansi": false
+    },
+    {
+      "id": "bigint_nullable_operator",
+      "ansi": false
+    },
+    {
+      "id": "bigint_nullable_function",
+      "ansi": false
+    },
+    {
+      "id": "constant_int_min_operator",
+      "ansi": false
+    },
+    {
+      "id": "constant_int_min_function",
+      "ansi": false
+    }
+  ],
+  "capture_script_sha256": "2a04add6ba8bcb197a6bc4f332248dded5e3ebff86ec16ef0b8bf5dde3887634"
+}

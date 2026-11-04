@@ -1,0 +1,69 @@
+{
+  "group": "unary-historical-fields-current-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "observation_count": 5,
+  "input_encoding": "decimal integer strings; positional arrays/structs; JSON null",
+  "input_source": {
+    "archive": "accepted-runtime.jsonl.gz",
+    "archive_sha256": "4a6de91a60bd9d6db19e8c373e33e45bb393f9f767316d88c41547edd612a271"
+  },
+  "reused_encoder": "references/capture_spark_895.py",
+  "reused_encoder_sha256": "2a04add6ba8bcb197a6bc4f332248dded5e3ebff86ec16ef0b8bf5dde3887634",
+  "scenarios": [
+    {
+      "id": "replay/existing-signed-literal-cases/36/double_min_false",
+      "sql": "SELECT - -9223372036854775808L AS r",
+      "ansi": false,
+      "ordered": false
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/53/arithmetic_column_control_true",
+      "sql": "SELECT -id AS r FROM range(3) ORDER BY id",
+      "ansi": true,
+      "ordered": true
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/53/arithmetic_column_control_false",
+      "sql": "SELECT -id AS r FROM range(3) ORDER BY id",
+      "ansi": false,
+      "ordered": true
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/54/arithmetic_parenthesized_control_true",
+      "sql": "SELECT -(id + 1L) AS r FROM range(3) ORDER BY id",
+      "ansi": true,
+      "ordered": true
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/54/arithmetic_parenthesized_control_false",
+      "sql": "SELECT -(id + 1L) AS r FROM range(3) ORDER BY id",
+      "ansi": false,
+      "ordered": true
+    }
+  ],
+  "identities": [
+    {
+      "id": "replay/existing-signed-literal-cases/36/double_min_false",
+      "ansi": false
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/53/arithmetic_column_control_true",
+      "ansi": true
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/53/arithmetic_column_control_false",
+      "ansi": false
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/54/arithmetic_parenthesized_control_true",
+      "ansi": true
+    },
+    {
+      "id": "replay/existing-signed-literal-cases/54/arithmetic_parenthesized_control_false",
+      "ansi": false
+    }
+  ],
+  "capture_script_sha256": "58dcd47d10a8689ee7131d2af6acc199051786c8f2941a9082eab55d46761cf1"
+}

@@ -1,10 +1,12 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::{Arc, LazyLock};
 
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion_common::Result;
 use datafusion_common::config::ConfigOptions;
-use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature};
+use datafusion_expr::{
+    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
+};
 use datafusion_spark::function::math::negative::SparkNegative as DataFusionNegative;
 
 /// `ConfigOptions` snapshots with `execution.enable_ansi_mode` pinned. Negation
@@ -65,6 +67,13 @@ impl ScalarUDFImpl for SparkNegative {
         self.inner.return_type(arg_types)
     }
 
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
+        let [input] = datafusion_common::utils::take_function_args(self.name(), args.arg_fields)?;
+        let nullable = input.is_nullable();
+        let field = self.inner.return_field_from_args(args)?;
+        Ok(Arc::new(field.as_ref().clone().with_nullable(nullable)))
+    }
+
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let config_options = if self.ansi_mode {
             Arc::clone(&ANSI_CONFIG)
@@ -76,5 +85,43 @@ impl ScalarUDFImpl for SparkNegative {
             ..args
         };
         self.inner.invoke_with_args(args)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::datatypes::{Field, IntervalUnit};
+
+    #[test]
+    fn unary_negation_refines_only_the_delegated_parent_nullability() -> Result<()> {
+        for data_type in [
+            DataType::Int32,
+            DataType::Int64,
+            DataType::Decimal128(12, 3),
+            DataType::Interval(IntervalUnit::YearMonth),
+        ] {
+            for ansi in [true, false] {
+                for nullable in [true, false] {
+                    let input = Arc::new(
+                        Field::new("source_name", data_type.clone(), nullable)
+                            .with_metadata([("source_tag".into(), "kept_on_input".into())].into()),
+                    );
+                    let args = || ReturnFieldArgs {
+                        arg_fields: std::slice::from_ref(&input),
+                        scalar_arguments: &[None],
+                    };
+                    let delegated = DataFusionNegative::new().return_field_from_args(args())?;
+                    let actual = SparkNegative::new(ansi).return_field_from_args(args())?;
+                    assert_eq!(
+                        actual.as_ref(),
+                        &delegated.as_ref().clone().with_nullable(nullable)
+                    );
+                    assert_eq!(actual.data_type(), &data_type);
+                    assert!(actual.metadata().is_empty());
+                }
+            }
+        }
+        Ok(())
     }
 }
