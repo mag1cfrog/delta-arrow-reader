@@ -1,6 +1,5 @@
 {
   "format_version": 1,
-  "kind": "complete-native-negative-observations-not-spark-oracle",
   "capture_source_head": "be21a17e856cf932f5b6f79b3a2a30da15dd8315",
   "capture_source_tree": "eb7ee430cf6f0d47f8766f6bef2dc54b8acd4695",
   "capture_role": "complete incoming be21 replay; exact preservation is not acceptance",
@@ -61,21 +60,8 @@
   "primary_optimized_schema": "unobserved; diagnostic repeats are separate",
   "acceptance_waivers": false,
   "full_compatibility_pass": false,
-  "observations": 348,
-  "owner_facets": {
-    "#722": 36,
-    "#788": 144,
-    "#813": 240,
-    "#897": 24,
-    "#922": 144
-  },
-  "owner_contexts": {
-    "#722": 12,
-    "#788": 126,
-    "#813": 108,
-    "#897": 12,
-    "#922": 144
-  },
+  "kind": "complete-native-extension-controls-not-spark-oracle",
+  "observations": 32,
   "meaning": "Exact native-extension preservation; no Spark oracle credit.",
   "controls": [
     {
