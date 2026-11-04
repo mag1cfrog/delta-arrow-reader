@@ -860,9 +860,18 @@ complete Spark fields and values for direct and connected consumers.
 The Spark function builder rejects non-array arguments during resolution with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, preserving untyped NULL and the
 existing array coercion path. Internal ARRAYS_OVERLAP compaction keeps the direct
-expression builder. The constant bad-cast IS NULL gap remains under #890; only
-its exact inherited observation permits a difference from Spark. The historical
-#891 controls stay frozen, while their non-array errors require strict matches.
+expression builder.
+
+Early local input preparation retains required IS NULL operands and comparison
+order until their conversions run. This covers ARRAY_COMPACT, ARRAY and STRUCT
+checks over VALUES. Later Spark NULL pruning uses a required operand's
+declaration to answer IS NULL before constant folding visits its children.
+Scalar subqueries retain their separate preparation checks, and native
+DataFusion keeps its existing evaluation order. Direct and STRUCT consumers
+still require the compacted values and retain reachable cast errors. The
+references require all 148 original comparisons, 28 supplemental input-admission
+comparisons and 44 NULL-inspection boundary comparisons to match strictly, with
+no inherited exceptions.
 
 ### Projection metadata
 

@@ -1984,7 +1984,7 @@ impl Prepare {
                             .build();
                         let mut simplifier = ExprSimplifier::new(info);
                         if spark_comparison_errors {
-                            simplifier = simplifier.with_left_to_right_comparison_errors();
+                            simplifier = simplifier.with_local_input_errors();
                         }
                         for expr in &project.expr {
                             if !row_expression(expr, true)? {
