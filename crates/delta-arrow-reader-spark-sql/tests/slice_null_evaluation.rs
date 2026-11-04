@@ -19,6 +19,93 @@ const ORIGINAL_IDS: &[&str] = &[
     "constant_bad_array_null_start",
 ];
 
+fn cast_input_matches(case: &Value, comparison: &Value) -> bool {
+    if case["expected"]["condition"] != "CAST_INVALID_INPUT" {
+        return true;
+    }
+    let Some(input) = case["spark_error_details"]["message_parameters"]["expression"].as_str()
+    else {
+        return false;
+    };
+    let expected = format!("Cannot cast string {input} to value of Int32 type");
+    comparison["error"].as_str().is_some_and(|error| {
+        error
+            .lines()
+            .filter_map(|line| line.strip_prefix("Arrow error: Cast error: "))
+            .any(|cause| cause == expected)
+    })
+}
+
+#[test]
+fn cast_error_priority_rejects_a_different_failing_argument() {
+    let case = json!({
+        "expected":{"condition":"CAST_INVALID_INPUT"},
+        "spark_error_details":{"message_parameters":{"expression":"'array_bad'"}},
+    });
+    for input in ["array_bad", "start_bad", "length_bad"] {
+        let comparison = json!({"error":format!(
+            "[CAST_INVALID_INPUT]\nArrow error: Cast error: Cannot cast string '{input}' to value of Int32 type"
+        )});
+        assert_eq!(cast_input_matches(&case, &comparison), input == "array_bad");
+    }
+    assert!(!cast_input_matches(
+        &case,
+        &json!({"error":"[CAST_INVALID_INPUT]"})
+    ));
+    assert!(!cast_input_matches(
+        &case,
+        &json!({"error":concat!(
+            "SQL: CAST('array_bad' AS INT), CAST('start_bad' AS INT)\n",
+            "[CAST_INVALID_INPUT]\n",
+            "Arrow error: Cast error: Cannot cast string 'start_bad' to value of Int32 type",
+        )})
+    ));
+}
+
+#[tokio::test]
+async fn ordered_observer_rejects_unexpected_success_and_reordered_rows() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let schema = json!({"type":"struct","fields":[{
+        "name":"r","type":"integer","nullable":false,"metadata":{},
+    }]});
+    let mut case = json!({
+        "sql":"SELECT CAST(1 AS INT) AS r", "ansi":true, "ordered":true,
+        "expected":{"condition":"CAST_INVALID_INPUT"}, "spark_error_phase":"collect",
+        "schema_stages":{
+            "public":schema, "analyzed":schema, "optimized":schema,
+            "executed_before_collect":schema, "executed":schema,
+        },
+    });
+    let unexpected_success =
+        spark_results::compare_exact_spark_query_stages_with_optimized(&session, &case).await?;
+    assert_eq!(unexpected_success["ordered_rows_match"], true);
+    assert_eq!(unexpected_success["error_matches"], false);
+    assert_eq!(unexpected_success["matches"], false);
+
+    case["sql"] = json!("SELECT k AS r FROM VALUES (1), (2) t(k) ORDER BY k");
+    case["expected"] = json!({"schema":schema,"rows":[["2"],["1"]]});
+    let reordered =
+        spark_results::compare_exact_spark_query_stages_with_optimized(&session, &case).await?;
+    assert_eq!(reordered["rows_match"], true);
+    assert_eq!(reordered["ordered_rows_match"], false);
+    assert_eq!(reordered["matches"], false);
+
+    case["expected"] = json!({"schema":schema});
+    let missing =
+        spark_results::compare_exact_spark_query_stages_with_optimized(&session, &case).await?;
+    assert_eq!(missing["ordered_rows_match"], false);
+    assert_eq!(missing["matches"], false);
+
+    case["sql"] = json!("SELECT CAST(1 AS INT) AS r WHERE false");
+    case["expected"] = json!({"schema":schema,"rows":[]});
+    let empty =
+        spark_results::compare_exact_spark_query_stages_with_optimized(&session, &case).await?;
+    assert_eq!(empty["ordered_rows_match"], true);
+    Ok(())
+}
+
 async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestResult {
     let mut completed = std::collections::BTreeSet::new();
     let mut differences = Vec::new();
@@ -42,6 +129,7 @@ async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestRes
             comparison["sql"] = case["sql"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch);
+            comparison["cast_input_matches"] = json!(cast_input_matches(case, &comparison));
             eprintln!("SLICE_NULL_EVALUATION_OBSERVATION {comparison}");
             if [
                 "matches",
@@ -52,6 +140,7 @@ async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestRes
                 "rows_match",
                 "ordered_rows_match",
                 "error_matches",
+                "cast_input_matches",
             ]
             .iter()
             .any(|flag| comparison[flag] != true)

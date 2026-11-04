@@ -308,7 +308,10 @@ pub(crate) async fn compare_exact_spark_query_stages(
     } else {
         true
     };
-    let ordered_rows_match = case["ordered"] != true
+    let expected_error = case["expected"]["condition"].as_str().is_some()
+        && case["expected"].get("rows").is_none();
+    let ordered_rows_match = expected_error
+        || case["ordered"] != true
         || rows_raw
             .as_ref()
             .is_some_and(|rows| json!(rows) == case["expected"]["rows"]);
