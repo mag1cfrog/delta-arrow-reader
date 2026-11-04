@@ -59,6 +59,42 @@ use crate::function::common::{
 use crate::function::scalar::datetime::date_format;
 use crate::function::scalar::lambda::lambda_with_fresh_parameter;
 
+fn regexp_extract(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        mut arguments,
+        function_context,
+    } = input;
+    if arguments.len() != 3 {
+        return Ok(ScalarUDF::from(SparkRegexpExtract::new()).call(arguments));
+    }
+    let asynchronous = arguments.iter().try_fold(false, |found, argument| {
+        Ok::<_, datafusion_common::DataFusionError>(
+            found || argument.exists(|expression| {
+                Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                    if function.func.as_async().is_some()))
+            })?,
+        )
+    })?;
+    if asynchronous || !matches!(arguments[2].get_type(function_context.schema)?,
+        DataType::Null | DataType::Int8 | DataType::Int16 | DataType::Int32
+            | DataType::Int64 | DataType::Float32 | DataType::Float64
+            | DataType::Decimal128(..) | DataType::Decimal256(..)
+            | DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View)
+    {
+        // Preserve the existing native validation/extraction path for other types.
+        return Ok(ScalarUDF::from(SparkRegexpExtract::new()).call(arguments));
+    }
+    let known_null = arguments.iter().any(|argument| {
+        literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
+    });
+    let index = arguments.pop().ok_or_else(|| PlanError::internal("missing regexp_extract index"))?;
+    let index = cast_string_function_int(index, function_context.schema,
+        function_context.plan_config.ansi_mode, "regexp_extract index")?;
+    // The existing value kernel consumes Int64 after Spark's INT conversion.
+    arguments.push(cast(index, DataType::Int64));
+    Ok(ScalarUDF::from(SparkRegexpExtract::new().with_logical_arguments(known_null)).call(arguments))
+}
+
 fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
         mut arguments,
@@ -875,7 +911,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("quote", F::udf(SparkQuote::new())),
         ("randstr", F::udf(Randstr::new())),
         ("regexp_count", F::udf(RegexpCountFunc::new())),
-        ("regexp_extract", F::udf(SparkRegexpExtract::new())),
+        ("regexp_extract", F::custom(regexp_extract)),
         ("regexp_extract_all", F::udf(SparkRegexpExtractAll::new())),
         ("regexp_instr", F::udf(RegexpInstrFunc::new())),
         ("regexp_replace", F::custom(regexp_replace)),

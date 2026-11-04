@@ -9,7 +9,8 @@ use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion_common::utils::take_function_args;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::function::Hint;
-use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
+use datafusion_expr::{Expr, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, Volatility};
 use regex::Regex;
@@ -21,6 +22,8 @@ use crate::functions_utils::{StrMemo, make_scalar_function};
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkRegexpExtract {
     signature: Signature,
+    logical_arguments: bool,
+    known_null_argument: bool,
 }
 
 impl Default for SparkRegexpExtract {
@@ -35,7 +38,15 @@ impl SparkRegexpExtract {
     pub fn new() -> Self {
         Self {
             signature: Signature::user_defined(Volatility::Immutable),
+            logical_arguments: false,
+            known_null_argument: false,
         }
+    }
+
+    pub fn with_logical_arguments(mut self, known_null: bool) -> Self {
+        self.logical_arguments = true;
+        self.known_null_argument = known_null;
+        self
     }
 }
 
@@ -59,6 +70,28 @@ impl ScalarUDFImpl for SparkRegexpExtract {
 
     fn coerce_types(&self, arg_types: &[DataType]) -> Result<Vec<DataType>> {
         coerce_regexp_extract_types(Self::NAME, arg_types)
+    }
+
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        self.logical_arguments
+    }
+
+    fn conditional_arguments<'a>(&self, _args: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        // Keep Spark's existing shared-argument extraction before row selection.
+        None
+    }
+
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
+        if self.logical_arguments && (self.known_null_argument
+            || args.iter().any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null())))
+        {
+            // Validate the native signature before pruning a known NULL result.
+            let types = args.iter().map(|arg| arg.get_type(info.schema().as_ref()))
+                .collect::<Result<Vec<_>>>()?;
+            let _ = self.coerce_types(&types)?;
+            return Ok(ExprSimplifyResult::Simplified(Expr::Literal(ScalarValue::Utf8(None), None)));
+        }
+        Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
