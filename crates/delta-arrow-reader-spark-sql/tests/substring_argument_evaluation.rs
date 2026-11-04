@@ -28,7 +28,9 @@ async fn check_counted(
     row_count: usize,
 ) -> TestResult {
     for rows in observed {
-        rows.lock().unwrap().clear();
+        rows.lock()
+            .map_err(|_| "poisoned substring row recorder")?
+            .clear();
     }
     let query = plan_query(
         session,
@@ -40,17 +42,24 @@ async fn check_counted(
     )
     .await?;
     let physical = query.create_physical_plan(session).await?;
-    assert!(
-        observed.iter().all(|rows| rows.lock().unwrap().is_empty()),
-        "planning evaluated a volatile substring operand: {sql}"
-    );
+    for rows in observed {
+        assert!(
+            rows.lock()
+                .map_err(|_| "poisoned substring row recorder")?
+                .is_empty(),
+            "planning evaluated a volatile substring operand: {sql}"
+        );
+    }
     let batches = collect(physical, session.task_ctx()).await?;
     assert_eq!(
         batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
         row_count
     );
     for (rows, expected) in observed.iter().zip(expected) {
-        let mut rows = rows.lock().unwrap().clone();
+        let mut rows = rows
+            .lock()
+            .map_err(|_| "poisoned substring row recorder")?
+            .clone();
         rows.sort_unstable();
         assert_eq!(rows, expected, "{sql}, ANSI={ansi_mode}");
     }
