@@ -2671,6 +2671,17 @@ NULL masks, required/nullable fields, constant and provider evaluation stages,
 empty providers and CASE reachability. Required unary lengths use the #895
 negation field correction. The owned #880 cases have no inherited allowance.
 
+`slice-parameters/reachability/` preserves 24 further Spark observations, with
+raw reference SHA256
+`58517d3c2a32f16fa5c1fd96258c8c95c65e12203bb4a59fe26cae1f81ec9bf5`.
+The strict `slice_preparation_boundaries` target compares all 48 batch identities
+for constant and provider-backed lambdas, required COUNT, unused projections,
+LIMIT 0 and scalar subqueries. Spark validates the constant SLICE body even for
+empty or NULL lambda inputs. Required COUNT and a discarded one-row scalar can
+prune that validation; a provider scalar subquery retains its own optimization.
+The portable package includes the input-only manifest, capture and verification
+scripts, pinned sources and complete raw plans, fields, values and error details.
+
 The local storage check verifies that nullable-element SLICE results retain the
 native hidden span under a NULL parent, while required-element results compact
 that span before the original cast. Both retain visible values, NULL parents,

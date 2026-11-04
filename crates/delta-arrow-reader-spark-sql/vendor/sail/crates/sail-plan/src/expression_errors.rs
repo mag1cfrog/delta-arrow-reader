@@ -1506,10 +1506,11 @@ impl Prepare {
                     .with_schema(schema)
                     .with_config_options(self.props.config_options.clone().unwrap_or_default())
                     .build();
-                // Prune required NULL probes and dead branches before checking constant errors.
-                let checked = ExprSimplifier::new(info)
-                    .simplify(expr.clone())
-                    .and_then(|prepared| self.check_expr(&prepared, true));
+                let simplifier = ExprSimplifier::new(info);
+                // Prune algebraic parents before validating constants inside higher-order calls.
+                let checked = expr.clone()
+                    .transform_down(|expr| simplifier.simplify_algebraic_once(expr))
+                    .and_then(|prepared| self.check_expr(&prepared.data, true));
                 // Other failures retain their existing preparation or execution stage.
                 if let Err(error) = checked
                     && SparkArraySlice::is_parameter_error(&error)

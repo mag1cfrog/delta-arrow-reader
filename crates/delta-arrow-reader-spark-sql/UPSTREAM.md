@@ -756,8 +756,9 @@ that declaration. Native ARRAY_SLICE registration and evaluation remain
 separate. SLICE rejects zero starts before negative lengths on rows whose three
 arguments are non-NULL. A targeted preparation check reports constant parameter
 errors after required ISNULL and dead CASE pruning; provider-dependent errors
-remain at collection. Folding-disabled and volatile extension contexts retain
-their existing preparation path. The native delegate still determines valid
+remain at collection. Constant lambda bodies validate before whole higher-order
+calls fold, including empty inputs. Folding-disabled and volatile extension
+contexts retain their existing preparation path. The native delegate still determines valid
 coordinates. NULL/fallible-operand and signed-coordinate gaps remain owned by
 #881 and #894; their exact inherited observations stay visible in the
 [result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).
