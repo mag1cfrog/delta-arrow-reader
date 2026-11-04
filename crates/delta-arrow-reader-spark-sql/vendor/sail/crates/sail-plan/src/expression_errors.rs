@@ -29,6 +29,7 @@ use crate::function::float_keys::NormalizeNestedFloatKeys;
 use crate::function::result_coercion::{
     has_coalesce_declaration_cast, prune_coalesce_declaration_cast,
 };
+use crate::function::scalar::SparkArraySlice;
 use crate::function::scalar::conditional::SparkNullIf;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
@@ -281,6 +282,7 @@ impl PrepareSparkExpressions {
         let mut has_groups = false;
         let mut has_constant_struct = false;
         let mut has_coalesce_declaration_casts = false;
+        let mut has_slice_parameters = false;
         plan.apply_with_subqueries(|node| {
             if let LogicalPlan::Aggregate(aggregate) = node
                 && !aggregate
@@ -307,12 +309,15 @@ impl PrepareSparkExpressions {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
                 })?;
                 check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
+                has_slice_parameters |= expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<SparkArraySlice>()))
+                })?;
                 has_null_sensitive_comparison |= expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<ArrayContains>() || f.func.inner().is::<SparkNullIf>()))
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts {
+            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
@@ -326,6 +331,7 @@ impl PrepareSparkExpressions {
             && !has_null_sensitive_comparison
             && !has_constant_struct
             && !has_coalesce_declaration_casts
+            && !has_slice_parameters
         {
             return Ok(plan);
         }
@@ -590,6 +596,9 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
+        if has_slice_parameters {
+            prepare.check_constant_slice_parameters(&plan)?;
+        }
         if !found {
             return Ok(plan);
         }
@@ -1469,6 +1478,50 @@ impl Prepare {
             &RecordBatchOptions::new().with_row_count(Some(1)),
         )?;
         create_physical_expr(expr, &DFSchema::empty(), &self.props)?.evaluate(&batch)
+    }
+
+    fn check_constant_slice_parameters(&self, plan: &LogicalPlan) -> Result<()> {
+        plan.apply_with_subqueries(|node| {
+            node.apply_expressions(|expr| {
+                if !expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<SparkArraySlice>()))
+                })?
+                    || expr.contains_scalar_subquery()
+                    || expr.exists(|expr| {
+                        Ok(expr.is_volatile_node()
+                            || matches!(expr, Expr::ScalarFunction(f)
+                                if !f.func.inner().supports_constant_folding()))
+                    })?
+                {
+                    return Ok(TreeNodeRecursion::Continue);
+                }
+                let schema = match node {
+                    LogicalPlan::TableScan(scan) => Arc::new(DFSchema::try_from_qualified_schema(
+                        scan.table_name.clone(),
+                        &scan.source.schema(),
+                    )?),
+                    _ => Arc::new(datafusion_expr::utils::merge_schema(&node.inputs())),
+                };
+                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                    .with_schema(schema)
+                    .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                    .build();
+                let simplifier = ExprSimplifier::new(info);
+                // Prune algebraic parents before validating constants inside higher-order calls.
+                let checked = expr.clone()
+                    .transform_down(|expr| simplifier.simplify_algebraic_once(expr))
+                    .and_then(|prepared| self.check_expr(&prepared.data, true));
+                // Other failures retain their existing preparation or execution stage.
+                if let Err(error) = checked
+                    && SparkArraySlice::is_parameter_error(&error)
+                {
+                    return Err(error);
+                }
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            Ok(TreeNodeRecursion::Continue)
+        })
+        .map(|_| ())
     }
 
     fn limit_count(&self, expr: Option<&Expr>, default: usize) -> Result<Option<usize>> {

@@ -1,3 +1,4 @@
+pub(crate) use array::SparkArraySlice;
 pub(crate) use lambda::{get_lambda_parameters, is_higher_order_function};
 
 use crate::function::common::ScalarFunction;

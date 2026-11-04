@@ -1,10 +1,14 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
+use datafusion::arrow::array::Array;
+use datafusion::arrow::compute::kernels::numeric::{add_wrapping, sub_wrapping};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
-use datafusion_common::ScalarValue;
+use datafusion::physical_expr_common::datum::apply;
+use datafusion_common::cast::as_int64_array;
+use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{
     ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
     ScalarUDFImpl, Signature, Volatility, cast, expr, is_null, lit, not, or, when,
@@ -117,22 +121,31 @@ fn slice_expr(
     let array = cast_list_value_nullability(array, schema, true)?;
     let start = cast(start, DataType::Int64);
     let length = cast(length, DataType::Int64);
-    let end = start.clone() + length - lit(1_i64);
     Ok(cast(
         ScalarUDF::from(SparkArraySlice {
             native: array_slice_udf(),
             required_elements,
         })
-        .call(vec![array, start, end]),
+        .call(vec![array, start, length]),
         output_type,
     ))
 }
 
 // Spark's result is NULL only when an array or numeric argument is NULL.
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct SparkArraySlice {
+pub(crate) struct SparkArraySlice {
     native: Arc<ScalarUDF>,
     required_elements: bool,
+}
+
+impl SparkArraySlice {
+    const START_ERROR: &str = "[INVALID_PARAMETER_VALUE.START] SLICE start must not be zero";
+    const LENGTH_ERROR: &str = "[INVALID_PARAMETER_VALUE.LENGTH] SLICE length must be nonnegative";
+
+    pub(crate) fn is_parameter_error(error: &DataFusionError) -> bool {
+        matches!(error.find_root(), DataFusionError::Execution(message)
+            if message == Self::START_ERROR || message == Self::LENGTH_ERROR)
+    }
 }
 
 impl ScalarUDFImpl for SparkArraySlice {
@@ -156,8 +169,44 @@ impl ScalarUDFImpl for SparkArraySlice {
 
     fn invoke_with_args(
         &self,
-        args: ScalarFunctionArgs,
+        mut args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
+        let [array, start, length] = args.args.as_slice() else {
+            return internal_err!("spark_slice requires three arguments");
+        };
+        // Keep scalars at one row instead of broadcasting them for validation.
+        let array_values = array.to_array(1)?;
+        let start_values = start.to_array(1)?;
+        let length_values = length.to_array(1)?;
+        let starts = as_int64_array(start_values.as_ref())?;
+        let lengths = as_int64_array(length_values.as_ref())?;
+        let row_index = |value: &ColumnarValue, row| match value {
+            ColumnarValue::Scalar(_) => 0,
+            ColumnarValue::Array(_) => row,
+        };
+        for row in 0..args.number_rows {
+            let array_row = row_index(array, row);
+            let start_row = row_index(start, row);
+            let length_row = row_index(length, row);
+            if array_values.is_null(array_row)
+                || starts.is_null(start_row)
+                || lengths.is_null(length_row)
+            {
+                continue;
+            }
+            if starts.value(start_row) == 0 {
+                return exec_err!("{}", Self::START_ERROR);
+            }
+            if lengths.value(length_row) < 0 {
+                return exec_err!("{}", Self::LENGTH_ERROR);
+            }
+        }
+        let end = apply(start, length, add_wrapping)?;
+        args.args[2] = apply(
+            &end,
+            &ColumnarValue::Scalar(ScalarValue::Int64(Some(1))),
+            sub_wrapping,
+        )?;
         match self.native.invoke_with_args(args)? {
             ColumnarValue::Array(array)
                 if self.required_elements
@@ -1270,6 +1319,73 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn slice_parameter_error_identity_is_exact() {
+        for message in [SparkArraySlice::START_ERROR, SparkArraySlice::LENGTH_ERROR] {
+            assert!(SparkArraySlice::is_parameter_error(
+                &DataFusionError::Execution(message.into(),)
+            ));
+            for error in [
+                DataFusionError::Plan(message.into()),
+                DataFusionError::Execution(format!("{message} from another function")),
+                DataFusionError::Execution(format!("other error: {message}")),
+            ] {
+                assert!(!SparkArraySlice::is_parameter_error(&error));
+            }
+        }
+    }
+
+    #[test]
+    fn slice_parameter_errors_follow_row_null_masks() -> PlanResult<()> {
+        use arrow::array::{Array, Int32Array};
+
+        for (start, length, condition) in [
+            (0, -1, Some("INVALID_PARAMETER_VALUE.START")),
+            (1, -1, Some("INVALID_PARAMETER_VALUE.LENGTH")),
+            (1, 0, None),
+        ] {
+            let array = ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
+                None,
+                Some(vec![Some(1)]),
+                Some(vec![Some(1)]),
+                Some(vec![]),
+            ]);
+            let batch = RecordBatch::try_from_iter([
+                ("a", Arc::new(array) as _),
+                (
+                    "start",
+                    Arc::new(Int32Array::from(vec![Some(0), None, Some(0), Some(start)])) as _,
+                ),
+                (
+                    "length",
+                    Arc::new(Int32Array::from(vec![
+                        Some(-1),
+                        Some(-1),
+                        None,
+                        Some(length),
+                    ])) as _,
+                ),
+            ])?;
+            let schema = Arc::new(DFSchema::try_from(batch.schema())?);
+            let expression = slice_expr(col("a"), col("start"), col("length"), &schema)?;
+            let physical =
+                SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
+            let result = physical.evaluate(&batch);
+            if let Some(condition) = condition {
+                assert!(
+                    result.is_err_and(|error| error.to_string().contains(condition)),
+                    "{condition}"
+                );
+            } else {
+                let result = result?.into_array(4)?;
+                result.to_data().validate_full()?;
+                assert_eq!(result.null_count(), 3);
+                assert!(!result.is_null(3));
             }
         }
         Ok(())
