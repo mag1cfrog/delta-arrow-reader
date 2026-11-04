@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Lift the existing scalar result policy through Spark ARRAY and STRUCT values.
+//! Common types and value conversion for Spark ARRAY and STRUCT expressions.
 
 use std::sync::{Arc, LazyLock};
 
@@ -31,7 +31,9 @@ use datafusion_common::utils::{
 };
 use datafusion_common::{DFSchema, Result, ScalarValue};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
-use datafusion_expr::type_coercion::binary::type_union_resolution;
+use datafusion_expr::type_coercion::binary::{
+    comparison_coercion, string_coercion, type_union_resolution,
+};
 use datafusion_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     Volatility, col, expr,
@@ -71,12 +73,95 @@ enum StructFieldNames {
     AllowPositionalRename,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommonTypePolicy {
+    WiderResult,
+    TightestArrayElement,
+}
+
+pub(crate) fn common_array_element_type(
+    left: &FieldRef,
+    right: &FieldRef,
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<Option<DataType>> {
+    let Some(target) = common_type(
+        left.data_type(),
+        right.data_type(),
+        context,
+        StructFieldNames::RequireMatching,
+        CommonTypePolicy::TightestArrayElement,
+    )? else {
+        return Ok(None);
+    };
+    // Spark selects a tightest type before the session's implicit array casts admit it.
+    for source in [left, right] {
+        let expected = source.as_ref().clone().with_data_type(target.clone());
+        if !array_element_cast_allowed(source, &expected, context.plan_config.ansi_mode) {
+            return Ok(None);
+        }
+    }
+    Ok(Some(target))
+}
+
+fn array_element_cast_allowed(source: &Field, target: &Field, ansi_mode: bool) -> bool {
+    if source.is_nullable() && !target.is_nullable() {
+        return false;
+    }
+    if structurally_equal(source.data_type(), target.data_type()) {
+        return true;
+    }
+    if let (Some(source), Some(target)) = (list_field(source.data_type()), list_field(target.data_type())) {
+        return array_element_cast_allowed(source, target, ansi_mode);
+    }
+    if let (DataType::Struct(source), DataType::Struct(target)) = (source.data_type(), target.data_type()) {
+        return ansi_mode && source.len() == target.len()
+            && source.iter().zip(target).all(|(source, target)| array_element_cast_allowed(source, target, ansi_mode));
+    }
+    ansi_mode || target.is_nullable() || !cast_adds_nulls(source.data_type(), target.data_type())
+}
+
+fn tightest_array_leaf_type(
+    left: &DataType,
+    right: &DataType,
+    context: &FunctionContextInput<'_>,
+) -> Option<DataType> {
+    let types = [left.clone(), right.clone()];
+    // Array inputs use TypeCoercion's tightest numeric type in both ANSI modes.
+    if let Some(target) = common_numeric_type(&types, false) {
+        // Tightest coercion cannot enlarge Decimal precision or scale.
+        return match (left, right) {
+            (DataType::Decimal128(..), integral) if integral.is_signed_integer() => {
+                (target == *left).then_some(target)
+            }
+            (integral, DataType::Decimal128(..)) if integral.is_signed_integer() => {
+                (target == *right).then_some(target)
+            }
+            _ if types.iter().any(|data_type| matches!(data_type, DataType::Decimal128(..))) => None,
+            _ => Some(target),
+        };
+    }
+    if is_string_type(left) && is_string_type(right) {
+        return string_coercion(left, right);
+    }
+    if is_binary_type(left) && is_binary_type(right) {
+        return comparison_coercion(left, right);
+    }
+    if is_temporal_type(left) && is_temporal_type(right) {
+        return common_temporal_type(&types, &context.plan_config.session_timezone);
+    }
+    None
+}
+
+fn is_binary_type(data_type: &DataType) -> bool {
+    matches!(data_type, DataType::Binary | DataType::LargeBinary | DataType::BinaryView)
+}
+
 fn has_string_type(data_type: &DataType) -> bool {
     is_string_type(data_type)
         || list_field(data_type).is_some_and(|field| has_string_type(field.data_type()))
 }
 
-pub(crate) fn cast_adds_nulls(source: &DataType, target: &DataType) -> bool {
+fn cast_adds_nulls(source: &DataType, target: &DataType) -> bool {
     if source == &DataType::Null || source == target || is_string_type(target) {
         false
     } else if is_string_type(source) {
@@ -110,6 +195,7 @@ fn common_type(
     right: &DataType,
     context: &FunctionContextInput<'_>,
     struct_field_names: StructFieldNames,
+    policy: CommonTypePolicy,
 ) -> PlanResult<Option<DataType>> {
     if left == right || right == &DataType::Null {
         return Ok(Some(left.clone()));
@@ -123,6 +209,7 @@ fn common_type(
             right_field.data_type(),
             context,
             struct_field_names,
+            policy,
         )?
         else {
             return Ok(None);
@@ -158,6 +245,7 @@ fn common_type(
                 right.data_type(),
                 context,
                 struct_field_names,
+                policy,
             )?
             else {
                 return Ok(None);
@@ -172,6 +260,9 @@ fn common_type(
     }
     if is_nested_result_type(left) || is_nested_result_type(right) {
         return Ok(None);
+    }
+    if policy == CommonTypePolicy::TightestArrayElement {
+        return Ok(tightest_array_leaf_type(left, right, context));
     }
     let types = [left.clone(), right.clone()];
     if let Some(target) = common_numeric_type(&types, context.plan_config.ansi_mode) {
@@ -219,7 +310,9 @@ fn structurally_equal(left: &DataType, right: &DataType) -> bool {
                 .zip(right)
                 .all(|(left, right)| structurally_equal(left.data_type(), right.data_type()));
     }
-    left == right || (is_string_type(left) && is_string_type(right))
+    left == right
+        || (is_string_type(left) && is_string_type(right))
+        || (is_binary_type(left) && is_binary_type(right))
 }
 
 pub(super) fn coerce_nested_result_values(
@@ -251,7 +344,7 @@ pub(super) fn coerce_nested_result_values(
     }
     let mut target = DataType::Null;
     for source in types {
-        target = common_type(&target, source, context, struct_field_names)
+        target = common_type(&target, source, context, struct_field_names, CommonTypePolicy::WiderResult)
             .map_err(|cause| {
                 PlanError::invalid(format!(
                     "[{error_condition}] Incompatible nested result types: {data_types:?}: {cause}"
@@ -286,6 +379,22 @@ pub(super) fn coerce_nested_result_values(
             ))
         })
         .collect()
+}
+
+pub(crate) fn cast_nested_value(
+    argument: expr::Expr,
+    source: &DataType,
+    target: &DataType,
+    context: &FunctionContextInput<'_>,
+) -> PlanResult<expr::Expr> {
+    let conversion = NestedResultCast {
+        coalesce_declaration_only: false,
+        target: target.clone(),
+        conversion: ResultCast::new(source, target, context)?,
+    };
+    Ok(drop_inherited_column_metadata(
+        ScalarUDF::from(conversion).call(vec![argument]),
+    ))
 }
 
 fn coalesce_declaration_cast_input(expression: &expr::Expr) -> Option<&expr::Expr> {

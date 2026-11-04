@@ -35,7 +35,7 @@ use crate::function::common::{
     SparkComparisonFloat,
 };
 use crate::function::numeric_coercion::common_numeric_type;
-use crate::function::result_coercion::cast_adds_nulls;
+use crate::function::result_coercion::{cast_nested_value, common_array_element_type};
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -328,30 +328,32 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let schema = function_context.schema.as_ref();
     let left_type = left.get_type(schema)?;
     let right_type = right.get_type(schema)?;
-    if (!left_type.is_list() && !left_type.is_null())
-        || (!right_type.is_list() && !right_type.is_null())
-    {
+    let (Some(left_element), Some(right_element)) = (
+        array_element_field(&left_type),
+        array_element_field(&right_type),
+    ) else {
         return Err(PlanError::invalid(
-            "ARRAYS_OVERLAP requires two array arguments",
+            "[DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES] ARRAYS_OVERLAP requires two array arguments",
         ));
-    }
+    };
+    let element_type = common_array_element_type(left_element, right_element, &function_context)?
+        .ok_or_else(|| PlanError::invalid(format!(
+            "[DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES] ARRAYS_OVERLAP requires compatible array element types, got {left_type:?} and {right_type:?}"
+        )))?;
     let nullable = left.nullable(schema)?
         || right.nullable(schema)?
-        || match (
-            array_element_field(&left_type),
-            array_element_field(&right_type),
-        ) {
-            (Some(left), Some(right)) => {
-                left.is_nullable()
-                    || right.is_nullable()
-                    || cast_adds_nulls(right.data_type(), left.data_type())
-            }
-            _ => true,
-        };
+        || left_element.is_nullable()
+        || right_element.is_nullable();
 
-    let nullable_array_type = nullable_array_probe_type(&left_type);
-    let left = cast(left, nullable_array_type.clone());
-    let right = cast(right, nullable_array_type.clone());
+    let element = Arc::new(Field::new_list_field(element_type, true));
+    let nullable_array_type = if matches!(left_type, DataType::LargeList(_) | DataType::LargeListView(_))
+        || matches!(right_type, DataType::LargeList(_) | DataType::LargeListView(_)) {
+        DataType::LargeList(element)
+    } else {
+        DataType::List(element)
+    };
+    let left = cast_nested_value(left, &left_type, &nullable_array_type, &function_context)?;
+    let right = cast_nested_value(right, &right_type, &nullable_array_type, &function_context)?;
     let same_type_null_only_array = cast(
         make_array(vec![lit(ScalarValue::Null)]),
         nullable_array_type,
