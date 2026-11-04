@@ -3469,10 +3469,10 @@ bounded contract. #771 remains open.
 
 Including the 480 clock controls and 32 independent host references, the recorded
 R3 baseline has 4,892 strict matches among 5,072 comparisons: 3,496 successful
-results and 1,396 precise errors. The repaired source requires 72 additional
-strict arity matches, for an expected 4,964 of 5,072 comparisons. This prospective
-total awaits fresh native capture and validation. The other 108 current negatives
-and all 180 historical negative profiles remain incompatible.
+results and 1,396 precise errors. The current gate requires 4,964 of 5,072
+comparisons to match strictly, including all 72 arity contexts. The remaining
+108 current name/field observations and all 180 historical negative profiles
+remain incompatible.
 The complete 5,216-record raw collector also retains 144 diagnostics without
 Spark oracle credit, including its 24 native clock-value witnesses. These counts
 describe the recorded contexts and do not establish family-wide compatibility.
