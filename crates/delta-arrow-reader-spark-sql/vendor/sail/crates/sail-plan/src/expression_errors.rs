@@ -1980,6 +1980,38 @@ impl Prepare {
                             },
                         )));
                     }
+                    if spark_comparison_errors && early_local_relation(&project.input)? {
+                        let literal_or_column = |expr: &Expr| {
+                            expr.exists(|expr| Ok(!matches!(without_metadata_annotations(expr),
+                                Expr::Literal(_, _) | Expr::Column(_) | Expr::Alias(_))))
+                                .map(|unsupported| !unsupported)
+                        };
+                        for expr in &project.expr {
+                            let expression = expr.clone().unalias();
+                            let Expr::ScalarFunction(function) = without_metadata_annotations(&expression) else { continue; };
+                            if !function.func.inner().downcast_ref::<SparkRegexpExtract>()
+                                .is_some_and(SparkRegexpExtract::requires_local_index_check)
+                                || function.args.len() != 3
+                                || !function.args[..2].iter().try_fold(true, |simple, expr| {
+                                    Ok::<_, datafusion_common::DataFusionError>(simple && literal_or_column(expr)?)
+                                })?
+                                || project.input.exists(|node| {
+                                    node.expressions().iter().try_fold(false, |unsupported, expr| {
+                                        Ok::<_, datafusion_common::DataFusionError>(unsupported || !literal_or_column(expr)?)
+                                    })
+                                })?
+                            {
+                                continue;
+                            }
+                            // Preview only the literal conversion on non-NULL source/pattern rows.
+                            // Regex parsing, callbacks and live index casts stay in execution.
+                            let index = datafusion_expr::when(
+                                function.args[0].clone().is_null().or(function.args[1].clone().is_null()),
+                                lit(ScalarValue::Int64(None)),
+                            ).otherwise(function.args[2].clone())?;
+                            try_check_local_row_errors(&index, &project.input, &self.props)?;
+                        }
+                    }
                     let mut casts = false;
                     let mut evaluable = true;
                     for expr in &project.expr {

@@ -87,12 +87,15 @@ fn regexp_extract(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
+    let check_local_index = function_context.plan_config.ansi_mode
+        && literal_value_without_evaluation(&arguments[2]).is_some();
     let index = arguments.pop().ok_or_else(|| PlanError::internal("missing regexp_extract index"))?;
     let index = cast_string_function_int(index, function_context.schema,
         function_context.plan_config.ansi_mode, "regexp_extract index")?;
     // The existing value kernel consumes Int64 after Spark's INT conversion.
     arguments.push(cast(index, DataType::Int64));
-    Ok(ScalarUDF::from(SparkRegexpExtract::new().with_null_short_circuit(known_null)).call(arguments))
+    Ok(ScalarUDF::from(SparkRegexpExtract::new().with_null_short_circuit(known_null)
+        .with_local_index_check(check_local_index)).call(arguments))
 }
 
 fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {

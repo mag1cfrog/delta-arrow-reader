@@ -24,6 +24,7 @@ pub struct SparkRegexpExtract {
     signature: Signature,
     null_short_circuit: bool,
     known_null_argument: bool,
+    check_local_index: bool,
 }
 
 impl Default for SparkRegexpExtract {
@@ -40,6 +41,7 @@ impl SparkRegexpExtract {
             signature: Signature::user_defined(Volatility::Immutable),
             null_short_circuit: false,
             known_null_argument: false,
+            check_local_index: false,
         }
     }
 
@@ -51,6 +53,15 @@ impl SparkRegexpExtract {
 
     pub fn has_null_short_circuit(&self) -> bool {
         self.null_short_circuit
+    }
+
+    pub fn with_local_index_check(mut self, required: bool) -> Self {
+        self.check_local_index = required;
+        self
+    }
+
+    pub fn requires_local_index_check(&self) -> bool {
+        self.null_short_circuit && self.check_local_index && !self.known_null_argument
     }
 }
 
