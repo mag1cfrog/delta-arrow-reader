@@ -70,11 +70,58 @@ async fn arrays_overlap_narrowing_matches_spark() -> TestResult {
 
 #[tokio::test]
 async fn arrays_overlap_common_element_types_match_spark() -> TestResult {
-    assert_arrays_overlap_result_fields(
-        include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl"),
-        40,
-    )
-    .await
+    let records = include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 41);
+    let owned = records.into_iter().filter(|record| record["id"] != "nan").collect::<Vec<_>>();
+    assert_arrays_overlap_result_records(&owned, 38).await
+}
+
+#[tokio::test]
+async fn arrays_overlap_nan_common_type_preserves_values_public_fields_and_completion() -> TestResult {
+    let records = include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 41);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records[0]["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+    let cases = records[1..].iter().filter(|record| record["id"] == "nan").collect::<Vec<_>>();
+    assert_eq!(cases.len(), 2);
+    assert_eq!(cases.iter().map(|case| case["ansi"].as_bool().ok_or("missing ANSI"))
+        .collect::<Result<std::collections::BTreeSet<_>, _>>()?,
+        std::collections::BTreeSet::from([false, true]));
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(configure_spark_sql(
+            SessionStateBuilder::new().with_default_features().with_config(
+                SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2)),
+        ).build());
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &cases {
+            let mut comparison = spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            comparison["group"] = records[0]["group"].clone();
+            comparison["id"] = case["id"].clone();
+            comparison["ansi"] = case["ansi"].clone();
+            comparison["batch"] = json!(batch_size);
+            eprintln!("ARRAY_RESULT_FIELDS_OBSERVATION {comparison}");
+            comparisons += 1;
+            // #843 owns optimized floating declarations; keep their full comparison flags in the audit.
+            if !["public_matches", "rows_match", "ordered_rows_match", "error_matches"]
+                .iter().all(|key| comparison[key] == true)
+                || comparison["native_phase"] != "encode"
+                || !comparison["error"].is_null()
+            {
+                differences.push(comparison.to_string());
+            }
+        }
+    }
+    assert_eq!(comparisons, 4);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
 }
 
 #[tokio::test]

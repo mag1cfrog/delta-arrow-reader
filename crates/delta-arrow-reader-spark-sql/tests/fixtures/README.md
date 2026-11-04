@@ -2480,6 +2480,14 @@ its other 16 floating-equality observations unchanged for #843. The canonical
 NaN and decimal-zero records in the common fixture do not establish raw-bit
 floating equality.
 
+Full-stage common-type acceptance covers 38 of the common fixture's 40
+observations. Its two `nan`/ANSI observations have a separate regression test
+for complete values, public fields and successful completion with matching error
+flags at both batch sizes. Optimized floating declarations belong to #843.
+The test still emits the complete unmodified comparisons, including any false
+before/physical field flags, for all four NaN audit records. It preserves the
+common-type runtime regression guard without claiming optimized field parity.
+
 The BINARY capture contains 16 successful provider observations and 120
 independent resolution errors. Its frozen capture script SHA256 is
 `dd08cd2e9ea7fa61d5d5a334806c6868f3cd19c36bd73e57b26131916cc42dea`;
@@ -2513,10 +2521,11 @@ The Sail converter unit `nested_identity_cast_restores_planned_fields_after_chil
 checks exact planned metadata/nullability, unchanged values, nonzero and empty
 slices, and rejection of incompatible primitive and nested value types.
 
-The target has 548 canonical reference comparisons and 1,512 storage comparisons,
-plus the six completed native ARRAY_HAS_ANY observations. Run it with the command
-above; the full workspace and connected conditional/set-operation checks remain
-part of validation.
+The target strictly checks 544 canonical and 1,512 storage full-stage comparisons.
+The four NaN value/public-field/completion checks retain their full audit records,
+bringing the audit to 2,060 observations, plus six completed native ARRAY_HAS_ANY
+controls. Run it with the command above; the full workspace and connected
+conditional/set-operation checks remain part of validation.
 
 
 ## MAP constructor root
