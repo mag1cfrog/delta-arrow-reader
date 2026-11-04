@@ -14,6 +14,7 @@ use sail_function::scalar::predicate::rewrite_like_pattern::RewriteLikePatternFu
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput, spark_in_list};
+use crate::function::scalar::string::lower_expr;
 
 fn extract_escape_char(escape_expr: expr::Expr) -> PlanResult<Option<char>> {
     match escape_expr {
@@ -49,7 +50,7 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
             PlanError::invalid(format!("There isn't a common type to coerce {source_type} and {pattern_type} in ILIKE expression"))
         })?;
         for argument in &mut arguments[..2] {
-            *argument = expr_fn::lower(argument.clone().cast_to(&data_type, schema)?);
+            *argument = lower_expr(argument.clone().cast_to(&data_type, schema)?);
         }
         Some(nullable)
     } else {
