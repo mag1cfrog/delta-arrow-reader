@@ -1980,8 +1980,10 @@ impl Prepare {
                 if let LogicalPlan::Projection(project) = &node {
                     if spark_comparison_errors && early_local_relation(&project.input)? {
                         for expr in &project.expr {
-                            let expression = expr.clone().unalias();
-                            let expression = without_metadata_annotations(&expression);
+                            let mut expression = without_metadata_annotations(expr);
+                            while let Expr::Alias(alias) = expression {
+                                expression = without_metadata_annotations(&alias.expr);
+                            }
                             let Expr::HigherOrderFunction(function) = expression else {
                                 continue;
                             };
