@@ -1646,17 +1646,33 @@ mod tests {
                     Ok(ColumnarValue::Array(Arc::new(Int64Array::from(vec![1]))))
                 }),
             );
-            let batches = session.table("slice_cse").await?.select(vec![slice.call(vec![
-                col("a"), lit(1_i64), no_columns.call(vec![]),
-            ]).alias("r")])?.collect().await?;
+            let batches = session
+                .table("slice_cse")
+                .await?
+                .select(vec![
+                    slice
+                        .call(vec![col("a"), lit(1_i64), no_columns.call(vec![])])
+                        .alias("r"),
+                ])?
+                .collect()
+                .await?;
             assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 2);
-            assert_eq!(batches.iter().map(|batch| batch.column(0).null_count()).sum::<usize>(), 1);
+            assert_eq!(
+                batches
+                    .iter()
+                    .map(|batch| batch.column(0).null_count())
+                    .sum::<usize>(),
+                1
+            );
             for batch in batches {
                 batch.column(0).to_data().validate_full()?;
                 let result = batch.column(0).as_list::<i32>();
                 for row in 0..result.len() {
                     if !result.is_null(row) {
-                        assert_eq!(result.value(row).as_primitive::<Int32Type>().values(), &[10]);
+                        assert_eq!(
+                            result.value(row).as_primitive::<Int32Type>().values(),
+                            &[10]
+                        );
                     }
                 }
             }
@@ -1705,20 +1721,27 @@ mod tests {
             Field::new("coordinate", DataType::Int64, false)
                 .with_metadata([("kind".into(), "length".into())].into()),
         ]));
-        let batch = RecordBatch::try_new(schema.clone(), vec![
-            array,
-            Arc::new(Int64Array::from(vec![999, 999, 999])),
-            Arc::new(Int64Array::from(vec![Some(1), None, Some(2)])),
-            Arc::new(Int64Array::from(vec![99, 99, 1])),
-        ])?;
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                array,
+                Arc::new(Int64Array::from(vec![999, 999, 999])),
+                Arc::new(Int64Array::from(vec![Some(1), None, Some(2)])),
+                Arc::new(Int64Array::from(vec![99, 99, 1])),
+            ],
+        )?;
         let args = [("a", 0), ("coordinate", 2), ("coordinate", 3)]
-            .into_iter().map(|(name, index)| Arc::new(Column::new(name, index)) as Arc<dyn PhysicalExpr>)
+            .into_iter()
+            .map(|(name, index)| Arc::new(Column::new(name, index)) as Arc<dyn PhysicalExpr>)
             .collect();
         let physical = ScalarFunctionExpr::try_new(
             Arc::new(ScalarUDF::from(SparkArraySlice {
-                native: array_slice_udf(), required_elements: false,
+                native: array_slice_udf(),
+                required_elements: false,
             })),
-            args, schema.as_ref(), Arc::new(ConfigOptions::default()),
+            args,
+            schema.as_ref(),
+            Arc::new(ConfigOptions::default()),
         )?;
         let result = physical.evaluate(&batch)?.into_array(3)?;
         result.to_data().validate_full()?;

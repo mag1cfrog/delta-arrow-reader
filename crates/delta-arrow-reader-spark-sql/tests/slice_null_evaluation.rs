@@ -414,37 +414,51 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
         ],
     }]});
     let expected = json!([
-        ["0","kept",[null,null,null],null],
-        ["1","kept",[["1"],["2"],null],["2"]],
-        ["2","kept",[["3"],["4"],null],["4"]],
+        ["0", "kept", [null, null, null], null],
+        ["1", "kept", [["1"], ["2"], null], ["2"]],
+        ["2", "kept", [["3"], ["4"], null], ["4"]],
     ]);
     let sql = "SELECT k, payload, TRANSFORM(starts, x -> SLICE(a, x + bias, n)) AS r, \
         SLICE(a, ARRAY_MAX(TRANSFORM(starts, y -> y + bias)), n) AS captured_start \
         FROM slice_projection_input ORDER BY k";
     for batch_size in [1, 32] {
-        let session = SessionContext::new_with_state(configure_spark_sql(
-            SessionStateBuilder::new().with_default_features().with_config(
-                SessionConfig::new().with_batch_size(batch_size),
-            ),
-        ).build());
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(SessionConfig::new().with_batch_size(batch_size)),
+            )
+            .build(),
+        );
         spark_inputs::register_recorded_inputs(&session, &header, batch_size)?;
         for ansi_mode in [true, false] {
             let query = delta_arrow_reader_spark_sql::plan_query(
-                &session, sql, &delta_arrow_reader_spark_sql::SparkSqlOptions {
-                    ansi_mode, ..Default::default()
+                &session,
+                sql,
+                &delta_arrow_reader_spark_sql::SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
                 },
-            ).await?;
+            )
+            .await?;
             let physical = query.create_physical_plan(&session).await?;
             let schema = physical.schema();
-            assert_eq!(schema.field(1).metadata().get("probe").map(String::as_str), Some("kept"));
+            assert_eq!(
+                schema.field(1).metadata().get("probe").map(String::as_str),
+                Some("kept")
+            );
             let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
             let mut rows = Vec::new();
             for batch in batches {
                 spark_results::validate_batch(schema.as_ref(), &batch)?;
                 for row in 0..batch.num_rows() {
-                    rows.push(batch.columns().iter().map(|column| {
-                        spark_results::encode_value(column.as_ref(), row)
-                    }).collect::<TestResult<Vec<_>>>()?);
+                    rows.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|column| spark_results::encode_value(column.as_ref(), row))
+                            .collect::<TestResult<Vec<_>>>()?,
+                    );
                 }
             }
             assert_eq!(json!(rows), expected, "ANSI={ansi_mode} batch={batch_size}");
