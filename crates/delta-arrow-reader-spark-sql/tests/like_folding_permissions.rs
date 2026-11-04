@@ -173,7 +173,7 @@ async fn like_local_checks_preserve_host_folding_permissions() -> Result<()> {
                         Arc::new(Schema::new(vec![Field::new(
                             "r",
                             data_type.clone(),
-                            !(scenario == "dead_case" && !spark),
+                            scenario != "dead_case" || spark,
                         )]))
                     );
                     let expected_physical = Arc::new(Schema::new(vec![Field::new(

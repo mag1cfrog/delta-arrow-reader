@@ -179,7 +179,7 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                     let comparison = like_profiles::compare_spark(case, &observed);
                     strict_incompatible += usize::from(comparison["strict_compatibility"] == false);
                     full_incompatible += usize::from(comparison["full_compatibility"] == false);
-                    let key = like_profiles::key(case, representation, batch_size);
+                    let key = like_profiles::key(case, representation, batch_size)?;
                     let profile = profiles.get(&key);
                     let retained = profile.is_some_and(|profile| {
                         assert!(retained_keys.insert(key.clone()));
@@ -710,15 +710,16 @@ fn register_nulls(session: &SessionContext) -> DataFusionResult<()> {
     Ok(())
 }
 
-async fn native_error(session: &SessionContext, sql: &str) -> String {
-    match session.sql(sql).await {
-        Err(error) => error.to_string(),
+async fn native_error(session: &SessionContext, sql: &str) -> TestResult<String> {
+    let error = match session.sql(sql).await {
+        Err(error) => error,
         Ok(frame) => frame
             .collect()
             .await
-            .expect_err("native invalid CAST must fail")
-            .to_string(),
-    }
+            .err()
+            .ok_or("native invalid CAST must fail")?,
+    };
+    Ok(error.to_string())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -754,7 +755,7 @@ async fn custom_host_rules_and_concurrent_native_spark_queries_stay_isolated() -
     let native_sql = r"SELECT s LIKE 'a\q' AS r FROM isolation_values";
     let native_expected = plain.sql(native_sql).await?.collect().await?;
     let invalid_cast = "SELECT CAST('bad' AS INT) AS r";
-    let native_error_expected = native_error(&plain, invalid_cast).await;
+    let native_error_expected = native_error(&plain, invalid_cast).await?;
     assert!(
         session
             .state()
@@ -778,7 +779,7 @@ async fn custom_host_rules_and_concurrent_native_spark_queries_stay_isolated() -
         for _ in 0..12 {
             tokio::task::yield_now().await;
             assert_eq!(
-                native_error(&error_session, invalid_cast).await,
+                native_error(&error_session, invalid_cast).await?,
                 native_error_expected
             );
         }

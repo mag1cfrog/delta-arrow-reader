@@ -7,13 +7,17 @@ use super::{TestResult, nullif_error_matches, required_error_matches};
 
 pub(super) type ProfileKey = (String, bool, usize, usize);
 
-pub(super) fn key(case: &Value, representation: usize, batch_size: usize) -> ProfileKey {
-    (
-        case["id"].as_str().expect("case ID").to_owned(),
-        case["ansi"].as_bool().expect("ANSI flag"),
+pub(super) fn key(
+    case: &Value,
+    representation: usize,
+    batch_size: usize,
+) -> TestResult<ProfileKey> {
+    Ok((
+        case["id"].as_str().ok_or("missing case ID")?.to_owned(),
+        case["ansi"].as_bool().ok_or("missing ANSI flag")?,
         representation,
         batch_size,
-    )
+    ))
 }
 
 pub(super) fn load() -> TestResult<BTreeMap<ProfileKey, Value>> {
@@ -40,7 +44,7 @@ pub(super) fn load() -> TestResult<BTreeMap<ProfileKey, Value>> {
         *owners.entry(owner).or_default() += 1;
         assert!(
             profiles
-                .insert(key(&profile, representation, batch_size), profile)
+                .insert(key(&profile, representation, batch_size)?, profile)
                 .is_none()
         );
     }
@@ -60,7 +64,7 @@ pub(super) fn compare_spark(case: &Value, actual: &Value) -> Value {
     let expected = &case["expected"];
     let expected_error = expected["status"] == "error";
     let mut facets = json!({
-        "status":!actual["error"].is_null() == expected_error,
+        "status":actual["error"].is_null() != expected_error,
         "analyzed_schema":actual["analyzed_schema"] == expected["analyzed_schema"],
         "physical_schema":if expected["physical_schema"].is_null() {
             json!("unavailable-spark-reference")
@@ -102,9 +106,7 @@ pub(super) fn compare_spark(case: &Value, actual: &Value) -> Value {
     // never replaced with optimized fields or with the native observation.
     let strict = facets
         .as_object()
-        .unwrap()
-        .values()
-        .all(|value| value.as_bool() != Some(false));
+        .is_some_and(|facets| facets.values().all(|value| value.as_bool() != Some(false)));
     let mut evidence = json!({
         "analyzed_raw":actual["analyzed_schema"].is_null() || actual["analyzed_arrow_schema"].is_string(),
         "physical_raw":actual["physical_schema"].is_null() || actual["physical_arrow_schema"].is_string(),
@@ -119,9 +121,7 @@ pub(super) fn compare_spark(case: &Value, actual: &Value) -> Value {
     let full = strict
         && evidence
             .as_object()
-            .unwrap()
-            .values()
-            .all(|value| value.as_bool() == Some(true));
+            .is_some_and(|evidence| evidence.values().all(|value| value.as_bool() == Some(true)));
     let mut availability = json!({});
     for stage in ["analyzed", "physical"] {
         let field = format!("{stage}_schema");
