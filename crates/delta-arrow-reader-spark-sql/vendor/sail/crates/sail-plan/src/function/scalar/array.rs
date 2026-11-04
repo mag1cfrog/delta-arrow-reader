@@ -7,7 +7,7 @@ use datafusion::functions_nested::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{
     ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
-    ScalarUDFImpl, Signature, cast, expr, is_null, lit, not, or, when,
+    ScalarUDFImpl, Signature, Volatility, cast, expr, is_null, lit, not, or, when,
 };
 use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
@@ -35,6 +35,7 @@ use crate::function::common::{
     SparkComparisonFloat,
 };
 use crate::function::numeric_coercion::common_numeric_type;
+use crate::function::result_coercion::cast_adds_nulls;
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -317,10 +318,38 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         function_context,
     } = input;
 
+    if arguments.len() != 2 {
+        return Err(PlanError::invalid(format!(
+            "ARRAYS_OVERLAP requires two arguments, got {}",
+            arguments.len()
+        )));
+    }
     let (left, right) = arguments.two()?;
+    let schema = function_context.schema.as_ref();
+    let left_type = left.get_type(schema)?;
+    let right_type = right.get_type(schema)?;
+    if (!left_type.is_list() && !left_type.is_null())
+        || (!right_type.is_list() && !right_type.is_null())
+    {
+        return Err(PlanError::invalid(
+            "ARRAYS_OVERLAP requires two array arguments",
+        ));
+    }
+    let nullable = left.nullable(schema)?
+        || right.nullable(schema)?
+        || match (
+            array_element_field(&left_type),
+            array_element_field(&right_type),
+        ) {
+            (Some(left), Some(right)) => {
+                left.is_nullable()
+                    || right.is_nullable()
+                    || cast_adds_nulls(right.data_type(), left.data_type())
+            }
+            _ => true,
+        };
 
-    let nullable_array_type =
-        with_list_value_nullability(&left.get_type(function_context.schema.as_ref())?, true);
+    let nullable_array_type = nullable_array_probe_type(&left_type);
     let left = cast(left, nullable_array_type.clone());
     let right = cast(right, nullable_array_type.clone());
     let same_type_null_only_array = cast(
@@ -331,9 +360,16 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
     let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
 
-    Ok(when(
+    let result = when(
         or(is_null(left.clone()), is_null(right.clone())),
         lit(ScalarValue::Null),
+    )
+    .when(
+        or(
+            expr_fn::array_length(left.clone()).eq(lit(0_i64)),
+            expr_fn::array_length(right.clone()).eq(lit(0_i64)),
+        ),
+        lit(false),
     )
     .when(
         or(left_has_null, right_has_null),
@@ -343,7 +379,49 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         ),
     )
     .when(lit(true), expr_fn::array_has_any(left, right))
-    .end()?)
+    .end()?;
+    Ok(ScalarUDF::from(ArraysOverlapResultField { nullable }).call(vec![result]))
+}
+
+// Preserve the operands' declaration across the nullable CASE and singleton NULL probes.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct ArraysOverlapResultField {
+    nullable: bool,
+}
+
+impl ScalarUDFImpl for ArraysOverlapResultField {
+    fn name(&self) -> &str {
+        "spark_arrays_overlap_result_field"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> =
+            std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn return_type(&self, _args: &[DataType]) -> datafusion_common::Result<DataType> {
+        Ok(DataType::Boolean)
+    }
+
+    fn return_field_from_args(
+        &self,
+        _args: ReturnFieldArgs,
+    ) -> datafusion_common::Result<FieldRef> {
+        Ok(Arc::new(Field::new(
+            self.name(),
+            DataType::Boolean,
+            self.nullable,
+        )))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        let [result] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        Ok(result)
+    }
 }
 
 fn normalize_flatten_inner_views(
@@ -679,6 +757,97 @@ mod tests {
     use datafusion_expr::{ColumnarValue, col};
 
     use super::*;
+
+    #[test]
+    fn arrays_overlap_preserves_null_results_across_list_storage_and_slices() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{Array, ArrayRef, AsArray};
+        use arrow::datatypes::Schema;
+
+        let session = SessionContext::new();
+        let left: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
+            Some(vec![Some(1), Some(2)]),
+            Some(vec![None, Some(2)]),
+            Some(vec![Some(3), Some(5)]),
+            None,
+        ]));
+        let right: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
+            Some(vec![Some(1), Some(4)]),
+            Some(vec![Some(3), Some(4)]),
+            Some(vec![Some(4), Some(6)]),
+            Some(vec![Some(4), Some(6)]),
+        ]));
+        let element = Arc::new(
+            Field::new_list_field(DataType::Int32, true)
+                .with_metadata([("origin".into(), "overlap-element".into())].into()),
+        );
+        for ansi_mode in [true, false] {
+            let config = Arc::new(crate::config::PlanConfig {
+                ansi_mode,
+                ..Default::default()
+            });
+            for storage in [
+                DataType::List(element.clone()),
+                DataType::LargeList(element.clone()),
+                DataType::FixedSizeList(element.clone(), 2),
+                DataType::ListView(element.clone()),
+                DataType::LargeListView(element.clone()),
+            ] {
+                let inputs = [left.clone(), right.clone()]
+                    .map(|input| arrow::compute::cast(input.as_ref(), &storage))
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()?;
+                for (offset, len) in [(0, 4), (1, 2), (1, 0)] {
+                    let schema = Arc::new(Schema::new(vec![
+                        Field::new("left", storage.clone(), true)
+                            .with_metadata([("source".into(), "left".into())].into()),
+                        Field::new("right", storage.clone(), false),
+                    ]));
+                    let batch = RecordBatch::try_new(
+                        schema.clone(),
+                        inputs
+                            .iter()
+                            .map(|input| input.slice(offset, len))
+                            .collect(),
+                    )?;
+                    for input in batch.columns() {
+                        input.to_data().validate_full()?;
+                    }
+                    let schema = Arc::new(DFSchema::try_from(schema)?);
+                    for arguments in [
+                        vec![col("left"), col("right")],
+                        vec![col("right"), col("left")],
+                    ] {
+                        let expression = arrays_overlap(ScalarFunctionInput {
+                            arguments,
+                            function_context: FunctionContextInput {
+                                argument_display_names: &[],
+                                plan_config: &config,
+                                session_context: &session,
+                                schema: &schema,
+                            },
+                        })?;
+                        let (_, field) = expression.to_field(&schema)?;
+                        assert_eq!(field.data_type(), &DataType::Boolean);
+                        assert!(field.is_nullable());
+                        assert!(field.metadata().is_empty());
+                        let physical = session.create_physical_expr(expression, &schema)?;
+                        let physical_field = physical.return_field(schema.inner())?;
+                        assert_eq!(physical_field.data_type(), &DataType::Boolean);
+                        assert!(physical_field.is_nullable());
+                        assert!(physical_field.metadata().is_empty());
+                        let result = physical.evaluate(&batch)?.into_array(len)?;
+                        result.to_data().validate_full()?;
+                        assert_eq!(
+                            result.as_boolean().iter().collect::<Vec<_>>(),
+                            [Some(true), None, Some(false), None][offset..offset + len]
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn flatten_keeps_element_fields_across_list_storage_and_slices() -> PlanResult<()> {

@@ -2411,6 +2411,50 @@ It checks every outer, inner and element nullability combination, exact leaf
 metadata, actual NULL representation and values. Constant STRUCT parent fields
 depend on the separate #849 prerequisite described above.
 
+## ARRAYS_OVERLAP result fields
+
+`arrays-overlap-result-fields-spark.jsonl` preserves all 26 original #836
+observations, with SHA256
+`b098a40ee021ce4c3792abe0b38c9f1b3cdce8335d57b8beafe6fc3c96f15cf9`.
+The header pins Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, UTC, the capture script hash,
+provider declarations and input rows. Both ANSI modes retain their complete
+analyzed and executed fields, exact rows and error phases.
+
+`arrays_overlap_result_fields.rs` asserts those observations at batch sizes 1
+and 32, plus the four original `overlap_numeric_widening` and
+`overlap_numeric_reverse` declaration controls from the unchanged shared
+boundary fixture. The resulting 60 comparisons cover direct and constant
+STRUCT outputs, live columns, actual NULL arrays and elements, hits, misses,
+empty arrays in both operand orders, zero rows and required cast errors.
+Two exact invalid-input query/condition pairs accept the pinned resolver
+diagnostics at resolution only. Negative controls reject a different query,
+condition, cause, phase or field/row comparison, including ordered rows.
+Native ARRAY_HAS_ANY controls compare configured and unconfigured
+observations, including full fields and validated batches.
+
+The four `overlap_bad_implicit_cast` and `overlap_bad_implicit_cast_is_null`
+Spark errors remain unchanged in the shared fixture and owned by #840.
+They are excluded from #836's Spark comparison count. A separate retained
+conversion guard checks that the existing INT/STRING lowering stays nullable
+and does not discard its required cast failure through IS NULL in either ANSI
+mode. This guard does not claim Spark admission parity for that signature.
+Asymmetric common-element coercion, BINARY storage and floating equality/folding
+remain owned by #840 and #843.
+
+The sail-plan storage control asserts nullable BOOLEAN declarations, empty
+result metadata, input/output Arrow validity and exact NULL/hit/miss values.
+It covers both ANSI modes and operand orders, List, LargeList, FixedSizeList
+width 2, ListView and LargeListView, full arrays, nonzero slices and zero-length
+slices. Constant STRUCT declarations use the separate #849 prerequisite.
+
+From this crate, replay the committed references and the storage control with:
+
+```sh
+cargo test --locked --workspace --test arrays_overlap_result_fields -- --nocapture
+cargo test --locked --workspace -p sail-plan arrays_overlap_preserves_null_results_across_list_storage_and_slices
+```
+
 
 ## MAP constructor root
 
