@@ -22,7 +22,7 @@ mod nested;
 pub(crate) use nested::{
     cast_nested_value, common_array_element_type, has_coalesce_declaration_cast,
     is_nested_result_type, nested_result_cast_input, prune_coalesce_declaration_cast,
-    structurally_equal,
+    same_positional_logical_type,
 };
 
 #[derive(PartialEq, Eq)]

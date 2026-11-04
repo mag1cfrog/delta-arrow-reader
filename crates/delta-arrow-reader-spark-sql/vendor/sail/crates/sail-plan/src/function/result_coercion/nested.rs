@@ -109,7 +109,7 @@ fn array_element_cast_allowed(source: &Field, target: &Field, ansi_mode: bool) -
     if source.is_nullable() && !target.is_nullable() {
         return false;
     }
-    if structurally_equal(source.data_type(), target.data_type()) {
+    if same_positional_logical_type(source.data_type(), target.data_type()) {
         return true;
     }
     if let (Some(source), Some(target)) = (
@@ -318,16 +318,16 @@ fn same_value_type(source: &DataType, target: &DataType) -> bool {
     source == target
 }
 
-pub(crate) fn structurally_equal(left: &DataType, right: &DataType) -> bool {
+pub(crate) fn same_positional_logical_type(left: &DataType, right: &DataType) -> bool {
     if let (Some(left), Some(right)) = (list_field(left), list_field(right)) {
-        return structurally_equal(left.data_type(), right.data_type());
+        return same_positional_logical_type(left.data_type(), right.data_type());
     }
     if let (DataType::Struct(left), DataType::Struct(right)) = (left, right) {
         return left.len() == right.len()
             && left
                 .iter()
                 .zip(right)
-                .all(|(left, right)| structurally_equal(left.data_type(), right.data_type()));
+                .all(|(left, right)| same_positional_logical_type(left.data_type(), right.data_type()));
     }
     left == right
         || (is_string_type(left) && is_string_type(right))
@@ -345,7 +345,7 @@ pub(super) fn coerce_nested_result_values(
     let struct_field_names = if matches!(set_op_type, Some(SetOpType::Union))
         && data_types
             .windows(2)
-            .all(|pair| structurally_equal(&pair[0], &pair[1]))
+            .all(|pair| same_positional_logical_type(&pair[0], &pair[1]))
     {
         StructFieldNames::AllowPositionalRename
     } else {
