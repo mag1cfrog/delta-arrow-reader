@@ -941,6 +941,24 @@ pub(crate) fn prune_retained_local_like_limits(
         .data)
 }
 
+fn forbids_local_planning(expr: &Expr) -> Result<bool> {
+    expr.exists(|expr| {
+        Ok(matches!(expr, Expr::ScalarFunction(function)
+            if !function.func.inner().supports_constant_folding()))
+    })
+}
+
+fn input_forbids_local_planning(input: &LogicalPlan) -> Result<bool> {
+    input.exists(|node| {
+        let mut forbidden = false;
+        node.apply_expressions(|expr| {
+            forbidden |= forbids_local_planning(expr)?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(forbidden)
+    })
+}
+
 // Check errors using discarded local rows. True means local interpretation
 // consumed this expression, including an empty input; false means ineligible.
 // No table scan or volatile expression is executed; no rows enter the real plan.
@@ -952,24 +970,7 @@ pub(crate) fn try_check_local_row_errors(
     if !input.exists(|node| Ok(matches!(node, LogicalPlan::Values(_))))? {
         return Ok(false);
     }
-    // This local preview must honor UDF planning permissions before the
-    // local evaluator visits any input projection, even below an empty filter.
-    let forbids_planning = |expr: &Expr| {
-        expr.exists(|expr| {
-            Ok(matches!(expr, Expr::ScalarFunction(function)
-                if !function.func.inner().supports_constant_folding()))
-        })
-    };
-    if forbids_planning(expr)?
-        || input.exists(|node| {
-            let mut forbidden = false;
-            node.apply_expressions(|expr| {
-                forbidden |= forbids_planning(expr)?;
-                Ok(TreeNodeRecursion::Continue)
-            })?;
-            Ok(forbidden)
-        })?
-    {
+    if forbids_local_planning(expr)? || input_forbids_local_planning(input)? {
         return Ok(false);
     }
     // Spark resolves its query clock before local interpretation. Lower only
@@ -2025,6 +2026,7 @@ impl Prepare {
                     }
                     if casts
                         && (evaluable || spark_comparison_errors)
+                        && !input_forbids_local_planning(&project.input)?
                         && let Some(batch) = self.local_batch(&project.input)?
                     {
                         if batch.num_rows() == 0 {
@@ -2044,7 +2046,8 @@ impl Prepare {
                             simplifier = simplifier.with_left_to_right_comparison_errors();
                         }
                         for expr in &project.expr {
-                            if !row_expression(expr, true)? {
+                            // Declining one expression must not discard eligible sibling checks.
+                            if forbids_local_planning(expr)? || !row_expression(expr, true)? {
                                 continue;
                             }
                             // Keep local comparisons while lowering other UDFs normally.

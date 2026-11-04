@@ -767,6 +767,8 @@ The default-true UDF folding capability is separate from volatility and delegate
 through aliases. Optimizer ancestor folding and successful Spark constant STRUCT
 preparation honor descendant opt-outs. Spark-marked ARRAY/STRUCT parents retain
 their complete child declarations before children fold; native defaults remain.
+Local cast interpretation also honors expression and input-producer opt-outs
+before physical evaluation, while retaining checks for eligible projection siblings.
 
 The result-field adapter prepares its owned whole operands without descending
 into user conditional branches. This retains required constant cast errors even
