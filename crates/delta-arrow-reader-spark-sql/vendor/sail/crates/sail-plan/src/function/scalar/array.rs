@@ -34,8 +34,12 @@ use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, ScalarFunction, ScalarFunctionInput,
     SparkComparisonFloat,
 };
+use crate::function::float_keys::normalize_spark_float_array_comparison;
 use crate::function::numeric_coercion::common_numeric_type;
-use crate::function::result_coercion::{cast_nested_value, common_array_element_type};
+use crate::function::result_coercion::{
+    cast_nested_value, common_array_element_type, nested_result_cast_input,
+    same_positional_logical_type,
+};
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -340,10 +344,14 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         .ok_or_else(|| PlanError::invalid(format!(
             "[DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES] ARRAYS_OVERLAP requires compatible array element types, got {left_type:?} and {right_type:?}"
         )))?;
-    let nullable = left.nullable(schema)?
-        || right.nullable(schema)?
-        || left_element.is_nullable()
-        || right_element.is_nullable();
+    let operand_nullable = [
+        left.nullable(schema)? || left_element.is_nullable(),
+        right.nullable(schema)? || right_element.is_nullable(),
+    ];
+    let left_needs_value_cast =
+        !same_positional_logical_type(left_element.data_type(), &element_type);
+    let right_needs_value_cast =
+        !same_positional_logical_type(right_element.data_type(), &element_type);
 
     let element = Arc::new(Field::new_list_field(element_type, true));
     let nullable_array_type = if matches!(
@@ -357,8 +365,19 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } else {
         DataType::List(element)
     };
-    let left = cast_nested_value(left, &left_type, &nullable_array_type, &function_context)?;
-    let right = cast_nested_value(right, &right_type, &nullable_array_type, &function_context)?;
+    let prepare_operand =
+        |value: expr::Expr, source: &DataType, needs_value_cast| -> PlanResult<expr::Expr> {
+            let value = if needs_value_cast {
+                cast_nested_value(value, source, &nullable_array_type, &function_context)?
+            } else {
+                value
+            };
+            let value = normalize_spark_float_array_comparison(value, schema)?;
+            let source = value.get_type(schema)?;
+            cast_nested_value(value, &source, &nullable_array_type, &function_context)
+        };
+    let left = prepare_operand(left, &left_type, left_needs_value_cast)?;
+    let right = prepare_operand(right, &right_type, right_needs_value_cast)?;
     let same_type_null_only_array = cast(
         make_array(vec![lit(ScalarValue::Null)]),
         nullable_array_type,
@@ -367,8 +386,13 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let left_has_null = expr_fn::array_has_any(left.clone(), same_type_null_only_array.clone());
     let right_has_null = expr_fn::array_has_any(right.clone(), same_type_null_only_array);
 
+    // A required ARRAY constructor can still fail while evaluating its elements.
     let result = when(
-        or(is_null(left.clone()), is_null(right.clone())),
+        is_null(expr_fn::array_length(left.clone())),
+        lit(ScalarValue::Null),
+    )
+    .when(
+        is_null(expr_fn::array_length(right.clone())),
         lit(ScalarValue::Null),
     )
     .when(
@@ -387,13 +411,13 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     )
     .when(lit(true), expr_fn::array_has_any(left, right))
     .end()?;
-    Ok(ScalarUDF::from(ArraysOverlapResultField { nullable }).call(vec![result]))
+    Ok(ScalarUDF::from(ArraysOverlapResultField { operand_nullable }).call(vec![result]))
 }
 
 // Preserve the operands' declaration across the nullable CASE and singleton NULL probes.
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct ArraysOverlapResultField {
-    nullable: bool,
+    operand_nullable: [bool; 2],
 }
 
 impl ScalarUDFImpl for ArraysOverlapResultField {
@@ -418,8 +442,69 @@ impl ScalarUDFImpl for ArraysOverlapResultField {
         Ok(Arc::new(Field::new(
             self.name(),
             DataType::Boolean,
-            self.nullable,
+            self.operand_nullable.into_iter().any(|nullable| nullable),
         )))
+    }
+
+    fn simplify(
+        &self,
+        args: Vec<expr::Expr>,
+        info: &datafusion_expr::simplify::SimplifyContext,
+    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
+        use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+        let mut operand_nullable = self.operand_nullable;
+        // This private wrapper owns the lowered CASE's result-value membership calls.
+        // Prepare each whole operand, preserving its own conditional reachability.
+        if let [expr::Expr::Case(case)] = args.as_slice() {
+            for value in case
+                .when_then_expr
+                .iter()
+                .map(|(_, value)| value.as_ref())
+                .chain(case.else_expr.iter().map(|value| value.as_ref()))
+            {
+                value.apply(|value| {
+                    if let expr::Expr::ScalarFunction(function) = value {
+                        if function.func.name() == "array_has_any" {
+                            for operand in &function.args {
+                                datafusion::optimizer::simplify_expressions::ExprSimplifier::new(
+                                    info.clone(),
+                                )
+                                .simplify(operand.clone())?;
+                            }
+                            // A folded synthetic cast hides its input fields;
+                            // retain that operand's recorded declaration.
+                            if let [left, right] = function.args.as_slice() {
+                                for (nullable, operand) in
+                                    operand_nullable.iter_mut().zip([left, right])
+                                {
+                                    if let Some(input) = nested_result_cast_input(operand) {
+                                        let data_type = info.get_data_type(input)?;
+                                        *nullable &= info.nullable(input)?
+                                            || array_element_field(&data_type)
+                                                .is_none_or(|field| field.is_nullable());
+                                    }
+                                }
+                            }
+                        }
+                        return Ok(TreeNodeRecursion::Jump);
+                    }
+                    // User CASE expressions inside operands retain their own short-circuiting.
+                    Ok(if matches!(value, expr::Expr::Case(_)) {
+                        TreeNodeRecursion::Jump
+                    } else {
+                        TreeNodeRecursion::Continue
+                    })
+                })?;
+            }
+        }
+        if operand_nullable != self.operand_nullable {
+            return Ok(datafusion_expr::simplify::ExprSimplifyResult::Simplified(
+                ScalarUDF::from(Self { operand_nullable }).call(args),
+            ));
+        }
+        Ok(datafusion_expr::simplify::ExprSimplifyResult::Original(
+            args,
+        ))
     }
 
     fn invoke_with_args(
@@ -764,6 +849,159 @@ mod tests {
     use datafusion_expr::{ColumnarValue, col};
 
     use super::*;
+
+    #[test]
+    fn arrays_overlap_normalizes_float_bits_across_list_storage_and_slices() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::array::{Array, ArrayRef, AsArray, Float32Array, Float64Array};
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use arrow::datatypes::Schema;
+
+        let session = SessionContext::new();
+        let make_values = |double, left| -> ArrayRef {
+            if double {
+                let values = if left {
+                    vec![
+                        Some(-0.0),
+                        Some(1.0),
+                        Some(f64::from_bits(0xfff8000000001234)),
+                        Some(2.0),
+                        None,
+                        Some(5.0),
+                        Some(700.0),
+                        Some(701.0),
+                        Some(8.0),
+                        Some(9.0),
+                    ]
+                } else {
+                    vec![
+                        Some(0.0),
+                        Some(3.0),
+                        Some(f64::from_bits(0x7ff8000000005678)),
+                        Some(4.0),
+                        Some(6.0),
+                        Some(7.0),
+                        Some(800.0),
+                        Some(801.0),
+                        Some(10.0),
+                        Some(11.0),
+                    ]
+                };
+                Arc::new(Float64Array::from(values))
+            } else {
+                let values = if left {
+                    vec![
+                        Some(-0.0),
+                        Some(1.0),
+                        Some(f32::from_bits(0xffc01234)),
+                        Some(2.0),
+                        None,
+                        Some(5.0),
+                        Some(700.0),
+                        Some(701.0),
+                        Some(8.0),
+                        Some(9.0),
+                    ]
+                } else {
+                    vec![
+                        Some(0.0),
+                        Some(3.0),
+                        Some(f32::from_bits(0x7fc05678)),
+                        Some(4.0),
+                        Some(6.0),
+                        Some(7.0),
+                        Some(800.0),
+                        Some(801.0),
+                        Some(10.0),
+                        Some(11.0),
+                    ]
+                };
+                Arc::new(Float32Array::from(values))
+            }
+        };
+        for ansi_mode in [true, false] {
+            let config = Arc::new(crate::config::PlanConfig {
+                ansi_mode,
+                ..Default::default()
+            });
+            for left_double in [false, true] {
+                for right_double in [false, true] {
+                    for (left_layout, right_layout) in [(0, 0), (0, 1), (3, 2), (4, 3), (2, 4)] {
+                        let inputs = [
+                            (left_double, true, left_layout),
+                            (right_double, false, right_layout),
+                        ]
+                        .map(|(double, left, layout)| {
+                            let values = make_values(double, left);
+                            let element = Arc::new(
+                                Field::new_list_field(values.data_type().clone(), true)
+                                    .with_metadata([("origin".into(), "float-bits".into())].into()),
+                            );
+                            let list = ListArray::try_new(
+                                element.clone(),
+                                OffsetBuffer::from_lengths([2; 5]),
+                                values,
+                                left.then(|| NullBuffer::from(vec![true, true, true, false, true])),
+                            )?;
+                            let storage = match layout {
+                                0 => DataType::List(element),
+                                1 => DataType::LargeList(element),
+                                2 => DataType::FixedSizeList(element, 2),
+                                3 => DataType::ListView(element),
+                                _ => DataType::LargeListView(element),
+                            };
+                            arrow::compute::cast(&list, &storage)
+                        })
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()?;
+                        for (offset, len) in [(0, 5), (1, 3), (1, 0)] {
+                            let schema = Arc::new(Schema::new(vec![
+                                Field::new("left", inputs[0].data_type().clone(), true),
+                                Field::new("right", inputs[1].data_type().clone(), false),
+                            ]));
+                            let batch = RecordBatch::try_new(
+                                schema.clone(),
+                                inputs
+                                    .iter()
+                                    .map(|input| input.slice(offset, len))
+                                    .collect(),
+                            )?;
+                            let schema = Arc::new(DFSchema::try_from(schema)?);
+                            for arguments in [
+                                vec![col("left"), col("right")],
+                                vec![col("right"), col("left")],
+                            ] {
+                                let expression = arrays_overlap(ScalarFunctionInput {
+                                    arguments,
+                                    function_context: FunctionContextInput {
+                                        argument_display_names: &[],
+                                        plan_config: &config,
+                                        session_context: &session,
+                                        schema: &schema,
+                                    },
+                                })?;
+                                let (_, field) = expression.to_field(&schema)?;
+                                assert_eq!(field.data_type(), &DataType::Boolean);
+                                assert!(field.is_nullable());
+                                assert!(field.metadata().is_empty());
+                                let actual = session
+                                    .create_physical_expr(expression, &schema)?
+                                    .evaluate(&batch)?
+                                    .into_array(len)?;
+                                actual.to_data().validate_full()?;
+                                assert_eq!(
+                                    actual.as_boolean().iter().collect::<Vec<_>>(),
+                                    [Some(true), Some(true), None, None, Some(false)]
+                                        [offset..offset + len]
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn arrays_overlap_preserves_null_results_across_list_storage_and_slices() -> PlanResult<()> {

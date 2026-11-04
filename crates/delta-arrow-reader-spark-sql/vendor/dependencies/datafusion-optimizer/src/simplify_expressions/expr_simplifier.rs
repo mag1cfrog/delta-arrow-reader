@@ -545,9 +545,26 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
             self.info,
             self.preserve_comparison_error_order,
         )?;
-        // Fold constant Boolean parents before their children: false AND bad()
-        // can succeed, while bad() AND false must keep the left-hand failure.
-        if matches!(&pruned.data, Expr::BinaryExpr(binary) if matches!(binary.op, Operator::And | Operator::Or))
+        let fold_nested_parent = matches!(&pruned.data, Expr::ScalarFunction(_))
+            && self
+                .info
+                .config_options()
+                .extensions
+                .iter()
+                .any(|(prefix, _)| prefix == "dar_spark_sql_errors")
+            && matches!(
+                self.info.get_data_type(&pruned.data),
+                Ok(DataType::Struct(_)
+                    | DataType::List(_)
+                    | DataType::LargeList(_)
+                    | DataType::FixedSizeList(_, _)
+                    | DataType::ListView(_)
+                    | DataType::LargeListView(_))
+            );
+        // Fold Boolean parents before fallible children. Spark nested results also
+        // retain their child declarations before those children simplify.
+        if (matches!(&pruned.data, Expr::BinaryExpr(binary) if matches!(binary.op, Operator::And | Operator::Or))
+            || fold_nested_parent)
             && !pruned.data.exists(|expr| Ok(!Self::can_evaluate(expr)))?
         {
             if let ConstSimplifyResult::Simplified(value, metadata) =
@@ -698,6 +715,7 @@ impl<'a> ConstEvaluator<'a> {
             | Expr::Placeholder(_) => false,
             Expr::ScalarFunction(ScalarFunction { func, .. }) => {
                 Self::volatility_ok(func.signature().volatility)
+                    && func.inner().supports_constant_folding()
             }
             Expr::HigherOrderFunction(HigherOrderFunction { func, .. }) => {
                 Self::volatility_ok(func.signature().volatility)

@@ -192,7 +192,8 @@ impl NullSideLineage<'_> {
                     Expr::Alias(alias) => Transformed::yes(*alias.expr),
                     Expr::ScalarFunction(mut function)
                         if function.func.inner().is::<SparkComparisonFloat>()
-                            || function.func.inner().is::<NormalizeNestedFloatKeys>() =>
+                            || (function.func.inner().is::<NormalizeNestedFloatKeys>()
+                                && function.func.inner().supports_constant_folding()) =>
                     {
                         Transformed::yes(function.args.remove(0))
                     }

@@ -575,6 +575,15 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
     /// [`Volatility`]: datafusion_expr_common::signature::Volatility
     fn signature(&self) -> &Signature;
 
+    /// Whether the optimizer may evaluate constant calls to this function.
+    ///
+    /// Returning `false` also prevents constant evaluation of ancestors that
+    /// depend on this call, without changing its volatility. Arguments may still
+    /// be simplified. The default is `true`.
+    fn supports_constant_folding(&self) -> bool {
+        true
+    }
+
     /// [`DataType`] returned by this function, given the types of the
     /// arguments.
     ///
@@ -1106,6 +1115,10 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
 
     fn signature(&self) -> &Signature {
         self.inner.signature()
+    }
+
+    fn supports_constant_folding(&self) -> bool {
+        self.inner.supports_constant_folding()
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {

@@ -897,7 +897,8 @@ impl PlanResolver<'_> {
                         .inner()
                         .downcast_ref::<SparkComparisonFloat>()
                         .is_some_and(|normalizer| !normalizer.widen)
-                        || function.func.inner().is::<NormalizeNestedFloatKeys>())
+                        || (function.func.inner().is::<NormalizeNestedFloatKeys>()
+                            && function.func.inner().supports_constant_folding()))
                     && let [arg] = function.args.as_slice()
                 {
                     arg

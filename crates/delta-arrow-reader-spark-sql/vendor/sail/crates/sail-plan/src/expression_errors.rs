@@ -91,7 +91,8 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
         Expr::TryCast(cast) => projected_null(&cast.expr, input),
         Expr::ScalarFunction(f)
             if f.func.inner().is::<NormalizeFloatArrayForSparkComparison>()
-                || f.func.inner().is::<NormalizeNestedFloatKeys>()
+                || (f.func.inner().is::<NormalizeNestedFloatKeys>()
+                    && f.func.inner().supports_constant_folding())
                 || f.func.inner().is::<SparkDecimalCast>()
                 || f.func.inner().is::<SparkComparisonFloat>() =>
         {
@@ -1441,6 +1442,8 @@ impl Prepare {
                     let expr = prepared.data;
                     if !matches!(&expr, Expr::ScalarFunction(f) if f.func.inner().is::<StructFunction>())
                         || !row_expression(&expr, false)?
+                        || expr.exists(|value| Ok(matches!(value, Expr::ScalarFunction(function)
+                            if !function.func.inner().supports_constant_folding())))?
                     {
                         return Ok(Transformed::no(expr));
                     }

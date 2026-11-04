@@ -656,9 +656,10 @@ parents use the separate declaration-preservation prerequisite #849.
 
 ### ARRAYS_OVERLAP declarations and empty arrays
 
-Spark ARRAYS_OVERLAP records its BOOLEAN result field before the synthetic
-nullable CASE and NULL probes. The field includes the original outer-array
-nullability and immediate nullable elements after input admission.
+Spark ARRAYS_OVERLAP records each operand's BOOLEAN-nullability contribution
+before the synthetic nullable CASE and NULL probes. The field includes the
+original outer-array nullability and immediate nullable elements after input
+admission. Each contribution can narrow independently after branch pruning.
 A NULL outer array returns NULL; an empty array returns false before probing
 NULL elements in either operand order. Singleton probes use List/LargeList
 storage, independent of a fixed input array width.
@@ -666,7 +667,6 @@ Resolution rejects non-array operands and wrong arity before evaluation.
 
 The [result-field references](tests/fixtures/README.md#arrays_overlap-result-fields)
 retain complete declarations, values, error phases and native isolation.
-Floating equality and normalization declarations remain a separate #843 change.
 
 ### ARRAYS_OVERLAP common element coercion
 
@@ -694,6 +694,38 @@ native ARRAY_HAS_ANY registration remain separate from argument conversion.
 The [common-element references](tests/fixtures/README.md#arrays_overlap-common-element-types)
 cover independent fields, values, errors, numeric/temporal boundaries and logical
 BINARY observations replayed across Arrow storage representations.
+
+### ARRAYS_OVERLAP floating equality and folding
+
+Floating operands reuse the shared comparison kernels: both zero signs compare
+equal, and distinct NaN signs/payloads compare equal, including admitted widening
+and nested ARRAY/STRUCT leaves. Required value conversion precedes normalization;
+comparison-only declaration casts follow it so constructors keep their folding
+behavior.
+
+Normalization distributes through ARRAY/STRUCT constructors, aliases, CASE
+result branches and COALESCE operands. Opaque ARRAY-containing values retain an
+immutable normalization transform that opts out of constant folding. The default
+general key normalizer remains foldable. A proven NULL STRUCT discards its field
+transforms; a NULL ARRAY retains its transform. Required opaque array columns
+keep their nonnullable result declarations.
+
+The default-true UDF folding capability is separate from volatility and delegates
+through aliases. Optimizer ancestor folding and successful Spark constant STRUCT
+preparation honor descendant opt-outs. Spark-marked ARRAY/STRUCT parents retain
+their complete child declarations before children fold; native defaults remain.
+
+The result-field adapter prepares its owned whole operands without descending
+into user conditional branches. This retains required constant cast errors even
+under NULL/IS NULL consumers. Ordered array-length NULL guards preserve runtime
+left-to-right evaluation: a NULL left array skips a bad live right cast, while a
+bad left operand still raises before a NULL right array.
+
+The [floating references](tests/fixtures/README.md#arrays_overlap-floating-operands)
+retain full comparison flags. General SLICE parent nullability remains tracked
+in #878: four exact identities accept either Spark's complete schemas or their
+frozen baseline schemas, with correct rows, errors, completion and every other
+field required. Their original false field-comparison flags remain visible.
 
 ### Projection metadata
 

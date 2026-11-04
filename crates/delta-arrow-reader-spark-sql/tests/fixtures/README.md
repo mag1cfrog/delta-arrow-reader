@@ -2480,13 +2480,10 @@ its other 16 floating-equality observations unchanged for #843. The canonical
 NaN and decimal-zero records in the common fixture do not establish raw-bit
 floating equality.
 
-Full-stage common-type acceptance covers 38 of the common fixture's 40
-observations. Its two `nan`/ANSI observations have a separate regression test
-for complete values, public fields and successful completion with matching error
-flags at both batch sizes. Optimized floating declarations belong to #843.
-The test still emits the complete unmodified comparisons, including any false
-before/physical field flags, for all four NaN audit records. It preserves the
-common-type runtime regression guard without claiming optimized field parity.
+All 40 common-type observations have strict full-stage assertions. The two
+`nan`/ANSI records use a separate test of their floating declarations at both
+batch sizes and reuse the same raw file. Their mixed-width constructor fields
+remain nullable through optimization, unlike same-type constructor controls.
 
 The BINARY capture contains 16 successful provider observations and 120
 independent resolution errors. Its frozen capture script SHA256 is
@@ -2521,12 +2518,79 @@ The Sail converter unit `nested_identity_cast_restores_planned_fields_after_chil
 checks exact planned metadata/nullability, unchanged values, nonzero and empty
 slices, and rejection of incompatible primitive and nested value types.
 
-The target strictly checks 544 canonical and 1,512 storage full-stage comparisons.
-The four NaN value/public-field/completion checks retain their full audit records,
-bringing the audit to 2,060 observations, plus six completed native ARRAY_HAS_ANY
-controls. Run it with the command above; the full workspace and connected
+The common-element, original declaration and storage tests contribute 2,060
+full-stage comparisons, including the four shared NaN comparisons. The floating
+sets below extend the same target; six complete native ARRAY_HAS_ANY controls
+remain separate. Run it with the command above; the full workspace and connected
 conditional/set-operation checks remain part of validation.
 
+## ARRAYS_OVERLAP floating operands
+
+The floating inventory contains 156 independent Spark observations, replayed at
+batch sizes 1 and 32. It reuses the 16 non-`dst_*` observations in the unchanged
+32-record common-type boundary file and the two `nan` records in the unchanged
+40-record common-type file. No shared raw record is duplicated.
+
+| Additional fixture | Observations | SHA256 |
+| --- | --- | --- |
+| `arrays-overlap-float-folding-spark.jsonl` | 16 | `5b471c1879ea731a8bd1280a92c677e03aee45ef2f4432e0365828e2790972b4` |
+| `arrays-overlap-conditional-folding-spark.jsonl` | 18 | `79c6018ac35f56a2e2894031b4454ecfd64e0e3f577afdb88abb68d9e38c5772` |
+| `arrays-overlap-live-cast-spark.jsonl` | 8 | `6c05fe900244be5dcd3ae60aad8b1114fed10745c8bda3a7a2b41e704c081177` |
+| `arrays-overlap-null-struct-array-spark.jsonl` | 2 | `eb6e745e06f2c970246a6e71c492032c6da0853a25d910464e714f6f3efbf6e1` |
+| `arrays-overlap-nested-operands-spark.jsonl` | 94 | `591f6af1d966cc26074d6273dc1c8d3e594b205d06cf068987a03f5b168839dd` |
+
+All headers pin Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, their capture source hashes and
+complete available field stages. The boundary input header verifies actual JVM
+FLOAT/DOUBLE raw bits for signed zeros and distinct NaN payloads. The 94-record
+capture verifies every nested floating leaf through JVM raw-bit methods before
+query capture, retaining five complete provider schemas and 56 input rows.
+Its source SHA256 is
+`42890bcacf50da2e08a22599562004110a1581121b2aee9b6d3ff6588de80da6`;
+its frozen manifest SHA256 is
+`bc0ac78a9c7726008d26a2a4c72602076b4754d7caa8783ad01da24e3c0ba38c`.
+Expected fields, Boolean/STRUCT rows, conditions and phases are actual Spark
+observations, preserved byte for byte.
+
+The folding records distinguish same-type constructors from casts/generated
+arrays and cover both orders, direct/STRUCT/IS NULL consumers, discarded
+IF/CASE/COALESCE arms and NULL STRUCTs containing float arrays. Nested-IF fields
+can narrow where top-level conditional STRUCT fields stay nullable. Required
+opaque array providers retain nonnullable fields. The new provider records
+cover both widths, admitted widening, nullable parents/elements, nested ARRAY
+and STRUCT leaves, empty arrays, zero rows and logical nonzero-start slices.
+Legacy nested STRUCT widening remains a resolution error.
+
+Standalone fallible queries isolate each operand order and direct, IS NULL and
+STRUCT consumer. All 18 ANSI constant cases error during optimization, including
+NULL-left cases. A live NULL left array skips a bad right cast; reversing the
+operands raises at collection for all three ANSI consumers. Safe and mixed-row
+controls retain actual values. Each fixture has its own test, and query panics
+remain failed observations so later cases still run.
+
+The target emits 2,368 distinct full comparisons: 856 canonical and 1,512 storage
+records. Of these, 312 cover the floating inventory. Four exact
+`overlap_float_required_all_pairs_logical_slice` identities retain the inherited
+SLICE parent-field difference tracked in #878. Their `matches` and individual
+field flags remain unmodified. `owned_matches` additionally accepts complete
+public/before/physical objects equal to the frozen baseline variant: only the
+six direct result and six nested child nullable bits differ from Spark. The
+guard also accepts complete Spark objects when #878 is fixed. Rows, error
+conditions/phases, completion, names, types, metadata and all other declarations
+must still match; negative controls reject unrelated fields and components.
+
+The Sail floating storage unit adds 240 evaluations across both widths/modes,
+both operand orders, five list-layout pairs and full/nonzero/empty slices. Those
+local assertions complement the independent Spark records. The discoverable
+`constant_folding_contract` target checks default folding, immutable opt-outs,
+aliases, volatile descendants, required errors, successful Spark parent folding
+and the separate constant STRUCT preparation boundary. Run the focused checks
+from this workspace with:
+
+```sh
+cargo test --locked --workspace --test arrays_overlap_result_fields --test constant_folding_contract -- --nocapture
+cargo test --locked --workspace -p sail-plan --lib arrays_overlap -- --nocapture
+```
 
 ## MAP constructor root
 
