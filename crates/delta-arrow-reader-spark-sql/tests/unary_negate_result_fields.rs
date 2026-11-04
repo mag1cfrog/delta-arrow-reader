@@ -26,7 +26,10 @@ async fn unary_negate_fields_match_spark() -> TestResult {
     for key in ["spark_version", "spark_revision", "timezone", "group"] {
         assert_eq!(records[0][key], manifest[key], "{key}");
     }
-    assert_eq!(records[0]["capture_sha256"], manifest["capture_script_sha256"]);
+    assert_eq!(
+        records[0]["capture_sha256"],
+        manifest["capture_script_sha256"]
+    );
     assert_eq!(records[0]["provider_input_roundtrip_checked"], true);
     let identities = records[1..]
         .iter()

@@ -193,8 +193,7 @@ pub(crate) async fn compare_exact_spark_query_stages_with_optimized(
         .as_ref()
         .map(|observation| observation["schema"].clone())
         .unwrap_or(Value::Null);
-    comparison["optimized_observation"] =
-        optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
+    comparison["optimized_observation"] = optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
     comparison["optimized_error"] = json!(optimized.as_ref().err().map(ToString::to_string));
     Ok(comparison)
 }
