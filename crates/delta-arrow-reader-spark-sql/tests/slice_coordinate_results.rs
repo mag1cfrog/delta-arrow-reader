@@ -373,9 +373,9 @@ fn conditional_capture_preserves_reached_branch_error_stages() -> TestResult {
     let (_, records) = load_conditional_coordinate_capture()?;
     for case in &records {
         let (condition, phase, stages) = match case["id"].as_str() {
-            Some("positive_overflow_invalid_start_then" | "negative_overflow_invalid_start_then") => {
-                ("INVALID_PARAMETER_VALUE.START", "optimized_schema", 3)
-            }
+            Some(
+                "positive_overflow_invalid_start_then" | "negative_overflow_invalid_start_then",
+            ) => ("INVALID_PARAMETER_VALUE.START", "optimized_schema", 3),
             Some("positive_overflow_invalid_length_then") => {
                 ("INVALID_PARAMETER_VALUE.LENGTH", "optimized_schema", 3)
             }
@@ -396,20 +396,43 @@ fn conditional_capture_preserves_reached_branch_error_stages() -> TestResult {
             assert_eq!(case["spark_error_details"]["condition"], condition);
             assert_eq!(case["spark_error_details"]["sql_state"], "22023");
             assert_eq!(case["spark_error_details"]["metadata_errors"], json!([]));
-            assert!(case["spark_error"].as_str().is_some_and(|error| !error.is_empty()));
-            assert!(case["spark_error_traceback"].as_str().is_some_and(|trace| !trace.is_empty()));
+            assert!(
+                case["spark_error"]
+                    .as_str()
+                    .is_some_and(|error| !error.is_empty())
+            );
+            assert!(
+                case["spark_error_traceback"]
+                    .as_str()
+                    .is_some_and(|trace| !trace.is_empty())
+            );
         }
         assert_eq!(case["ordered"], true);
         let schemas = case["schema_stages"].as_object().ok_or("missing stages")?;
         assert_eq!(schemas.len(), stages);
-        assert_eq!(case["spark_plans"].as_object().map(|plans| plans.len()), Some(stages - 2));
+        assert_eq!(
+            case["spark_plans"].as_object().map(|plans| plans.len()),
+            Some(stages - 2)
+        );
         for stage in [
-            "public", "resolved", "analyzed", "optimized", "physical",
-            "executed_before_collect", "executed",
-        ].into_iter().take(stages) {
+            "public",
+            "resolved",
+            "analyzed",
+            "optimized",
+            "physical",
+            "executed_before_collect",
+            "executed",
+        ]
+        .into_iter()
+        .take(stages)
+        {
             assert_eq!(schemas[stage], schemas["public"], "{} {stage}", case["id"]);
             if stage != "public" && stage != "resolved" {
-                assert!(case["spark_plans"][stage].as_str().is_some_and(|plan| !plan.is_empty()));
+                assert!(
+                    case["spark_plans"][stage]
+                        .as_str()
+                        .is_some_and(|plan| !plan.is_empty())
+                );
             }
         }
     }

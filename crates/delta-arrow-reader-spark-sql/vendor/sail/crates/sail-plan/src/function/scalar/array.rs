@@ -1550,7 +1550,9 @@ mod tests {
             ] {
                 let input = arrow::compute::cast(&input, &storage)?;
                 let literal = match &storage {
-                    DataType::List(_) => ScalarValue::List(Arc::new(input.as_list::<i32>().clone())),
+                    DataType::List(_) => {
+                        ScalarValue::List(Arc::new(input.as_list::<i32>().clone()))
+                    }
                     _ => ScalarValue::LargeList(Arc::new(input.as_list::<i64>().clone())),
                 };
                 assert_eq!(literal.data_type(), storage);
