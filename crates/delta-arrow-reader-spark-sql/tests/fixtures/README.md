@@ -2569,15 +2569,27 @@ controls retain actual values. Each fixture has its own test, and query panics
 remain failed observations so later cases still run.
 
 The target emits 2,368 distinct full comparisons: 856 canonical and 1,512 storage
-records. Of these, 312 cover the floating inventory. Four exact
-`overlap_float_required_all_pairs_logical_slice` identities retain the inherited
-SLICE parent-field difference tracked in #878. Their `matches` and individual
-field flags remain unmodified. `owned_matches` additionally accepts complete
-public/before/physical objects equal to the frozen baseline variant: only the
-six direct result and six nested child nullable bits differ from Spark. The
-guard also accepts complete Spark objects when #878 is fixed. Rows, error
-conditions/phases, completion, names, types, metadata and all other declarations
-must still match; negative controls reject unrelated fields and components.
+records. Of these, 312 cover the floating inventory. Every comparison requires
+complete Spark fields, rows, error conditions/phases and completion. This
+includes the four `overlap_float_required_all_pairs_logical_slice` identities;
+no SLICE field allowance applies.
+
+`slice-parent-fields-spark.jsonl` adds 70 independently captured SLICE
+observations, with SHA256
+`b65e5418d3fcdf99ba6730bd3079f03f2854c1bfd9a1856ae9caeea42304cbfd`.
+The pinned source SHA256 is
+`85d335bbcba11c59e3fbd18dfe9283133de6d4fba2fcd461ffff8e2cac08e1f3`;
+the input-only manifest SHA256 is
+`d9136ee279e8d1b6fdd576e0b03746f1de69755a09242c63febeb785233d33a1`.
+The capture checks its provider's complete schema and four input rows before
+observing SQL. It covers all required/nullable array parent and element pairs,
+required/nullable numeric arguments, literals, NULL and empty arrays, nested
+ARRAY/STRUCT fields and metadata, direct/STRUCT/ISNULL/overlap consumers and
+zero rows. Bounded parameter and fallible-operand controls retain the actual
+Spark conditions and phases. `slice_result_fields.rs` observes all 140 exact
+identities at batches 1 and 32 and checks six successful native ARRAY_SLICE
+queries against unconfigured DataFusion. Query failures remain observations so
+later identities still run.
 
 The Sail floating storage unit adds 240 evaluations across both widths/modes,
 both operand orders, five list-layout pairs and full/nonzero/empty slices. Those

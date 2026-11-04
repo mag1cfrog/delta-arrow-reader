@@ -722,10 +722,11 @@ left-to-right evaluation: a NULL left array skips a bad live right cast, while a
 bad left operand still raises before a NULL right array.
 
 The [floating references](tests/fixtures/README.md#arrays_overlap-floating-operands)
-retain full comparison flags. General SLICE parent nullability remains tracked
-in #878: four exact identities accept either Spark's complete schemas or their
-frozen baseline schemas, with correct rows, errors, completion and every other
-field required. Their original false field-comparison flags remain visible.
+require complete Spark fields, rows, errors and completion, including required
+SLICE operands. SLICE retains its source element declaration and derives parent
+nullability from the array, start and length arguments through a private native
+ArraySlice delegate. Its direct, STRUCT, ISNULL and overlap consumers share that
+declaration. Native ARRAY_SLICE registration and evaluation remain separate.
 
 ### Projection metadata
 

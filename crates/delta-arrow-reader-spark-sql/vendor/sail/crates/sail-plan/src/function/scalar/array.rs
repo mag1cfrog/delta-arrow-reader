@@ -9,6 +9,7 @@ use datafusion_expr::{
     ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
     ScalarUDFImpl, Signature, Volatility, cast, expr, is_null, lit, not, or, when,
 };
+use datafusion_functions_nested::extract::array_slice_udf;
 use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
 use datafusion_spark::function::array::expr_fn as array_fn;
@@ -116,9 +117,40 @@ fn slice_expr(
     let length = cast(length, DataType::Int64);
     let end = start.clone() + length - lit(1_i64);
     Ok(cast(
-        expr_fn::array_slice(array, start, end, None),
+        ScalarUDF::from(SliceResultField(array_slice_udf())).call(vec![array, start, end]),
         output_type,
     ))
+}
+
+// Spark's result is NULL only when an array or numeric argument is NULL.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SliceResultField(Arc<ScalarUDF>);
+
+impl ScalarUDFImpl for SliceResultField {
+    fn name(&self) -> &str {
+        "spark_slice"
+    }
+
+    fn signature(&self) -> &Signature {
+        self.0.signature()
+    }
+
+    fn return_type(&self, arguments: &[DataType]) -> datafusion_common::Result<DataType> {
+        self.0.return_type(arguments)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        let nullable = args.arg_fields.iter().any(|field| field.is_nullable());
+        let field = self.0.return_field_from_args(args)?;
+        Ok(Arc::new(field.as_ref().clone().with_nullable(nullable)))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        self.0.invoke_with_args(args)
+    }
 }
 
 fn sort_array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
