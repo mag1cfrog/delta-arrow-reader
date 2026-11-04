@@ -1,18 +1,65 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::sync::Arc;
+
 use datafusion::arrow::datatypes::DataType;
 use datafusion_common::ScalarValue;
-use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
+use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_expr::{ExprSchemable, HigherOrderUDF, ScalarUDF, cast, expr, lit, when};
 use datafusion_functions::math::expr_fn::abs;
 use datafusion_functions_nested::expr_fn;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::collection::spark_concat::SparkConcat;
+use sail_function::scalar::collection::spark_concat_runtime::SparkConcatRuntime;
 use sail_function::scalar::collection::spark_reverse::SparkReverse;
 use sail_function::scalar::misc::raise_error::RaiseError;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, drop_inherited_column_metadata,
+    without_metadata_annotations,
 };
+
+use super::lambda::lambda_with_fresh_parameter;
+
+// Lower only after logical optimization, so CombineConcats still sees its raw
+// children. Simple columns/literals already use one safe flat kernel invocation.
+pub(crate) fn lower_runtime_concat(expression: expr::Expr) -> PlanResult<Transformed<expr::Expr>> {
+    let expr::Expr::ScalarFunction(function) = &expression else {
+        return Ok(Transformed::no(expression));
+    };
+    let Some(concat) = function.func.inner().downcast_ref::<SparkConcat>() else {
+        return Ok(Transformed::no(expression));
+    };
+    if !concat.has_ordered_evaluation()
+        || function.args.iter().all(|arg| {
+            matches!(
+                without_metadata_annotations(arg),
+                expr::Expr::Column(_) | expr::Expr::Literal(_, _)
+            )
+        })
+    {
+        return Ok(Transformed::no(expression));
+    }
+    // Native lambdas cannot contain async UDFs. Keep their existing physical
+    // extraction path instead of introducing an unsupported lambda body.
+    if expression.exists(|value| {
+        Ok(matches!(value, expr::Expr::ScalarFunction(function)
+            if function.func.as_async().is_some()))
+    })? {
+        return Ok(Transformed::no(expression));
+    }
+    let volatile = function.args.iter().any(expr::Expr::is_volatile);
+    let runtime = SparkConcatRuntime::new(concat.clone(), volatile);
+    let arguments = function
+        .args
+        .iter()
+        .cloned()
+        .map(|arg| lambda_with_fresh_parameter(arg, "_concat"))
+        .collect::<PlanResult<Vec<_>>>()?;
+    Ok(Transformed::yes(expr::Expr::HigherOrderFunction(
+        expr::HigherOrderFunction::new(Arc::new(HigherOrderUDF::from(runtime)), arguments),
+    )))
+}
 
 fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
@@ -80,7 +127,29 @@ fn element_at(input: ScalarFunctionInput, is_try: bool) -> PlanResult<expr::Expr
 pub(super) fn list_built_in_collection_functions() -> Vec<(&'static str, ScalarFunction)> {
     use crate::function::common::ScalarFunctionBuilder as F;
 
-    let concat = F::udf(SparkConcat::new());
+    let ordinary_concat = F::udf(SparkConcat::new());
+    let ordered_concat = F::udf(SparkConcat::new().with_ordered_evaluation());
+    let concat = F::custom(move |input| {
+        let c06 = !input.arguments.is_empty()
+            && input.arguments.iter().all(|arg| {
+                matches!(
+                    arg.get_type(input.function_context.schema),
+                    Ok(DataType::Null
+                        | DataType::Utf8
+                        | DataType::LargeUtf8
+                        | DataType::Utf8View
+                        | DataType::Binary
+                        | DataType::LargeBinary
+                        | DataType::BinaryView
+                        | DataType::FixedSizeBinary(_))
+                )
+            });
+        if c06 {
+            ordered_concat(input)
+        } else {
+            ordinary_concat(input)
+        }
+    });
     vec![
         ("cardinality", F::custom(size)),
         ("deep_size", F::unary(expr_fn::cardinality)),

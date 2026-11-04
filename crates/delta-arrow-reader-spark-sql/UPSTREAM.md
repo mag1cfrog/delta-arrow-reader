@@ -825,3 +825,27 @@ coercion and malformed-byte STRING representation retain their separate owners.
 The [replacement references](tests/fixtures/regexp-replace-README.md) preserve all
 518 frozen records, complete fields, errors, code-point controls and the strict
 remaining compatibility differences.
+
+### C06 CONCAT runtime argument order
+
+The STRING/BINARY registry selects a query-local ordered CONCAT mode while leaving
+ARRAY_CONCAT and other argument families on their existing path. Its NULL rewrite
+retains preceding work, with #883's constant-error guard preserved as a separate
+dependency. Folding-disabled extension descendants retain the whole-call NULL
+boundary, including when an earlier operand depends on a column. Logical CONCAT
+remains visible for type-preserving flattening and eager CSE. Spark local/constant
+expression preparation retains its existing evaluator.
+
+After logical optimization, SparkQueryPlanner lowers computed CONCAT operands to
+native lambda arguments. The runtime adapter selects surviving rows cumulatively,
+aligns prior arrays once and delegates to the original flat kernel. It neither
+replays failures nor changes numeric, CAST, date, naming or shared DataFusion traits.
+Simple column/literal calls keep the old physical path. Batched volatile calls keep
+their existing state granularity; cross-row competing-error priority and generic RNG
+state are not redefined. The [runtime references](tests/fixtures/README.md#concat-runtime-argument-order-885)
+retain all 192 measured observations, full fields and meaningful failures, plus
+source-count, exact byte/type, slice/buffer and flat-width controls. Native host
+queries remain outside this Spark-only lowering.
+Async UDF operands also retain their existing extraction path: DataFusion's native
+lambda planner rejects async bodies. The C06 adapter does not change that shared
+contract or claim ordered masking for async operands.
