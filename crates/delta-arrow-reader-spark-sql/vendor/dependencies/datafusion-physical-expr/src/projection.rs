@@ -881,7 +881,8 @@ impl Projector {
         }
         let mut arrays = values
             .into_iter()
-            .map(|value| match value {
+            .enumerate()
+            .map(|(index, value)| match value {
                 datafusion_expr::ColumnarValue::Array(array) => {
                     Ok(if array.len() == rows {
                         array
@@ -889,7 +890,14 @@ impl Projector {
                         array.slice(0, rows)
                     })
                 }
-                scalar => scalar.into_array_of_size(rows),
+                scalar => {
+                    // Scalar broadcast is part of this output's evaluation metric.
+                    let _timer = self
+                        .expression_metrics
+                        .as_ref()
+                        .and_then(|m| m.scoped_timer(index));
+                    scalar.into_array_of_size(rows)
+                }
             })
             .collect::<Result<Vec<ArrayRef>>>()?;
         // Unreached outputs at row 0 need only their empty declaration. Building
