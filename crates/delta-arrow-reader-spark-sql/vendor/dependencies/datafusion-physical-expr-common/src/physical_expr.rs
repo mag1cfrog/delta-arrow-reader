@@ -70,6 +70,7 @@ pub struct EvaluatedRowPrefix {
 
 impl EvaluatedRowPrefix {
     /// Wrap a successful evaluation covering the complete supplied domain.
+    #[inline]
     pub fn complete(values: ColumnarValue) -> Self {
         Self {
             values,
@@ -78,6 +79,7 @@ impl EvaluatedRowPrefix {
     }
 
     /// Return the ordinary value or move out the original deferred error.
+    #[inline]
     pub fn into_result(self) -> Result<ColumnarValue> {
         match self.failure {
             Some(failure) => Err(failure.error),
@@ -86,6 +88,7 @@ impl EvaluatedRowPrefix {
     }
 
     /// Check row bounds and prefix shape against the supplied input domain.
+    #[inline]
     pub fn validate(&self, input_rows: usize) -> Result<()> {
         let rows = match &self.failure {
             Some(failure) => {
