@@ -166,12 +166,25 @@ pub(crate) fn register_recorded_inputs(
     metadata: &Value,
     batch_size: usize,
 ) -> TestResult {
+    register_recorded_inputs_with_partition_count(session, metadata, batch_size, 2)
+}
+
+pub(crate) fn register_recorded_inputs_with_partition_count(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+    partition_count: usize,
+) -> TestResult {
+    assert!(
+        partition_count > 0,
+        "input partition count must be positive"
+    );
     for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
         let batch = decode_recorded_batch(input)?;
         let schema = batch.schema();
-        let mut partitions = vec![Vec::new(); 2];
+        let mut partitions = vec![Vec::new(); partition_count];
         for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
-            partitions[chunk % 2]
+            partitions[chunk % partition_count]
                 .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
         }
         session.register_table(

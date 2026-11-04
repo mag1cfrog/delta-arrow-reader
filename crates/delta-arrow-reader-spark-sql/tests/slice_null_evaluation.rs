@@ -1,6 +1,8 @@
 //! SLICE NULL evaluation matches independently captured Spark schemas and errors.
 
+use arrow::compute::concat_batches;
 use datafusion::execution::SessionStateBuilder;
+use datafusion::physical_plan::{ExecutionPlanProperties, collect};
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
@@ -163,11 +165,43 @@ async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestRes
             configure_spark_sql(
                 SessionStateBuilder::new()
                     .with_default_features()
-                    .with_config(SessionConfig::new().with_batch_size(batch)),
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch)
+                            .with_target_partitions(1),
+                    ),
             )
             .build(),
         );
-        spark_inputs::register_recorded_inputs(&session, &records[0], batch)?;
+        // Both Spark captures use local[1] and one shuffle partition.
+        spark_inputs::register_recorded_inputs_with_partition_count(
+            &session,
+            &records[0],
+            batch,
+            1,
+        )?;
+        for input in records[0]["inputs"].as_array().ok_or("missing inputs")? {
+            let table = input["name"].as_str().ok_or("missing table name")?;
+            let provider = session.table_provider(table).await?;
+            let state = session.state();
+            let scan = provider.scan(&state, None, &[], None).await?;
+            assert_eq!(
+                scan.output_partitioning().partition_count(),
+                1,
+                "{table} batch={batch}"
+            );
+            let expected = spark_inputs::decode_recorded_batch(input)?;
+            assert_eq!(scan.schema(), expected.schema(), "{table} batch={batch}");
+            let batches = collect(scan, session.task_ctx()).await?;
+            for actual in &batches {
+                spark_results::validate_batch(expected.schema().as_ref(), actual)?;
+            }
+            assert_eq!(
+                concat_batches(&expected.schema(), &batches)?,
+                expected,
+                "{table} unsorted input order, batch={batch}"
+            );
+        }
         for case in cases {
             let mut comparison =
                 spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
