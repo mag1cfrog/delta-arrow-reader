@@ -13,7 +13,7 @@ mod spark_inputs;
 mod spark_results;
 use spark_results::TestResult;
 
-const SCENARIO_IDS: &[&str] = &[
+const PARAMETER_CAPTURE_COORDINATE_IDS: &[&str] = &[
     "literal_min_start_zero_length",
     "literal_last_max_length",
     "provider_valid_boundaries",
@@ -21,7 +21,7 @@ const SCENARIO_IDS: &[&str] = &[
     "literal_negative_start_past_end",
 ];
 
-const BOUNDARY_SCENARIO_IDS: &[&str] = &[
+const COORDINATE_CAPTURE_IDS: &[&str] = &[
     "provider_array_literal_last_max_length",
     "literal_array_provider_last_max_length",
     "literal_negative_last_max_length",
@@ -29,7 +29,7 @@ const BOUNDARY_SCENARIO_IDS: &[&str] = &[
     "nullable_boundary_coordinates",
 ];
 
-fn coordinate_references() -> TestResult<(Value, Vec<Value>)> {
+fn load_parameter_capture_coordinates() -> TestResult<(Value, Vec<Value>)> {
     let manifest: Value =
         serde_json::from_str(include_str!("fixtures/slice-parameters/manifest.json"))?;
     let mut records = include_str!("fixtures/slice-parameters/spark-reference.jsonl")
@@ -51,7 +51,7 @@ fn coordinate_references() -> TestResult<(Value, Vec<Value>)> {
     records.retain(|case| {
         case["id"]
             .as_str()
-            .is_some_and(|id| SCENARIO_IDS.contains(&id))
+            .is_some_and(|id| PARAMETER_CAPTURE_COORDINATE_IDS.contains(&id))
     });
     let identities = records
         .iter()
@@ -59,7 +59,7 @@ fn coordinate_references() -> TestResult<(Value, Vec<Value>)> {
         .collect::<Vec<_>>();
     let expected = [true, false]
         .into_iter()
-        .flat_map(|ansi| SCENARIO_IDS.iter().map(move |id| json!({"id":id,"ansi":ansi})))
+        .flat_map(|ansi| PARAMETER_CAPTURE_COORDINATE_IDS.iter().map(move |id| json!({"id":id,"ansi":ansi})))
         .collect::<Vec<_>>();
     assert_eq!(identities, expected);
     for case in &records {
@@ -94,7 +94,7 @@ fn coordinate_references() -> TestResult<(Value, Vec<Value>)> {
     Ok((header, records))
 }
 
-fn boundary_references() -> TestResult<(Value, Vec<Value>)> {
+fn load_coordinate_capture() -> TestResult<(Value, Vec<Value>)> {
     let manifest: Value =
         serde_json::from_str(include_str!("fixtures/slice-coordinates/manifest.json"))?;
     let mut records = include_str!("fixtures/slice-coordinates/spark-reference.jsonl")
@@ -105,7 +105,7 @@ fn boundary_references() -> TestResult<(Value, Vec<Value>)> {
     assert_eq!(manifest["observation_count"], 10);
     assert_eq!(records.len(), 11);
     let header = records.remove(0);
-    let (original_header, _) = coordinate_references()?;
+    let (original_header, _) = load_parameter_capture_coordinates()?;
     for key in ["spark_version", "spark_revision", "timezone"] {
         assert_eq!(header[key], original_header[key], "{key}");
     }
@@ -149,7 +149,7 @@ fn boundary_references() -> TestResult<(Value, Vec<Value>)> {
     let expected = [true, false]
         .into_iter()
         .flat_map(|ansi| {
-            BOUNDARY_SCENARIO_IDS
+            COORDINATE_CAPTURE_IDS
                 .iter()
                 .map(move |id| json!({"id":id,"ansi":ansi}))
         })
@@ -192,8 +192,8 @@ fn boundary_references() -> TestResult<(Value, Vec<Value>)> {
 }
 
 #[test]
-fn coordinate_references_preserve_spark_discriminators() -> TestResult {
-    let (_, records) = coordinate_references()?;
+fn parameter_capture_preserves_signed_coordinate_results() -> TestResult {
+    let (_, records) = load_parameter_capture_coordinates()?;
     for case in &records {
         let expected = match case["id"].as_str() {
             Some("literal_min_start_zero_length" | "literal_last_max_length") => json!([[[]]]),
@@ -228,8 +228,8 @@ fn coordinate_references_preserve_spark_discriminators() -> TestResult {
 }
 
 #[test]
-fn coordinate_boundary_references_preserve_spark_discriminators() -> TestResult {
-    let (_, records) = boundary_references()?;
+fn coordinate_capture_preserves_literal_and_provider_results() -> TestResult {
+    let (_, records) = load_coordinate_capture()?;
     for case in &records {
         let expected = match case["id"].as_str() {
             Some("literal_negative_last_max_length") => {
@@ -284,7 +284,7 @@ fn coordinate_boundary_references_preserve_spark_discriminators() -> TestResult 
 
 #[tokio::test]
 async fn slice_coordinate_results_match_independent_spark() -> TestResult {
-    let groups = [coordinate_references()?, boundary_references()?];
+    let groups = [load_parameter_capture_coordinates()?, load_coordinate_capture()?];
     let mut completed = std::collections::BTreeSet::new();
     let mut differences = Vec::new();
     for (header, records) in &groups {
