@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -21,7 +22,7 @@ pub use guarantee::{Guarantee, LiteralGuarantee};
 use std::borrow::Borrow;
 use std::sync::Arc;
 
-use crate::expressions::{BinaryExpr, Column, Literal};
+use crate::expressions::{BinaryExpr, Column, LambdaVariable, Literal};
 use crate::tree_node::ExprContext;
 use crate::{
     AcrossPartitions, ConstExpr, EquivalenceProperties, PhysicalExpr, PhysicalSortExpr,
@@ -280,6 +281,60 @@ where
     let root = init.transform_up(|node| builder.mutate(node)).data()?;
     // Return a tuple containing the root node index and the DAG.
     Ok((root.data.unwrap(), builder.graph))
+}
+
+/// Plans the input projection and reindexes Column and LambdaVariable references.
+pub(crate) fn plan_expression_input_projection(
+    expr: &Arc<dyn PhysicalExpr>,
+) -> Result<(Vec<usize>, Arc<dyn PhysicalExpr>)> {
+    let mut used_column_indices = HashSet::new();
+
+    expr.apply(|node| {
+        if let Some(col) = node.downcast_ref::<Column>() {
+            used_column_indices.insert(col.index());
+        } else if let Some(var) = node.downcast_ref::<LambdaVariable>() {
+            used_column_indices.insert(var.index());
+        }
+
+        Ok(TreeNodeRecursion::Continue)
+    })
+    .expect("closure should be infallible");
+
+    let mut projection = used_column_indices.into_iter().collect::<Vec<_>>();
+
+    projection.sort();
+
+    let column_index_map = projection
+        .iter()
+        .enumerate()
+        .map(|(projected, original)| (*original, projected))
+        .collect::<HashMap<_, _>>();
+
+    let projected_body = Arc::clone(expr)
+        .transform_down(|e| {
+            if let Some(column) = e.downcast_ref::<Column>() {
+                let original = column.index();
+                let projected = *column_index_map.get(&original).unwrap();
+                if projected != original {
+                    return Ok(Transformed::yes(Arc::new(Column::new(
+                        column.name(),
+                        projected,
+                    ))));
+                }
+            } else if let Some(lambda_variable) = e.downcast_ref::<LambdaVariable>() {
+                let original = lambda_variable.index();
+                let projected = *column_index_map.get(&original).unwrap();
+                if projected != original {
+                    return Ok(Transformed::yes(Arc::new(LambdaVariable::new(
+                        projected,
+                        Arc::clone(lambda_variable.field()),
+                    ))));
+                }
+            }
+            Ok(Transformed::no(e))
+        })?
+        .data;
+    Ok((projection, projected_body))
 }
 
 /// Recursively extract referenced [`Column`]s within a [`PhysicalExpr`].

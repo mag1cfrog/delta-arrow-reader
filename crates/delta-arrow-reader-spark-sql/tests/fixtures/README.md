@@ -2647,24 +2647,16 @@ DataFusion. It verifies the ordered internal output names before applying the
 public-name mapping and retains the raw optimized schema. Query failures remain
 observations so later identities still run.
 
-Of those 140 comparisons, 132 require complete Spark parity. The other eight are
-inherited ANSI NULL/fallible-operand observations owned by #881. Their raw
-`matches` and component flags remain visible. `slice-inherited-controls.jsonl`
-contains four current DAR observations for regression checks;
-paired runs verified that batches 1 and 32 differ only in the batch label.
-The predicate accepts a complete Spark match or the exact issue-owned reference
-and full observed object. It compares all fields, metadata, rows, errors,
-phases and flags, including the components improved by the declaration fix.
-Negative controls reject changed references, components, metadata, panic fields
-and extra keys. These inherited checks do not establish full SLICE parity.
+All 140 SLICE parent comparisons require complete Spark parity. The four
+original NULL/fallible-operand identities remain unchanged and now compare
+strictly in both ANSI modes and at both batch sizes.
 
 `slice-parameters/spark-reference.jsonl` adds 308 independent Spark observations
 for 154 scenarios in both ANSI modes, with SHA256
 `d3d5001f84003b5756483f8f2699100746b1fd105ffcf92d8a974c219abafeb0`.
 The test compares all 616 batch identities. It requires complete Spark parity
-for 588 and retains 28 exact inherited comparisons: eight NULL/fallible-operand
-observations owned by #881 and 20 signed-coordinate/boundary observations owned
-by #894. `slice-parameters/inherited-controls.jsonl` stores their 14 complete
+for 596 and retains 20 exact signed-coordinate/boundary comparisons owned by
+#894. `slice-parameters/inherited-controls.jsonl` stores their ten complete
 baseline objects from `bbecae8d`, with the full raw reference for each identity.
 The parameter tests cover zero starts, negative lengths, numeric error priority,
 NULL masks, required/nullable fields, constant and provider evaluation stages,
@@ -2686,6 +2678,33 @@ The local storage check verifies that nullable-element SLICE results retain the
 native hidden span under a NULL parent, while required-element results compact
 that span before the original cast. Both retain visible values, NULL parents,
 element metadata and valid Arrow data.
+
+`slice-null-evaluation/` preserves 98 independent Spark observations for 49
+scenarios in both ANSI modes. Its raw reference SHA256 is
+`844b2c9c865075b80ebc4f1696082b255e32813c67622156e46b7a07ae9dc130`.
+The capture distinguishes known literal NULL propagation from runtime array,
+start and length frontiers, live cast priority, parameter validation, connected
+ISNULL/CASE consumers, repeated inputs and empty providers. Reached constant
+argument failures retain Spark's optimization stage even under nullable
+provider inputs. Cast comparisons check the captured input against the actual
+Arrow cast cause.
+
+`slice_null_evaluation.rs` retains all nine flags for 212 comparisons: 16 from
+the original references and 196 from the fresh capture. It requires 210 strict
+matches. Two existing all-non-NULL error-priority observations remain owned by
+#902, limited to ANSI true at batch 32. Their complete references and complete
+baseline observations must match exactly; batch 1 and ANSI false remain strict.
+Mutation checks reject changes to references, schemas, metadata, phases, errors,
+flags, ANSI mode, batch size and extra fields. These controls do not establish
+full SLICE parity.
+
+Local tests also check custom element fields and metadata, required-element
+NULL storage, nonzero input slices, repeated and empty evaluation, alias
+forwarding and CSE. Opaque and volatile callbacks record the exact reached row
+identities, including failures, so extra evaluation or replay fails the test.
+Duplicate-name coordinates and captured lambda coordinates check index-based
+input projection. A volatile callback with no column references checks that
+empty projections preserve the selected row count.
 
 The Sail floating storage unit adds 240 evaluations across both widths/modes,
 both operand orders, five list-layout pairs and full/nonzero/empty slices. Those
