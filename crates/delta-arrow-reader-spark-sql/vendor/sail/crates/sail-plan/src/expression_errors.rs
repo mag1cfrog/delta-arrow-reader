@@ -31,11 +31,11 @@ use crate::function::result_coercion::{
 };
 use crate::function::scalar::SparkArraySlice;
 use crate::function::scalar::conditional::SparkNullIf;
-use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
 };
+use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use crate::function::scalar::{
     preserve_local_case_conversion, simplify_projected_case_conversions,
 };
@@ -884,7 +884,9 @@ fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
                 LogicalPlan::Filter(filter) => Some(&filter.input),
                 _ => None,
             };
-            let Some(input) = input else { return Ok(Transformed::no(node)); };
+            let Some(input) = input else {
+                return Ok(Transformed::no(node));
+            };
             if !local_input(input)? {
                 return Ok(Transformed::no(node));
             }
@@ -894,13 +896,20 @@ fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
                 let name = names.save(&expression);
                 expression
                     .transform_up(|expression| {
-                        lower_runtime_substring(expression).and_then(|substring| {
-                            lower_runtime_regexp_extract(substring.data, local_values).map(|extract| {
-                                Transformed::new_transformed(extract.data, substring.transformed || extract.transformed)
+                        lower_runtime_substring(expression)
+                            .and_then(|substring| {
+                                lower_runtime_regexp_extract(substring.data, local_values).map(
+                                    |extract| {
+                                        Transformed::new_transformed(
+                                            extract.data,
+                                            substring.transformed || extract.transformed,
+                                        )
+                                    },
+                                )
                             })
-                        }).map_err(|error| {
-                            datafusion_common::DataFusionError::External(Box::new(error))
-                        })
+                            .map_err(|error| {
+                                datafusion_common::DataFusionError::External(Box::new(error))
+                            })
                     })
                     .map(|expression| expression.update_data(|expression| name.restore(expression)))
             })
@@ -1972,21 +1981,39 @@ impl Prepare {
                         for expr in &project.expr {
                             let expression = expr.clone().unalias();
                             let expression = without_metadata_annotations(&expression);
-                            let Expr::HigherOrderFunction(function) = expression else { continue; };
-                            let Some(extract) = (function.func.inner().as_ref() as &dyn std::any::Any)
-                                .downcast_ref::<SparkRegexpExtract>() else { continue; };
+                            let Expr::HigherOrderFunction(function) = expression else {
+                                continue;
+                            };
+                            let Some(extract) = (function.func.inner().as_ref()
+                                as &dyn std::any::Any)
+                                .downcast_ref::<SparkRegexpExtract>()
+                            else {
+                                continue;
+                            };
                             let empty = known_empty(&project.input);
-                            if !empty && !extract.requires_local_index_check() { continue; }
-                            let Some([source, pattern, index]) = SparkRegexpExtract::closed_argument_bodies(expression)? else { continue; };
+                            if !empty && !extract.requires_local_index_check() {
+                                continue;
+                            }
+                            let Some([source, pattern, index]) =
+                                SparkRegexpExtract::closed_argument_bodies(expression)?
+                            else {
+                                continue;
+                            };
                             // Keep earlier local input work and NULL selection before index conversion.
                             let index = datafusion_expr::when(
                                 source.clone().is_null().or(pattern.clone().is_null()),
                                 lit(ScalarValue::Int64(None)),
-                            ).otherwise(index.clone())?;
-                            if try_check_local_row_errors(&index, &project.input, &self.props)? && empty {
-                                return Ok(Transformed::yes(LogicalPlan::EmptyRelation(EmptyRelation {
-                                    produce_one_row: false, schema: Arc::clone(&project.schema),
-                                })));
+                            )
+                            .otherwise(index.clone())?;
+                            if try_check_local_row_errors(&index, &project.input, &self.props)?
+                                && empty
+                            {
+                                return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                                    EmptyRelation {
+                                        produce_one_row: false,
+                                        schema: Arc::clone(&project.schema),
+                                    },
+                                )));
                             }
                         }
                     }

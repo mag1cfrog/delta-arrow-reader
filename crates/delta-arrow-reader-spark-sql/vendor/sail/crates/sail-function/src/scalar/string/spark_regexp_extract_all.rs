@@ -11,15 +11,19 @@ use datafusion_common::utils::take_function_args;
 use datafusion_common::{Result, ScalarValue, exec_err};
 use datafusion_expr::function::Hint;
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
-use datafusion_expr::{Expr, ExprSchemable, HigherOrderFunctionArgs, HigherOrderReturnFieldArgs,
-    HigherOrderSignature, HigherOrderUDFImpl, LambdaParametersProgress, ReturnFieldArgs,
-    ScalarFunctionArgs, ScalarUDFImpl, ValueOrLambda};
+use datafusion_expr::{
+    Expr, ExprSchemable, HigherOrderFunctionArgs, HigherOrderReturnFieldArgs, HigherOrderSignature,
+    HigherOrderUDFImpl, LambdaParametersProgress, ReturnFieldArgs, ScalarFunctionArgs,
+    ScalarUDFImpl, ValueOrLambda,
+};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, Volatility};
 use regex::Regex;
 
 use crate::error::{generic_exec_err, generic_internal_err, unsupported_data_types_exec_err};
-use crate::functions_nested_utils::{evaluate_lambdas_until_null, opt_downcast_arg, scatter_active_rows};
+use crate::functions_nested_utils::{
+    evaluate_lambdas_until_null, opt_downcast_arg, scatter_active_rows,
+};
 use crate::functions_utils::{StrMemo, make_scalar_function};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -75,8 +79,10 @@ impl SparkRegexpExtract {
         let Expr::HigherOrderFunction(function) = expr else {
             return Ok(None);
         };
-        if !(function.func.inner().as_ref() as &dyn std::any::Any).downcast_ref::<Self>()
-            .is_some_and(Self::has_null_short_circuit) {
+        if !(function.func.inner().as_ref() as &dyn std::any::Any)
+            .downcast_ref::<Self>()
+            .is_some_and(Self::has_null_short_circuit)
+        {
             return Ok(None);
         }
         let [
@@ -127,20 +133,31 @@ impl ScalarUDFImpl for SparkRegexpExtract {
         self.null_short_circuit
     }
 
-    fn conditional_arguments<'a>(&self, _args: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+    fn conditional_arguments<'a>(
+        &self,
+        _args: &'a [Expr],
+    ) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
         // Keep Spark's existing shared-argument extraction before row selection.
         None
     }
 
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
-        if self.null_short_circuit && (self.known_null_argument
-            || args.iter().any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null())))
+        if self.null_short_circuit
+            && (self.known_null_argument
+                || args
+                    .iter()
+                    .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null())))
         {
             // Validate the native signature before pruning a known NULL result.
-            let types = args.iter().map(|arg| arg.get_type(info.schema().as_ref()))
+            let types = args
+                .iter()
+                .map(|arg| arg.get_type(info.schema().as_ref()))
                 .collect::<Result<Vec<_>>>()?;
             let _ = self.coerce_types(&types)?;
-            return Ok(ExprSimplifyResult::Simplified(Expr::Literal(ScalarValue::Utf8(None), None)));
+            return Ok(ExprSimplifyResult::Simplified(Expr::Literal(
+                ScalarValue::Utf8(None),
+                None,
+            )));
         }
         Ok(ExprSimplifyResult::Original(args))
     }
@@ -194,7 +211,13 @@ impl HigherOrderUDFImpl for SparkRegexpExtract {
                 ValueOrLambda::Value(_) => unreachable!("checked lambda arguments"),
             })
             .collect::<Vec<_>>();
-        ScalarUDFImpl::coerce_types(self, &fields.iter().map(|field| field.data_type().clone()).collect::<Vec<_>>())?;
+        ScalarUDFImpl::coerce_types(
+            self,
+            &fields
+                .iter()
+                .map(|field| field.data_type().clone())
+                .collect::<Vec<_>>(),
+        )?;
         ScalarUDFImpl::return_field_from_args(
             self,
             ReturnFieldArgs {

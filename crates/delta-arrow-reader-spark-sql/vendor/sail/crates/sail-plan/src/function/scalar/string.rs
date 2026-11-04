@@ -69,17 +69,29 @@ fn regexp_extract(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }
     let asynchronous = arguments.iter().try_fold(false, |found, argument| {
         Ok::<_, datafusion_common::DataFusionError>(
-            found || argument.exists(|expression| {
-                Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+            found
+                || argument.exists(|expression| {
+                    Ok(matches!(expression, expr::Expr::ScalarFunction(function)
                     if function.func.as_async().is_some()))
-            })?,
+                })?,
         )
     })?;
-    if asynchronous || !matches!(arguments[2].get_type(function_context.schema)?,
-        DataType::Null | DataType::Int8 | DataType::Int16 | DataType::Int32
-            | DataType::Int64 | DataType::Float32 | DataType::Float64
-            | DataType::Decimal128(..) | DataType::Decimal256(..)
-            | DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View)
+    if asynchronous
+        || !matches!(
+            arguments[2].get_type(function_context.schema)?,
+            DataType::Null
+                | DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::Decimal128(..)
+                | DataType::Decimal256(..)
+                | DataType::Utf8
+                | DataType::LargeUtf8
+                | DataType::Utf8View
+        )
     {
         // Preserve the existing native validation/extraction path for other types.
         return Ok(ScalarUDF::from(SparkRegexpExtract::new()).call(arguments));
@@ -87,13 +99,23 @@ fn regexp_extract(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
-    let index = arguments.pop().ok_or_else(|| PlanError::internal("missing regexp_extract index"))?;
-    let index = cast_string_function_int(index, function_context.schema,
-        function_context.plan_config.ansi_mode, "regexp_extract index")?;
+    let index = arguments
+        .pop()
+        .ok_or_else(|| PlanError::internal("missing regexp_extract index"))?;
+    let index = cast_string_function_int(
+        index,
+        function_context.schema,
+        function_context.plan_config.ansi_mode,
+        "regexp_extract index",
+    )?;
     // The existing value kernel consumes Int64 after Spark's INT conversion.
     arguments.push(cast(index, DataType::Int64));
-    Ok(ScalarUDF::from(SparkRegexpExtract::new().with_null_short_circuit(known_null)
-        .with_local_index_check(function_context.plan_config.ansi_mode)).call(arguments))
+    Ok(ScalarUDF::from(
+        SparkRegexpExtract::new()
+            .with_null_short_circuit(known_null)
+            .with_local_index_check(function_context.plan_config.ansi_mode),
+    )
+    .call(arguments))
 }
 
 fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -329,23 +351,39 @@ pub(crate) fn lower_runtime_substring(
     substring_lambdas(expression)
 }
 
-pub(crate) fn lower_runtime_regexp_extract(expression: expr::Expr, local_values: bool) -> PlanResult<Transformed<expr::Expr>> {
+pub(crate) fn lower_runtime_regexp_extract(
+    expression: expr::Expr,
+    local_values: bool,
+) -> PlanResult<Transformed<expr::Expr>> {
     let expr::Expr::ScalarFunction(function) = &expression else {
         return Ok(Transformed::no(expression));
     };
     // Bare calls retain scalar NULL pruning; local VALUES preserve reached arguments.
-    let Some(extract) = function.func.inner().downcast_ref::<SparkRegexpExtract>()
-        .filter(|extract| extract.has_null_short_circuit()
-            && (local_values || !extract.has_known_null_argument())) else {
+    let Some(extract) = function
+        .func
+        .inner()
+        .downcast_ref::<SparkRegexpExtract>()
+        .filter(|extract| {
+            extract.has_null_short_circuit() && (local_values || !extract.has_known_null_argument())
+        })
+    else {
         return Ok(Transformed::no(expression));
     };
-    if function.args.len() != 3 { return Ok(Transformed::no(expression)); }
-    let arguments = function.args.iter().cloned()
+    if function.args.len() != 3 {
+        return Ok(Transformed::no(expression));
+    }
+    let arguments = function
+        .args
+        .iter()
+        .cloned()
         .map(|argument| lambda_with_fresh_parameter(argument, "_regexp_extract"))
         .collect::<PlanResult<Vec<_>>>()?;
-    Ok(Transformed::yes(expr::Expr::HigherOrderFunction(expr::HigherOrderFunction::new(
-        Arc::new(HigherOrderUDF::new_from_impl(extract.clone())), arguments,
-    ))))
+    Ok(Transformed::yes(expr::Expr::HigherOrderFunction(
+        expr::HigherOrderFunction::new(
+            Arc::new(HigherOrderUDF::new_from_impl(extract.clone())),
+            arguments,
+        ),
+    )))
 }
 
 fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
@@ -984,29 +1022,62 @@ fn regexp_extract_known_null_pruning_keeps_local_order_and_type_validation() -> 
     use datafusion_expr::execution_props::ExecutionProps;
 
     let schema = Arc::new(DFSchema::empty());
-    let info = SimplifyContext::builder().with_schema(Arc::clone(&schema)).build();
-    let batch = RecordBatch::try_new_with_options(Arc::clone(schema.inner()), vec![],
-        &RecordBatchOptions::new().with_row_count(Some(1)))?;
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::clone(&schema))
+        .build();
+    let batch = RecordBatch::try_new_with_options(
+        Arc::clone(schema.inner()),
+        vec![],
+        &RecordBatchOptions::new().with_row_count(Some(1)),
+    )?;
     for null_index in [true, false] {
-        let extract = SparkRegexpExtract::new().with_null_short_circuit(true)
+        let extract = SparkRegexpExtract::new()
+            .with_null_short_circuit(true)
             .with_local_index_check(true);
         let source = cast(cast(lit("bad"), DataType::Int32), DataType::Utf8);
-        let arguments = vec![source,
-            if null_index { lit("(a)") } else { lit(ScalarValue::Utf8(None)) },
-            if null_index { lit(ScalarValue::Int64(None)) } else { lit(1_i64) }];
+        let arguments = vec![
+            source,
+            if null_index {
+                lit("(a)")
+            } else {
+                lit(ScalarValue::Utf8(None))
+            },
+            if null_index {
+                lit(ScalarValue::Int64(None))
+            } else {
+                lit(1_i64)
+            },
+        ];
         let expression = ScalarUDF::from(extract.clone()).call(arguments);
         let local = lower_runtime_regexp_extract(expression.clone(), true)?;
         assert!(local.transformed);
-        let error = ExprSimplifier::new(info.clone()).simplify(local.data)
+        let error = ExprSimplifier::new(info.clone())
+            .simplify(local.data)
             .and_then(|expr| create_physical_expr(&expr, &schema, &ExecutionProps::new()))
-            .and_then(|expr| expr.evaluate(&batch)).unwrap_err().to_string();
-        assert!(error.ends_with("Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"), "{error}");
+            .and_then(|expr| expr.evaluate(&batch))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.ends_with(
+                "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"
+            ),
+            "{error}"
+        );
         let lowered = lower_runtime_regexp_extract(expression, false)?;
         assert!(!lowered.transformed);
         let simplified = ExprSimplifier::new(info.clone()).simplify(lowered.data)?;
-        assert!(matches!(simplified, expr::Expr::Literal(ScalarValue::Utf8(None), _)));
-        assert!(extract.simplify(vec![lit(1_i32), lit("(a)"),
-            lit(ScalarValue::Int64(None))], &info).is_err());
+        assert!(matches!(
+            simplified,
+            expr::Expr::Literal(ScalarValue::Utf8(None), _)
+        ));
+        assert!(
+            extract
+                .simplify(
+                    vec![lit(1_i32), lit("(a)"), lit(ScalarValue::Int64(None))],
+                    &info
+                )
+                .is_err()
+        );
     }
     Ok(())
 }
