@@ -3,6 +3,7 @@
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
+use futures_util::FutureExt;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -11,6 +12,47 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_results::TestResult;
+
+async fn capture_overlap_observation(
+    observation: impl std::future::Future<Output = TestResult<Value>>,
+) -> TestResult<Value> {
+    match std::panic::AssertUnwindSafe(observation)
+        .catch_unwind()
+        .await
+    {
+        Ok(observation) => observation,
+        Err(payload) => {
+            let panic = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| {
+                    payload
+                        .downcast_ref::<&str>()
+                        .map(|message| (*message).to_owned())
+                })
+                .unwrap_or_else(|| "non-string panic payload".into());
+            Ok(json!({"matches":false,"panic":panic,
+                "public_schema":null,"before_collect":null,"physical_schema":null,
+                "rows":null,"rows_raw":null,"native_phase":null,"error":null,
+                "public_matches":false,"before_matches":false,"physical_matches":false,
+                "rows_match":false,"ordered_rows_match":false,"error_matches":false}))
+        }
+    }
+}
+
+#[tokio::test]
+async fn overlap_panics_remain_failed_observations_without_sql_errors() -> TestResult {
+    let observation = capture_overlap_observation(async {
+        std::panic::resume_unwind(Box::new("overlap observer panic sentinel"))
+    })
+    .await?;
+    assert_eq!(observation["matches"], false);
+    assert_eq!(observation["panic"], "overlap observer panic sentinel");
+    assert_eq!(observation["error"], Value::Null);
+    assert_eq!(observation["native_phase"], Value::Null);
+    assert_eq!(observation["error_matches"], false);
+    Ok(())
+}
 
 #[tokio::test]
 async fn arrays_overlap_result_fields_match_spark() -> TestResult {
@@ -83,74 +125,79 @@ async fn arrays_overlap_common_element_types_match_spark() -> TestResult {
 }
 
 #[tokio::test]
-async fn arrays_overlap_nan_common_type_preserves_values_public_fields_and_completion() -> TestResult
-{
+async fn arrays_overlap_nan_common_type_fields_match_spark() -> TestResult {
     let records = include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records.len(), 41);
-    assert_eq!(records[0]["spark_version"], "4.2.0");
-    assert_eq!(
-        records[0]["spark_revision"],
-        "32f7299601108917fb01920a54e084595b7b3bf8"
-    );
-    let cases = records[1..]
-        .iter()
-        .filter(|record| record["id"] == "nan")
+    let floating = records
+        .into_iter()
+        .filter(|record| record.get("id").is_none() || record["id"] == "nan")
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 2);
-    assert_eq!(
-        cases
-            .iter()
-            .map(|case| case["ansi"].as_bool().ok_or("missing ANSI"))
-            .collect::<Result<std::collections::BTreeSet<_>, _>>()?,
-        std::collections::BTreeSet::from([false, true])
-    );
-    let mut differences = Vec::new();
-    let mut comparisons = 0;
-    for batch_size in [1, 32] {
-        let session = SessionContext::new_with_state(
-            configure_spark_sql(
-                SessionStateBuilder::new()
-                    .with_default_features()
-                    .with_config(
-                        SessionConfig::new()
-                            .with_batch_size(batch_size)
-                            .with_target_partitions(2),
-                    ),
-            )
-            .build(),
-        );
-        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
-        for case in &cases {
-            let mut comparison =
-                spark_results::compare_exact_spark_query_stages(&session, case).await?;
-            comparison["group"] = records[0]["group"].clone();
-            comparison["id"] = case["id"].clone();
-            comparison["ansi"] = case["ansi"].clone();
-            comparison["batch"] = json!(batch_size);
-            eprintln!("ARRAY_RESULT_FIELDS_OBSERVATION {comparison}");
-            comparisons += 1;
-            // #843 owns optimized floating declarations; keep their full comparison flags in the audit.
-            if ![
-                "public_matches",
-                "rows_match",
-                "ordered_rows_match",
-                "error_matches",
-            ]
-            .iter()
-            .all(|key| comparison[key] == true)
-                || comparison["native_phase"] != "encode"
-                || !comparison["error"].is_null()
-            {
-                differences.push(comparison.to_string());
-            }
-        }
-    }
-    assert_eq!(comparisons, 4);
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
-    Ok(())
+    assert_arrays_overlap_result_records(&floating, 2).await
+}
+
+#[tokio::test]
+async fn arrays_overlap_independent_float_boundaries_match_spark() -> TestResult {
+    let records = include_str!("fixtures/arrays-overlap-common-type-boundaries-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 33);
+    let floating = records
+        .into_iter()
+        .filter(|record| {
+            record.get("id").is_none()
+                || record["id"].as_str().is_some_and(|id| !id.starts_with("dst_"))
+        })
+        .collect::<Vec<_>>();
+    assert_arrays_overlap_result_records(&floating, 16).await
+}
+
+#[tokio::test]
+async fn arrays_overlap_float_folding_matches_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-float-folding-spark.jsonl"),
+        16,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn arrays_overlap_conditional_float_folding_matches_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-conditional-folding-spark.jsonl"),
+        18,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn arrays_overlap_live_fallible_operands_match_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-live-cast-spark.jsonl"),
+        8,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn arrays_overlap_null_struct_array_fields_match_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-null-struct-array-spark.jsonl"),
+        2,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn arrays_overlap_nested_float_operands_match_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-nested-operands-spark.jsonl"),
+        94,
+    )
+    .await
 }
 
 #[tokio::test]
@@ -332,8 +379,10 @@ async fn arrays_overlap_binary_storage_matches_recorded_logical_types() -> TestR
                                     .as_str()
                                     .is_some_and(|family| family.contains("binary_string")))
                     }) {
-                        let mut comparison =
-                            spark_results::compare_exact_spark_query_stages(&session, case).await?;
+                        let mut comparison = capture_overlap_observation(
+                            spark_results::compare_exact_spark_query_stages(&session, case),
+                        )
+                        .await?;
                         comparison["id"] = case["id"].clone();
                         comparison["ansi"] = case["ansi"].clone();
                         comparison["batch"] = json!(batch_size);
@@ -413,8 +462,10 @@ async fn assert_arrays_overlap_result_records(
                     case["schema_stages"]["executed"]
                 );
             }
-            let mut comparison =
-                spark_results::compare_exact_spark_query_stages(&session, case).await?;
+            let mut comparison = capture_overlap_observation(
+                spark_results::compare_exact_spark_query_stages(&session, case),
+            )
+            .await?;
             apply_arrays_overlap_diagnostic_alias(case, &mut comparison);
             comparison["group"] = records[0]["group"].clone();
             comparison["id"] = case["id"].clone();
