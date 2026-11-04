@@ -22,7 +22,7 @@ use crate::functions_utils::{StrMemo, make_scalar_function};
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkRegexpExtract {
     signature: Signature,
-    logical_arguments: bool,
+    null_short_circuit: bool,
     known_null_argument: bool,
 }
 
@@ -38,13 +38,13 @@ impl SparkRegexpExtract {
     pub fn new() -> Self {
         Self {
             signature: Signature::user_defined(Volatility::Immutable),
-            logical_arguments: false,
+            null_short_circuit: false,
             known_null_argument: false,
         }
     }
 
-    pub fn with_logical_arguments(mut self, known_null: bool) -> Self {
-        self.logical_arguments = true;
+    pub fn with_null_short_circuit(mut self, known_null: bool) -> Self {
+        self.null_short_circuit = true;
         self.known_null_argument = known_null;
         self
     }
@@ -73,7 +73,7 @@ impl ScalarUDFImpl for SparkRegexpExtract {
     }
 
     fn short_circuits_on_any_null_argument(&self) -> bool {
-        self.logical_arguments
+        self.null_short_circuit
     }
 
     fn conditional_arguments<'a>(&self, _args: &'a [Expr]) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
@@ -82,7 +82,7 @@ impl ScalarUDFImpl for SparkRegexpExtract {
     }
 
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
-        if self.logical_arguments && (self.known_null_argument
+        if self.null_short_circuit && (self.known_null_argument
             || args.iter().any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null())))
         {
             // Validate the native signature before pruning a known NULL result.

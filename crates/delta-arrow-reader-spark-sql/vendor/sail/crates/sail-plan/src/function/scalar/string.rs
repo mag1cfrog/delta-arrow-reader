@@ -92,7 +92,7 @@ fn regexp_extract(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         function_context.plan_config.ansi_mode, "regexp_extract index")?;
     // The existing value kernel consumes Int64 after Spark's INT conversion.
     arguments.push(cast(index, DataType::Int64));
-    Ok(ScalarUDF::from(SparkRegexpExtract::new().with_logical_arguments(known_null)).call(arguments))
+    Ok(ScalarUDF::from(SparkRegexpExtract::new().with_null_short_circuit(known_null)).call(arguments))
 }
 
 fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
