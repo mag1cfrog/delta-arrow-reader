@@ -59,7 +59,11 @@ fn load_parameter_capture_coordinates() -> TestResult<(Value, Vec<Value>)> {
         .collect::<Vec<_>>();
     let expected = [true, false]
         .into_iter()
-        .flat_map(|ansi| PARAMETER_CAPTURE_COORDINATE_IDS.iter().map(move |id| json!({"id":id,"ansi":ansi})))
+        .flat_map(|ansi| {
+            PARAMETER_CAPTURE_COORDINATE_IDS
+                .iter()
+                .map(move |id| json!({"id":id,"ansi":ansi}))
+        })
         .collect::<Vec<_>>();
     assert_eq!(identities, expected);
     for case in &records {
@@ -83,7 +87,8 @@ fn load_parameter_capture_coordinates() -> TestResult<(Value, Vec<Value>)> {
         ] {
             assert_eq!(
                 case["schema_stages"][stage], case["expected"]["schema"],
-                "{} {stage}", case["id"]
+                "{} {stage}",
+                case["id"]
             );
         }
         assert_eq!(
@@ -180,7 +185,8 @@ fn load_coordinate_capture() -> TestResult<(Value, Vec<Value>)> {
         ] {
             assert_eq!(
                 case["schema_stages"][stage], case["expected"]["schema"],
-                "{} {stage}", case["id"]
+                "{} {stage}",
+                case["id"]
             );
         }
         assert_eq!(
@@ -284,7 +290,10 @@ fn coordinate_capture_preserves_literal_and_provider_results() -> TestResult {
 
 #[tokio::test]
 async fn slice_coordinate_results_match_independent_spark() -> TestResult {
-    let groups = [load_parameter_capture_coordinates()?, load_coordinate_capture()?];
+    let groups = [
+        load_parameter_capture_coordinates()?,
+        load_coordinate_capture()?,
+    ];
     let mut completed = std::collections::BTreeSet::new();
     let mut differences = Vec::new();
     for (header, records) in &groups {
@@ -346,8 +355,11 @@ async fn slice_coordinate_results_match_independent_spark() -> TestResult {
                         (stage.clone(), json!(actual == Some(expected)))
                     })
                     .collect::<serde_json::Map<String, Value>>();
-                observation["schema_stages_match"] =
-                    json!(stage_matches.values().all(|matched| matched.as_bool() == Some(true)));
+                observation["schema_stages_match"] = json!(
+                    stage_matches
+                        .values()
+                        .all(|matched| matched.as_bool() == Some(true))
+                );
                 observation["schema_stage_matches"] = json!(stage_matches);
                 eprintln!("SLICE_COORDINATE_OBSERVATION {observation}");
                 if [
