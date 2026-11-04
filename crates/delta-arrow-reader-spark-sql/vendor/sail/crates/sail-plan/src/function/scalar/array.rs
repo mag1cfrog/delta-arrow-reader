@@ -1,12 +1,13 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, as_int64_array};
+use datafusion::arrow::array::Array;
 use datafusion::arrow::compute::kernels::numeric::{add_wrapping, sub_wrapping};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
 use datafusion::physical_expr_common::datum::apply;
+use datafusion_common::cast::as_int64_array;
 use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{
     ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
@@ -177,8 +178,8 @@ impl ScalarUDFImpl for SparkArraySlice {
         let array_values = array.to_array(1)?;
         let start_values = start.to_array(1)?;
         let length_values = length.to_array(1)?;
-        let starts = as_int64_array(&start_values)?;
-        let lengths = as_int64_array(&length_values)?;
+        let starts = as_int64_array(start_values.as_ref())?;
+        let lengths = as_int64_array(length_values.as_ref())?;
         let row_index = |value: &ColumnarValue, row| match value {
             ColumnarValue::Scalar(_) => 0,
             ColumnarValue::Array(_) => row,
