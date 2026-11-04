@@ -100,11 +100,13 @@ The harness reports these retained dependencies separately from exact matches:
   | `(a)?` on `a😀b` | `<a><>?<>?<>b<>` | `<a><>😀<>b<>` |
   | `\B` on `a😀b` | `a?X?b` | Exact equality required |
 
-- BIGINT, Decimal and STRING positions retain Spark's successful `a1X` result
-  beside the native explicit position-coercion error. Their conversion to INT
-  is owned by #799. Native public analysis is unavailable
-  for these six references; all 36 observations retain that analysis error
-  explicitly and receive no field-compatibility credit.
+BIGINT, Decimal and STRING positions reuse the native INT cast builders used
+by substring. The original six coercion references now require complete fields
+and the `a1X` result. STRING and Decimal casts retain their analyzed nullable
+declaration until ordinary optimization folds the position. Positions remain
+foldable and positive; invalid text is checked before replacement evaluation,
+including NULL, no-match and unused inputs. General numeric conversion and cast
+declaration differences retain their shared owners.
 
 The `?` characters above are the independently captured Spark results after
 Java encodes the constructed result as UTF-8. This output is valid UTF-8 and is
@@ -112,12 +114,11 @@ separate from #780's byte-backed STRING representation. Every reference and raw
 external outcome remains in the replay. Complete REGEXP_REPLACE compatibility
 still requires the broader #798 matcher work and the other named dependencies.
 
-The original regression inventory requires 2,244 complete-result observations,
-732 required errors and 132 precisely retained external observations. Passing this
+The original regression inventory requires 2,280 complete-result observations,
+732 required errors and 96 precisely retained external observations. Passing this
 regression checks those invariants; the full Spark comparison remains false
 while the external outcomes differ. The position and replacement rules follow the pinned
 [Spark RegExpReplace implementation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/regexpExpressions.scala#L637).
-
 
 ## Raw nonword boundary
 
@@ -173,3 +174,47 @@ letters, empty/group-zero replacements, lazy invalid groups, NULLs and mixed
 patterns across all string storage types. The once-only volatile argument check
 uses both 14-row providers. Native DataFusion raw-nonboundary behavior is checked
 before and after Spark planning.
+
+
+## Position INT coercion
+
+`regexp-replace-position-int-spark.jsonl` preserves 110 independently captured
+Spark 4.2.0 references. It covers both ANSI modes, ordinary and boundary numeric
+positions, STRING parsing, NULL/empty/no-match inputs, guarded expressions, typed
+real position columns and direct CAST controls. Position columns remain
+nonfoldable admission errors. The complete input schemas, rows, runtime identity,
+settings and available field/error stages are retained byte-for-byte.
+
+The header's `input_only: true` flag and description of unobserved inputs with
+`No expected results.` are inherited from the input seed. The replay and build
+metadata, including `replay.observations: 110`, and the following recorded
+outcomes describe the completed Spark reference capture.
+
+`regexp_replace_position.rs` replays all 660 contexts across Utf8, LargeUtf8
+and Utf8View at batch sizes 1/32. It checks values, complete available fields,
+meaningful error causes, native failure stages and diagnostic identifiers as
+separate facets. Position errors raised during Spark SQL analysis must fail at
+native resolution with no result schemas. The five direct CAST error references
+map separately to native physical planning, retaining analyzed fields and absent
+physical fields.
+
+The measured replay has 588 semantic matches and 72 value/field differences.
+Requiring the diagnostic condition identifier as well leaves 528 strict matches
+and 132 strict differences. Sixty otherwise matching primitive overflow errors
+lack Spark's `CAST_OVERFLOW` identifier. The native profile fixture preserves
+every known difference with its exact actual fields, raw Arrow schemas, rows or
+complete error body and stage. Legacy BIGINT narrowing (#813), legacy nonfinite
+conversion (#897), analyzed CAST nullability (#796) and primitive CAST condition
+identifiers (#922) remain separate shared work. Exact profile preservation gives no
+Spark compatibility credit, and complete raw diagnostic parity remains unverified.
+
+`regexp_replace_position_folding.rs` protects all 36 measured custom Rust UDF
+contexts, including all 24 standalone Spark-resolver/native-SQL controls. Newly
+coerced STRING/BIGINT callbacks that disable folding reject before invocation.
+Folding-enabled STRING/BIGINT REGEXP_REPLACE callbacks retain the observed
+resolution/physical/execution counts 1/2/2 as a native regression contract. The
+existing INT callback still runs once during resolution even when folding is
+disabled. Its folding-disabled cases in both ANSI modes remain strict host-contract
+differences under #893. These callback observations carry no Apache Spark oracle
+credit. Their fixture retains actual fields, names,
+rows, errors and counters, including absent later stages after rejection.

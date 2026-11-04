@@ -77,21 +77,28 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } else {
         lit(1i32)
     };
-    if position.is_volatile() || !position.column_refs().is_empty() {
+    let data_type = position.get_type(function_context.schema)?;
+    let coerced_position = !matches!(data_type, DataType::Int32 | DataType::Null);
+    if position.is_volatile()
+        || !position.column_refs().is_empty()
+        || (coerced_position
+            && position.exists(|expression| {
+                Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                    if !function.func.inner().supports_constant_folding()))
+            })?)
+    {
         return Err(PlanError::invalid(
             "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression",
         ));
     }
-    if !matches!(
-        position.get_type(function_context.schema)?,
-        DataType::Int32 | DataType::Null
-    ) {
-        return Err(PlanError::invalid(
-            "regexp_replace position coercion to INT is outside the supported position contract",
-        ));
-    }
-    let position = LiteralEvaluator::new().evaluate(&position)?;
-    let position = match position {
+    let position = cast_string_function_int(
+        position,
+        function_context.schema,
+        function_context.plan_config.ansi_mode,
+        "regexp_replace position",
+    )?;
+    let value = LiteralEvaluator::new().evaluate(&position)?;
+    let value = match value {
         ScalarValue::Int32(Some(value)) if value > 0 => ScalarValue::Int32(Some(value)),
         value if value.is_null() => ScalarValue::Int32(None),
         ScalarValue::Int32(Some(value)) => {
@@ -105,8 +112,53 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             )));
         }
     };
-    arguments.push(lit(position));
+    // Keep the cast's analyzed declaration until ordinary optimization folds it.
+    // Existing INT inputs retain their already-materialized position path.
+    arguments.push(if coerced_position {
+        position
+    } else {
+        lit(value)
+    });
     Ok(ScalarUDF::from(SparkRegexpReplace::new()).call(arguments))
+}
+
+fn cast_string_function_int(
+    argument: expr::Expr,
+    schema: &DFSchema,
+    ansi_mode: bool,
+    parameter: &str,
+) -> PlanResult<expr::Expr> {
+    Ok(match argument.get_type(schema)? {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
+            let mode = if ansi_mode {
+                StringIntegerCastMode::Ansi
+            } else {
+                StringIntegerCastMode::Legacy
+            };
+            SparkCastStringToInteger::try_new(DataType::Int32, mode)?.into_expr(argument)
+        }
+        DataType::Decimal128(..) | DataType::Decimal256(..) => {
+            let mode = if ansi_mode {
+                DecimalCastMode::Ansi
+            } else {
+                DecimalCastMode::Legacy
+            };
+            ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
+                .call(vec![argument])
+        }
+        DataType::Null
+        | DataType::Int8
+        | DataType::Int16
+        | DataType::Int32
+        | DataType::Int64
+        | DataType::Float32
+        | DataType::Float64 => cast(argument, DataType::Int32),
+        data_type => {
+            return Err(PlanError::invalid(format!(
+                "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {parameter} requires INT, got {data_type}"
+            )));
+        }
+    })
 }
 
 fn regexp_substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -149,42 +201,24 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             let argument = if index == 0 {
                 argument
             } else {
-                let data_type = argument.get_type(function_context.schema)?;
-                let converted = match data_type {
-                    DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
-                        let mode = if function_context.plan_config.ansi_mode {
-                            StringIntegerCastMode::Ansi
-                        } else {
-                            StringIntegerCastMode::Legacy
-                        };
-                        SparkCastStringToInteger::try_new(DataType::Int32, mode)?
-                            .into_expr(argument)
-                    }
-                    DataType::Decimal128(..) | DataType::Decimal256(..) => {
-                        let mode = if function_context.plan_config.ansi_mode {
-                            DecimalCastMode::Ansi
-                        } else {
-                            DecimalCastMode::Legacy
-                        };
-                        ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
-                            .call(vec![argument])
-                    }
-                    // Retain legacy BIGINT behavior until the shared CAST policy
-                    // supplies Spark INT narrowing (#813).
-                    DataType::Int64 if !function_context.plan_config.ansi_mode => argument,
-                    DataType::Null
-                    | DataType::Int8
-                    | DataType::Int16
-                    | DataType::Int32
-                    | DataType::Int64
-                    | DataType::Float32
-                    | DataType::Float64 => cast(argument, DataType::Int32),
-                    _ => {
-                        let parameter = if index == 1 { "position" } else { "length" };
-                        return Err(PlanError::invalid(format!(
-                            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] substring {parameter} requires INT, got {data_type}"
-                        )));
-                    }
+                let converted = if argument.get_type(function_context.schema)? == DataType::Int64
+                    && !function_context.plan_config.ansi_mode
+                {
+                    // Retain legacy BIGINT behavior until shared #813 supplies
+                    // Spark INT narrowing, as before this helper extraction.
+                    argument
+                } else {
+                    let parameter = if index == 1 {
+                        "substring position"
+                    } else {
+                        "substring length"
+                    };
+                    cast_string_function_int(
+                        argument,
+                        function_context.schema,
+                        function_context.plan_config.ansi_mode,
+                        parameter,
+                    )?
                 };
                 // The value kernel consumes Int64 after Spark's INT conversion.
                 cast(converted, DataType::Int64)
