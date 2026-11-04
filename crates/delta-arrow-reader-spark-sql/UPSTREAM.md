@@ -768,6 +768,9 @@ children use the dependency's logical NULL validation without rewriting their
 dictionary pools or changing storage types. The
 [result references](tests/fixtures/README.md#array_compact-result-fields) preserve
 complete Spark fields and values for direct and connected consumers.
+The constant bad-cast IS NULL gap remains under #890, and the invalid-input error
+category remains under #891. Their exact inherited observations stay visible in
+the references; they do not count as strict Spark matches.
 
 ### Projection metadata
 

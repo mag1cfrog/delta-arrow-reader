@@ -165,6 +165,24 @@ pub(crate) async fn capture_spark_optimized_observation(
     Ok(json!({"raw_schema":raw_schema,"schema":schema,"names_match":names_match}))
 }
 
+/// Require the unchanged reference and complete inherited DAR observation.
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared observers."
+)]
+pub(crate) fn matches_inherited_query_observation(
+    reference: &Value,
+    comparison: &Value,
+    control: &Value,
+) -> bool {
+    if control["reference"] != *reference {
+        return false;
+    }
+    let mut expected = control["observation"].clone();
+    expected["batch"] = comparison["batch"].clone();
+    comparison == &expected
+}
+
 /// Compare exact recorded stages, complete rows, and the required engine error phase.
 #[allow(
     dead_code,

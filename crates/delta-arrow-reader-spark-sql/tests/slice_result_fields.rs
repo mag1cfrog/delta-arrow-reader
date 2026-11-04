@@ -133,12 +133,7 @@ fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Va
     let reference = json!({"sql":case["sql"],"family":case["family"],
         "consumer":case["consumer"],"expected":case["expected"],
         "schema_stages":case["schema_stages"],"spark_error_phase":case["spark_error_phase"]});
-    if control["reference"] != reference {
-        return false;
-    }
-    let mut expected = control["observation"].clone();
-    expected["batch"] = comparison["batch"].clone();
-    comparison == &expected
+    spark_results::matches_inherited_query_observation(&reference, comparison, control)
 }
 
 #[tokio::test]

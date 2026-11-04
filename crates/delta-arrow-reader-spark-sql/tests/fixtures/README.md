@@ -2841,6 +2841,22 @@ Separate encoded-provider controls require public
 Union, sliced run-end encoded and dictionary inputs to keep their values and
 pass safe construction with required elements.
 
+`array-compact-inherited-controls.jsonl` preserves three complete DAR observation
+objects from baseline `87384089cc4d902a70a9a984b7782abe7ddb357c`, paired with the
+full independent Spark records. #890 owns the ANSI constant bad-cast IS NULL
+result; #891 owns the non-array error category in both modes. Replaying those
+three identities at both batch sizes gives six inherited comparisons. The other
+142 comparisons require strict Spark fields, rows and errors. The summary
+reports strict matches separately from the issue contract.
+
+The inherited guard requires the same identity, complete reference and complete
+baseline observation, normalizing only batch 1 versus 32. It preserves every
+canonical comparison flag. A full strict success also passes, so a later fix can
+resolve an inherited gap. Adversarial checks reject changed queries, conditions,
+phases, causes, fields, metadata, rows, flags, missing/extra keys, unsupported
+batches, ANSI modes and panics. These controls do not establish full
+ARRAY_COMPACT compatibility.
+
 From this crate, replay the references and focused kernel checks with:
 
 ```sh
