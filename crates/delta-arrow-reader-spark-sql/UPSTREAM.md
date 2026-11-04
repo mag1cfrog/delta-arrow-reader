@@ -40,6 +40,15 @@ Unmodified files came from those archives, rather than mutable Cargo source cach
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
 
+Arrow cast also exposes `parse_string_rows_until_error` for callers that need
+successful rows before a strict parse failure. It reuses the primitive parser
+and strict loop for Utf8, LargeUtf8 and Utf8View, returning the exact preceding
+rows, including NULLs, plus the first failing input index and original Arrow
+error. Existing strict cast calls still return that error directly, and safe
+casts still replace invalid values with NULL. The
+[integration tests](tests/string_cast_rows.rs) cover the public API and existing
+cast compatibility. This primitive does not change SQL error ordering.
+
 Required List and LargeList elements use an exact logical NULL check when child
 storage reports conservative nullability. Unused dictionary NULL values,
 inactive Union children and NULL runs outside a sliced child's logical range
