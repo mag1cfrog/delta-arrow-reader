@@ -145,6 +145,38 @@ fn regexp_replace_strings<O: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<Array
                 )
             })
         })?;
+        let replacement_error = |cause| {
+            exec_datafusion_err!(
+                "[INVALID_REGEXP_REPLACE] source={value:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}: {cause}"
+            )
+        };
+        if pattern.is_empty() {
+            let units = value.encode_utf16().collect::<Vec<_>>();
+            let start = (position - 1) as usize;
+            if start != 0 && start >= units.len() {
+                builder.append_value(value);
+                continue;
+            }
+            let captures = regex
+                .captures("")
+                .ok_or_else(|| exec_datafusion_err!("regexp_replace empty pattern has no match"))?;
+            output.clear();
+            append_replacement(&mut output, replacement, regex, &captures)
+                .map_err(replacement_error)?;
+            let replacement_units = output.encode_utf16().collect::<Vec<_>>();
+            let mut result_units = units[..start].to_vec();
+            for unit in &units[start..] {
+                result_units.extend_from_slice(&replacement_units);
+                result_units.push(*unit);
+            }
+            result_units.extend_from_slice(&replacement_units);
+            // Java advances empty matches by one UTF-16 unit. Encode only after
+            // assembly so an empty replacement can preserve a surrogate pair.
+            output.clear();
+            output.extend(char::decode_utf16(result_units).map(|unit| unit.unwrap_or('?')));
+            builder.append_value(&output);
+            continue;
+        }
         let start = utf16_start(value, (position - 1) as usize)?;
         let Some(start) = start else {
             builder.append_value(value);
@@ -160,11 +192,8 @@ fn regexp_replace_strings<O: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<Array
                 .get(0)
                 .ok_or_else(|| exec_datafusion_err!("regexp_replace match has no full capture"))?;
             output.push_str(&region[end..matched.start()]);
-            append_replacement(&mut output, replacement, regex, &captures).map_err(|cause| {
-                exec_datafusion_err!(
-                    "[INVALID_REGEXP_REPLACE] source={value:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}: {cause}"
-                )
-            })?;
+            append_replacement(&mut output, replacement, regex, &captures)
+                .map_err(replacement_error)?;
             end = matched.end();
             // Java admits an empty match immediately after a nonempty match.
             // Regex::captures_iter skips that match, so drive the search directly.
@@ -322,6 +351,68 @@ mod tests {
                 result.as_string::<i32>(),
                 &StringArray::from(vec![Some("a00"), None, Some("$1")])
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn sliced_empty_patterns_assemble_utf16_before_encoding() -> Result<()> {
+        let source = StringArray::from(vec![
+            Some("outside"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            None,
+            Some("é中𐐷z"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some(""),
+            Some("a😀b"),
+            Some("outside"),
+        ]);
+        let pattern = StringArray::from(vec![
+            "outside", "", "", "", "[", "", ".", ".?", "", "", "", "outside",
+        ]);
+        let replacement = StringArray::from(vec![
+            "outside", "X", "", "$0", "$9", "Ω🦊", "X", "X", "$9", "$9", "$9", "outside",
+        ]);
+        let position = Int32Array::from(vec![
+            Some(1),
+            Some(1),
+            Some(3),
+            Some(3),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(5),
+            Some(2),
+            None,
+            Some(1),
+        ]);
+        let expected = StringArray::from(vec![
+            Some("XaX?X?XbX"),
+            Some("a😀b"),
+            Some("a😀b"),
+            None,
+            Some("Ω🦊éΩ🦊中Ω🦊?Ω🦊?Ω🦊zΩ🦊"),
+            Some("XXX"),
+            Some("XXXX"),
+            Some("a😀b"),
+            Some(""),
+            None,
+        ]);
+        for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+            let source = cast(&(Arc::new(source.clone()) as ArrayRef), &data_type)?.slice(1, 10);
+            let pattern = cast(&(Arc::new(pattern.clone()) as ArrayRef), &data_type)?.slice(1, 10);
+            let replacement =
+                cast(&(Arc::new(replacement.clone()) as ArrayRef), &data_type)?.slice(1, 10);
+            let position = (Arc::new(position.clone()) as ArrayRef).slice(1, 10);
+            let result = regexp_replace(&[source, pattern, replacement, position])?;
+            assert_eq!(result.data_type(), &data_type);
+            let result = cast(&result, &DataType::Utf8)?;
+            assert_eq!(result.as_string::<i32>(), &expected);
         }
         Ok(())
     }
