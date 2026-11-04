@@ -20,9 +20,10 @@ use datafusion_expr::{
 use datafusion_functions_nested::concat::ArrayConcat;
 use sail_common_datafusion::utils::items::ItemTaker;
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SparkConcat {
     signature: Signature,
+    ordered_evaluation: bool,
 }
 
 impl Default for SparkConcat {
@@ -38,7 +39,19 @@ impl SparkConcat {
                 vec![TypeSignature::Exact(vec![]), TypeSignature::VariadicAny],
                 Volatility::Immutable,
             ),
+            ordered_evaluation: false,
         }
+    }
+
+    // C06 runtime selection is installed after logical folding/CSE. Scalar
+    // invocation stays eager for Spark's constant and local-relation checks.
+    pub fn with_ordered_evaluation(mut self) -> Self {
+        self.ordered_evaluation = true;
+        self
+    }
+
+    pub fn has_ordered_evaluation(&self) -> bool {
+        self.ordered_evaluation
     }
 }
 
@@ -92,7 +105,7 @@ impl ScalarUDFImpl for SparkConcat {
     ///   types fall through so the invoke path can apply Spark coercions.
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         // R1: flatten nested concat (Spark's CombineConcats).
-        let args = flatten_nested_concats(args, info)?;
+        let args = flatten_nested_concats(args, info, self.ordered_evaluation)?;
 
         // R2: null propagation. Only fold when the arg types form a valid concat —
         // otherwise fall through so the normal path still raises the type error
@@ -115,9 +128,18 @@ impl ScalarUDFImpl for SparkConcat {
                         | DataType::Utf8View
                         | DataType::Binary
                         | DataType::LargeBinary
-                ) && has_unfolded_constant_argument(&args)?
-                {
-                    return Ok(ExprSimplifyResult::Original(args));
+                ) {
+                    if has_unfolded_constant_argument(&args)? {
+                        return Ok(ExprSimplifyResult::Original(args));
+                    }
+                    // A later NULL preserves runtime work before it. Opaque
+                    // extensions keep #883's whole-call native NULL boundary.
+                    if self.ordered_evaluation
+                        && !matches!(args.first(), Some(Expr::Literal(value, _)) if value.is_null())
+                        && !has_folding_disabled_argument(&args)?
+                    {
+                        return Ok(ExprSimplifyResult::Original(args));
+                    }
                 }
                 if let Ok(null) = ScalarValue::try_from(&return_type) {
                     return Ok(ExprSimplifyResult::Simplified(Expr::Literal(null, None)));
@@ -237,14 +259,21 @@ impl ScalarUDFImpl for SparkConcat {
 
 // Explicit folding opt-outs keep the whole CONCAT on its native NULL path.
 // Their descendants may fold when reachable; this guard must not force them.
-fn has_unfolded_constant_argument(args: &[Expr]) -> Result<bool> {
+fn has_folding_disabled_argument(args: &[Expr]) -> Result<bool> {
     for arg in args {
         if arg.exists(|expr| {
             Ok(matches!(expr, Expr::ScalarFunction(function)
                 if !function.func.inner().supports_constant_folding()))
         })? {
-            return Ok(false);
+            return Ok(true);
         }
+    }
+    Ok(false)
+}
+
+fn has_unfolded_constant_argument(args: &[Expr]) -> Result<bool> {
+    if has_folding_disabled_argument(args)? {
+        return Ok(false);
     }
     for arg in args {
         if concat_constant_state(arg)?.1 {
@@ -427,10 +456,14 @@ fn cast_list_columnar_values(
 }
 
 /// If `expr` is a nested `spark_concat` call, return its arguments.
-fn nested_concat_args(expr: &Expr) -> Option<&[Expr]> {
+fn nested_concat_args(expr: &Expr, ordered_evaluation: bool) -> Option<&[Expr]> {
     match expr {
         Expr::ScalarFunction(inner)
-            if inner.func.inner().downcast_ref::<SparkConcat>().is_some() =>
+            if inner
+                .func
+                .inner()
+                .downcast_ref::<SparkConcat>()
+                .is_some_and(|concat| concat.ordered_evaluation == ordered_evaluation) =>
         {
             Some(&inner.args)
         }
@@ -440,16 +473,23 @@ fn nested_concat_args(expr: &Expr) -> Option<&[Expr]> {
 
 /// Spark's `CombineConcats`: flatten nested `spark_concat` children,
 /// `concat(concat(a, b), c)` -> `concat(a, b, c)`, reducing nesting to a single
-/// kernel pass. Only flatten when it keeps the same return type — this guards the
-/// array element-type / dimension merge in `return_type`; otherwise the arguments
-/// are returned unchanged.
-fn flatten_nested_concats(args: Vec<Expr>, info: &SimplifyContext) -> Result<Vec<Expr>> {
-    if !args.iter().any(|arg| nested_concat_args(arg).is_some()) {
+/// kernel pass. Only flatten within the same evaluation mode and when the return
+/// type is preserved. This guards the array element-type / dimension merge in
+/// `return_type`; otherwise the arguments are returned unchanged.
+fn flatten_nested_concats(
+    args: Vec<Expr>,
+    info: &SimplifyContext,
+    ordered_evaluation: bool,
+) -> Result<Vec<Expr>> {
+    if !args
+        .iter()
+        .any(|arg| nested_concat_args(arg, ordered_evaluation).is_some())
+    {
         return Ok(args);
     }
     let mut flattened = Vec::with_capacity(args.len());
     for arg in &args {
-        match nested_concat_args(arg) {
+        match nested_concat_args(arg, ordered_evaluation) {
             Some(inner) => flattened.extend(inner.iter().cloned()),
             None => flattened.push(arg.clone()),
         }

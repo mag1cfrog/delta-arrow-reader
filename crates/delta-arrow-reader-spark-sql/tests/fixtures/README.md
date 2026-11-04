@@ -2966,3 +2966,88 @@ the 24 precise invalid UTF-8 failures under #780 remain strict failures.
 cargo +1.96.0 test --locked --workspace --test concat_constant_errors -- --nocapture --test-threads=1
 cargo +1.96.0 test --locked --workspace --test constant_folding_contract concat_null_waits_for_constant_operands_and_honors_folding_permission -- --exact --nocapture
 ```
+
+## CONCAT runtime argument order (#885)
+
+`concat-runtime-order-spark.jsonl` preserves all 32 independent Spark 4.2.0 records
+at revision `32f7299601108917fb01920a54e084595b7b3bf8`. Required STRING/BINARY
+providers contain a live zero divisor; separate nullable providers mask that row
+with an earlier NULL. The cases cover literal NULL first, middle and last,
+nullable arguments in both orders, nested CONCAT and dead CASE, in both ANSI modes.
+The complete header retains source metadata, rows, settings and build identities.
+
+`concat_runtime_order.rs` requires all 192 comparisons across the original three
+representations, batch sizes 1 and 32, and two-partition registration. It compares
+complete analyzed and available physical fields, duplicate-preserving row multisets,
+execution phase and the exact native divide-by-zero cause. Raw rows and Arrow schema
+receipts remain in every log. No physical Spark fields or rows are invented for
+error references, and unrelated errors receive no match credit.
+
+Separate counters use an explicit one-partition provider to check that masked
+operands are skipped and evaluated operands run once per needed row. STRING/BINARY
+arrays include nonzero slices, Large and View representations, long values, NULLs
+and arbitrary binary bytes. The controls check exact output bytes, declared Arrow
+types and unchanged provider buffers. Nested widths 3, 16 and 64 require one flat
+logical CONCAT and exact repeated values with unchanged source call counts. These
+are structural growth controls; they make no elapsed-time performance claim.
+
+The C06 registry opts in only STRING/BINARY/NULL arguments. It preserves work before
+a later NULL and keeps raw CONCAT visible through logical folding and CSE.
+Folding-disabled extension descendants retain #883's whole-call NULL boundary.
+The host controls cover STRING/BINARY column prefixes and nested opaque calls,
+with complete NULL values, Arrow schemas and zero callbacks at every stage. After
+logical optimization, the Spark physical planner lowers computed operands to native
+lambdas. Runtime selection evaluates each operand once for rows still nonnull,
+aligns each retained argument once and invokes the existing flat CONCAT kernel.
+Simple columns and literals keep the existing kernel path. The original binary
+kernel and its existing copying behavior remain unchanged.
+Async UDF operands keep DataFusion's existing extraction path because native
+lambdas do not support async bodies; a host control checks that planning still works.
+
+Logical CSE and local relation preparation keep their eager paths: the independent
+supplementary controls show that shared children across CONCATs and local VALUES
+can raise errors even when a single generated CONCAT masks those rows. Batched
+volatile invocation is retained. Competing errors on different rows and seeded RNG
+state remain separately recorded in the complete 16-reference diagnostic capture;
+a different retained error remains a strict difference, with no alternate-error
+waiver or full C06 compatibility claim. #883 constant errors, #876 metadata/flat
+plans, all 1,752 original CONCAT comparisons and the 24 strict #780 gaps remain
+separate required gates. Native DataFusion CONCAT and ARRAY_CONCAT retain their
+existing implementations.
+
+```sh
+cargo +1.96.0 test --locked --workspace --test concat_runtime_order -- --nocapture --test-threads=1
+cargo +1.96.0 test --locked --workspace --test concat_constant_errors concat_preparation_preserves_native_queries_and_computed_operands -- --exact --nocapture --test-threads=1
+cargo +1.96.0 test --locked --workspace --test concat_metadata -- --nocapture --test-threads=1
+```
+
+### Supplementary and single-partition CONCAT controls
+
+`885-cse-order-state-spark.jsonl` and `rng-one-partition-spark.jsonl` retain the
+complete frozen Spark 4.2.0 captures, including inputs, settings and build identity.
+The permanent tests cover all 96 supplementary contexts and 12 matched RNG
+contexts. CSE and local VALUES keep their required errors. Local VALUES reports
+DIVIDE_BY_ZERO at Spark `optimized_schema` and native `physical`; the tests keep
+those stage names separate and compare the exact cause and available fields.
+
+`concat-runtime-native-negative-profiles.jsonl` preserves 17 native R3 receipts
+with their original source hashes, commands, settings and log identities. Nine
+supplementary and eight matched RNG results remain strict Spark differences.
+The seeded value differences are tracked by #901, and direct RAND nullability
+by #875. Three supplementary receipts retain competing errors on different rows
+of an unordered query. Their checks pin complete public fields, exact values,
+row IDs, causes, stages and context without granting compatibility credit.
+Raw Arrow receipts remain available; internal analyzer aliases are not public
+field names. The matched RNG inputs use one real native partition and Spark
+local[1], with batch sizes 1 and 32.
+
+```sh
+cargo +1.96.0 test --locked --workspace --test concat_runtime_order -- --nocapture --test-threads=1
+```
+
+To replay the matched RNG capture, the shared Spark collector encodes direct
+Float64 values with Python's `repr`, as in the frozen reference.
+
+```sh
+python tests/fixtures/recapture_string_binary_spark.py --input tests/fixtures/rng-one-partition-spark.jsonl --output /tmp/concat-rng-spark-fresh.jsonl
+```

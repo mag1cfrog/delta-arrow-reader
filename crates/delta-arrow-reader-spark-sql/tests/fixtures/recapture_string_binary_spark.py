@@ -55,6 +55,8 @@ def encode(value):
         return bytes(value).hex()
     if isinstance(value, bool):
         return str(value).lower()
+    if isinstance(value, float):
+        return repr(value)
     if isinstance(value, (int, str)):
         return str(value)
     raise TypeError(f"unexpected C06 output value: {type(value).__name__}")
