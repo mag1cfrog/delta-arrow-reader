@@ -654,6 +654,21 @@ The [FLATTEN references](tests/fixtures/README.md#flatten-result-fields) cover
 complete fields, rows, invalid inputs and native SQL isolation. Constant STRUCT
 parents use the separate declaration-preservation prerequisite #849.
 
+### ARRAYS_OVERLAP declarations and empty arrays
+
+Spark ARRAYS_OVERLAP records its BOOLEAN result field before the synthetic
+nullable CASE and NULL probes. The field includes outer-array nullability,
+immediate nullable elements and the shared nested-cast nullability rule.
+A NULL outer array returns NULL; an empty array returns false before probing
+NULL elements in either operand order. Singleton probes reuse FLATTEN's
+List/LargeList storage adaptation, independent of a fixed input array width.
+Resolution rejects non-array operands and wrong arity before evaluation.
+
+The [result-field references](tests/fixtures/README.md#arrays_overlap-result-fields)
+retain complete declarations, values, error phases and native isolation.
+Common-element coercion/BINARY admission (#840) and floating equality/folding
+(#843) remain separate deliveries.
+
 ### Projection metadata
 
 SELECT classifies original expressions before lowering: unaliased derived values

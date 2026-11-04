@@ -76,7 +76,7 @@ fn has_string_type(data_type: &DataType) -> bool {
         || list_field(data_type).is_some_and(|field| has_string_type(field.data_type()))
 }
 
-fn cast_adds_nulls(source: &DataType, target: &DataType) -> bool {
+pub(crate) fn cast_adds_nulls(source: &DataType, target: &DataType) -> bool {
     if source == &DataType::Null || source == target || is_string_type(target) {
         false
     } else if is_string_type(source) {
