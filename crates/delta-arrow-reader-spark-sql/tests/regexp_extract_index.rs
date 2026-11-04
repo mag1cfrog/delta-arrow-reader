@@ -94,6 +94,12 @@ async fn regexp_extract_index_retains_distinct_shared_cast_references() -> TestR
         include_str!("fixtures/regexp-extract-index-cse-spark.jsonl"), 8)], 8, 48).await
 }
 
+#[tokio::test]
+async fn regexp_extract_index_retains_local_input_and_null_boundaries() -> TestResult {
+    capture_references(&[("local_frontier", "regexp-extract-index-local-frontier-spark.jsonl",
+        include_str!("fixtures/regexp-extract-index-local-frontier-spark.jsonl"), 18)], 18, 108).await
+}
+
 async fn capture_references(fixtures: &[(&str, &str, &str, usize)], expected_references: usize,
     expected_observations: usize) -> TestResult {
     let stages: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-native-stages.json"))?;
