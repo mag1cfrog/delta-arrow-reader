@@ -150,28 +150,53 @@ fn regexp_replace_strings<O: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<Array
                 "[INVALID_REGEXP_REPLACE] source={value:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}: {cause}"
             )
         };
-        if pattern.is_empty() {
+        if pattern.is_empty() || pattern == r"\B" {
             let units = value.encode_utf16().collect::<Vec<_>>();
             let start = (position - 1) as usize;
             if start != 0 && start >= units.len() {
                 builder.append_value(value);
                 continue;
             }
-            let captures = regex
-                .captures("")
-                .ok_or_else(|| exec_datafusion_err!("regexp_replace empty pattern has no match"))?;
+            let mut matches = Vec::new();
+            if !pattern.is_empty() {
+                matches.resize(units.len() + 1, true);
+                let mut previous_word = false;
+                let mut offset = 0;
+                let mut character_buffer = [0; 4];
+                for character in value.chars() {
+                    // Retain native word classification at scalar boundaries.
+                    // Surrogate midpoints have two nonword halves; only the
+                    // actual region start hides its preceding character.
+                    let word = !regex.is_match(character.encode_utf8(&mut character_buffer));
+                    matches[offset] = (offset != start && previous_word) == word;
+                    offset += character.len_utf16();
+                    previous_word = word;
+                }
+                matches[offset] = !previous_word;
+                if !matches[start..].iter().any(|matched| *matched) {
+                    builder.append_value(value);
+                    continue;
+                }
+            }
+            let captures = regex.captures("").ok_or_else(|| {
+                exec_datafusion_err!("regexp_replace zero-width pattern has no match")
+            })?;
             output.clear();
             append_replacement(&mut output, replacement, regex, &captures)
                 .map_err(replacement_error)?;
             let replacement_units = output.encode_utf16().collect::<Vec<_>>();
             let mut result_units = units[..start].to_vec();
-            for unit in &units[start..] {
-                result_units.extend_from_slice(&replacement_units);
-                result_units.push(*unit);
+            for index in start..units.len() {
+                if matches.is_empty() || matches[index] {
+                    result_units.extend_from_slice(&replacement_units);
+                }
+                result_units.push(units[index]);
             }
-            result_units.extend_from_slice(&replacement_units);
-            // Java advances empty matches by one UTF-16 unit. Encode only after
-            // assembly so an empty replacement can preserve a surrogate pair.
+            if matches.is_empty() || matches[units.len()] {
+                result_units.extend_from_slice(&replacement_units);
+            }
+            // Encode after assembly so an empty replacement can preserve a pair,
+            // including when the untouched prefix ends inside that pair.
             output.clear();
             output.extend(char::decode_utf16(result_units).map(|unit| unit.unwrap_or('?')));
             builder.append_value(&output);
@@ -414,6 +439,109 @@ mod tests {
             let result = cast(&result, &DataType::Utf8)?;
             assert_eq!(result.as_string::<i32>(), &expected);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn sliced_nonboundaries_keep_utf16_regions_and_lazy_replacements() -> Result<()> {
+        let source = StringArray::from(vec![
+            Some("outside"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("𐐷"),
+            Some("a𐐷b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a"),
+            Some(""),
+            None,
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("outside"),
+        ]);
+        let pattern = StringArray::from(vec![
+            Some("outside"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            Some(r"\B"),
+            None,
+            Some(r"\B"),
+            Some(""),
+            Some("."),
+            Some("outside"),
+        ]);
+        let replacement = StringArray::from(vec![
+            "outside", "X", "X", "X", "X", "X", "", "$0", "$1", "$1", "X", "$9", "$9", "$9", "X",
+            "X", "outside",
+        ]);
+        let position = Int32Array::from(vec![
+            Some(1),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(1),
+            Some(1),
+            Some(3),
+            Some(3),
+            Some(5),
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(1),
+            None,
+            Some(1),
+            Some(1),
+            Some(1),
+        ]);
+        let expected = StringArray::from(vec![
+            Some("a?X?b"),
+            Some("aX?X?b"),
+            Some("a?X?b"),
+            Some("?X?"),
+            Some("aX?X?Xb"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a😀b"),
+            Some("a"),
+            Some("X"),
+            None,
+            None,
+            None,
+            Some("XaX?X?XbX"),
+            Some("XXX"),
+        ]);
+        for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+            let source = cast(&(Arc::new(source.clone()) as ArrayRef), &data_type)?.slice(1, 15);
+            let pattern = cast(&(Arc::new(pattern.clone()) as ArrayRef), &data_type)?.slice(1, 15);
+            let replacement =
+                cast(&(Arc::new(replacement.clone()) as ArrayRef), &data_type)?.slice(1, 15);
+            let position = (Arc::new(position.clone()) as ArrayRef).slice(1, 15);
+            let result = regexp_replace(&[source, pattern, replacement, position])?;
+            assert_eq!(result.data_type(), &data_type);
+            let result = cast(&result, &DataType::Utf8)?;
+            assert_eq!(result.as_string::<i32>(), &expected);
+        }
+        let error = regexp_replace(&[
+            Arc::new(StringArray::from(vec!["a😀b"])),
+            Arc::new(StringArray::from(vec![r"\B"])),
+            Arc::new(StringArray::from(vec!["$1"])),
+            Arc::new(Int32Array::from(vec![3])),
+        ])
+        .err()
+        .ok_or_else(|| exec_datafusion_err!("live missing group must fail"))?;
+        assert!(error.to_string().contains("No group 1"));
         Ok(())
     }
 }
