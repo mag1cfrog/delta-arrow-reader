@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use arrow::array::{Array, ArrayRef, Int32Array, LargeStringArray, PrimitiveArray, StringArray, StringViewArray};
+use arrow::array::{
+    Array, ArrayRef, Int32Array, LargeStringArray, PrimitiveArray, StringArray, StringViewArray,
+};
 use arrow::compute::kernels::cast::{ParsedStringRows, parse_string_rows_until_error};
 use arrow::compute::kernels::cast_utils::Parser;
 use arrow::compute::{CastOptions, cast_with_options};
@@ -35,10 +37,16 @@ fn assert_rows<P: Parser>(
         padded.extend_from_slice(input);
         padded.push(Some("invalid-after-slice"));
         for source in string_layouts(if sliced { &padded } else { input }) {
-            let input = if sliced { source.slice(1, input.len()) } else { source };
+            let input = if sliced {
+                source.slice(1, input.len())
+            } else {
+                source
+            };
             input.to_data().validate_full()?;
-            let ParsedStringRows { values, failure: actual_failure } =
-                parse_string_rows_until_error::<P>(input.as_ref())?;
+            let ParsedStringRows {
+                values,
+                failure: actual_failure,
+            } = parse_string_rows_until_error::<P>(input.as_ref())?;
             values.to_data().validate_full()?;
             assert_eq!(values.data_type(), &P::DATA_TYPE);
             assert_eq!(values.to_data(), expected.to_data(), "input: {input:?}");
@@ -50,10 +58,13 @@ fn assert_rows<P: Parser>(
                 assert_eq!(actual_failure.row_index, row_index);
                 assert_eq!(values.len(), row_index);
                 let message = format!(
-                    "Cannot cast string '{bad_value}' to value of {} type", P::DATA_TYPE
+                    "Cannot cast string '{bad_value}' to value of {} type",
+                    P::DATA_TYPE
                 );
-                assert!(matches!(&actual_failure.error, ArrowError::CastError(actual)
-                    if actual == &message));
+                assert!(
+                    matches!(&actual_failure.error, ArrowError::CastError(actual)
+                    if actual == &message)
+                );
                 assert!(matches!(strict_cast, Err(ArrowError::CastError(actual))
                     if actual == message));
             } else {
@@ -72,7 +83,11 @@ fn strict_rows_preserve_nulls_and_stop_at_the_first_error() -> Result<(), ArrowE
     assert_rows::<Int64Type>(&[], &[], None)?;
     assert_rows::<Int64Type>(&[None, None], &[None, None], None)?;
     assert_rows::<Int64Type>(
-        &[Some("-9223372036854775808"), Some("0"), Some("9223372036854775807")],
+        &[
+            Some("-9223372036854775808"),
+            Some("0"),
+            Some("9223372036854775807"),
+        ],
         &[Some(i64::MIN), Some(0), Some(i64::MAX)],
         None,
     )?;
@@ -92,7 +107,11 @@ fn strict_rows_preserve_nulls_and_stop_at_the_first_error() -> Result<(), ArrowE
         Some((3, "bad")),
     )?;
     assert_rows::<Int64Type>(
-        &[Some("7"), Some("9223372036854775808"), Some("different-invalid")],
+        &[
+            Some("7"),
+            Some("9223372036854775808"),
+            Some("different-invalid"),
+        ],
         &[Some(7)],
         Some((1, "9223372036854775808")),
     )?;
@@ -144,9 +163,18 @@ fn every_spark_ansi_integer_width_uses_the_existing_checked_parser() -> Result<(
 fn safe_casts_keep_parsing_after_invalid_values() -> Result<(), ArrowError> {
     let expected = Int32Array::from(vec![Some(12), None, None, None, None, Some(-34)]);
     for input in string_layouts(&[
-        Some("12"), None, Some("bad"), Some("2147483648"), Some("bad"), Some("-34"),
+        Some("12"),
+        None,
+        Some("bad"),
+        Some("2147483648"),
+        Some("bad"),
+        Some("-34"),
     ]) {
-        let output = cast_with_options(input.as_ref(), &Int32Type::DATA_TYPE, &CastOptions::default())?;
+        let output = cast_with_options(
+            input.as_ref(),
+            &Int32Type::DATA_TYPE,
+            &CastOptions::default(),
+        )?;
         output.to_data().validate_full()?;
         assert_eq!(output.to_data(), expected.to_data());
     }
