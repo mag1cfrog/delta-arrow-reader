@@ -1507,36 +1507,41 @@ mod tests {
 
     #[test]
     fn slice_nested_constants_preserve_fields_and_interpreted_bounds() -> PlanResult<()> {
-        use arrow::array::{Int32Array, StructArray};
+        use arrow::array::{ArrayRef, Int32Array, StructArray};
         use arrow::buffer::OffsetBuffer;
         use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 
         let schema = Arc::new(DFSchema::empty());
-        for nullable in [false, true] {
-            let children = vec![
-                Field::new("required_value", DataType::Int32, false)
-                    .with_metadata([("source".into(), "constant-required-child".into())].into()),
-                Field::new("optional_value", DataType::Int32, true)
-                    .with_metadata([("source".into(), "constant-optional-child".into())].into()),
-            ];
-            let values = StructArray::try_new(
-                children.clone().into(),
-                vec![
-                    Arc::new(Int32Array::from(vec![1, 2, 2, 3])),
-                    Arc::new(Int32Array::from(vec![Some(1), None, Some(2), Some(3)])),
-                ],
-                None,
-            )?;
-            // Immediate list-element metadata has a separate scalar-cast gap (#909).
+        let primitive: ArrayRef = Arc::new(Int32Array::from(vec![1, 2, 2, 3]));
+        let children = vec![
+            Field::new("required_value", DataType::Int32, false)
+                .with_metadata([("source".into(), "constant-required-child".into())].into()),
+            Field::new("optional_value", DataType::Int32, true)
+                .with_metadata([("source".into(), "constant-optional-child".into())].into()),
+        ];
+        let struct_values: ArrayRef = Arc::new(StructArray::try_new(
+            children.into(),
+            vec![
+                primitive.clone(),
+                Arc::new(Int32Array::from(vec![Some(1), None, Some(2), Some(3)])),
+            ],
+            None,
+        )?);
+        // Prior scalar-cast gaps: immediate element metadata (#909), required Struct elements (#910).
+        for (element_nullable, values) in [
+            (false, primitive.clone()),
+            (true, primitive),
+            (true, struct_values),
+        ] {
             let element = Arc::new(Field::new(
                 "kept_element",
-                DataType::Struct(children.into()),
-                nullable,
+                values.data_type().clone(),
+                element_nullable,
             ));
             let input = ListArray::try_new(
                 element.clone(),
                 OffsetBuffer::from_lengths([4]),
-                Arc::new(values),
+                values,
                 None,
             )?;
             for storage in [
