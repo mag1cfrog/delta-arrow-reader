@@ -3319,8 +3319,9 @@ outputs unchanged. The selection header records the original SHA-256. The
 unaliased mixed-function control retains the generated LIKE label gap in #791
 as an explicit incompatible observation. Its generated metadata matches the
 reference at both analyzed and physical stages.
-The argument-count controls require their exact native resolution cause and
-remain separate from Spark WRONG_NUM_ARGS diagnostic compatibility.
+The argument-count controls require Spark's WRONG_NUM_ARGS condition, function
+identity and expected/actual counts at native resolution. Their earlier generic
+native errors remain preserved as incompatible historical observations.
 
 `like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
 all-NULL and empty registered inputs. It distinguishes literal from
@@ -3440,7 +3441,7 @@ fresh Spark observations from recorded inputs and SQL.
 
 `like_escapes.rs` replays all 760 references across Utf8, LargeUtf8 and Utf8View
 at batch sizes 1 and 32, producing 4,560 observations. It compares every actual
-result with the unchanged Spark reference. The current bounded replay has
+result with the unchanged Spark reference. The recorded R3 baseline has
 532 strict success references and 198 precise error references, producing
 3,192 successful-result and 1,188 error comparisons, or 4,380 strict matches.
 
@@ -3453,19 +3454,25 @@ the #915 LIKE/ILIKE arity condition and function/parameter differences. The
 flag remains false. No field, nullable declaration or expected Spark output is
 adjusted. The earlier generated-name allowance has been removed.
 
-The preservation gate requires each profiled actual object to equal its complete
-frozen native observation, including raw analyzed/physical fields, rows, exact
-error text/stage and availability. All other observations must match Spark's
-applicable fields, values and meaningful error cause. The profile header records
-actual source identities and receipt hashes; it is native regression evidence,
+The preservation gate keeps the 108 #791/#875 current negative observations equal
+to their complete frozen native objects, including raw analyzed/physical fields,
+rows, exact error text/stage and availability. The 72 #915 profiles retain their
+historical negative objects and comparisons, while their current queries must
+match Spark's condition, function identity and counts. Independent class and
+parameter checks keep the old generic cause incompatible. All other observations
+must match Spark's applicable fields, values and meaningful error cause. The
+profile header records actual source identities and receipt hashes; it is native regression evidence,
 with no Spark oracle or acceptance-waiver credit. Mutation controls reject
 schema, metadata, row, raw-field, error-cause/stage and availability changes.
 The test is named `like_escapes_preserve_complete_observations` to describe this
 bounded contract. #771 remains open.
 
-Including the 480 clock controls and 32 independent host references, the current
-5,072 reference comparisons retain 4,892 strict matches: 3,496 successful results
-and 1,396 precise errors. The same 180 incompatible observations stay false.
+Including the 480 clock controls and 32 independent host references, the recorded
+R3 baseline has 4,892 strict matches among 5,072 comparisons: 3,496 successful
+results and 1,396 precise errors. The current gate requires 4,964 of 5,072
+comparisons to match strictly, including all 72 arity contexts. The remaining
+108 current name/field observations and all 180 historical negative profiles
+remain incompatible.
 The complete 5,216-record raw collector also retains 144 diagnostics without
 Spark oracle credit, including its 24 native clock-value witnesses. These counts
 describe the recorded contexts and do not establish family-wide compatibility.
