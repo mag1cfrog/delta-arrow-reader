@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use arrow::array::{Array, ArrayRef, BinaryArray, Int32Array, Int64Array, StringArray};
+use arrow::array::{
+    Array, ArrayRef, BinaryArray, BooleanArray, Int32Array, Int64Array, ListArray, StringArray,
+};
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
@@ -76,6 +78,18 @@ pub(crate) fn register_inputs(
                         })
                         .collect::<TestResult<Vec<_>>>()?,
                 )),
+                "boolean" => Arc::new(BooleanArray::from(
+                    values
+                        .iter()
+                        .map(|v| {
+                            if v.is_null() {
+                                Ok(None)
+                            } else {
+                                Ok(Some(v.as_str().ok_or("missing boolean")?.parse::<bool>()?))
+                            }
+                        })
+                        .collect::<TestResult<Vec<_>>>()?,
+                )),
                 "binary" => {
                     let decoded = values
                         .iter()
@@ -122,23 +136,77 @@ pub(crate) fn register_inputs(
     Ok(())
 }
 
+fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
+    Ok(match data_type {
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => json!("string"),
+        DataType::Binary
+        | DataType::LargeBinary
+        | DataType::BinaryView
+        | DataType::FixedSizeBinary(_) => json!("binary"),
+        DataType::Int32 => json!("integer"),
+        DataType::Int64 => json!("long"),
+        DataType::Float64 => json!("double"),
+        DataType::Boolean => json!("boolean"),
+        DataType::Null => json!("void"),
+        DataType::List(field) => json!({"type":"array",
+            "elementType":spark_schema_type(field.data_type())?,
+            "containsNull":field.is_nullable()}),
+        other => return Err(format!("unexpected output type: {other}").into()),
+    })
+}
+
 fn capture_schema(fields: &[Arc<Field>], names: Option<&[String]>) -> TestResult<Value> {
-    Ok(
-        json!({"type":"struct", "fields": fields.iter().enumerate().map(|(i, field)| {
-        let data_type = match field.data_type() {
-            DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => "string",
-            DataType::Binary | DataType::LargeBinary | DataType::BinaryView | DataType::FixedSizeBinary(_) => "binary",
-            DataType::Int32 => "integer",
-            DataType::Int64 => "long",
-            DataType::Float64 => "double",
-            DataType::Boolean => "boolean",
-            DataType::Null => "void",
-            other => return Err(format!("unexpected output type: {other}").into()),
-        };
-        Ok(json!({"name": names.map_or(field.name(), |names| &names[i]),
-            "type":data_type,"nullable":field.is_nullable(),"metadata":field.metadata()}))
-    }).collect::<TestResult<Vec<_>>>()?}),
-    )
+    Ok(json!({"type":"struct", "fields": fields.iter().enumerate()
+        .map(|(index, field)| Ok(json!({
+            "name":names.map_or(field.name(), |names| &names[index]),
+            "type":spark_schema_type(field.data_type())?,
+            "nullable":field.is_nullable(),"metadata":field.metadata()})))
+        .collect::<TestResult<Vec<_>>>()?}))
+}
+
+fn encode_value(column: &dyn Array, row: usize) -> TestResult<Value> {
+    if column
+        .logical_nulls()
+        .as_ref()
+        .is_some_and(|nulls| nulls.is_null(row))
+    {
+        return Ok(Value::Null);
+    }
+    Ok(match column.data_type() {
+        DataType::List(field) => {
+            let values = column
+                .as_any()
+                .downcast_ref::<ListArray>()
+                .ok_or("expected list")?
+                .value(row);
+            if !field.is_nullable() && values.logical_null_count() != 0 {
+                return Err("nonnullable list element returned NULL".into());
+            }
+            json!(
+                (0..values.len())
+                    .map(|index| encode_value(values.as_ref(), index))
+                    .collect::<TestResult<Vec<_>>>()?
+            )
+        }
+        DataType::Binary
+        | DataType::LargeBinary
+        | DataType::BinaryView
+        | DataType::FixedSizeBinary(_) => {
+            let binary = cast(column, &DataType::Binary)?;
+            let binary = binary
+                .as_any()
+                .downcast_ref::<BinaryArray>()
+                .ok_or("expected binary")?;
+            json!(
+                binary
+                    .value(row)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            )
+        }
+        _ => json!(array_value_to_string(column, row)?),
+    })
 }
 
 // Retain fields from each completed planning stage when a later stage fails.
@@ -205,33 +273,11 @@ pub(crate) async fn capture_observation(
         for row in 0..batch.num_rows() {
             let mut values = Vec::new();
             for (index, column) in batch.columns().iter().enumerate() {
-                let nulls = column.logical_nulls();
-                let value = if nulls.as_ref().is_some_and(|nulls| nulls.is_null(row)) {
+                let value = encode_value(column.as_ref(), row)?;
+                if value.is_null() {
                     assert!(schema.field(index).is_nullable());
                     assert!(query.logical_plan.schema().field(index).is_nullable());
-                    Value::Null
-                } else if matches!(
-                    column.data_type(),
-                    DataType::Binary
-                        | DataType::LargeBinary
-                        | DataType::BinaryView
-                        | DataType::FixedSizeBinary(_)
-                ) {
-                    let binary = cast(column, &DataType::Binary)?;
-                    let binary = binary
-                        .as_any()
-                        .downcast_ref::<BinaryArray>()
-                        .ok_or("expected binary")?;
-                    json!(
-                        binary
-                            .value(row)
-                            .iter()
-                            .map(|b| format!("{b:02x}"))
-                            .collect::<String>()
-                    )
-                } else {
-                    json!(array_value_to_string(column.as_ref(), row)?)
-                };
+                }
                 values.push(value);
             }
             rows.push(values);
@@ -247,4 +293,35 @@ pub(crate) async fn capture_result(session: &SessionContext, case: &Value) -> Te
         return Err(error.to_owned().into());
     }
     Ok(observation)
+}
+
+#[test]
+fn actual_list_capture_retains_child_fields_and_nonnull_values() -> TestResult {
+    use arrow::datatypes::Int32Type;
+    let values = ListArray::from_iter_primitive::<Int32Type, _, _>([
+        Some(vec![Some(1), None, Some(3)]),
+        None,
+    ]);
+    let child = Arc::new(
+        Field::new("actual_items", DataType::Int32, true)
+            .with_metadata(HashMap::from([("source".into(), "actual_arrow".into())])),
+    );
+    let values = ListArray::new(
+        child,
+        values.offsets().clone(),
+        values.values().clone(),
+        values.nulls().cloned(),
+    );
+    let fields = vec![Arc::new(Field::new("r", values.data_type().clone(), true))];
+    assert_eq!(
+        capture_schema(&fields, None)?,
+        json!({"type":"struct","fields":[{
+        "name":"r","type":{"type":"array","elementType":"integer","containsNull":true},
+        "nullable":true,"metadata":{}}]})
+    );
+    let raw = format!("{fields:?}");
+    assert!(raw.contains("actual_items") && raw.contains("actual_arrow"));
+    assert_eq!(encode_value(&values, 0)?, json!(["1", null, "3"]));
+    assert_eq!(encode_value(&values, 1)?, Value::Null);
+    Ok(())
 }

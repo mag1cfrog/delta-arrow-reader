@@ -578,8 +578,20 @@ SUBSTR and SUBSTRING reuse DataFusion Spark's Unicode substring kernel. Binary
 ranges retain Spark's Java INT arithmetic and zero padding through a small
 native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
 length is INT_MAX for both strings and binary values.
+Position and length use the existing mode-aware STRING and Decimal integer
+casts before widening to the value kernel's Int64 inputs. Row-dependent calls
+use native scalar NULL selection while retaining ordinary logical CSE. Whole
+constant and early local calls retain the private closed-lambda adapter for
+conditional folding and preparation. Its selection/scatter helpers remain in use.
+Async arguments retain their existing extraction and eager scalar evaluation path.
+Legacy BIGINT arguments retain their previous route until shared #813 supplies
+Spark INT narrowing. General numeric CAST declarations and non-finite values
+remain with #796 and #897.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
-cover analyzed fields, executed values and native SQL preservation.
+retain all 656 references and 3,936 native observations, plus the separate
+84-observation competing-error supplement, native SQL and fixed-binary controls.
+The regression invariant preserves each known failure and reports strict full
+compatibility false; it does not complete #778 or its shared dependencies.
 
 UNHEX reads Utf8, LargeUtf8 and Utf8View through the same byte parser and row
 builder. Invalid hexadecimal text remains NULL, odd-length text retains its

@@ -13,6 +13,13 @@ mod string_binary;
 use contracts::{check_fixture, error_is, invalid_utf8_error, metadata_fields_match};
 use string_binary::TestResult;
 
+#[allow(
+    dead_code,
+    reason = "The original contracts share the focused substring matchers."
+)]
+#[path = "support/substring.rs"]
+mod substring;
+
 fn alias_metadata_gap(case: &Value, actual: &Value) -> bool {
     let count = match case["id"].as_str() {
         Some("frozen_nulls_concat_ws" | "frozen_strings_unicode" | "frozen_strings_binary") => 2,
@@ -36,17 +43,14 @@ fn invalid_binary_outcome(
 ) -> Option<&'static str> {
     let expected = &case["expected"];
     match case["id"].as_str()? {
-        "unaliased_binary_names" => (metadata_fields_match(
-            &actual["analyzed_schema"],
-            &expected["analyzed_schema"],
-            &[json!({}), json!({}), json!({}), json!({})],
-        ) && actual["physical_schema"].is_null()
+        "unaliased_binary_names" => (actual["analyzed_schema"] == expected["analyzed_schema"]
+            && actual["physical_schema"].is_null()
             && invalid_utf8_error(
                 actual,
                 "physical",
                 "invalid utf-8 sequence of 1 bytes from index 1",
             ))
-        .then_some("open_780_invalid_utf8_and_710_alias_metadata"),
+        .then_some("open_780_invalid_utf8"),
         "invalid_utf8_binary_roundtrip_literal" => (actual["analyzed_schema"]
             == expected["analyzed_schema"]
             && actual["physical_schema"].is_null()
@@ -128,45 +132,7 @@ fn arity_cause_matches(case: &Value, actual: &Value) -> bool {
 }
 
 fn substring_coercion_gap(case: &Value, actual: &Value) -> bool {
-    let Some(id) = case["id"].as_str() else {
-        return false;
-    };
-    let rejection = match id {
-        "admission_substring_boolean_position" => Some(("Boolean", "Utf8, Boolean, Int32")),
-        "admission_substring_invalid_string_position" => Some(("String", "Utf8, Utf8, Int32")),
-        "admission_substring_invalid_string_length" => Some(("String", "Utf8, Int32, Utf8")),
-        "admission_substring_numeric_string_arguments" => Some(("String", "Utf8, Utf8, Utf8")),
-        _ => None,
-    };
-    if let Some((input, signature)) = rejection {
-        let native_type = if input == "Boolean" {
-            "Boolean"
-        } else {
-            "Utf8"
-        };
-        let native_error = format!(
-            "resolve: External error: error in DataFusion: Error during planning: Internal error: Function 'substring' failed to match any signature, errors: Error during planning: Function 'substring' expects 2 arguments but received 3,Error during planning: Function 'substring' requires Int64, but received {input} (DataType: {native_type}).,Error during planning: Function 'substring' expects 2 arguments but received 3,Error during planning: Function 'substring' requires Binary, but received String (DataType: Utf8)..\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'substring({signature})'. You might need to add explicit type casts.\n\tCandidate functions:\n\tsubstring(str: String, pos: Int64)\n\tsubstring(str: String, pos: Int64, length: Int64)\n\tsubstring(str: Binary, pos: Int64)\n\tsubstring(str: Binary, pos: Int64, length: Int64)"
-        );
-        return actual["analyzed_schema"].is_null()
-            && actual["physical_schema"].is_null()
-            && error_is(actual, "resolve", &native_error);
-    }
-    let observed_value = match id {
-        "admission_substring_bigint_length_above_int" => "abcdef",
-        "admission_substring_bigint_position_above_int"
-        | "admission_substring_bigint_position_below_int"
-        | "admission_substring_bigint_length_below_int" => "",
-        _ => return false,
-    };
-    // This is the observed native wider-integer profile, not a Spark expectation.
-    // ANSI requires CAST_OVERFLOW; legacy length cases wrap to different values.
-    let native_fields = json!({"type":"struct","fields":[
-        {"name":"r","type":"string","nullable":false,"metadata":{}}
-    ]});
-    actual.get("error").is_none()
-        && actual["analyzed_schema"] == case["expected"]["analyzed_schema"]
-        && actual["physical_schema"] == native_fields
-        && actual["rows"] == json!([[observed_value]])
+    substring::known_difference(case, actual) == Some("open_813_legacy_bigint")
 }
 
 fn open_contract_outcome(
@@ -183,8 +149,14 @@ fn open_contract_outcome(
         // These preserve meaningful admission causes, without claiming identical
         // Spark diagnostics or sharing #795's distinct pre-admission formatter bug.
         Some("arity_cause_only_151")
+    } else if case["id"]
+        .as_str()
+        .is_some_and(|id| id.starts_with("admission_substring_"))
+        && substring::matches_reference(case, actual)
+    {
+        Some("substring_argument_cause")
     } else if substring_coercion_gap(case, actual) {
-        Some("open_778_substring_argument_coercion")
+        Some("open_813_legacy_bigint")
     } else {
         None
     }
@@ -240,7 +212,7 @@ fn contract_gap_profiles_reject_new_fields_values_and_causes() -> TestResult {
     let case = records
         .iter()
         .find(|case| {
-            case["id"] == "admission_substring_bigint_length_above_int" && case["ansi"] == true
+            case["id"] == "admission_substring_bigint_length_above_int" && case["ansi"] == false
         })
         .ok_or("missing width reference")?;
     let mut actual = json!({"analyzed_schema":case["expected"]["analyzed_schema"],
@@ -279,6 +251,11 @@ fn uncaptured_substring_errors_reject_the_review_counterexample() -> TestResult 
     });
     assert!(!contracts::complete_match(&reviewed, &case["expected"]));
     assert!(open_contract_outcome(&case, &reviewed, 0, 1).is_none());
+    let mut concrete_cause = reviewed.clone();
+    concrete_cause["error"] =
+        json!("execute: Arrow error: Cast error: Can't cast value 2147483648 to type Int32");
+    assert!(!substring::matches_reference(&case, &concrete_cause));
+    assert!(open_contract_outcome(&case, &concrete_cause, 0, 1).is_none());
 
     let observed_native_fields = json!({"type":"struct","fields":[
         {"name":"r","type":"string","nullable":false,"metadata":{}}
