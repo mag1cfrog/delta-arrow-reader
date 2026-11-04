@@ -76,7 +76,7 @@ impl Debug for ScalarFunctionExpr {
 }
 
 impl ScalarFunctionExpr {
-    fn evaluate_arguments(
+    fn evaluate_eager_and_invoke(
         &self,
         batch: &RecordBatch,
         retain_row_errors: bool,
@@ -301,7 +301,7 @@ impl ScalarFunctionExpr {
             return self.evaluate_first_non_null(batch);
         }
         if self.short_circuit_any_arg_null {
-            return self.evaluate_arguments(batch, false)?.into_result();
+            return self.evaluate_eager_and_invoke(batch, false)?.into_result();
         }
         let Some(first) = self.args.first() else {
             return self.invoke_evaluated(batch, Vec::new());
@@ -559,7 +559,7 @@ impl PhysicalExpr for ScalarFunctionExpr {
                 arrow::array::new_empty_array(self.return_type()),
             )));
         }
-        self.evaluate_arguments(batch, true)
+        self.evaluate_eager_and_invoke(batch, true)
     }
 
     fn evaluate_selected_rows_until_error(

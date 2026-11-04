@@ -39,23 +39,6 @@ fn slice_null_comparison_matches(case: &Value, comparison: &Value) -> bool {
         && COMPARISON_FLAGS.iter().all(|flag| comparison[flag] == true)
 }
 
-fn cast_input_matches(case: &Value, comparison: &Value) -> bool {
-    if case["expected"]["condition"] != "CAST_INVALID_INPUT" {
-        return true;
-    }
-    let Some(input) = case["spark_error_details"]["message_parameters"]["expression"].as_str()
-    else {
-        return false;
-    };
-    let expected = format!("Cannot cast string {input} to value of Int32 type");
-    comparison["error"].as_str().is_some_and(|error| {
-        error
-            .lines()
-            .filter_map(|line| line.strip_prefix("Arrow error: Cast error: "))
-            .any(|cause| cause == expected)
-    })
-}
-
 #[test]
 fn cast_error_priority_rejects_a_different_failing_argument() {
     let case = json!({
@@ -66,13 +49,16 @@ fn cast_error_priority_rejects_a_different_failing_argument() {
         let comparison = json!({"error":format!(
             "[CAST_INVALID_INPUT]\nArrow error: Cast error: Cannot cast string '{input}' to value of Int32 type"
         )});
-        assert_eq!(cast_input_matches(&case, &comparison), input == "array_bad");
+        assert_eq!(
+            spark_results::matches_spark_int32_cast_input(&case, &comparison),
+            input == "array_bad"
+        );
     }
-    assert!(!cast_input_matches(
+    assert!(!spark_results::matches_spark_int32_cast_input(
         &case,
         &json!({"error":"[CAST_INVALID_INPUT]"})
     ));
-    assert!(!cast_input_matches(
+    assert!(!spark_results::matches_spark_int32_cast_input(
         &case,
         &json!({"error":concat!(
             "SQL: CAST('array_bad' AS INT), CAST('start_bad' AS INT)\n",
@@ -181,7 +167,9 @@ async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestRes
             comparison["sql"] = case["sql"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch);
-            comparison["cast_input_matches"] = json!(cast_input_matches(case, &comparison));
+            comparison["cast_input_matches"] = json!(
+                spark_results::matches_spark_int32_cast_input(case, &comparison)
+            );
             eprintln!("SLICE_NULL_EVALUATION_OBSERVATION {comparison}");
             if !slice_null_comparison_matches(case, &comparison) {
                 differences.push(comparison.to_string());

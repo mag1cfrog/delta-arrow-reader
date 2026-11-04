@@ -63,23 +63,6 @@ fn recorded_source_sha256(source: &str) -> TestResult<String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn cast_input_matches(case: &Value, observation: &Value) -> bool {
-    if case["expected"]["condition"] != "CAST_INVALID_INPUT" {
-        return true;
-    }
-    let Some(input) = case["spark_error_details"]["message_parameters"]["expression"].as_str()
-    else {
-        return false;
-    };
-    let expected = format!("Cannot cast string {input} to value of Int32 type");
-    observation["error"].as_str().is_some_and(|error| {
-        error
-            .lines()
-            .filter_map(|line| line.strip_prefix("Arrow error: Cast error: "))
-            .any(|cause| cause == expected)
-    })
-}
-
 fn observer_panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
     payload
         .downcast_ref::<String>()
@@ -225,7 +208,7 @@ fn discriminator_gates_reject_incomplete_stages_cast_causes_and_input_order() ->
         let observation = json!({"error":format!(
             "[CAST_INVALID_INPUT]\nArrow error: Cast error: Cannot cast string '{input}' to value of Int32 type")});
         assert_eq!(
-            cast_input_matches(&case, &observation),
+            spark_results::matches_spark_int32_cast_input(&case, &observation),
             input == "start_bad"
         );
     }
@@ -497,7 +480,9 @@ async fn slice_new_row_error_discriminators_match_verified_spark() -> TestResult
             observation["ansi"] = case["ansi"].clone();
             observation["batch"] = json!(batch_size);
             observation["spark_reference_sha256"] = json!(SPARK_REFERENCE_SHA256);
-            observation["cast_input_matches"] = json!(cast_input_matches(case, &observation));
+            observation["cast_input_matches"] = json!(
+                spark_results::matches_spark_int32_cast_input(case, &observation)
+            );
             observation["provider_input_matches"] = json!(provider_matches);
             observation["scenario_input_matches"] = json!(scenario_matches);
             let mut schemas = serde_json::Map::new();

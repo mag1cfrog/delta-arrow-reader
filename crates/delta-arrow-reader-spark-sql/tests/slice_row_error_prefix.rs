@@ -495,11 +495,14 @@ static PHYSICAL_SELECTED_CALLS: AtomicUsize = AtomicUsize::new(0);
 
 impl Display for OpaquePhysicalExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("opaque_expression")
+        self.fmt_sql(f)
     }
 }
 
 impl PhysicalExpr for OpaquePhysicalExpression {
+    fn fmt_sql(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("opaque_expression")
+    }
     fn data_type(&self, _: &Schema) -> Result<DataType> {
         Ok(DataType::Int32)
     }
