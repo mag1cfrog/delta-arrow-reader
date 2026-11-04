@@ -396,7 +396,7 @@ async fn slice_null_evaluation_matches_fresh_spark_capture() -> TestResult {
 }
 
 #[tokio::test]
-async fn slice_selected_concat_coordinates_keep_null_frontiers() -> TestResult {
+async fn slice_concat_coordinates_preserve_null_short_circuiting() -> TestResult {
     let header = json!({"inputs":[{
         "name":"slice_concat_input",
         "schema":{"type":"struct","fields":[
