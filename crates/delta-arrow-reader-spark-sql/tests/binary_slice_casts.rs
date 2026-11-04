@@ -42,16 +42,13 @@ fn assert_casts(
                 ..Default::default()
             };
             let result = cast_with_options(input, &target, &options);
-            if !safe
-                && let Some((byte_error, view_error)) = strict_errors
-            {
-                let expected_error = if input.data_type() == &DataType::BinaryView
-                    && target == DataType::Utf8View
-                {
-                    view_error
-                } else {
-                    byte_error
-                };
+            if !safe && let Some((byte_error, view_error)) = strict_errors {
+                let expected_error =
+                    if input.data_type() == &DataType::BinaryView && target == DataType::Utf8View {
+                        view_error
+                    } else {
+                        byte_error
+                    };
                 assert!(
                     matches!(&result, Err(ArrowError::InvalidArgumentError(message))
                         if message == expected_error),
@@ -92,7 +89,11 @@ fn assert_binary_layouts(
     expected: &[Option<&[u8]>],
     strict_errors: Option<(&str, &str)>,
 ) -> Result<(), ArrowError> {
-    for source in [DataType::Binary, DataType::LargeBinary, DataType::BinaryView] {
+    for source in [
+        DataType::Binary,
+        DataType::LargeBinary,
+        DataType::BinaryView,
+    ] {
         let backing = cast(backing, &source)?;
         let visible = backing.slice(offset, length);
         assert_casts(visible.as_ref(), expected, strict_errors)?;
@@ -129,13 +130,15 @@ fn valid_binary_slices_ignore_retained_bytes_and_null_payloads() -> Result<(), A
     assert_binary_layouts(&nullable, 1, 3, &[None, Some(b"a"), None], None)?;
     assert_binary_layouts(&nullable, 1, 1, &[None], None)?;
 
-    let valid_offset = BinaryArray::from_vec(vec![
-        b"prefix".as_slice(),
-        b"",
-        "é😀".as_bytes(),
-        b"suffix",
-    ]);
-    assert_binary_layouts(&valid_offset, 1, 2, &[Some(b""), Some("é😀".as_bytes())], None)
+    let valid_offset =
+        BinaryArray::from_vec(vec![b"prefix".as_slice(), b"", "é😀".as_bytes(), b"suffix"]);
+    assert_binary_layouts(
+        &valid_offset,
+        1,
+        2,
+        &[Some(b""), Some("é😀".as_bytes())],
+        None,
+    )
 }
 
 #[test]
