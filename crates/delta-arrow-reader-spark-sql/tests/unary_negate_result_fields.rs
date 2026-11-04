@@ -89,3 +89,48 @@ async fn unary_negate_fields_match_spark() -> TestResult {
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn spark_configuration_preserves_native_unary_negation() -> TestResult {
+    let records = include_str!("fixtures/unary-negate-fields/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    for batch_size in [1, 32] {
+        let config = SessionConfig::new()
+            .with_batch_size(batch_size)
+            .with_target_partitions(2);
+        let native = SessionContext::new_with_config(config.clone());
+        let configured = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(config),
+            )
+            .build(),
+        );
+        for session in [&native, &configured] {
+            spark_inputs::register_recorded_inputs(session, &records[0], batch_size)?;
+        }
+        for sql in [
+            "SELECT -required_int AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+            "SELECT -nullable_int AS r FROM unary_input WHERE k IN (0, 1, 3) ORDER BY k",
+            "SELECT -CAST(required_int AS BIGINT) AS r FROM unary_input ORDER BY k",
+            "SELECT -required_int AS r FROM unary_empty",
+            "SELECT -CAST(NULL AS INT) AS r",
+        ] {
+            let expected = spark_results::capture_native_query_observation(&native, sql).await?;
+            let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+            let observation = json!({"sql":sql,"batch":batch_size,"native":expected,"configured":actual});
+            eprintln!("UNARY_NEGATE_NATIVE_OBSERVATION {observation}");
+            assert!(observation["native"]["error"].is_null(), "{observation}");
+            assert_eq!(observation["native"]["phase"], "encode", "{observation}");
+            for stage in ["public_schema", "before_collect", "physical_schema"] {
+                assert!(observation["native"][stage].is_object(), "{observation}");
+            }
+            assert!(observation["native"]["rows"].is_array(), "{observation}");
+            assert_eq!(observation["configured"], observation["native"], "{observation}");
+        }
+    }
+    Ok(())
+}
