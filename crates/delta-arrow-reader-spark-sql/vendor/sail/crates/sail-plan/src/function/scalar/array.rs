@@ -1517,20 +1517,36 @@ mod tests {
 
     #[test]
     fn slice_nested_constants_preserve_fields_and_interpreted_bounds() -> PlanResult<()> {
-        use arrow::array::Int32Array;
+        use arrow::array::{Int32Array, StructArray};
         use arrow::buffer::OffsetBuffer;
         use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 
         let schema = Arc::new(DFSchema::empty());
         for nullable in [false, true] {
-            let element = Arc::new(
-                Field::new("kept_element", DataType::Int32, nullable)
-                    .with_metadata([("source".into(), "constant-coordinate-test".into())].into()),
-            );
+            let children = vec![
+                Field::new("required_value", DataType::Int32, false)
+                    .with_metadata([("source".into(), "constant-required-child".into())].into()),
+                Field::new("optional_value", DataType::Int32, true)
+                    .with_metadata([("source".into(), "constant-optional-child".into())].into()),
+            ];
+            let values = StructArray::try_new(
+                children.clone().into(),
+                vec![
+                    Arc::new(Int32Array::from(vec![1, 2, 2, 3])),
+                    Arc::new(Int32Array::from(vec![Some(1), None, Some(2), Some(3)])),
+                ],
+                None,
+            )?;
+            // Immediate list-element metadata has a separate scalar-cast gap (#909).
+            let element = Arc::new(Field::new(
+                "kept_element",
+                DataType::Struct(children.into()),
+                nullable,
+            ));
             let input = ListArray::try_new(
                 element.clone(),
                 OffsetBuffer::from_lengths([4]),
-                Arc::new(Int32Array::from(vec![1, 2, 2, 3])),
+                Arc::new(values),
                 None,
             )?;
             for storage in [
@@ -1538,8 +1554,13 @@ mod tests {
                 DataType::LargeList(element.clone()),
             ] {
                 let input = arrow::compute::cast(&input, &storage)?;
-                let literal = lit(ScalarValue::try_from_array(input.as_ref(), 0)?);
-                let inner = slice_expr(literal, lit(-2_i64), lit(3_i64), &schema)?;
+                let literal = match &storage {
+                    DataType::List(_) => ScalarValue::List(Arc::new(input.as_list::<i32>().clone())),
+                    _ => ScalarValue::LargeList(Arc::new(input.as_list::<i64>().clone())),
+                };
+                assert_eq!(literal.data_type(), storage);
+                literal.to_array()?.to_data().validate_full()?;
+                let inner = slice_expr(lit(literal), lit(-2_i64), lit(3_i64), &schema)?;
                 let outer = slice_expr(inner, lit(-1_i64), lit(i64::from(i32::MAX)), &schema)?;
                 let info = SimplifyContext::builder()
                     .with_schema(schema.clone())

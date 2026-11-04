@@ -2682,6 +2682,12 @@ emits all query outcomes before aggregate failure. Its literal/provider result
 assertions retain the independent Spark discriminators without inherited
 allowances. Local tests also cover all four list input layouts, complete
 element fields, nested literal folding and opaque runtime Scalar operands.
+Runtime layout checks retain immediate element metadata. The constant fixture
+constructs List/LargeList scalars directly and checks named, required/nullable
+Struct child fields with metadata, complete output types, valid Arrow data and
+the interpreted empty result. The pre-existing scalar list-cast loss of
+immediate element metadata is tracked separately in
+[#909](https://github.com/mag1cfrog/delta-arrow-reader/issues/909).
 
 `slice-parameters/reachability/` preserves 24 further Spark observations, with
 raw reference SHA256
