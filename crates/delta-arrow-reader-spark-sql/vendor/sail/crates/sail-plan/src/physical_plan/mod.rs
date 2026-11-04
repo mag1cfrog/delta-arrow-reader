@@ -7,6 +7,7 @@ use datafusion::execution::context::QueryPlanner;
 use datafusion::physical_expr::{LexOrdering, OrderingRequirements, create_physical_sort_exprs};
 use datafusion::physical_optimizer::output_requirements::OutputRequirementExec;
 use datafusion::physical_plan::ExecutionPlan;
+use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
@@ -20,6 +21,7 @@ use self::monotonic_id::MonotonicIdExec;
 use self::spark_partition_id::SparkPartitionIdExec;
 use crate::expression_errors::SparkSqlExpressionSemantics;
 use crate::function::scalar::lower_runtime_concat;
+use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producers};
 
 mod monotonic_id;
 mod spark_partition_id;
@@ -60,7 +62,7 @@ impl QueryPlanner for SparkQueryPlanner {
             .get::<SparkSqlExpressionSemantics>()
             .is_some()
         {
-            Cow::Owned(
+            Cow::Owned(admit_prefix_producers(
                 logical_plan
                     .clone()
                     .transform_up_with_subqueries(|node| {
@@ -78,7 +80,7 @@ impl QueryPlanner for SparkQueryPlanner {
                         })
                     })?
                     .data,
-            )
+            )?)
         } else {
             Cow::Borrowed(logical_plan)
         };
@@ -101,9 +103,31 @@ impl ExtensionPlanner for SparkExtensionPlanner {
         physical_inputs: &[Arc<dyn ExecutionPlan>],
         session_state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
-        let plan: Arc<dyn ExecutionPlan> = if let Some(partition_id) =
-            node.as_any().downcast_ref::<SparkPartitionIdNode>()
+        let plan: Arc<dyn ExecutionPlan> = if let Some(provenance) =
+            node.as_any().downcast_ref::<ProjectionRowErrorNode>()
         {
+            let [input] = physical_inputs else {
+                return internal_err!(
+                    "Projection row-error provenance requires exactly one physical input"
+                );
+            };
+            match provenance {
+                ProjectionRowErrorNode::InputSortBoundary(_) => Arc::clone(input),
+                ProjectionRowErrorNode::PrefixProducer(_) => {
+                    let Some(projection) = input.downcast_ref::<ProjectionExec>() else {
+                        return internal_err!(
+                            "A row-error prefix producer must be a computed projection"
+                        );
+                    };
+                    if projection.schema().fields() != node.schema().fields() {
+                        return internal_err!(
+                            "A row-error prefix producer changed its bound output fields"
+                        );
+                    }
+                    Arc::new(projection.clone().with_row_error_prefix(true))
+                }
+            }
+        } else if let Some(partition_id) = node.as_any().downcast_ref::<SparkPartitionIdNode>() {
             let [input] = physical_inputs else {
                 return internal_err!("SparkPartitionIdExec requires exactly one physical input");
             };

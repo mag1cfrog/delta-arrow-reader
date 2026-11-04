@@ -35,6 +35,7 @@ use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_like_query_clock};
 use sail_plan::physical_plan::SparkQueryPlanner;
+use sail_plan::projection_row_errors::CaptureSparkInputSortBoundaries;
 use sail_plan::resolver::PlanResolver;
 
 /// Interpretation of timestamp types without an explicit timezone qualifier.
@@ -54,6 +55,7 @@ pub fn configure_spark_sql(builder: SessionStateBuilder) -> SessionStateBuilder 
         .with_query_planner(Arc::new(SparkQueryPlanner))
         .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
         .with_analyzer_rule(Arc::new(PreserveSparkLikeErrors))
+        .with_analyzer_rule(Arc::new(CaptureSparkInputSortBoundaries))
 }
 
 /// A resolved Spark query with its output names before optimizer renaming.

@@ -1,0 +1,166 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "source_commit": "d2f9e5eb50d50f9eae0c285b51bc52ab4ecf5cdf",
+  "spark_master": "local[1]",
+  "spark_config": {
+    "spark.ui.enabled": "false",
+    "spark.default.parallelism": "1",
+    "spark.sql.shuffle.partitions": "1",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.ansi.enabled": "true",
+    "spark.sql.adaptive.enabled": "true",
+    "spark.sql.codegen.wholeStage": "true",
+    "spark.sql.codegen.factoryMode": "FALLBACK"
+  },
+  "input_encoding": "JSON null for NULL; signed canonical decimal strings for INT32; JSON strings for STRING; nested JSON arrays for rows/ARRAY; result BOOLEAN is true/false string",
+  "group": "slice-902-plan-boundaries-v1",
+  "scenario_count": 3,
+  "observation_count": 6,
+  "scope": "Three parent #902 investigations: actual repeated eager expression, explicit subquery alias lineage, and a user logical sort below outer SLICE. No expected winner, forced CSE, sort retention, opaque UDF parity, or new compatibility category is encoded. This does not expand or block bounded #914.",
+  "input_order_contract": "The original four slice_priority rows and required schema are unchanged. A single-partition RDD preserves manifest row order; provider and raw k IN (0,1) selection are roundtripped before the query catch. Those checks establish source order, not the order after the logical sort. Output key k is column 3; actual rows and all raw plans are preserved even if optimization removes the user sort.",
+  "provenance": {
+    "accepted_commit": "d2f9e5eb50d50f9eae0c285b51bc52ab4ecf5cdf",
+    "original_provider_manifest_sha256": "cc8f37d2aed568ba717f9f83aa13f6484cbf00becc30d540775fb2c1737a4b82",
+    "original_provider_manifest": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-null-evaluation/manifest.json",
+    "encoding_capture_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/902-row-priority-preparation-v1/capture_spark.py",
+    "encoding_capture_sha256": "bac7a1ec14f49b23e56cdbf4b173c66892defc26acd8f28e0d62d8ae56a38a45",
+    "verifier_source": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/902-row-priority-preparation-v1/verify_capture.py",
+    "verifier_source_sha256": "9104edd3ac3f3e4b62e2685ad34ff3c284b06a7f29b04d1f5576244bd71d22d9",
+    "reuse": "Self-contained derivative of the frozen 902 capture/verifier: typed decode, canonical encode, structured Java/Python causes, single-partition input roundtrips, all schema stages, exclusive raw capture, and mutation checks. No DAR outcome is an oracle."
+  },
+  "inputs": [
+    {
+      "name": "slice_priority",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "array_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "start_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length_text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "10",
+          "0",
+          "1"
+        ],
+        [
+          "1",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ],
+        [
+          "2",
+          "10",
+          "1",
+          "-1"
+        ],
+        [
+          "3",
+          "array_bad",
+          "start_bad",
+          "length_bad"
+        ]
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "repeated_array_eager_projection",
+      "family": "repeated_expression",
+      "ordered": true,
+      "sql": "SELECT SLICE(ARRAY(CAST(array_text AS INT)), CAST(start_text AS INT), CAST(length_text AS INT)) AS r, ARRAY(CAST(array_text AS INT)) AS repeated_array, k FROM slice_priority WHERE k IN (0, 1) ORDER BY k",
+      "input_sql": "SELECT k, array_text, start_text, length_text FROM slice_priority WHERE k IN (0, 1)",
+      "input_keys": [
+        "0",
+        "1"
+      ],
+      "result_key_column": "k",
+      "result_key_direction": "ascending"
+    },
+    {
+      "id": "repeated_array_named_alias",
+      "family": "named_alias_projection",
+      "ordered": true,
+      "sql": "SELECT SLICE(ARRAY(CAST(named_input.array_text AS INT)), CAST(named_input.start_text AS INT), CAST(named_input.length_text AS INT)) AS r, ARRAY(CAST(named_input.array_text AS INT)) AS repeated_array, named_input.k AS k FROM (SELECT k, array_text, start_text, length_text FROM slice_priority WHERE k IN (0, 1)) AS named_input ORDER BY k",
+      "input_sql": "SELECT k, array_text, start_text, length_text FROM slice_priority WHERE k IN (0, 1)",
+      "input_keys": [
+        "0",
+        "1"
+      ],
+      "result_key_column": "k",
+      "result_key_direction": "ascending"
+    },
+    {
+      "id": "logical_sort_below_outer_slice",
+      "family": "logical_sort_below",
+      "ordered": true,
+      "sql": "SELECT SLICE(shared_array, CAST(start_text AS INT), CAST(length_text AS INT)) AS r, shared_array AS repeated_array, k FROM (SELECT k, ARRAY(CAST(array_text AS INT)) AS shared_array, start_text, length_text FROM slice_priority WHERE k IN (0, 1) ORDER BY k) AS sorted_input",
+      "input_sql": "SELECT k, array_text, start_text, length_text FROM slice_priority WHERE k IN (0, 1)",
+      "input_keys": [
+        "0",
+        "1"
+      ],
+      "result_key_column": "k",
+      "result_key_direction": "ascending"
+    }
+  ],
+  "identities": [
+    {
+      "id": "repeated_array_eager_projection",
+      "ansi": true
+    },
+    {
+      "id": "repeated_array_named_alias",
+      "ansi": true
+    },
+    {
+      "id": "logical_sort_below_outer_slice",
+      "ansi": true
+    },
+    {
+      "id": "repeated_array_eager_projection",
+      "ansi": false
+    },
+    {
+      "id": "repeated_array_named_alias",
+      "ansi": false
+    },
+    {
+      "id": "logical_sort_below_outer_slice",
+      "ansi": false
+    }
+  ],
+  "capture_script_sha256": "a7a17804e6a585b6203771cc53dbeb4ba0483171f4b42bf3bc41c40d5528ee3c",
+  "verifier_script_sha256": "90b085cd04c91b35d55d480a404e768954f4d8fa25a88135c20034f544256841"
+}
