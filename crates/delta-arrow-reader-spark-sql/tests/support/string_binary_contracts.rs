@@ -51,7 +51,7 @@ pub(crate) fn error_is(actual: &Value, stage: &str, error: &str) -> bool {
     actual["error_stage"] == stage && actual["error"] == error && actual.get("rows").is_none()
 }
 
-fn completed_stages_are_retained(actual: &Value) -> bool {
+pub(crate) fn completed_stages_are_retained(actual: &Value) -> bool {
     let analyzed =
         actual["analyzed_schema"].is_object() && actual["analyzed_arrow_schema"].is_string();
     let physical =

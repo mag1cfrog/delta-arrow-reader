@@ -1054,7 +1054,7 @@ fn repeated_values(array: &ArrayRef, count: usize) -> TestResult<Value> {
 }
 
 #[tokio::test]
-async fn concat_preserves_existing_async_operand_planning() -> TestResult {
+async fn concat_and_substring_preserve_existing_async_operand_planning() -> TestResult {
     use datafusion::logical_expr::async_udf::{AsyncScalarUDF, AsyncScalarUDFImpl};
     use datafusion::logical_expr::{ScalarFunctionArgs, ScalarUDFImpl, Signature};
     #[derive(Debug, PartialEq, Eq, Hash)]
@@ -1114,6 +1114,22 @@ async fn concat_preserves_existing_async_operand_planning() -> TestResult {
     for ansi in [false, true] {
         let actual = capture_result(&session,&json!({"sql":"SELECT concat(v,concat_async_identity(v)) AS r FROM concat_async","ansi":ansi})).await?;
         assert_eq!(actual["rows"], json!([["aa"], [null]]));
+        for function in ["substring", "substr"] {
+            for arguments in [
+                "concat_async_identity(v),1,2",
+                "v,cast(length(concat_async_identity(v)) AS BIGINT),2",
+                "v,1,cast(length(concat_async_identity(v)) AS BIGINT)",
+            ] {
+                let sql = format!("SELECT {function}({arguments}) AS r FROM concat_async");
+                let actual = capture_result(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+                let schema = json!({"type":"struct","fields":[
+                    {"name":"r","type":"string","nullable":true,"metadata":{}}
+                ]});
+                assert_eq!(actual["analyzed_schema"], schema);
+                assert_eq!(actual["physical_schema"], schema);
+                assert_eq!(actual["rows"], json!([["a"], [null]]));
+            }
+        }
     }
     Ok(())
 }

@@ -1928,25 +1928,58 @@ cargo test --locked --workspace --test scalar_float_ordering
 
 ## String and binary substring
 
-`substring-spark.jsonl` retains 304 independent Spark 4.2.0 observations for
-Unicode codepoint and binary byte boundaries, NULLs, empty values and column
-arguments in both ANSI modes. `substring-boundaries-spark.jsonl` adds 194
-observations for signed-32-bit range arithmetic and omitted lengths. Each capture
-records the exact Spark/JVM build, loaded JAR hashes, inputs and settings, with
-analyzed, optimized and executed schemas collected separately.
+`substring-original-spark.jsonl` retains all 340 original substring-containing
+Spark records, including the 36 admission, alias and mixed-observer records that
+were absent from the older 304-record `substring-spark.jsonl` subset. Every
+selected record and the whole-source header are copied byte for byte from the
+original C06 capture. The header's original counts still describe that complete
+source. The older subset remains unchanged.
 
-`substring.rs` compares all 498 observations at batch sizes 1 and 32 with three
-string/binary representations. It checks complete fields and ordered values,
-plus FixedSizeBinary slices, empty providers and unchanged native DataFusion SQL.
-Argument-type conversion is covered separately by #778; these captures use INT
-position and length arguments.
+`substring-boundaries-spark.jsonl` adds 194 signed-32-bit range and omitted-length
+records. `substring-arguments-spark.jsonl` adds 122 independent records for STRING
+and BIGINT columns, FLOAT/DOUBLE/Decimal expressions, paired direct CAST controls,
+NULL/empty input, dead branches, computed sources and local/provider LIMIT 0.
+All captures retain complete settings, inputs, Spark/JVM/Python/build identities,
+loaded JAR hashes, available schemas, values and structured errors.
+
+`substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
+and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
+retained regression result has 3,774 strict receipt matches and 162 retained failures:
+12 invalid UTF8 sibling casts (#780), 30 legacy BIGINT outcomes (#813 and the
+unfinished legacy #778 adapter), 72 analyzed numeric CAST declarations (#796),
+24 legacy non-finite conversions (#897), and 24 overflow-notation comparisons.
+The last group retains the measured strict failure while a separate narrow
+predicate recognizes the same numeric overflow cause. Its source/target types,
+numeric value, SQL, available fields and exact native error are pinned; mutation
+controls reject changed values, signs, targets and causes. This distinction adds
+no Decimal defect or strict compatibility credit.
+
+The normal Cargo gate is a complete regression invariant. It records every full
+comparison, pins the exact known profiles and reports `full_compatibility_pass`
+false. The separate meaningful-condition comparison has 3,798 matches and 138
+differences, so compatibility remains incomplete by either measure. No fixture
+field is rewritten and no missing Spark physical field is invented.
+
+`substring-first-error-spark.jsonl` separately retains all 14 independent
+competing-error records. Its 84 native comparisons have 81 meaningful-cause
+matches and three forward ANSI batch-32 winner differences, one per storage
+representation. All three remain strict failures. The provider has two native
+partitions: batch size 1 assigns one row to each partition; batch size 32 puts
+both rows in partition 0. These unordered cross-row observations establish no
+general SQL error-priority rule. Sole-live-error and source-NULL controls remain
+strict, and no arbitrary alternate error is accepted.
+
+FixedSizeBinary slices, empty providers and native DataFusion SQL remain in
+`substring.rs`. `substring_argument_evaluation.rs` separately records exact row
+IDs to check once-only volatile operand evaluation, prior-NULL skipping and no
+planning-time execution across all retained representations and batch sizes.
 
 Recollect a fixture in the Spark 4.2.0 environment with a fresh output path:
 
 ```sh
 python tests/fixtures/recapture_string_binary_spark.py \
-  --input tests/fixtures/substring-spark.jsonl \
-  --output /tmp/substring-spark-fresh.jsonl
+  --input tests/fixtures/substring-original-spark.jsonl \
+  --output /tmp/substring-original-spark-fresh.jsonl
 ```
 
 The replayer uses recorded input schemas, rows, SQL and settings. It ignores
@@ -2129,19 +2162,17 @@ Arrow schemas and ordered rows or the specific failure stage/cause. Direct
 source projections must retain their original metadata. Derived result fields
 are compared separately, including names, types, nullability and metadata.
 
-Known differences remain explicit observations without compatibility credit:
-#710 inherited/generated-alias metadata, #780 invalid UTF8 STRING and byte
-round trips, and #778 SUBSTRING INT coercion. Their bounded profiles pin every
-available field, value and exact native error cause from the post-#774 capture
-at `06b6752ceaabb7e011909570d54638d902994ed3`. No reference fields are rewritten or
-used to construct actual schemas. Invalid-byte casts retain their available
-analyzed and physical fields; failed physical planning leaves physical fields
-unavailable. The wider-integer SUBSTRING profiles preserve the missing ANSI
-errors and wrong legacy lengths. A new field, value, stage or cause difference
-fails the tests. Negative controls reject unrelated causes and changed fields
-or values, including the reviewed synthetic overflow counterexample. Unobserved
-SUBSTRING errors require a fresh native capture and review before adding an
-acceptance profile. An absent Spark physical-schema reference remains unavailable.
+The older cross-family profiles retain their named metadata and invalid-byte
+observations. The substring profiles now use the retained outcomes at
+`92de8d551c000b16cf9e0746fcbf7f5ffa15db93`: repaired admission and ANSI errors
+must match their concrete causes, while the two remaining original legacy length
+differences retain the precise #813 values. The invalid-byte substring observer
+now requires exact analyzed fields. All original fixture bytes remain unchanged.
+No reference fields are rewritten or used to construct actual schemas.
+Unavailable physical stages remain unavailable. New fields, values, stages or
+causes fail the tests, and negative controls retain the reviewed synthetic
+overflow counterexample. The complete 656-record substring gate above provides
+the full strict comparison and dependency ledger.
 
 The seven arity controls check the original Spark function/count parameters and
 precise native admission causes. They are reported separately from full Spark
@@ -3093,3 +3124,52 @@ All captures record Spark 4.2.0 revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1+0, Python 3.12.14,
 loaded artifact hashes, UTC inputs and both ANSI modes. Recollect a fixture
 with the shared replayer and a fresh output path; it ignores expected fields.
+
+### Substring constant descendants
+
+`substring-descendant-spark.jsonl` and `substring-parent-null-spark.jsonl` retain
+98 and 12 independent Spark 4.2.0 records, copied byte for byte from the fresh
+R2 descendant and constant-parent-NULL captures. They include all 55 SQL
+statements in both ANSI modes, with the recorded inputs, settings and available
+schemas, values and structured errors.
+
+`substring_descendants.rs` records all 660 comparisons across three storage
+representations and batch sizes 1/32. The regression gate requires 648 meaningful
+matches and preserves 12 ARRAY_CONCAT alias differences. Its 33 divide references,
+exercised in 198 contexts, map Spark `optimized_schema` to native `physical` preparation with the exact
+DIVIDE_BY_ZERO cause; the stage names remain distinct. The native negative
+profiles and three mutation controls retain complete R4 receipts. Their raw
+Arrow schemas preserve storage details; internal aliases do not define public
+output names. Profiles are never used to construct actual schemas or values.
+
+Spark rejects the ARRAY_CONCAT alias with UNRESOLVED_ROUTINE. The native/Sail
+alias remains unchanged, so these 12 comparisons stay false and full
+compatibility remains false. This gate adds no ARRAY constructor implementation
+or general support decision. The shared helper only captures Boolean inputs and
+actual Arrow List fields and values.
+
+Replay these captures with `recapture_string_binary_spark.py --input <fixture>
+--output <fresh-output>`. Run the retained gate with:
+
+```sh
+cargo +1.96.0 test --locked --workspace -p delta-arrow-reader-spark-sql --test substring_descendants
+```
+
+`substring-cse-spark.jsonl` adds 16 byte-exact Spark records for eight STRING and
+BINARY single/pair projections. Its actual runtime SQL setting receipt and
+SparkContext settings both record `spark.sql.subexpressionElimination.enabled`
+as `true`. The separate 96-context positive gate requires 72 successful results
+and 24 precise collection errors. It records the default native logical and
+physical optimizer rules and available source-manifest receipt. Four mutation
+controls retain base/R4 provenance separately; these selected native receipts
+establish no single-version all-96 compatibility result.
+
+`substring-null-order-spark.jsonl` adds 64 byte-exact records for source,
+position, length and NULL ordering. Its separate 384-context positive gate
+requires 372 successful results and 12 exact preexecution DIVIDE_BY_ZERO
+mappings from two references. Three real R4 mutation controls retain native
+fields, rows and causes. Both positive gates reuse the descendant capture and
+comparison helpers and have no negative profiles. Together with the original
+110-reference gate, all 190 references and 1,140 contexts remain required. The
+original 12 ARRAY_CONCAT alias comparisons stay false; full family compatibility
+remains incomplete.

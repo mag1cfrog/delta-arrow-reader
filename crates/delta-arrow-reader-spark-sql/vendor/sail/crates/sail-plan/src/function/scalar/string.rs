@@ -7,10 +7,11 @@ use datafusion::functions::regex::expr_fn as regex_fn;
 use datafusion::functions::regex::regexpcount::RegexpCountFunc;
 use datafusion::functions::regex::regexpinstr::RegexpInstrFunc;
 use datafusion::functions::string as native_string;
+use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, ScalarValue};
 use datafusion_expr::{
-    ColumnarValue, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
-    Signature, cast, expr, lit, try_cast, when,
+    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
+    ScalarUDFImpl, Signature, cast, expr, lit, try_cast, when,
 };
 use datafusion_functions_nested::expr_fn::array_element;
 use datafusion_spark::function::math::expr_fn as math_fn;
@@ -20,6 +21,10 @@ use datafusion_spark::function::string::format_string::FormatStringFunc;
 use datafusion_spark::function::string::length::SparkLengthFunc;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::spark_cast_string_to_integer::{
+    SparkCastStringToInteger, StringIntegerCastMode,
+};
+use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_to_string::SparkToUtf8;
 use sail_function::scalar::string::format_number::FormatNumber;
 use sail_function::scalar::string::levenshtein::Levenshtein;
@@ -44,8 +49,11 @@ use sail_function::scalar::string::spark_to_char::SparkToChar;
 use sail_function::scalar::string::spark_to_number::SparkToNumber;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    ScalarFunction, ScalarFunctionInput, literal_value_without_evaluation,
+};
 use crate::function::scalar::datetime::date_format;
+use crate::function::scalar::lambda::lambda_with_fresh_parameter;
 
 fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
@@ -112,6 +120,9 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         mut arguments,
         function_context,
     } = input;
+    let known_null = arguments.iter().any(|argument| {
+        literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
+    });
     let length_opt = (arguments.len() == 3).then(|| arguments.pop()).flatten();
     let (value, position) = arguments
         .two()
@@ -127,7 +138,109 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         _ => cast_to_logical_string_or_try(value, function_context.schema, false)?,
     };
     let length = length_opt.unwrap_or_else(|| lit(i32::MAX));
-    Ok(ScalarUDF::from(SparkSubstring::new()).call(vec![value, position, length]))
+    let arguments = [value, position, length]
+        .into_iter()
+        .enumerate()
+        .map(|(index, argument)| {
+            let argument = if index == 0 {
+                argument
+            } else {
+                let data_type = argument.get_type(function_context.schema)?;
+                let converted = match data_type {
+                    DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
+                        let mode = if function_context.plan_config.ansi_mode {
+                            StringIntegerCastMode::Ansi
+                        } else {
+                            StringIntegerCastMode::Legacy
+                        };
+                        SparkCastStringToInteger::try_new(DataType::Int32, mode)?
+                            .into_expr(argument)
+                    }
+                    DataType::Decimal128(..) | DataType::Decimal256(..) => {
+                        let mode = if function_context.plan_config.ansi_mode {
+                            DecimalCastMode::Ansi
+                        } else {
+                            DecimalCastMode::Legacy
+                        };
+                        ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
+                            .call(vec![argument])
+                    }
+                    // Retain legacy BIGINT behavior until the shared CAST policy
+                    // supplies Spark INT narrowing (#813).
+                    DataType::Int64 if !function_context.plan_config.ansi_mode => argument,
+                    DataType::Null
+                    | DataType::Int8
+                    | DataType::Int16
+                    | DataType::Int32
+                    | DataType::Int64
+                    | DataType::Float32
+                    | DataType::Float64 => cast(argument, DataType::Int32),
+                    _ => {
+                        let parameter = if index == 1 { "position" } else { "length" };
+                        return Err(PlanError::invalid(format!(
+                            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] substring {parameter} requires INT, got {data_type}"
+                        )));
+                    }
+                };
+                // The value kernel consumes Int64 after Spark's INT conversion.
+                cast(converted, DataType::Int64)
+            };
+            Ok(argument)
+        })
+        .collect::<PlanResult<Vec<_>>>()?;
+    let logical = ScalarUDF::from(
+        SparkSubstring::new()
+            .with_logical_arguments()
+            .with_known_null_argument(known_null),
+    )
+    .call(arguments);
+    // Constant parents keep their cumulative NULL evaluation. Nonconstant calls
+    // expose ordinary constant descendants until physical runtime lowering.
+    if !known_null && crate::expression_errors::row_expression(&logical, false)? {
+        return substring_lambdas(logical).map(|value| value.data);
+    }
+    Ok(logical)
+}
+
+fn substring_lambdas(expression: expr::Expr) -> PlanResult<Transformed<expr::Expr>> {
+    let expr::Expr::ScalarFunction(function) = &expression else {
+        return Ok(Transformed::no(expression));
+    };
+    if function.args.len() != 3
+        || !function
+            .func
+            .inner()
+            .downcast_ref::<SparkSubstring>()
+            .is_some_and(SparkSubstring::has_logical_arguments)
+    {
+        return Ok(Transformed::no(expression));
+    }
+    // Native lambdas cannot contain async UDFs. Keep their existing physical
+    // extraction path instead of introducing an unsupported lambda body.
+    if expression.exists(|value| {
+        Ok(matches!(value, expr::Expr::ScalarFunction(function)
+            if function.func.as_async().is_some()))
+    })? {
+        return Ok(Transformed::no(expression));
+    }
+    let arguments = function
+        .args
+        .iter()
+        .cloned()
+        .map(|argument| lambda_with_fresh_parameter(argument, "_substring"))
+        .collect::<PlanResult<Vec<_>>>()?;
+    Ok(Transformed::yes(expr::Expr::HigherOrderFunction(
+        expr::HigherOrderFunction::new(
+            std::sync::Arc::new(HigherOrderUDF::new_from_impl(SparkSubstring::new())),
+            arguments,
+        ),
+    )))
+}
+
+pub(crate) fn lower_runtime_substring(
+    expression: expr::Expr,
+) -> PlanResult<Transformed<expr::Expr>> {
+    substring_lambdas(expression)
 }
 
 fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
@@ -518,4 +631,142 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("validate_utf8", F::custom(validate_utf8)),
         ("strpos", F::binary(expr_fn::strpos)),
     ]
+}
+
+#[test]
+fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
+-> datafusion_common::Result<()> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
+    use datafusion_expr::{Expr, ScalarUDFImpl, Volatility, col, create_udf};
+    use sail_function::scalar::collection::spark_concat::SparkConcat;
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let permitted = create_udf(
+        "substring_permitted_position",
+        vec![DataType::Int64],
+        DataType::Int64,
+        Volatility::Immutable,
+        Arc::new(move |args| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(args[0].clone())
+        }),
+    );
+    let position = permitted.call(vec![lit(1_i64) / lit(1_i64)]);
+    let args = vec![col("s"), position, lit(2_i64)];
+    let function = ScalarUDF::from(SparkSubstring::new().with_logical_arguments());
+    let logical = function.call(args.clone());
+    // Spark's logical substring permits common-subexpression extraction before
+    // the runtime HOF supplies cumulative NULL selection.
+    assert!(!function.short_circuits());
+    assert!(function.conditional_arguments(&args).is_none());
+    assert!(!crate::expression_errors::row_expression(&logical, false)?);
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::new(DFSchema::try_from(Schema::new(vec![
+            Field::new("s", DataType::Utf8, true),
+        ]))?))
+        .build();
+    for arguments in [
+        vec![lit(ScalarValue::Utf8(None)), logical.clone()],
+        vec![logical.clone(), lit(ScalarValue::Utf8(None))],
+    ] {
+        assert!(matches!(
+            SparkConcat::new().simplify(arguments, &info)?,
+            ExprSimplifyResult::Original(_)
+        ));
+    }
+    let malformed = function.call(vec![col("s"), lit(1_i64)]);
+    assert!(
+        !lower_runtime_substring(malformed)
+            .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
+            .transformed
+    );
+    let lowered = lower_runtime_substring(logical)
+        .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
+    assert!(lowered.transformed);
+    let Expr::HigherOrderFunction(runtime) = &lowered.data else {
+        panic!("substring was not lowered to its runtime HOF");
+    };
+    assert!(runtime.func.short_circuits());
+    assert!(runtime.func.conditional_arguments(&runtime.args).is_some());
+    let bodies = SparkSubstring::closed_argument_bodies(&lowered.data)?.unwrap();
+    assert_eq!(bodies, [&args[0], &args[1], &args[2]]);
+    assert!(crate::expression_errors::row_expression(
+        &lowered.data,
+        true
+    )?);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let known_null = SparkSubstring::new()
+        .with_logical_arguments()
+        .with_known_null_argument(true);
+    assert!(matches!(
+        known_null.simplify(args.clone(), &info)?,
+        ExprSimplifyResult::Simplified(Expr::Literal(value, _)) if value.is_null()
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    for source_type in [
+        DataType::Utf8,
+        DataType::LargeUtf8,
+        DataType::Utf8View,
+        DataType::Binary,
+        DataType::LargeBinary,
+        DataType::BinaryView,
+    ] {
+        for source_nullable in [false, true] {
+            let source_field = Arc::new(
+                Field::new("s", source_type.clone(), source_nullable).with_metadata(
+                    std::collections::HashMap::from([("source".into(), "metadata".into())]),
+                ),
+            );
+            let info = SimplifyContext::builder()
+                .with_schema(Arc::new(DFSchema::try_from(Schema::new(vec![
+                    Arc::clone(&source_field),
+                ]))?))
+                .build();
+            let arguments = vec![col("s"), lit(ScalarValue::Int64(None)), lit(2_i64)];
+            let fields = arguments
+                .iter()
+                .map(|argument| {
+                    argument
+                        .to_field(info.schema().as_ref())
+                        .map(|(_, field)| field)
+                })
+                .collect::<datafusion_common::Result<Vec<_>>>()?;
+            let native_field = ScalarUDFImpl::return_field_from_args(
+                &SparkSubstring::new(),
+                datafusion_expr::ReturnFieldArgs {
+                    arg_fields: &fields,
+                    scalar_arguments: &[
+                        None,
+                        Some(&ScalarValue::Int64(None)),
+                        Some(&ScalarValue::Int64(Some(2))),
+                    ],
+                },
+            )?;
+            let ExprSimplifyResult::Simplified(value) = known_null.simplify(arguments, &info)?
+            else {
+                panic!("known NULL substring was not simplified");
+            };
+            assert!(matches!(&value, Expr::Literal(value, _) if value.is_null()));
+            let (_, field) = value.to_field(info.schema().as_ref())?;
+            assert_eq!(field.data_type(), native_field.data_type());
+            assert_eq!(field.is_nullable(), native_field.is_nullable());
+            assert_eq!(field.metadata(), native_field.metadata());
+            assert_eq!(native_field.data_type(), &source_type);
+            assert!(native_field.is_nullable());
+            assert!(native_field.metadata().is_empty());
+        }
+    }
+    let ordinary = SparkSubstring::new();
+    assert!(!ScalarUDFImpl::short_circuits(&ordinary));
+    assert!(matches!(
+        ordinary.simplify(args, &info)?,
+        ExprSimplifyResult::Original(_)
+    ));
+    Ok(())
 }
