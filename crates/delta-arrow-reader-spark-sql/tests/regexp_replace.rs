@@ -10,6 +10,9 @@ use serde_json::{Value, json};
 mod string_binary;
 use string_binary::{TestResult, capture_observation, capture_result, register_inputs};
 
+#[path = "support/regexp_partition_layout.rs"]
+mod regexp_partition_layout;
+
 fn session(batch_size: usize) -> SessionContext {
     SessionContext::new_with_state(
         configure_spark_sql(
@@ -52,8 +55,9 @@ fn known_utf16_empty_matches(actual: &Value, expected: &Value, id: &str) -> bool
     }
     let (native, spark) = match id {
         "empty_supplementary" => ("XaX😀XbX", "XaX?X?XbX"),
-        "optional_supplementary" | "nonempty_optional" => ("<a><>😀<>b<>", "<a><>?<>?<>b<>"),
-        "nonboundary_supplementary" | "nonempty_nonboundary" => ("a😀b", "a?X?b"),
+        "optional_supplementary"
+        | "nonempty_optional"
+        | "nonboundary_probe_retained_nonempty_optional" => ("<a><>😀<>b<>", "<a><>?<>?<>b<>"),
         _ => return false,
     };
     actual["rows"] == json!([[native]]) && expected["rows"] == json!([[spark]])
@@ -368,8 +372,15 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         differences.push(format!("{id} ANSI={} representation={representation} batch={batch_size}: expected {expected}, observed {observed}",case["ansi"]));
                         "difference"
                     };
-                    if id == "empty_supplementary" && status != "exact" {
-                        differences.push("the exact empty-pattern repair must match Spark".into());
+                    if matches!(
+                        id,
+                        "empty_supplementary"
+                            | "nonboundary_supplementary"
+                            | "nonempty_nonboundary"
+                    ) && status != "exact"
+                    {
+                        differences
+                            .push("the exact zero-width pattern repair must match Spark".into());
                     }
                     let matches_reference = matches!(
                         status,
@@ -404,7 +415,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
             "full_compatibility_pass":reference_mismatches == 0})
     );
     assert_eq!(compared, (94 + 138 + 14 + 20 + 252) * 6);
-    assert_eq!(reference_mismatches, 156);
+    assert_eq!(reference_mismatches, 132);
     assert_eq!(external.get("external_like_name_791"), Some(&12));
     assert_eq!(required_error_fields_compared, (52 + 42) * 6);
     assert_eq!(external_error_fields_compared, 6 * 6);
@@ -418,7 +429,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
     assert_eq!(external.get("external_java_utf16_region_798"), Some(&24));
     assert_eq!(
         external.get("external_java_utf16_empty_match_798"),
-        Some(&48)
+        Some(&24)
     );
     assert_eq!(
         external.get("external_position_coercion_799_analysis_unavailable"),
@@ -434,6 +445,145 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
     Ok(())
 }
 
+fn known_nonboundary_mixed_optional(actual: &Value, expected: &Value, id: &str) -> bool {
+    if actual["analyzed_schema"] != expected["analyzed_schema"]
+        || actual["physical_schema"] != expected["physical_schema"]
+    {
+        return false;
+    }
+    let (native, spark) = match id {
+        "nonboundary_probe_column_mixed" => ("<a><>😀<>b<>", "<a><>?<>?<>b<>"),
+        "nonboundary_probe_column_position_2" => ("a<>😀<>b<>", "a<>?<>?<>b<>"),
+        _ => return false,
+    };
+    let (Some(actual), Some(expected)) = (actual["rows"].as_array(), expected["rows"].as_array())
+    else {
+        return false;
+    };
+    let mut optional_rows = 0;
+    actual.len() == expected.len()
+        && actual.iter().zip(expected).all(|(actual, expected)| {
+            if expected[0] == "9" {
+                optional_rows += 1;
+                actual == &json!(["9", native]) && expected == &json!(["9", spark])
+            } else {
+                actual == expected
+            }
+        })
+        && optional_rows == 1
+}
+
+#[tokio::test]
+async fn regexp_replace_nonboundaries_match_spark_and_retain_adjacent_patterns() -> TestResult {
+    let records = include_str!("fixtures/regexp-replace-nonboundary-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(records.len() - 1, 80);
+    let mut compared = 0;
+    let mut exact_results = 0;
+    let mut required_errors = 0;
+    let mut external_optional = 0;
+    let mut external_mixed = 0;
+    let mut external_region = 0;
+    let mut external_partition_layout = 0;
+    let mut differences = Vec::new();
+    eprintln!(
+        "c06 nonboundary capture header: {}",
+        json!({"spark_capture_header":records[0],"references":80,
+            "exact_nonboundary_references":64,"adjacent_pattern_references":16,
+            "native_target_partitions":2,"native_session_timezone":"UTC"})
+    );
+    for representation in 0..3 {
+        for batch_size in [1, 32] {
+            let session = session(batch_size);
+            register_inputs(&session, &records[0], representation, batch_size)?;
+            for case in &records[1..] {
+                compared += 1;
+                let id = case["id"].as_str().ok_or("missing ID")?;
+                let expected = &case["expected"];
+                let actual = capture_observation(&session, case).await?;
+                let error = actual["error"].as_str();
+                let analyzed = actual
+                    .get("analyzed_schema")
+                    .filter(|value| !value.is_null());
+                let physical_comparison = schema_comparison(&actual, expected, "physical_schema");
+                let error_fields_match = matches!(
+                    physical_comparison,
+                    "exact" | "reference_unavailable" | "unavailable"
+                );
+                let status = if error.is_none() && complete_result_matches(&actual, expected) {
+                    exact_results += 1;
+                    "exact"
+                } else if error_fields_match
+                    && error.is_some_and(|error| {
+                        required_error_outcome_matches(error, analyzed, expected)
+                    })
+                {
+                    required_errors += 1;
+                    "required_error"
+                } else if regexp_partition_layout::known_partition_layout_error(
+                    case,
+                    representation,
+                    batch_size,
+                    &actual,
+                )? {
+                    external_partition_layout += 1;
+                    "external_partition_layout_error"
+                } else if error.is_none() && known_utf16_empty_matches(&actual, expected, id) {
+                    external_optional += 1;
+                    "external_optional_utf16_798"
+                } else if error.is_none() && known_nonboundary_mixed_optional(&actual, expected, id)
+                {
+                    external_mixed += 1;
+                    "external_mixed_optional_utf16_798"
+                } else if id == "nonboundary_probe_retained_nonempty_split_dot"
+                    && analyzed == Some(&expected["analyzed_schema"])
+                    && physical_comparison != "difference"
+                    && expected["rows"] == json!([["a?XX"]])
+                    && error.is_some_and(|error| {
+                        error.contains(
+                            "cannot start a native regex region inside a UTF-16 surrogate pair",
+                        )
+                    })
+                {
+                    external_region += 1;
+                    "external_split_region_utf16_798"
+                } else {
+                    differences.push(format!("{id} ANSI={} representation={representation} batch={batch_size}: expected {expected}, observed {actual}",case["ansi"]));
+                    "difference"
+                };
+                eprintln!(
+                    "c06 nonboundary observation: {}",
+                    json!({"id":id,"ansi":case["ansi"],"sql":case["sql"],
+                        "representation":representation,"batch_size":batch_size,
+                        "status":status,"matches_reference":matches!(status,"exact" | "required_error"),
+                        "schema_comparison":{"analyzed":schema_comparison(&actual,expected,"analyzed_schema"),
+                            "physical":physical_comparison},"expected":expected,"actual":actual})
+                );
+            }
+        }
+    }
+    let strict_differences = compared - exact_results - required_errors;
+    eprintln!(
+        "c06 nonboundary capture summary: {}",
+        json!({"references":80,"observations":compared,"strict_differences":strict_differences,
+            "full_compatibility_pass":strict_differences == 0,"unexpected_differences":differences.len(),
+            "external_partition_layout_errors":external_partition_layout})
+    );
+    assert_eq!(compared, 480);
+    assert_eq!(exact_results, 384);
+    assert_eq!(required_errors, 42);
+    assert_eq!(external_partition_layout, 6);
+    assert_eq!(external_optional, 12);
+    assert_eq!(external_mixed, 24);
+    assert_eq!(external_region, 12);
+    assert_eq!(strict_differences, 54);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
 #[tokio::test]
 async fn regexp_replace_preserves_native_sql() -> TestResult {
     let plain = SessionContext::new();
@@ -442,6 +592,7 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
     for sql in [
         r"SELECT regexp_replace('ab12cd34','([0-9]+)', E'X\\1Y','g') AS r",
         "SELECT regexp_replace('a😀b','','X','g') AS r",
+        r"SELECT regexp_replace('a😀b', E'\\B','X','g') AS r",
     ] {
         let expected = plain.sql(sql).await?.collect().await?;
         assert_eq!(session.sql(sql).await?.collect().await?, expected);
@@ -451,6 +602,7 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
         for sql in [
             "SELECT regexp_replace('ab12cd34','([0-9]+)','$1X') AS r",
             "SELECT regexp_replace('a😀b','','X') AS r",
+            r"SELECT regexp_replace('a😀b',r'\B','X') AS r",
         ] {
             capture_result(&session, &json!({"sql":sql,"ansi":ansi})).await?;
         }
@@ -502,62 +654,69 @@ async fn regexp_replace_evaluates_each_volatile_argument_once() -> TestResult {
 
     use datafusion::logical_expr::{ColumnarValue, Volatility, create_udf};
 
-    let metadata: Value = serde_json::from_str(
-        include_str!("fixtures/regexp-replace-empty-utf16-spark.jsonl")
-            .lines()
-            .next()
-            .ok_or("missing metadata")?,
-    )?;
-    for (representation, data_type) in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View]
-        .into_iter()
-        .enumerate()
-    {
-        for batch_size in [1, 32] {
-            for ansi_mode in [true, false] {
-                let session = session(batch_size);
-                register_inputs(&session, &metadata, representation, batch_size)?;
-                let evaluated_rows: [Arc<AtomicUsize>; 3] =
-                    std::array::from_fn(|_| Arc::new(AtomicUsize::new(0)));
-                for (name, counter) in ["count_source", "count_pattern", "count_replacement"]
-                    .into_iter()
-                    .zip(&evaluated_rows)
-                {
-                    let counter = Arc::clone(counter);
-                    session.register_udf(create_udf(
-                        name,
-                        vec![data_type.clone()],
-                        data_type.clone(),
-                        Volatility::Volatile,
-                        Arc::new(move |arguments| {
-                            let arrays = ColumnarValue::values_to_arrays(arguments)?;
-                            counter.fetch_add(arrays[0].len(), Ordering::SeqCst);
-                            Ok(ColumnarValue::Array(Arc::clone(&arrays[0])))
-                        }),
-                    ));
-                }
-                let query = plan_query(
-                    &session,
-                    "SELECT k,regexp_replace(count_source(s),count_pattern(re),count_replacement(replacement)) AS r FROM rr_utf16 ORDER BY k",
-                    &SparkSqlOptions { ansi_mode, ..Default::default() },
-                )
-                .await?;
-                let physical = query.create_physical_plan(&session).await?;
-                assert_eq!(
-                    evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst)),
-                    [0; 3]
-                );
-                let batches =
-                    datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
-                assert_eq!(
-                    batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
-                    14
-                );
-                assert_eq!(
-                    evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst)),
-                    [14; 3]
-                );
-                for batch in batches {
-                    assert_eq!(batch.column(1).data_type(), &data_type);
+    for (capture, table) in [
+        (
+            include_str!("fixtures/regexp-replace-empty-utf16-spark.jsonl"),
+            "rr_utf16",
+        ),
+        (
+            include_str!("fixtures/regexp-replace-nonboundary-spark.jsonl"),
+            "rr_nonboundary",
+        ),
+    ] {
+        let metadata: Value =
+            serde_json::from_str(capture.lines().next().ok_or("missing metadata")?)?;
+        for (representation, data_type) in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View]
+            .into_iter()
+            .enumerate()
+        {
+            for batch_size in [1, 32] {
+                for ansi_mode in [true, false] {
+                    let session = session(batch_size);
+                    register_inputs(&session, &metadata, representation, batch_size)?;
+                    let evaluated_rows: [Arc<AtomicUsize>; 3] =
+                        std::array::from_fn(|_| Arc::new(AtomicUsize::new(0)));
+                    for (name, counter) in ["count_source", "count_pattern", "count_replacement"]
+                        .into_iter()
+                        .zip(&evaluated_rows)
+                    {
+                        let counter = Arc::clone(counter);
+                        session.register_udf(create_udf(
+                            name,
+                            vec![data_type.clone()],
+                            data_type.clone(),
+                            Volatility::Volatile,
+                            Arc::new(move |arguments| {
+                                let arrays = ColumnarValue::values_to_arrays(arguments)?;
+                                counter.fetch_add(arrays[0].len(), Ordering::SeqCst);
+                                Ok(ColumnarValue::Array(Arc::clone(&arrays[0])))
+                            }),
+                        ));
+                    }
+                    let query = plan_query(
+                        &session,
+                        &format!("SELECT k,regexp_replace(count_source(s),count_pattern(re),count_replacement(replacement)) AS r FROM {table} ORDER BY k"),
+                        &SparkSqlOptions { ansi_mode, ..Default::default() },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    assert_eq!(
+                        evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst)),
+                        [0; 3]
+                    );
+                    let batches =
+                        datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+                    assert_eq!(
+                        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                        14
+                    );
+                    assert_eq!(
+                        evaluated_rows.each_ref().map(|n| n.load(Ordering::SeqCst)),
+                        [14; 3]
+                    );
+                    for batch in batches {
+                        assert_eq!(batch.column(1).data_type(), &data_type);
+                    }
                 }
             }
         }

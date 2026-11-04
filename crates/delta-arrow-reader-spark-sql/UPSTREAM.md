@@ -843,7 +843,7 @@ the metadata lifetime described above. Wider declaration compatibility and
 naming/grammar gaps remain separate work under their existing owners.
 
 
-### REGEXP_REPLACE exact empty pattern
+### REGEXP_REPLACE exact empty and nonword-boundary patterns
 
 The Spark replacement adapter handles an exact empty pattern with UTF-16 unit
 positions and Java's one-unit empty-match progression. It builds the complete
@@ -853,13 +853,19 @@ replacement parsing remains lazy, and noninitial positions at or past the end
 leave the source unchanged. NULL admission, declared Arrow string storage and
 native DataFusion regex behavior retain their existing paths.
 
-Nonempty patterns continue through the native regex matcher. Optional patterns,
-nonword boundaries and nonempty regions starting inside a surrogate pair remain
-tracked by #798. Java-only pattern support, SQL literal preprocessing, position
+The exact raw `\B` pattern shares UTF-16 assembly with the empty pattern. Native
+word classification supplies the scalar sides; each surrogate midpoint has two
+nonword halves. Only the region start hides its preceding side. This permits
+positions inside a pair while preserving lazy replacement validation and pair
+recombination. Other nonempty patterns keep the native matcher.
+
+Optional patterns and other nonempty regions starting inside a surrogate pair
+remain under #798. Native scalar word categories retain their separate #779
+Java-pattern limitation. Java-only syntax, SQL literal preprocessing, position
 coercion and malformed-byte STRING representation retain their separate owners.
-The [replacement references](tests/fixtures/regexp-replace-README.md) preserve all
-518 frozen records, complete fields, errors, code-point controls and the strict
-remaining compatibility differences.
+The [replacement references](tests/fixtures/regexp-replace-README.md) preserve the
+518 original records and 80 raw-nonboundary records, complete fields, errors,
+code-point controls and the strict remaining compatibility differences.
 
 ### C06 CONCAT runtime argument order
 
