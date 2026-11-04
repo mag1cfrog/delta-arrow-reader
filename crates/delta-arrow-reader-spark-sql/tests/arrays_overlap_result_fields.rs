@@ -92,7 +92,10 @@ async fn retained_overlap_conversion_remains_nullable_and_required() -> TestResu
             Field::new("l", left.data_type().clone(), false),
             Field::new("r", right.data_type().clone(), false),
         ]));
-        session.register_batch("mixed_overlap", RecordBatch::try_new(schema, vec![left, right])?)?;
+        session.register_batch(
+            "mixed_overlap",
+            RecordBatch::try_new(schema, vec![left, right])?,
+        )?;
         let options = SparkSqlOptions {
             ansi_mode,
             ..SparkSqlOptions::default()
@@ -131,7 +134,10 @@ async fn assert_arrays_overlap_result_fields(source: &str, expected_cases: usize
     assert_arrays_overlap_result_records(&records, expected_cases).await
 }
 
-async fn assert_arrays_overlap_result_records(records: &[Value], expected_cases: usize) -> TestResult {
+async fn assert_arrays_overlap_result_records(
+    records: &[Value],
+    expected_cases: usize,
+) -> TestResult {
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records[0]["spark_revision"],

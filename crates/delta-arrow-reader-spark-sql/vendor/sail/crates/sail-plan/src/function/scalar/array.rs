@@ -331,7 +331,9 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     if (!left_type.is_list() && !left_type.is_null())
         || (!right_type.is_list() && !right_type.is_null())
     {
-        return Err(PlanError::invalid("ARRAYS_OVERLAP requires two array arguments"));
+        return Err(PlanError::invalid(
+            "ARRAYS_OVERLAP requires two array arguments",
+        ));
     }
     let nullable = left.nullable(schema)?
         || right.nullable(schema)?
@@ -402,7 +404,10 @@ impl ScalarUDFImpl for ArraysOverlapResultField {
         Ok(DataType::Boolean)
     }
 
-    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+    fn return_field_from_args(
+        &self,
+        _args: ReturnFieldArgs,
+    ) -> datafusion_common::Result<FieldRef> {
         Ok(Arc::new(Field::new(
             self.name(),
             DataType::Boolean,
@@ -800,7 +805,10 @@ mod tests {
                     ]));
                     let batch = RecordBatch::try_new(
                         schema.clone(),
-                        inputs.iter().map(|input| input.slice(offset, len)).collect(),
+                        inputs
+                            .iter()
+                            .map(|input| input.slice(offset, len))
+                            .collect(),
                     )?;
                     for input in batch.columns() {
                         input.to_data().validate_full()?;
