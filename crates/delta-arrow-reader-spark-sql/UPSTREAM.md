@@ -1008,3 +1008,12 @@ The focused position fixture retains 110 independent Spark references and all
 660 native configurations. Shared BIGINT narrowing, nonfinite conversion and
 CAST declarations remain with #813, #897 and #796. No numeric parser, overflow
 policy, replacement kernel or native DataFusion SQL behavior is changed here.
+
+REGEXP_REPLACE constructs that INT coercion before testing position foldability,
+so unsupported types report `UNEXPECTED_INPUT_TYPE` even for provider expressions
+in discarded inputs. Literal evaluation still follows the foldability guard,
+which visits original descendants through the cast wrapper. The
+[type-priority references](tests/fixtures/regexp-replace-position-type-priority-README.md)
+require all 192 contexts from 32 independent Spark references. Native structured
+error parameters remain unavailable; the regression checks the exact native
+cause and result-field boundary without claiming complete raw diagnostic parity.
