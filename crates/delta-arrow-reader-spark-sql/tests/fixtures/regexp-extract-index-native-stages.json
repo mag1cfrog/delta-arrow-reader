@@ -1,0 +1,6 @@
+{
+  "format_version": 1,
+  "meaning": "Only reviewed actual native stage/availability contracts may populate this list. Unknown contracts remain false. No accepted negative profile is supplied.",
+  "contracts": [],
+  "full_compatibility_pass": false
+}
