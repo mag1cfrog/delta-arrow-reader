@@ -160,9 +160,7 @@ pub(crate) async fn capture_spark_optimized_observation(
             .zip(query.logical_plan.schema().fields())
             .all(|(actual, resolved)| actual.name() == resolved.name());
     let schema = names_match
-        .then(|| {
-            capture_schema(optimized.schema().fields(), Some(&query.column_names))
-        })
+        .then(|| capture_schema(optimized.schema().fields(), Some(&query.column_names)))
         .transpose()?;
     Ok(json!({"raw_schema":raw_schema,"schema":schema,"names_match":names_match}))
 }

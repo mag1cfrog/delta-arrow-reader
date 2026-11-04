@@ -196,7 +196,8 @@ async fn slice_parent_fields_match_spark() -> TestResult {
             let mut comparison = capture_slice_observation(async {
                 let mut comparison =
                     spark_results::compare_exact_spark_query_stages(&session, case).await?;
-                let optimized = spark_results::capture_spark_optimized_observation(&session, case).await;
+                let optimized =
+                    spark_results::capture_spark_optimized_observation(&session, case).await;
                 comparison["optimized_matches"] = json!(match &optimized {
                     Ok(observation) =>
                         observation["names_match"] == true
@@ -205,7 +206,10 @@ async fn slice_parent_fields_match_spark() -> TestResult {
                     Err(error) =>
                         case["schema_stages"].get("optimized").is_none()
                             && comparison["error_matches"] == true
-                            && matches!(comparison["native_phase"].as_str(), Some("resolve" | "create_physical_plan"))
+                            && matches!(
+                                comparison["native_phase"].as_str(),
+                                Some("resolve" | "create_physical_plan")
+                            )
                             && comparison["error"].as_str() == Some(error.to_string().as_str()),
                 });
                 comparison["optimized_schema"] = optimized

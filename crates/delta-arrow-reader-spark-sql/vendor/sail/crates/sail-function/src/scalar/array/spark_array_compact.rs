@@ -166,8 +166,7 @@ mod tests {
     use super::*;
 
     use datafusion::arrow::array::{
-        AsArray, DictionaryArray, Int8Array, Int32Array, ListArray, StructArray,
-        new_empty_array,
+        AsArray, DictionaryArray, Int8Array, Int32Array, ListArray, StructArray, new_empty_array,
     };
     use datafusion::arrow::buffer::NullBuffer;
     use datafusion::arrow::datatypes::{Fields, Int8Type, Int32Type};
@@ -232,7 +231,10 @@ mod tests {
             nulls,
         )?;
         for (data_type, return_type) in [
-            (DataType::List(field.clone()), DataType::List(required.clone())),
+            (
+                DataType::List(field.clone()),
+                DataType::List(required.clone()),
+            ),
             (DataType::LargeList(field), DataType::LargeList(required)),
         ] {
             let input = compute::cast(&input, &data_type)?;
@@ -258,11 +260,19 @@ mod tests {
                 let (first, last, child_len) = match actual.data_type() {
                     DataType::List(_) => {
                         let list = as_list_array(&actual);
-                        (list.offsets()[0] as usize, list.offsets()[len] as usize, list.values().len())
+                        (
+                            list.offsets()[0] as usize,
+                            list.offsets()[len] as usize,
+                            list.values().len(),
+                        )
                     }
                     DataType::LargeList(_) => {
                         let list = as_large_list_array(&actual);
-                        (list.offsets()[0] as usize, list.offsets()[len] as usize, list.values().len())
+                        (
+                            list.offsets()[0] as usize,
+                            list.offsets()[len] as usize,
+                            list.values().len(),
+                        )
                     }
                     _ => unreachable!(),
                 };
@@ -280,13 +290,20 @@ mod tests {
 
     #[test]
     fn array_compact_refines_only_the_immediate_element_field() -> Result<()> {
-        let nested = DataType::Struct(vec![
-            Field::new("id", DataType::Int32, false),
-            Field::new("nested", DataType::List(Arc::new(
-                Field::new("number", DataType::Int32, true)
-                    .with_metadata([("unit".into(), "count".into())].into()),
-            )), true),
-        ].into());
+        let nested = DataType::Struct(
+            vec![
+                Field::new("id", DataType::Int32, false),
+                Field::new(
+                    "nested",
+                    DataType::List(Arc::new(
+                        Field::new("number", DataType::Int32, true)
+                            .with_metadata([("unit".into(), "count".into())].into()),
+                    )),
+                    true,
+                ),
+            ]
+            .into(),
+        );
         let udf = SparkArrayCompact::new();
         for elements_nullable in [false, true] {
             let element = Arc::new(
@@ -295,8 +312,14 @@ mod tests {
             );
             let required = Arc::new(element.as_ref().clone().with_nullable(false));
             for (input_type, expected) in [
-                (DataType::List(element.clone()), DataType::List(required.clone())),
-                (DataType::LargeList(element.clone()), DataType::LargeList(required.clone())),
+                (
+                    DataType::List(element.clone()),
+                    DataType::List(required.clone()),
+                ),
+                (
+                    DataType::LargeList(element.clone()),
+                    DataType::LargeList(required.clone()),
+                ),
             ] {
                 for nullable in [false, true] {
                     let field = Arc::new(
@@ -315,8 +338,17 @@ mod tests {
         }
         for types in [vec![], vec![DataType::Int32], vec![DataType::Null; 2]] {
             assert!(udf.return_type(&types).is_err());
-            let fields = types.iter().map(|data_type| Arc::new(Field::new("input", data_type.clone(), true))).collect::<Vec<_>>();
-            assert!(udf.return_field_from_args(ReturnFieldArgs { arg_fields: &fields, scalar_arguments: &[] }).is_err());
+            let fields = types
+                .iter()
+                .map(|data_type| Arc::new(Field::new("input", data_type.clone(), true)))
+                .collect::<Vec<_>>();
+            assert!(
+                udf.return_field_from_args(ReturnFieldArgs {
+                    arg_fields: &fields,
+                    scalar_arguments: &[]
+                })
+                .is_err()
+            );
         }
         assert!(array_compact_inner(&[]).is_err());
         Ok(())
@@ -332,29 +364,52 @@ mod tests {
             Field::new("id", DataType::Int32, false),
             Field::new("nested", DataType::List(nested_field.clone()), true)
                 .with_metadata([("origin".into(), "nested".into())].into()),
-        ].into();
+        ]
+        .into();
         let nested: ArrayRef = Arc::new(ListArray::try_new(
-            nested_field.clone(), OffsetBuffer::from_lengths([2, 1, 0]),
-            Arc::new(Int32Array::from(vec![Some(1), None, Some(99)])), None,
+            nested_field.clone(),
+            OffsetBuffer::from_lengths([2, 1, 0]),
+            Arc::new(Int32Array::from(vec![Some(1), None, Some(99)])),
+            None,
         )?);
         let values: ArrayRef = Arc::new(StructArray::try_new(
-            fields.clone(), vec![Arc::new(Int32Array::from(vec![1, 2, 3])), nested],
+            fields.clone(),
+            vec![Arc::new(Int32Array::from(vec![1, 2, 3])), nested],
             Some(NullBuffer::from(vec![true, false, true])),
         )?);
         let expected_nested: ArrayRef = Arc::new(ListArray::try_new(
-            nested_field, OffsetBuffer::from_lengths([2, 0]),
-            Arc::new(Int32Array::from(vec![Some(1), None])), None,
+            nested_field,
+            OffsetBuffer::from_lengths([2, 0]),
+            Arc::new(Int32Array::from(vec![Some(1), None])),
+            None,
         )?);
         let expected_values: ArrayRef = Arc::new(StructArray::try_new(
-            fields, vec![Arc::new(Int32Array::from(vec![1, 3])), expected_nested], None,
+            fields,
+            vec![Arc::new(Int32Array::from(vec![1, 3])), expected_nested],
+            None,
         )?);
-        let element = Arc::new(Field::new("entry", values.data_type().clone(), true)
-            .with_metadata([("origin".into(), "element".into())].into()));
+        let element = Arc::new(
+            Field::new("entry", values.data_type().clone(), true)
+                .with_metadata([("origin".into(), "element".into())].into()),
+        );
         let required = Arc::new(element.as_ref().clone().with_nullable(false));
-        let input = ListArray::try_new(element.clone(), OffsetBuffer::from_lengths([3, 0]), values, None)?;
-        let expected = ListArray::try_new(required.clone(), OffsetBuffer::from_lengths([2, 0]), expected_values, None)?;
+        let input = ListArray::try_new(
+            element.clone(),
+            OffsetBuffer::from_lengths([3, 0]),
+            values,
+            None,
+        )?;
+        let expected = ListArray::try_new(
+            required.clone(),
+            OffsetBuffer::from_lengths([2, 0]),
+            expected_values,
+            None,
+        )?;
         for (input_type, expected_type) in [
-            (DataType::List(element.clone()), DataType::List(required.clone())),
+            (
+                DataType::List(element.clone()),
+                DataType::List(required.clone()),
+            ),
             (DataType::LargeList(element), DataType::LargeList(required)),
         ] {
             let input = compute::cast(&input, &input_type)?;
@@ -362,7 +417,10 @@ mod tests {
             for (argument, rows) in [
                 (ColumnarValue::Array(input.clone()), 2),
                 (ColumnarValue::Array(input.slice(1, 0)), 0),
-                (ColumnarValue::Scalar(ScalarValue::try_from_array(&input, 0)?), 1),
+                (
+                    ColumnarValue::Scalar(ScalarValue::try_from_array(&input, 0)?),
+                    1,
+                ),
             ] {
                 let scalar = matches!(&argument, ColumnarValue::Scalar(_));
                 let (actual, field) = invoke_compact(argument, false, rows)?;
@@ -381,12 +439,24 @@ mod tests {
     fn array_compact_null_inputs_return_typed_null_lists() -> Result<()> {
         for (input_type, expected) in [
             (DataType::Null, DataType::new_list(DataType::Null, false)),
-            (DataType::new_list(DataType::Int32, true), DataType::new_list(DataType::Int32, false)),
-            (DataType::new_large_list(DataType::Int32, true), DataType::new_large_list(DataType::Int32, false)),
-            (DataType::new_list(DataType::Null, true), DataType::new_list(DataType::Null, false)),
+            (
+                DataType::new_list(DataType::Int32, true),
+                DataType::new_list(DataType::Int32, false),
+            ),
+            (
+                DataType::new_large_list(DataType::Int32, true),
+                DataType::new_large_list(DataType::Int32, false),
+            ),
+            (
+                DataType::new_list(DataType::Null, true),
+                DataType::new_list(DataType::Null, false),
+            ),
         ] {
             for (argument, rows) in [
-                (ColumnarValue::Scalar(ScalarValue::try_from(&input_type)?), 1),
+                (
+                    ColumnarValue::Scalar(ScalarValue::try_from(&input_type)?),
+                    1,
+                ),
                 (ColumnarValue::Array(new_null_array(&input_type, 2)), 2),
                 (ColumnarValue::Array(new_empty_array(&input_type)), 0),
             ] {
@@ -409,16 +479,32 @@ mod tests {
     fn array_compact_removes_logical_dictionary_nulls_without_rewriting_the_pool() -> Result<()> {
         let pool: ArrayRef = Arc::new(Int32Array::from(vec![None, Some(3), Some(4), None]));
         let values: ArrayRef = Arc::new(DictionaryArray::<Int8Type>::try_new(
-            Int8Array::from(vec![Some(0), Some(1), None, Some(2), Some(1), Some(3)]), pool.clone(),
+            Int8Array::from(vec![Some(0), Some(1), None, Some(2), Some(1), Some(3)]),
+            pool.clone(),
         )?);
         let element = Arc::new(Field::new("entry", values.data_type().clone(), true));
         let required = Arc::new(element.as_ref().clone().with_nullable(false));
         let nulls = Some(NullBuffer::from(vec![true, true, false]));
-        let input = ListArray::try_new(element.clone(), OffsetBuffer::from_lengths([2, 3, 1]), values, nulls.clone())?;
-        let expected = ListArray::try_new(required.clone(), OffsetBuffer::from_lengths([1, 2, 0]),
-            Arc::new(DictionaryArray::<Int8Type>::try_new(Int8Array::from(vec![1, 2, 1]), pool.clone())?), nulls)?;
+        let input = ListArray::try_new(
+            element.clone(),
+            OffsetBuffer::from_lengths([2, 3, 1]),
+            values,
+            nulls.clone(),
+        )?;
+        let expected = ListArray::try_new(
+            required.clone(),
+            OffsetBuffer::from_lengths([1, 2, 0]),
+            Arc::new(DictionaryArray::<Int8Type>::try_new(
+                Int8Array::from(vec![1, 2, 1]),
+                pool.clone(),
+            )?),
+            nulls,
+        )?;
         for (input_type, return_type) in [
-            (DataType::List(element.clone()), DataType::List(required.clone())),
+            (
+                DataType::List(element.clone()),
+                DataType::List(required.clone()),
+            ),
             (DataType::LargeList(element), DataType::LargeList(required)),
         ] {
             let input = compute::cast(&input, &input_type)?;
@@ -436,7 +522,10 @@ mod tests {
             let dictionary = values.as_dictionary::<Int8Type>();
             assert_eq!(dictionary.logical_null_count(), 0);
             assert!(Arc::ptr_eq(dictionary.values(), &pool));
-            assert_eq!(compute::cast(values.as_ref(), &DataType::Int32)?.as_primitive::<Int32Type>(), &Int32Array::from(vec![3, 4, 3]));
+            assert_eq!(
+                compute::cast(values.as_ref(), &DataType::Int32)?.as_primitive::<Int32Type>(),
+                &Int32Array::from(vec![3, 4, 3])
+            );
         }
         Ok(())
     }
