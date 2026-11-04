@@ -80,7 +80,7 @@ async fn capture_slice_observation(
     }
 }
 
-async fn capture_slice_optimized_schema(
+async fn capture_slice_optimized_observation(
     session: &SessionContext,
     case: &Value,
 ) -> TestResult<Value> {
@@ -99,7 +99,20 @@ async fn capture_slice_optimized_schema(
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());
     let optimized = state.optimize(&query.logical_plan)?;
-    spark_results::capture_schema(optimized.schema().fields(), Some(&query.column_names))
+    let raw_schema = spark_results::capture_schema(optimized.schema().fields(), None)?;
+    let names_match = optimized.schema().fields().len() == query.logical_plan.schema().fields().len()
+        && optimized
+            .schema()
+            .fields()
+            .iter()
+            .zip(query.logical_plan.schema().fields())
+            .all(|(actual, resolved)| actual.name() == resolved.name());
+    let schema = names_match
+        .then(|| {
+            spark_results::capture_schema(optimized.schema().fields(), Some(&query.column_names))
+        })
+        .transpose()?;
+    Ok(json!({"raw_schema":raw_schema,"schema":schema,"names_match":names_match}))
 }
 
 #[tokio::test]
@@ -150,10 +163,17 @@ async fn slice_parent_fields_match_spark() -> TestResult {
             let mut comparison = capture_slice_observation(async {
                 let mut comparison =
                     spark_results::compare_exact_spark_query_stages(&session, case).await?;
-                let optimized = capture_slice_optimized_schema(&session, case).await;
-                comparison["optimized_matches"] =
-                    json!(optimized.as_ref().ok() == case["schema_stages"].get("optimized"));
-                comparison["optimized_schema"] =
+                let optimized = capture_slice_optimized_observation(&session, case).await;
+                comparison["optimized_matches"] = json!(match &optimized {
+                    Ok(observation) => observation["names_match"] == true
+                        && Some(&observation["schema"]) == case["schema_stages"].get("optimized"),
+                    Err(_) => case["schema_stages"].get("optimized").is_none(),
+                });
+                comparison["optimized_schema"] = optimized
+                    .as_ref()
+                    .map(|observation| observation["schema"].clone())
+                    .unwrap_or(Value::Null);
+                comparison["optimized_observation"] =
                     optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
                 comparison["optimized_error"] =
                     json!(optimized.as_ref().err().map(ToString::to_string));
