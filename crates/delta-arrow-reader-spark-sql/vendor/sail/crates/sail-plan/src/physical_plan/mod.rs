@@ -9,8 +9,8 @@ use datafusion::physical_optimizer::output_requirements::OutputRequirementExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
-use datafusion_common::tree_node::TreeNodeRecursion;
-use datafusion_common::{Result, internal_err};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::{DataFusionError, Result, internal_err};
 use datafusion_expr::{LogicalPlan, UserDefinedLogicalNode};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
@@ -18,6 +18,8 @@ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use self::monotonic_id::MonotonicIdExec;
 use self::spark_partition_id::SparkPartitionIdExec;
+use crate::expression_errors::SparkSqlExpressionSemantics;
+use crate::function::scalar::lower_runtime_concat;
 
 mod monotonic_id;
 mod spark_partition_id;
@@ -52,8 +54,36 @@ impl QueryPlanner for SparkQueryPlanner {
             }
             Ok(TreeNodeRecursion::Continue)
         })?;
+        let runtime_plan = if session_state
+            .config_options()
+            .extensions
+            .get::<SparkSqlExpressionSemantics>()
+            .is_some()
+        {
+            Cow::Owned(
+                logical_plan
+                    .clone()
+                    .transform_up_with_subqueries(|node| {
+                        let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                        node.map_expressions(|expression| {
+                            let name = names.save(&expression);
+                            expression
+                                .transform_up(|expression| {
+                                    lower_runtime_concat(expression)
+                                        .map_err(|error| DataFusionError::External(Box::new(error)))
+                                })
+                                .map(|expression| {
+                                    expression.update_data(|expression| name.restore(expression))
+                                })
+                        })
+                    })?
+                    .data,
+            )
+        } else {
+            Cow::Borrowed(logical_plan)
+        };
         DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
-            .create_physical_plan(logical_plan, &state)
+            .create_physical_plan(&runtime_plan, &state)
             .await
     }
 }

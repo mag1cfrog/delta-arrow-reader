@@ -130,6 +130,7 @@ fn capture_schema(fields: &[Arc<Field>], names: Option<&[String]>) -> TestResult
             DataType::Binary | DataType::LargeBinary | DataType::BinaryView | DataType::FixedSizeBinary(_) => "binary",
             DataType::Int32 => "integer",
             DataType::Int64 => "long",
+            DataType::Float64 => "double",
             DataType::Boolean => "boolean",
             DataType::Null => "void",
             other => return Err(format!("unexpected output type: {other}").into()),
