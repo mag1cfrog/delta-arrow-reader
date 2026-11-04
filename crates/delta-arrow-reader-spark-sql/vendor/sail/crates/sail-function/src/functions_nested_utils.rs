@@ -165,23 +165,47 @@ mod tests {
             Field::new("id", DataType::Int32, false),
             Field::new("value", DataType::Int32, true)
                 .with_metadata([("unit".into(), "count".into())].into()),
-        ].into();
+        ]
+        .into();
         for elements_nullable in [false, true] {
             let values: ArrayRef = Arc::new(StructArray::try_new(
                 fields.clone(),
-                vec![Arc::new(Int32Array::from(vec![0, 1, 2])), Arc::new(Int32Array::from(vec![Some(900), None, Some(800)]))],
+                vec![
+                    Arc::new(Int32Array::from(vec![0, 1, 2])),
+                    Arc::new(Int32Array::from(vec![Some(900), None, Some(800)])),
+                ],
                 elements_nullable.then(|| NullBuffer::from(vec![true, false, true])),
             )?);
-            let field = Arc::new(Field::new("entry", values.data_type().clone(), elements_nullable)
-                .with_metadata([("origin".into(), "element".into())].into()));
+            let field = Arc::new(
+                Field::new("entry", values.data_type().clone(), elements_nullable)
+                    .with_metadata([("origin".into(), "element".into())].into()),
+            );
             for parent_null in [false, true] {
                 let nulls = Some(NullBuffer::from(vec![true, !parent_null, true]));
                 for scalar in [
-                    ScalarValue::List(Arc::new(ListArray::try_new(field.clone(), OffsetBuffer::from_lengths([1, 1, 1]), values.clone(), nulls.clone())?.slice(1, 1))),
-                    ScalarValue::LargeList(Arc::new(LargeListArray::try_new(field.clone(), OffsetBuffer::from_lengths([1, 1, 1]), values.clone(), nulls.clone())?.slice(1, 1))),
+                    ScalarValue::List(Arc::new(
+                        ListArray::try_new(
+                            field.clone(),
+                            OffsetBuffer::from_lengths([1, 1, 1]),
+                            values.clone(),
+                            nulls.clone(),
+                        )?
+                        .slice(1, 1),
+                    )),
+                    ScalarValue::LargeList(Arc::new(
+                        LargeListArray::try_new(
+                            field.clone(),
+                            OffsetBuffer::from_lengths([1, 1, 1]),
+                            values.clone(),
+                            nulls.clone(),
+                        )?
+                        .slice(1, 1),
+                    )),
                 ] {
                     let expected = scalar.to_array_of_size(1)?;
-                    let actual = make_scalar_function(|args| Ok(args[0].clone()))(&[ColumnarValue::Scalar(scalar)])?;
+                    let actual = make_scalar_function(|args| Ok(args[0].clone()))(&[
+                        ColumnarValue::Scalar(scalar),
+                    ])?;
                     assert!(matches!(&actual, ColumnarValue::Scalar(_)));
                     let actual = actual.into_array(1)?;
                     actual.to_data().validate_full()?;
@@ -194,9 +218,14 @@ mod tests {
                         DataType::LargeList(_) => as_large_list_array(actual.as_ref())?.value(0),
                         _ => unreachable!(),
                     };
-                    assert_eq!(children.logical_null_count(), usize::from(elements_nullable));
+                    assert_eq!(
+                        children.logical_null_count(),
+                        usize::from(elements_nullable)
+                    );
                     for array in [expected.clone(), expected.slice(0, 0)] {
-                        let actual = make_scalar_function(|args| Ok(args[0].clone()))(&[ColumnarValue::Array(array.clone())])?;
+                        let actual = make_scalar_function(|args| Ok(args[0].clone()))(&[
+                            ColumnarValue::Array(array.clone()),
+                        ])?;
                         assert!(matches!(&actual, ColumnarValue::Array(_)));
                         assert!(Arc::ptr_eq(&actual.into_array(array.len())?, &array));
                     }
@@ -209,7 +238,10 @@ mod tests {
     #[test]
     fn scalar_adapter_preserves_primitives_arrays_and_errors() -> Result<()> {
         for value in [ScalarValue::Int32(Some(7)), ScalarValue::Int32(None)] {
-            let actual = make_scalar_function(|args| Ok(args[0].clone()))(&[ColumnarValue::Scalar(value.clone())])?;
+            let actual =
+                make_scalar_function(|args| Ok(args[0].clone()))(&[ColumnarValue::Scalar(
+                    value.clone(),
+                )])?;
             let ColumnarValue::Scalar(actual) = actual else {
                 return Err(exec_datafusion_err!("expected a scalar result"));
             };
@@ -217,7 +249,10 @@ mod tests {
         }
         for values in [vec![], vec![Some(7), None]] {
             let array: ArrayRef = Arc::new(Int32Array::from(values));
-            let actual = make_scalar_function(|args| Ok(args[0].clone()))(&[ColumnarValue::Array(array.clone())])?;
+            let actual =
+                make_scalar_function(|args| Ok(args[0].clone()))(&[ColumnarValue::Array(
+                    array.clone(),
+                )])?;
             assert!(matches!(&actual, ColumnarValue::Array(_)));
             assert!(Arc::ptr_eq(&actual.into_array(array.len())?, &array));
         }
@@ -232,7 +267,8 @@ mod tests {
             ColumnarValue::Scalar(ScalarValue::Int32(Some(7))),
             ColumnarValue::Array(Arc::new(Int32Array::from(vec![7]))),
         ] {
-            let result = make_scalar_function(|_| Err(exec_datafusion_err!("kernel sentinel")))(&[argument]);
+            let result =
+                make_scalar_function(|_| Err(exec_datafusion_err!("kernel sentinel")))(&[argument]);
             assert!(result.is_err_and(|error| error.to_string().contains("kernel sentinel")));
         }
         let result = make_scalar_function(|args| Ok(args[0].clone()))(&[
@@ -245,16 +281,31 @@ mod tests {
 
     #[test]
     fn list_scalar_adapter_extracts_the_first_row_and_rejects_empty_output() -> Result<()> {
-        let field = Arc::new(Field::new("entry", DataType::Int32, true)
-            .with_metadata([("origin".into(), "element".into())].into()));
+        let field = Arc::new(
+            Field::new("entry", DataType::Int32, true)
+                .with_metadata([("origin".into(), "element".into())].into()),
+        );
         for parent_null in [false, true] {
             let values: ArrayRef = Arc::new(Int32Array::from(vec![11, 22]));
             let nulls = Some(NullBuffer::from(vec![!parent_null, true]));
             for array in [
-                Arc::new(ListArray::try_new(field.clone(), OffsetBuffer::from_lengths([1, 1]), values.clone(), nulls.clone())?) as ArrayRef,
-                Arc::new(LargeListArray::try_new(field.clone(), OffsetBuffer::from_lengths([1, 1]), values.clone(), nulls.clone())?) as ArrayRef,
+                Arc::new(ListArray::try_new(
+                    field.clone(),
+                    OffsetBuffer::from_lengths([1, 1]),
+                    values.clone(),
+                    nulls.clone(),
+                )?) as ArrayRef,
+                Arc::new(LargeListArray::try_new(
+                    field.clone(),
+                    OffsetBuffer::from_lengths([1, 1]),
+                    values.clone(),
+                    nulls.clone(),
+                )?) as ArrayRef,
             ] {
-                let actual = make_scalar_function(|_| Ok(array.clone()))(&[ColumnarValue::Scalar(ScalarValue::Int32(Some(7)))])?;
+                let actual =
+                    make_scalar_function(|_| Ok(array.clone()))(&[ColumnarValue::Scalar(
+                        ScalarValue::Int32(Some(7)),
+                    )])?;
                 assert!(matches!(&actual, ColumnarValue::Scalar(_)));
                 let actual = actual.into_array(1)?;
                 let expected = array.slice(0, 1);
@@ -265,7 +316,9 @@ mod tests {
                 assert_eq!(actual.null_count(), usize::from(parent_null));
                 assert!(actual.to_data().ptr_eq(&expected.to_data()));
                 let empty = new_null_array(array.data_type(), 0);
-                let result = make_scalar_function(|_| Ok(empty.clone()))(&[ColumnarValue::Scalar(ScalarValue::Int32(Some(7)))]);
+                let result = make_scalar_function(|_| Ok(empty.clone()))(&[ColumnarValue::Scalar(
+                    ScalarValue::Int32(Some(7)),
+                )]);
                 assert!(result.is_err_and(|error| error.to_string().contains("empty list result")));
             }
         }

@@ -110,9 +110,18 @@ fn compact_matches_issue_contract(case: &Value, comparison: &Value, controls: &[
     {
         return false;
     }
-    if ["matches", "optimized_matches", "public_matches", "before_matches",
-        "physical_matches", "rows_match", "ordered_rows_match", "error_matches"]
-        .iter().all(|flag| comparison[flag] == true)
+    if [
+        "matches",
+        "optimized_matches",
+        "public_matches",
+        "before_matches",
+        "physical_matches",
+        "rows_match",
+        "ordered_rows_match",
+        "error_matches",
+    ]
+    .iter()
+    .all(|flag| comparison[flag] == true)
     {
         return true;
     }
@@ -122,11 +131,16 @@ fn compact_matches_issue_contract(case: &Value, comparison: &Value, controls: &[
         (Some("invalid_non_array"), Some(_)) => 891,
         _ => return false,
     };
-    controls.iter().find(|control| {
-        control["issue"] == issue && control["id"] == case["id"] && control["ansi"] == case["ansi"]
-    }).is_some_and(|control| {
-        spark_results::matches_inherited_query_observation(case, comparison, control)
-    })
+    controls
+        .iter()
+        .find(|control| {
+            control["issue"] == issue
+                && control["id"] == case["id"]
+                && control["ansi"] == case["ansi"]
+        })
+        .is_some_and(|control| {
+            spark_results::matches_inherited_query_observation(case, comparison, control)
+        })
 }
 
 #[tokio::test]
@@ -135,10 +149,14 @@ async fn compact_result_fields_match_spark() -> TestResult {
     let mut differences = Vec::new();
     let mut strict_matches = 0;
     let controls = include_str!("fixtures/array-compact-inherited-controls.jsonl")
-        .lines().map(serde_json::from_str::<Value>)
+        .lines()
+        .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(controls.len(), 4);
-    assert_eq!(controls[0]["baseline_head"], "87384089cc4d902a70a9a984b7782abe7ddb357c");
+    assert_eq!(
+        controls[0]["baseline_head"],
+        "87384089cc4d902a70a9a984b7782abe7ddb357c"
+    );
     assert_eq!(controls[0]["issues"], json!([890, 891]));
     assert_eq!(controls[0]["batch_objects_identical_except_batch"], true);
     for (fixture, group, ids, record_count) in [
@@ -210,7 +228,11 @@ async fn compact_result_fields_match_spark() -> TestResult {
                 if comparison["matches"] == true && comparison["optimized_matches"] == true {
                     strict_matches += 1;
                 }
-                comparison["owned_matches"] = json!(compact_matches_issue_contract(case, &comparison, &controls[1..]));
+                comparison["owned_matches"] = json!(compact_matches_issue_contract(
+                    case,
+                    &comparison,
+                    &controls[1..]
+                ));
                 assert!(completed.insert((
                     group.to_owned(),
                     case["id"].to_string(),
@@ -225,7 +247,10 @@ async fn compact_result_fields_match_spark() -> TestResult {
         }
     }
     assert_eq!(completed.len(), 148);
-    eprintln!("ARRAY_COMPACT_FIELDS_SUMMARY {}", json!({"comparisons":completed.len(),"strict_matches":strict_matches,"owned_matches":completed.len()-differences.len(),"inherited_control_identities":controls.len()-1}));
+    eprintln!(
+        "ARRAY_COMPACT_FIELDS_SUMMARY {}",
+        json!({"comparisons":completed.len(),"strict_matches":strict_matches,"owned_matches":completed.len()-differences.len(),"inherited_control_identities":controls.len()-1})
+    );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
@@ -233,16 +258,20 @@ async fn compact_result_fields_match_spark() -> TestResult {
 #[test]
 fn inherited_compact_controls_reject_new_differences() -> TestResult {
     let references = include_str!("fixtures/array-compact-fields-spark.jsonl")
-        .lines().map(serde_json::from_str::<Value>)
+        .lines()
+        .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     let controls = include_str!("fixtures/array-compact-inherited-controls.jsonl")
-        .lines().map(serde_json::from_str::<Value>)
+        .lines()
+        .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     let controls = &controls[1..];
     let mut identities = std::collections::BTreeSet::new();
     for control in controls {
         assert!(identities.insert((control["id"].to_string(), control["ansi"].to_string())));
-        let case = references.iter().find(|case| case["id"] == control["id"] && case["ansi"] == control["ansi"])
+        let case = references
+            .iter()
+            .find(|case| case["id"] == control["id"] && case["ansi"] == control["ansi"])
             .ok_or("missing inherited reference")?;
         assert_eq!(&control["reference"], case);
         for batch in [1, 32] {
@@ -252,61 +281,142 @@ fn inherited_compact_controls_reject_new_differences() -> TestResult {
             for key in comparison.as_object().ok_or("missing observation")?.keys() {
                 let mut wrong = comparison.clone();
                 wrong[key] = json!("new difference");
-                assert!(!compact_matches_issue_contract(case, &wrong, controls), "{key}");
+                assert!(
+                    !compact_matches_issue_contract(case, &wrong, controls),
+                    "{key}"
+                );
                 let mut missing = comparison.clone();
-                missing.as_object_mut().ok_or("missing observation")?.remove(key);
-                assert!(!compact_matches_issue_contract(case, &missing, controls), "missing {key}");
+                missing
+                    .as_object_mut()
+                    .ok_or("missing observation")?
+                    .remove(key);
+                assert!(
+                    !compact_matches_issue_contract(case, &missing, controls),
+                    "missing {key}"
+                );
             }
             for (key, value) in [
-                ("batch", json!(2)), ("ansi", json!(!case["ansi"].as_bool().ok_or("missing ANSI")?)),
-                ("panic", Value::Null), ("observation_error", Value::Null), ("extra", json!(true)),
+                ("batch", json!(2)),
+                (
+                    "ansi",
+                    json!(!case["ansi"].as_bool().ok_or("missing ANSI")?),
+                ),
+                ("panic", Value::Null),
+                ("observation_error", Value::Null),
+                ("extra", json!(true)),
             ] {
                 let mut wrong = comparison.clone();
                 wrong[key] = value;
-                assert!(!compact_matches_issue_contract(case, &wrong, controls), "{key}");
+                assert!(
+                    !compact_matches_issue_contract(case, &wrong, controls),
+                    "{key}"
+                );
             }
-            for stage in ["/public_schema", "/before_collect", "/physical_schema", "/optimized_observation/schema", "/optimized_observation/raw_schema"] {
-                for (field, value) in [("name", json!("wrong")), ("type", json!("string")), ("nullable", json!("wrong")), ("metadata", json!({"new":"difference"}))] {
+            for stage in [
+                "/public_schema",
+                "/before_collect",
+                "/physical_schema",
+                "/optimized_observation/schema",
+                "/optimized_observation/raw_schema",
+            ] {
+                for (field, value) in [
+                    ("name", json!("wrong")),
+                    ("type", json!("string")),
+                    ("nullable", json!("wrong")),
+                    ("metadata", json!({"new":"difference"})),
+                ] {
                     let pointer = format!("{stage}/fields/0/{field}");
                     let mut wrong = comparison.clone();
                     if let Some(actual) = wrong.pointer_mut(&pointer) {
                         *actual = value;
-                        assert!(!compact_matches_issue_contract(case, &wrong, controls), "{pointer}");
+                        assert!(
+                            !compact_matches_issue_contract(case, &wrong, controls),
+                            "{pointer}"
+                        );
                     }
                 }
             }
             for key in case.as_object().ok_or("missing reference")?.keys() {
                 let mut wrong = case.clone();
                 wrong[key] = json!("different reference");
-                assert!(!compact_matches_issue_contract(&wrong, &comparison, controls), "{key}");
+                assert!(
+                    !compact_matches_issue_contract(&wrong, &comparison, controls),
+                    "{key}"
+                );
             }
             let mut wrong = case.clone();
             wrong["expected"]["condition"] = json!("different condition");
-            assert!(!compact_matches_issue_contract(&wrong, &comparison, controls));
+            assert!(!compact_matches_issue_contract(
+                &wrong,
+                &comparison,
+                controls
+            ));
             let mut repaired = comparison;
-            for flag in ["matches", "optimized_matches", "public_matches", "before_matches", "physical_matches", "rows_match", "ordered_rows_match", "error_matches"] {
+            for flag in [
+                "matches",
+                "optimized_matches",
+                "public_matches",
+                "before_matches",
+                "physical_matches",
+                "rows_match",
+                "ordered_rows_match",
+                "error_matches",
+            ] {
                 repaired[flag] = json!(true);
             }
             assert!(compact_matches_issue_contract(case, &repaired, controls));
-            for flag in ["matches", "optimized_matches", "public_matches", "before_matches", "physical_matches", "rows_match", "ordered_rows_match", "error_matches"] {
+            for flag in [
+                "matches",
+                "optimized_matches",
+                "public_matches",
+                "before_matches",
+                "physical_matches",
+                "rows_match",
+                "ordered_rows_match",
+                "error_matches",
+            ] {
                 let mut wrong = repaired.clone();
                 wrong[flag] = json!(false);
-                assert!(!compact_matches_issue_contract(case, &wrong, controls), "strict {flag}");
+                assert!(
+                    !compact_matches_issue_contract(case, &wrong, controls),
+                    "strict {flag}"
+                );
             }
             for (key, value) in [
-                ("batch", json!(2)), ("group", json!("wrong")), ("id", json!("wrong")),
-                ("ansi", json!(!case["ansi"].as_bool().ok_or("missing ANSI")?)),
-                ("panic", Value::Null), ("observation_error", Value::Null),
+                ("batch", json!(2)),
+                ("group", json!("wrong")),
+                ("id", json!("wrong")),
+                (
+                    "ansi",
+                    json!(!case["ansi"].as_bool().ok_or("missing ANSI")?),
+                ),
+                ("panic", Value::Null),
+                ("observation_error", Value::Null),
             ] {
                 let mut wrong = repaired.clone();
                 wrong[key] = value;
-                assert!(!compact_matches_issue_contract(case, &wrong, controls), "strict {key}");
+                assert!(
+                    !compact_matches_issue_contract(case, &wrong, controls),
+                    "strict {key}"
+                );
             }
         }
     }
     assert_eq!(identities.len(), 3);
-    assert_eq!(controls.iter().filter(|control| control["issue"] == 890).count(), 1);
-    assert_eq!(controls.iter().filter(|control| control["issue"] == 891).count(), 2);
+    assert_eq!(
+        controls
+            .iter()
+            .filter(|control| control["issue"] == 890)
+            .count(),
+        1
+    );
+    assert_eq!(
+        controls
+            .iter()
+            .filter(|control| control["issue"] == 891)
+            .count(),
+        2
+    );
     Ok(())
 }
 

@@ -418,7 +418,9 @@ mod tests {
             assert_eq!(expected.data_type(), &expected_type);
             let scalar = match input.data_type() {
                 DataType::List(_) => ScalarValue::List(Arc::new(as_list_array(&input).slice(0, 1))),
-                DataType::LargeList(_) => ScalarValue::LargeList(Arc::new(as_large_list_array(&input).slice(0, 1))),
+                DataType::LargeList(_) => {
+                    ScalarValue::LargeList(Arc::new(as_large_list_array(&input).slice(0, 1)))
+                }
                 _ => unreachable!(),
             };
             assert_eq!(scalar.data_type(), input_type);
@@ -525,7 +527,10 @@ mod tests {
             let input_pool = input_values.as_dictionary::<Int8Type>().values().clone();
             let input_pool_data = input_pool.to_data();
             assert!(input_pool_data.ptr_eq(&pool.to_data()));
-            assert_eq!(input_pool.as_primitive::<Int32Type>(), &Int32Array::from(vec![None, Some(3), Some(4), None]));
+            assert_eq!(
+                input_pool.as_primitive::<Int32Type>(),
+                &Int32Array::from(vec![None, Some(3), Some(4), None])
+            );
             let (actual, field) = invoke_compact(ColumnarValue::Array(input), true, 3)?;
             let actual = actual.into_array(3)?;
             actual.to_data().validate_full()?;
@@ -539,7 +544,10 @@ mod tests {
             let dictionary = values.as_dictionary::<Int8Type>();
             assert_eq!(dictionary.logical_null_count(), 0);
             assert_eq!(dictionary.values().data_type(), input_pool.data_type());
-            assert_eq!(dictionary.values().as_primitive::<Int32Type>(), &Int32Array::from(vec![None, Some(3), Some(4), None]));
+            assert_eq!(
+                dictionary.values().as_primitive::<Int32Type>(),
+                &Int32Array::from(vec![None, Some(3), Some(4), None])
+            );
             assert!(dictionary.values().to_data().ptr_eq(&input_pool_data));
             assert_eq!(
                 compute::cast(values.as_ref(), &DataType::Int32)?.as_primitive::<Int32Type>(),
