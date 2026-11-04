@@ -855,3 +855,11 @@ queries remain outside this Spark-only lowering.
 Async UDF operands also retain their existing extraction path: DataFusion's native
 lambda planner rejects async bodies. The C06 adapter does not change that shared
 contract or claim ordered masking for async operands.
+
+### Trim and case fields
+
+Spark TRIM, LTRIM, RTRIM, LOWER and UPPER use a private planning adapter that
+derives result nullability from every supplied argument. LCASE and UCASE share
+the corresponding case-conversion path. Native signatures, return types and
+value kernels remain in use. Separately registered BTRIM and native DataFusion
+SQL retain their existing declarations.
