@@ -79,6 +79,12 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     };
     let data_type = position.get_type(function_context.schema)?;
     let coerced_position = !matches!(data_type, DataType::Int32 | DataType::Null);
+    let position = cast_string_function_int(
+        position,
+        function_context.schema,
+        function_context.plan_config.ansi_mode,
+        "regexp_replace position",
+    )?;
     if position.is_volatile()
         || !position.column_refs().is_empty()
         || (coerced_position
@@ -91,12 +97,6 @@ fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression",
         ));
     }
-    let position = cast_string_function_int(
-        position,
-        function_context.schema,
-        function_context.plan_config.ansi_mode,
-        "regexp_replace position",
-    )?;
     let value = LiteralEvaluator::new().evaluate(&position)?;
     let value = match value {
         ScalarValue::Int32(Some(value)) if value > 0 => ScalarValue::Int32(Some(value)),
