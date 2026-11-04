@@ -2,7 +2,7 @@
 
 use datafusion::execution::SessionStateBuilder;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -42,87 +42,158 @@ async fn arrays_overlap_numeric_declaration_controls_match_spark() -> TestResult
 }
 
 #[tokio::test]
-async fn retained_overlap_conversion_remains_nullable_and_required() -> TestResult {
-    use std::sync::Arc;
-
-    use arrow::array::{Array, ArrayRef, Int32Array, ListArray, StringArray};
-    use arrow::buffer::OffsetBuffer;
-    use arrow::datatypes::{DataType, Field, Schema};
-    use arrow::record_batch::RecordBatch;
-    use datafusion::physical_plan::collect;
-
-    // #840 owns rejection of these mixed signatures; their reference errors stay unchanged.
-    let rejected = include_str!("fixtures/array-result-fields-boundaries-spark.jsonl")
+async fn arrays_overlap_incompatible_element_types_match_spark() -> TestResult {
+    let records = include_str!("fixtures/array-result-fields-boundaries-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .filter(|case| {
-            matches!(
-                case["id"].as_str(),
-                Some("overlap_bad_implicit_cast" | "overlap_bad_implicit_cast_is_null")
-            )
+        .filter(|record| {
+            record.get("id").is_none()
+                || matches!(
+                    record["id"].as_str(),
+                    Some("overlap_bad_implicit_cast" | "overlap_bad_implicit_cast_is_null")
+                )
         })
         .collect::<Vec<_>>();
-    assert_eq!(rejected.len(), 4);
-    for case in rejected {
-        assert_eq!(
-            case["expected"]["condition"],
-            "DATATYPE_MISMATCH.BINARY_ARRAY_DIFF_TYPES"
-        );
-        assert_eq!(case["spark_error_phase"], "sql");
+    assert_arrays_overlap_result_records(&records, 4).await
+}
+
+#[tokio::test]
+async fn arrays_overlap_common_element_types_match_spark() -> TestResult {
+    for (source, count) in [
+        (include_str!("fixtures/arrays-overlap-narrowing-spark.jsonl"), 32),
+        (include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl"), 40),
+        (include_str!("fixtures/arrays-overlap-positive-coercion-result-fields-spark.jsonl"), 16),
+    ] {
+        assert_arrays_overlap_result_fields(source, count).await?;
     }
-    for ansi_mode in [true, false] {
-        let session = SessionContext::new_with_state(
-            configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
-        );
-        let left: ArrayRef = Arc::new(ListArray::try_new(
-            Arc::new(Field::new_list_field(DataType::Int32, false)),
-            OffsetBuffer::from_lengths([1]),
-            Arc::new(Int32Array::from(vec![1])),
-            None,
-        )?);
-        let right: ArrayRef = Arc::new(ListArray::try_new(
-            Arc::new(Field::new_list_field(DataType::Utf8, false)),
-            OffsetBuffer::from_lengths([1]),
-            Arc::new(StringArray::from(vec!["bad"])),
-            None,
-        )?);
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("l", left.data_type().clone(), false),
-            Field::new("r", right.data_type().clone(), false),
-        ]));
-        session.register_batch(
-            "mixed_overlap",
-            RecordBatch::try_new(schema, vec![left, right])?,
-        )?;
-        let options = SparkSqlOptions {
-            ansi_mode,
-            ..SparkSqlOptions::default()
-        };
-        let query = plan_query(
-            &session,
-            "SELECT ARRAYS_OVERLAP(l,r) AS r FROM mixed_overlap",
-            &options,
-        )
-        .await?;
-        assert!(query.logical_plan.schema().field(0).is_nullable());
-        let query = plan_query(
-            &session,
-            "SELECT ARRAYS_OVERLAP(l,r) IS NULL AS r FROM mixed_overlap",
-            &options,
-        )
-        .await?;
-        let physical = query.create_physical_plan(&session).await?;
-        let error = collect(physical, session.task_ctx())
-            .await
-            .expect_err("required conversion must execute")
-            .to_string();
-        assert!(
-            error.to_ascii_lowercase().contains("cast") && error.contains("bad"),
-            "{error}"
-        );
+    Ok(())
+}
+
+#[tokio::test]
+async fn arrays_overlap_common_temporal_conversion_matches_spark() -> TestResult {
+    let records = include_str!("fixtures/arrays-overlap-common-type-boundaries-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 33);
+    assert_eq!(records[0]["timezone"], "America/New_York");
+    // The unchanged reference also contains independent #843 floating-equality cases.
+    let temporal = records.into_iter().filter(|record| {
+        record.get("id").is_none()
+            || record["id"].as_str().is_some_and(|id| id.starts_with("dst_"))
+    }).collect::<Vec<_>>();
+    assert_arrays_overlap_result_records(&temporal, 16).await
+}
+
+#[tokio::test]
+async fn arrays_overlap_binary_admission_matches_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-binary-admission-spark.jsonl"),
+        136,
+    ).await
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ArrayLayout {
+    Lists,
+    MixedOffsets,
+    MixedViews,
+}
+
+fn binary_storage_type(
+    data_type: &arrow::datatypes::DataType,
+    storage: &arrow::datatypes::DataType,
+) -> arrow::datatypes::DataType {
+    use std::sync::Arc;
+    use arrow::datatypes::DataType;
+
+    match data_type {
+        DataType::Binary => storage.clone(),
+        DataType::List(field) => DataType::List(Arc::new(field.as_ref().clone()
+            .with_data_type(binary_storage_type(field.data_type(), storage)))),
+        DataType::Struct(fields) => DataType::Struct(fields.iter().map(|field| {
+            field.as_ref().clone().with_data_type(binary_storage_type(field.data_type(), storage))
+        }).collect()),
+        _ => data_type.clone(),
     }
+}
+
+#[tokio::test]
+async fn arrays_overlap_binary_storage_matches_recorded_logical_types() -> TestResult {
+    use std::sync::Arc;
+    use arrow::datatypes::{DataType, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::datasource::MemTable;
+
+    let records = include_str!("fixtures/arrays-overlap-binary-admission-spark.jsonl")
+        .lines().map(serde_json::from_str::<Value>).collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 137);
+    let binary_types = [DataType::Binary, DataType::LargeBinary, DataType::BinaryView];
+    let mut comparisons = 0;
+    let mut differences = Vec::new();
+    for left_storage in &binary_types {
+        for right_storage in &binary_types {
+            for layout in [ArrayLayout::Lists, ArrayLayout::MixedOffsets, ArrayLayout::MixedViews] {
+                for batch_size in [1, 32] {
+                    let session = SessionContext::new_with_state(configure_spark_sql(
+                        SessionStateBuilder::new().with_default_features().with_config(
+                            SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2)),
+                    ).build());
+                    for input in records[0]["inputs"].as_array().ok_or("missing inputs")? {
+                        let source = spark_inputs::decode_recorded_batch(input)?;
+                        let fields = source.schema().fields().iter().enumerate().map(|(index, field)| {
+                            let storage = if index == 1 { left_storage } else { right_storage };
+                            let target = binary_storage_type(field.data_type(), storage);
+                            let target = if let DataType::List(child) = target {
+                                match (layout, index) {
+                                    (ArrayLayout::MixedOffsets, 2) => DataType::LargeList(child),
+                                    (ArrayLayout::MixedViews, 1) => DataType::ListView(child),
+                                    (ArrayLayout::MixedViews, 2) => DataType::LargeListView(child),
+                                    _ => DataType::List(child),
+                                }
+                            } else { target };
+                            field.as_ref().clone().with_data_type(target)
+                        }).collect::<Vec<_>>();
+                        let schema = Arc::new(Schema::new(fields));
+                        let columns = source.columns().iter().zip(schema.fields()).map(|(column, field)| {
+                            let value = arrow::compute::cast(column.as_ref(), field.data_type())?;
+                            value.to_data().validate_full()?;
+                            Ok(value)
+                        }).collect::<TestResult<Vec<_>>>()?;
+                        let batch = RecordBatch::try_new(schema.clone(), columns)?;
+                        let mut partitions = vec![vec![batch.slice(1, 0)], Vec::new()];
+                        for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
+                            partitions[chunk % 2].push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
+                        }
+                        session.register_table(input["name"].as_str().ok_or("missing table name")?,
+                            Arc::new(MemTable::try_new(schema, partitions)?))?;
+                    }
+                    for case in records[1..].iter().filter(|case| {
+                        case["order"] == "both"
+                            || (left_storage == right_storage && case["source"] == "provider"
+                                && case["family"].as_str().is_some_and(|family| family.contains("binary_string")))
+                    }) {
+                        let mut comparison = spark_results::compare_exact_spark_query_stages(&session, case).await?;
+                        comparison["id"] = case["id"].clone();
+                        comparison["ansi"] = case["ansi"].clone();
+                        comparison["batch"] = json!(batch_size);
+                        comparison["left_storage"] = json!(left_storage.to_string());
+                        comparison["right_storage"] = json!(right_storage.to_string());
+                        comparison["layout"] = json!(format!("{layout:?}"));
+                        eprintln!("ARRAYS_OVERLAP_BINARY_STORAGE_OBSERVATION {comparison}");
+                        comparisons += 1;
+                        if comparison["matches"] != true {
+                            differences.push(comparison.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(comparisons, 1512);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
 
