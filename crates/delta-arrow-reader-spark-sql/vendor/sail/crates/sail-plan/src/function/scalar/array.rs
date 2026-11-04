@@ -1,7 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, AsArray, Int64Array};
+use datafusion::arrow::array::{Array, AsArray, Int64Array, builder::Int64Builder};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
@@ -271,18 +271,6 @@ impl ScalarUDFImpl for SparkArraySlice {
             ColumnarValue::Scalar(_) => 0,
             ColumnarValue::Array(_) => row,
         };
-        for row in 0..args.number_rows {
-            let array_row = row_index(array, row);
-            let start_row = row_index(start, row);
-            let length_row = row_index(length, row);
-            if array_values.is_null(array_row)
-                || starts.is_null(start_row)
-                || lengths.is_null(length_row)
-            {
-                continue;
-            }
-            Self::validate_parameters(starts.value(start_row), lengths.value(length_row))?;
-        }
         // Preserve scalar broadcasting without copying the array for each row.
         let scalar_result = args
             .args
@@ -293,8 +281,8 @@ impl ScalarUDFImpl for SparkArraySlice {
         } else {
             args.number_rows
         };
-        let mut native_starts = Vec::with_capacity(rows);
-        let mut native_ends = Vec::with_capacity(rows);
+        let mut native_starts = Int64Builder::with_capacity(rows);
+        let mut native_ends = Int64Builder::with_capacity(rows);
         for row in 0..rows {
             let array_row = row_index(array, row);
             let start_row = row_index(start, row);
@@ -303,13 +291,15 @@ impl ScalarUDFImpl for SparkArraySlice {
                 || starts.is_null(start_row)
                 || lengths.is_null(length_row)
             {
-                native_starts.push(None);
-                native_ends.push(None);
+                native_starts.append_null();
+                native_ends.append_null();
                 continue;
             }
-            let array_length = Self::list_length(array_values.as_ref(), array_row)?;
-            let start_index = Self::start_index(starts.value(start_row), array_length);
+            let start = starts.value(start_row);
             let length = lengths.value(length_row);
+            Self::validate_parameters(start, length)?;
+            let array_length = Self::list_length(array_values.as_ref(), array_row)?;
+            let start_index = Self::start_index(start, array_length);
             let (start, end) = if start_index < 0 || start_index >= array_length || length == 0 {
                 (1, 0)
             } else {
@@ -318,18 +308,18 @@ impl ScalarUDFImpl for SparkArraySlice {
                     start_index + length.min(array_length - start_index),
                 )
             };
-            native_starts.push(Some(start));
-            native_ends.push(Some(end));
+            native_starts.append_value(start);
+            native_ends.append_value(end);
         }
-        let coordinate = |values: Vec<Option<i64>>| {
+        let coordinate = |values: Int64Array| {
             if scalar_result {
-                ColumnarValue::Scalar(ScalarValue::Int64(values.first().copied().flatten()))
+                ColumnarValue::Scalar(ScalarValue::Int64(values.iter().next().flatten()))
             } else {
-                ColumnarValue::Array(Arc::new(Int64Array::from(values)))
+                ColumnarValue::Array(Arc::new(values))
             }
         };
-        args.args[1] = coordinate(native_starts);
-        args.args[2] = coordinate(native_ends);
+        args.args[1] = coordinate(native_starts.finish());
+        args.args[2] = coordinate(native_ends.finish());
         match self.native.invoke_with_args(args)? {
             ColumnarValue::Array(array)
                 if self.required_elements
