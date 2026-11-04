@@ -329,13 +329,14 @@ pub(crate) fn lower_runtime_substring(
     substring_lambdas(expression)
 }
 
-pub(crate) fn lower_runtime_regexp_extract(expression: expr::Expr) -> PlanResult<Transformed<expr::Expr>> {
+pub(crate) fn lower_runtime_regexp_extract(expression: expr::Expr, local_values: bool) -> PlanResult<Transformed<expr::Expr>> {
     let expr::Expr::ScalarFunction(function) = &expression else {
         return Ok(Transformed::no(expression));
     };
-    // Preserve whole-call scalar NULL pruning before any argument body is evaluated.
+    // Bare calls retain scalar NULL pruning; local VALUES preserve reached arguments.
     let Some(extract) = function.func.inner().downcast_ref::<SparkRegexpExtract>()
-        .filter(|extract| extract.has_null_short_circuit() && !extract.has_known_null_argument()) else {
+        .filter(|extract| extract.has_null_short_circuit()
+            && (local_values || !extract.has_known_null_argument())) else {
         return Ok(Transformed::no(expression));
     };
     if function.args.len() != 3 { return Ok(Transformed::no(expression)); }
@@ -977,8 +978,15 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
 }
 
 #[test]
-fn regexp_extract_known_null_pruning_keeps_type_validation() -> PlanResult<()> {
-    let info = SimplifyContext::builder().with_schema(Arc::new(DFSchema::empty())).build();
+fn regexp_extract_known_null_pruning_keeps_local_order_and_type_validation() -> PlanResult<()> {
+    use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
+    use datafusion::physical_expr::create_physical_expr;
+    use datafusion_expr::execution_props::ExecutionProps;
+
+    let schema = Arc::new(DFSchema::empty());
+    let info = SimplifyContext::builder().with_schema(Arc::clone(&schema)).build();
+    let batch = RecordBatch::try_new_with_options(Arc::clone(schema.inner()), vec![],
+        &RecordBatchOptions::new().with_row_count(Some(1)))?;
     for null_index in [true, false] {
         let extract = SparkRegexpExtract::new().with_null_short_circuit(true)
             .with_local_index_check(true);
@@ -987,7 +995,13 @@ fn regexp_extract_known_null_pruning_keeps_type_validation() -> PlanResult<()> {
             if null_index { lit("(a)") } else { lit(ScalarValue::Utf8(None)) },
             if null_index { lit(ScalarValue::Int64(None)) } else { lit(1_i64) }];
         let expression = ScalarUDF::from(extract.clone()).call(arguments);
-        let lowered = lower_runtime_regexp_extract(expression)?;
+        let local = lower_runtime_regexp_extract(expression.clone(), true)?;
+        assert!(local.transformed);
+        let error = ExprSimplifier::new(info.clone()).simplify(local.data)
+            .and_then(|expr| create_physical_expr(&expr, &schema, &ExecutionProps::new()))
+            .and_then(|expr| expr.evaluate(&batch)).unwrap_err().to_string();
+        assert!(error.ends_with("Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"), "{error}");
+        let lowered = lower_runtime_regexp_extract(expression, false)?;
         assert!(!lowered.transformed);
         let simplified = ExprSimplifier::new(info.clone()).simplify(lowered.data)?;
         assert!(matches!(simplified, expr::Expr::Literal(ScalarValue::Utf8(None), _)));

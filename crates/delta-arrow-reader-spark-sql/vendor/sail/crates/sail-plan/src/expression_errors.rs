@@ -879,21 +879,23 @@ fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
     }
     Ok(plan
         .transform_up_with_subqueries(|node| {
-            let local = match &node {
-                LogicalPlan::Projection(project) => local_input(&project.input)?,
-                LogicalPlan::Filter(filter) => local_input(&filter.input)?,
-                _ => false,
+            let input = match &node {
+                LogicalPlan::Projection(project) => Some(&project.input),
+                LogicalPlan::Filter(filter) => Some(&filter.input),
+                _ => None,
             };
-            if !local {
+            let Some(input) = input else { return Ok(Transformed::no(node)); };
+            if !local_input(input)? {
                 return Ok(Transformed::no(node));
             }
+            let local_values = input.exists(|node| Ok(matches!(node, LogicalPlan::Values(_))))?;
             let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
             node.map_expressions(|expression| {
                 let name = names.save(&expression);
                 expression
                     .transform_up(|expression| {
                         lower_runtime_substring(expression).and_then(|substring| {
-                            lower_runtime_regexp_extract(substring.data).map(|extract| {
+                            lower_runtime_regexp_extract(substring.data, local_values).map(|extract| {
                                 Transformed::new_transformed(extract.data, substring.transformed || extract.transformed)
                             })
                         }).map_err(|error| {
