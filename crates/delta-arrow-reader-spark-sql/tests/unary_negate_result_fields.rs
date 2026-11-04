@@ -141,12 +141,23 @@ async fn historical_unary_negate_fields_match_spark() -> TestResult {
     for key in ["spark_version", "spark_revision", "timezone", "group"] {
         assert_eq!(records[0][key], manifest[key], "{key}");
     }
-    assert_eq!(records[0]["capture_sha256"], manifest["capture_script_sha256"]);
-    assert_eq!(json!(records[1..].iter().map(|case| {
-        json!({"id":case["id"],"ansi":case["ansi"]})
-    }).collect::<Vec<_>>()), manifest["identities"]);
+    assert_eq!(
+        records[0]["capture_sha256"],
+        manifest["capture_script_sha256"]
+    );
+    assert_eq!(
+        json!(
+            records[1..]
+                .iter()
+                .map(|case| { json!({"id":case["id"],"ansi":case["ansi"]}) })
+                .collect::<Vec<_>>()
+        ),
+        manifest["identities"]
+    );
     for (case, definition) in records[1..].iter().zip(
-        manifest["scenarios"].as_array().ok_or("missing scenarios")?,
+        manifest["scenarios"]
+            .as_array()
+            .ok_or("missing scenarios")?,
     ) {
         for (key, value) in definition.as_object().ok_or("missing definition")? {
             assert_eq!(&case[key], value, "{} {key}", case["id"]);
@@ -159,12 +170,18 @@ async fn historical_unary_negate_fields_match_spark() -> TestResult {
             configure_spark_sql(
                 SessionStateBuilder::new()
                     .with_default_features()
-                    .with_config(SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2)),
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
             )
             .build(),
         );
         for case in &records[1..] {
-            let mut comparison = spark_results::compare_exact_spark_query_stages_with_optimized(&session, case).await?;
+            let mut comparison =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await?;
             comparison["group"] = records[0]["group"].clone();
             comparison["id"] = case["id"].clone();
             comparison["ansi"] = case["ansi"].clone();
