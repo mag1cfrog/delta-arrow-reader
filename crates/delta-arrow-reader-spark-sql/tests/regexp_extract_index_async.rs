@@ -16,6 +16,10 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
+#[path = "support/regexp_extract_index_native.rs"]
+mod index_native;
+use index_native::{control_key, native_controls, native_matches};
+
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static SYNC_CALLS: AtomicUsize = AtomicUsize::new(0);
 static ASYNC_CALLS: AtomicUsize = AtomicUsize::new(0);
@@ -124,6 +128,8 @@ async fn regexp_extract_preserves_native_async_source_controls() -> TestResult {
     );
     let cases = inputs["cases"].as_array().ok_or("missing async inputs")?;
     assert_eq!(cases.len(), 6);
+    let keys = &["kind", "ansi"];
+    let mut controls = native_controls(cases, controls, keys)?;
     for case in cases {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -245,12 +251,8 @@ async fn regexp_extract_preserves_native_async_source_controls() -> TestResult {
                 .map_err(|_| "async callback mutex poisoned")?
                 .clone()
         );
-        let contract = controls.iter().find(|value| {
-            value["kind"] == case["kind"]
-                && value["ansi"] == case["ansi"]
-                && value["reviewed"] == true
-        });
-        if !contract.is_some_and(|value| value["actual"] == actual) {
+        let contract = controls.remove(&control_key(case, keys)?).ok_or("missing native control")?;
+        if !native_matches(&contract, case, &actual) {
             differences.push(format!("{} ANSI={}: {actual}", case["kind"], case["ansi"]));
         }
         eprintln!(
@@ -262,6 +264,7 @@ async fn regexp_extract_preserves_native_async_source_controls() -> TestResult {
         "c06 index async summary: {}",
         json!({"run_label":label,"observations":6,"collection_complete":true,"compatibility_evaluated":false,"spark_oracle_credit":false})
     );
+    assert!(controls.is_empty(), "unused native controls");
     assert!(
         differences.is_empty(),
         "unreviewed or changed native controls: {}",

@@ -629,10 +629,22 @@ NULL results from its argument fields. The existing native regex memo compiles
 patterns only for non-NULL rows; group-index validation follows a successful
 match. Parser errors retain the native cause. The
 [extraction references](tests/fixtures/README.md#regular-expression-extraction)
-cover supported patterns, Spark INT indices and evaluation boundaries.
-BIGINT-to-INT index narrowing remains separate argument-coercion work.
-Java-only pattern syntax, including lookbehind, remains a separate engine
-limitation under #779.
+cover supported patterns, index conversion and evaluation boundaries.
+Supported index arguments use the existing shared Spark INT conversion builder,
+then widen to the Int64 input required by the regex kernel. This adaptation is
+local to REGEXP_EXTRACT; shared legacy BIGINT and nonfinite floating conversion
+limits remain under #813 and #897. Primitive ANSI overflow identifiers remain
+under #922.
+
+Local VALUES inputs retain reached source work before index conversion. Bare
+known-NULL calls can prune unused arguments after type validation. Shared casts
+required by CSE remain evaluated even when extraction sources are NULL. Native
+callback controls preserve selection and producer folding permissions; async
+arguments retain the existing scalar fallback. The references compare each
+available analyzed and physical declaration with its corresponding Spark stage,
+and preserve exact incompatible observations separately from strict matches.
+Inline VALUES wrapper differences remain under #722. Java-only pattern syntax,
+including lookbehind, remains a separate engine limitation under #779.
 
 Spark ILIKE lowers its original, jointly coerced source and pattern with the
 native LOWER value kernel, then uses ordinary case-sensitive Arrow LIKE. The

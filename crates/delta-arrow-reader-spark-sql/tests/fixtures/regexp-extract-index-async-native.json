@@ -1,7 +1,535 @@
 {
   "format_version": 1,
-  "meaning": "Only reviewed complete repaired native observations may populate these native-extension controls. Unknown controls remain false. No Apache Spark oracle credit.",
-  "controls": [],
-  "spark_oracle_credit": false,
-  "full_compatibility_pass": false
+  "kind": "complete-native-negative-observations-not-spark-oracle",
+  "capture_source_head": "be21a17e856cf932f5b6f79b3a2a30da15dd8315",
+  "capture_source_tree": "eb7ee430cf6f0d47f8766f6bef2dc54b8acd4695",
+  "capture_role": "complete incoming be21 replay; exact preservation is not acceptance",
+  "capture_seal_sha256": "a99b7ff62b0caf3eb257ac9a45e532f00ddc434e45ce0a93838c16157ab72361",
+  "capture_evidence": {
+    "main": {
+      "main/native.jsonl": "56261a60a1c1ba290f9e103d3661b0f218285b9f8b8949b4b09141cac87dca92",
+      "main/native.log": "44174f42af7790a441f9569e04f82004cae587e1e847418a4aae0382528c647f",
+      "main/native-manifest.json": "3094397da391b077ec93d0f66f84971bb17f1e60caf0dda5b823e35355558eea",
+      "main/pre-audit-manifest.json": "03246d09eeaf22c9da5793537a29f0d356cd0f2cd6957fb6690dbc5ab1415068"
+    },
+    "cse": {
+      "cse/native.jsonl": "d32357d7d2737d6337bdf31e6e173b2d4897982975417d4dbe80f7441a2cf841",
+      "cse/native.log": "4403e89ea01a58b38684526f153547912fc8587a95d7d91b1ad8e46eef41131c",
+      "cse/native-manifest.json": "d88c30bdc917352a4124950d1819293b6839b81388c3429227f48a7df673b720",
+      "cse/pre-audit-manifest.json": "83ddd80b6661db26bdada15a1dddf35332657c702a4e297b78ca9abcedbd5e3f"
+    },
+    "local-frontier": {
+      "local-frontier/native.jsonl": "39a4ea276804d0b1b1f0562e7a987ca675fd33406c95d9d1f750d01f808af5d6",
+      "local-frontier/native.log": "33ab670bbef71e64800a7eaaab8e90df285ee5b592396690c02085b4c20715dd",
+      "local-frontier/native-manifest.json": "c4fec6e72544fd89bcd65f2eb9baaa55f6c1f61d728a27b8940186a80b50c3b1",
+      "local-frontier/pre-audit-manifest.json": "9a3302df77b0645c643fb5421595cea88807c9ff42a79ccc8f97294d197843e5"
+    },
+    "foldable-null": {
+      "foldable-null/native.jsonl": "2709b6122fe0d756dbfc56377cbfbd3a6c61051890d7943147f33bd43d90f685",
+      "foldable-null/native.log": "fa8b62d7916634a15cd87a16e75b0840fac548a5deb643b253e267929b1c57d4",
+      "foldable-null/native-manifest.json": "86259ceb24509f3ad345e84d5f6cae32b7b7d92b65b735953676aad34ed8933a",
+      "foldable-null/pre-audit-manifest.json": "f18a4b613bf2ef101e90c6e413392f1f041bccc415ebb8339042fc506c420d03"
+    },
+    "selection": {
+      "selection/native.jsonl": "2a29d20ab65c802f201076405c285d204a706597e36f33076f20d5da3820e8e7",
+      "selection/native.log": "a1aabf7847195a0ba779bcb2036b9b19b6a2324d40388f8e3a0e71b6495f0458",
+      "selection/native-manifest.json": "95efa36dbc505635790a4d210725ecd811dad785570f46f40f7cd99a1e811de5"
+    },
+    "async": {
+      "async/native.jsonl": "d435c7b3d3ca3447da6be43b88f824a5bac8843668a0ab5da407555218028ec7",
+      "async/native.log": "5923a92a618cdeda745f40951c32965a6b4c2700e50c437bfb4bc67147b4d473",
+      "async/native-manifest.json": "7cbe3d0b8cce219a11e89f699113a7356b9c1130569399ae3a181d135ece47c3",
+      "async/pre-audit-manifest.json": "353fa232217b362a7fe1ac5baeb75786c3d8c456fb7f434eceeb9871ad8f091d"
+    }
+  },
+  "frozen_references": {
+    "regexp-extract-index-original-spark.jsonl": "7f7d0a832706922117f33e2a44044404b568cae95bf3fa764802a6add986ac73",
+    "regexp-extract-index-expanded-spark.jsonl": "3d9ff8457c69a4e61d217f852a4b928f72b6305ac8102b66528c1a9591e76311",
+    "regexp-extract-index-cast-controls-spark.jsonl": "b625d0f2c384cacc353cea0e1a5a3fddfe4ccc0ec00ee3262a65c6a1fa732738",
+    "regexp-extract-index-cse-spark.jsonl": "6052ecbfb9d7ebc2ee82093b7892bb808a0c232a41eb2d259d9360d27d3bcec0",
+    "regexp-extract-index-local-frontier-spark.jsonl": "85728027bb552b1f90791009cc372ad5923a97f2594cebd6b2c34dbd50658e6e",
+    "regexp-extract-index-foldable-null-spark.jsonl": "4d0a340103a5d4aa4749bfcf1c389917f798094f0ec2827919a088fa71a97429"
+  },
+  "legacy_fixture_bijection": {
+    "773-index-spark.jsonl": "regexp-extract-index-original-spark.jsonl",
+    "788-index-expanded-spark.jsonl": "regexp-extract-index-expanded-spark.jsonl",
+    "788-cast-controls-spark.jsonl": "regexp-extract-index-cast-controls-spark.jsonl",
+    "regexp-extract-cse-spark.jsonl": "regexp-extract-index-cse-spark.jsonl",
+    "regexp-extract-local-frontier-spark.jsonl": "regexp-extract-index-local-frontier-spark.jsonl",
+    "regexp-extract-foldable-null-spark.jsonl": "regexp-extract-index-foldable-null-spark.jsonl"
+  },
+  "primary_optimized_schema": "unobserved; diagnostic repeats are separate",
+  "acceptance_waivers": false,
+  "full_compatibility_pass": false,
+  "observations": 348,
+  "owner_facets": {
+    "#722": 36,
+    "#788": 144,
+    "#813": 240,
+    "#897": 24,
+    "#922": 144
+  },
+  "owner_contexts": {
+    "#722": 12,
+    "#788": 126,
+    "#813": 108,
+    "#897": 12,
+    "#922": 144
+  },
+  "meaning": "Exact native-extension preservation; no Spark oracle credit.",
+  "controls": [
+    {
+      "kind": "int_one",
+      "ansi": true,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,1) AS r FROM rp788_async ORDER BY id",
+      "reviewed": true,
+      "actual": {
+        "after_resolve": {
+          "sync": 0,
+          "async": 0
+        },
+        "column_names": [
+          "id",
+          "r"
+        ],
+        "analyzed_fields": [
+          {
+            "name": "#3",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "#4",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#3\", data_type: Int32 }, Field { name: \"#4\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None, None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "after_physical": {
+          "sync": 0,
+          "async": 0
+        },
+        "physical_fields": [
+          {
+            "name": "id",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "r",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "physical_arrow_schema": "Schema { fields: [Field { name: \"id\", data_type: Int32 }, Field { name: \"r\", data_type: Utf8, nullable: true }], metadata: {} }",
+        "rows": [
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            null
+          ]
+        ],
+        "after_execute": {
+          "sync": 0,
+          "async": 1
+        },
+        "invocations": [
+          {
+            "number_rows": 2,
+            "arg_fields": "[Field { name: \"s\", data_type: Utf8, nullable: true }]",
+            "argument": {
+              "kind": "array",
+              "values": [
+                "a",
+                null
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "bigint_one",
+      "ansi": true,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,CAST(1 AS BIGINT)) AS r FROM rp788_async ORDER BY id",
+      "reviewed": true,
+      "actual": {
+        "after_resolve": {
+          "sync": 0,
+          "async": 0
+        },
+        "column_names": [
+          "id",
+          "r"
+        ],
+        "analyzed_fields": [
+          {
+            "name": "#3",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "#4",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#3\", data_type: Int32 }, Field { name: \"#4\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None, None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "after_physical": {
+          "sync": 0,
+          "async": 0
+        },
+        "physical_fields": [
+          {
+            "name": "id",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "r",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "physical_arrow_schema": "Schema { fields: [Field { name: \"id\", data_type: Int32 }, Field { name: \"r\", data_type: Utf8, nullable: true }], metadata: {} }",
+        "rows": [
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            null
+          ]
+        ],
+        "after_execute": {
+          "sync": 0,
+          "async": 1
+        },
+        "invocations": [
+          {
+            "number_rows": 2,
+            "arg_fields": "[Field { name: \"s\", data_type: Utf8, nullable: true }]",
+            "argument": {
+              "kind": "array",
+              "values": [
+                "a",
+                null
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "bigint_wrap_zero",
+      "ansi": true,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,4294967296L) AS r FROM rp788_async ORDER BY id",
+      "reviewed": true,
+      "actual": {
+        "after_resolve": {
+          "sync": 0,
+          "async": 0
+        },
+        "column_names": [
+          "id",
+          "r"
+        ],
+        "analyzed_fields": [
+          {
+            "name": "#3",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "#4",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#3\", data_type: Int32 }, Field { name: \"#4\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None, None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "after_physical": {
+          "sync": 0,
+          "async": 0
+        },
+        "physical_fields": [
+          {
+            "name": "id",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "r",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "physical_arrow_schema": "Schema { fields: [Field { name: \"id\", data_type: Int32 }, Field { name: \"r\", data_type: Utf8, nullable: true }], metadata: {} }",
+        "error_stage": "execute",
+        "error": "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296",
+        "error_chain": [
+          "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296"
+        ],
+        "after_execute": {
+          "sync": 0,
+          "async": 1
+        },
+        "invocations": [
+          {
+            "number_rows": 2,
+            "arg_fields": "[Field { name: \"s\", data_type: Utf8, nullable: true }]",
+            "argument": {
+              "kind": "array",
+              "values": [
+                "a",
+                null
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "int_one",
+      "ansi": false,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,1) AS r FROM rp788_async ORDER BY id",
+      "reviewed": true,
+      "actual": {
+        "after_resolve": {
+          "sync": 0,
+          "async": 0
+        },
+        "column_names": [
+          "id",
+          "r"
+        ],
+        "analyzed_fields": [
+          {
+            "name": "#3",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "#4",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#3\", data_type: Int32 }, Field { name: \"#4\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None, None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "after_physical": {
+          "sync": 0,
+          "async": 0
+        },
+        "physical_fields": [
+          {
+            "name": "id",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "r",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "physical_arrow_schema": "Schema { fields: [Field { name: \"id\", data_type: Int32 }, Field { name: \"r\", data_type: Utf8, nullable: true }], metadata: {} }",
+        "rows": [
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            null
+          ]
+        ],
+        "after_execute": {
+          "sync": 0,
+          "async": 1
+        },
+        "invocations": [
+          {
+            "number_rows": 2,
+            "arg_fields": "[Field { name: \"s\", data_type: Utf8, nullable: true }]",
+            "argument": {
+              "kind": "array",
+              "values": [
+                "a",
+                null
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "bigint_one",
+      "ansi": false,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,CAST(1 AS BIGINT)) AS r FROM rp788_async ORDER BY id",
+      "reviewed": true,
+      "actual": {
+        "after_resolve": {
+          "sync": 0,
+          "async": 0
+        },
+        "column_names": [
+          "id",
+          "r"
+        ],
+        "analyzed_fields": [
+          {
+            "name": "#3",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "#4",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#3\", data_type: Int32 }, Field { name: \"#4\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None, None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "after_physical": {
+          "sync": 0,
+          "async": 0
+        },
+        "physical_fields": [
+          {
+            "name": "id",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "r",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "physical_arrow_schema": "Schema { fields: [Field { name: \"id\", data_type: Int32 }, Field { name: \"r\", data_type: Utf8, nullable: true }], metadata: {} }",
+        "rows": [
+          [
+            "1",
+            "a"
+          ],
+          [
+            "2",
+            null
+          ]
+        ],
+        "after_execute": {
+          "sync": 0,
+          "async": 1
+        },
+        "invocations": [
+          {
+            "number_rows": 2,
+            "arg_fields": "[Field { name: \"s\", data_type: Utf8, nullable: true }]",
+            "argument": {
+              "kind": "array",
+              "values": [
+                "a",
+                null
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "bigint_wrap_zero",
+      "ansi": false,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,4294967296L) AS r FROM rp788_async ORDER BY id",
+      "reviewed": true,
+      "actual": {
+        "after_resolve": {
+          "sync": 0,
+          "async": 0
+        },
+        "column_names": [
+          "id",
+          "r"
+        ],
+        "analyzed_fields": [
+          {
+            "name": "#3",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "#4",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#3\", data_type: Int32 }, Field { name: \"#4\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None, None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "after_physical": {
+          "sync": 0,
+          "async": 0
+        },
+        "physical_fields": [
+          {
+            "name": "id",
+            "type": "Int32",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "r",
+            "type": "Utf8",
+            "nullable": true,
+            "metadata": {}
+          }
+        ],
+        "physical_arrow_schema": "Schema { fields: [Field { name: \"id\", data_type: Int32 }, Field { name: \"r\", data_type: Utf8, nullable: true }], metadata: {} }",
+        "error_stage": "execute",
+        "error": "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296",
+        "error_chain": [
+          "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296"
+        ],
+        "after_execute": {
+          "sync": 0,
+          "async": 1
+        },
+        "invocations": [
+          {
+            "number_rows": 2,
+            "arg_fields": "[Field { name: \"s\", data_type: Utf8, nullable: true }]",
+            "argument": {
+              "kind": "array",
+              "values": [
+                "a",
+                null
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "spark_oracle_credit": false
 }

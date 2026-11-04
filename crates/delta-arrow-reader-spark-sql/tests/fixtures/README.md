@@ -2107,13 +2107,65 @@ report the complete supplied index and allowed range. The two original
 Spark-valid lookbehind observations remain in the fixture and are checked
 separately as 12 native engine failures under #779; they are excluded from
 compatibility counts. The
-index references here use Spark INT values. BIGINT-to-INT argument narrowing is
-separate coercion work and is excluded from these compatibility counts.
+original index references here use Spark INT values. The separate index corpus
+below covers the function-local INT argument adapter.
 
 Kernel checks cover mixed source/pattern representations, slices, out-of-line
 view strings and NULL rows with a singular invalid pattern. Native DataFusion
 regex functions are compared before and after Spark planning. REGEXP_EXTRACT_ALL
 retains its separate implementation and existing regression.
+
+The index corpus preserves six independent Spark domains:
+
+| Fixture | Records | Domain |
+| --- | ---: | --- |
+| `regexp-extract-index-original-spark.jsonl` | 10 | Original BIGINT boundaries |
+| `regexp-extract-index-expanded-spark.jsonl` | 106 | Index types, NULLs and evaluation boundaries |
+| `regexp-extract-index-cast-controls-spark.jsonl` | 10 | Direct numeric CAST controls |
+| `regexp-extract-index-cse-spark.jsonl` | 8 | Distinct outputs sharing a cast |
+| `regexp-extract-index-local-frontier-spark.jsonl` | 18 | Local VALUES, filters and LIMIT 0 |
+| `regexp-extract-index-foldable-null-spark.jsonl` | 16 | Bare and local known-NULL calls |
+
+`regexp_extract_index.rs` compares all 168 records across three string
+representations and two batch sizes, for 1,008 contexts. Fields compare complete
+names, types, nullability and metadata against the frozen declaration at the same
+stage. Ordered values compare in full. Spark can refine a nullable analyzed field
+to a nonnullable physical field; the comparison retains both declarations.
+Native primary observations expose analyzed and physical schemas and raw Arrow
+fields when those stages complete. Native optimized schemas remain unobserved.
+Required errors retain the independently captured Spark phase, condition and
+parameters alongside the measured native stage and exact missing/null field
+availability. A reviewed native boundary does not imply phase or cause equality.
+
+Every context must match strictly or preserve its complete reviewed native
+negative object and computed false facets in
+`regexp-extract-index-native-negative.jsonl`. Unknown errors, changed fields,
+values, SQL or context keys, and missing, duplicate or unused profiles fail the
+regression gate. Preserved differences receive no Spark-match credit and retain
+`full_compatibility_pass=false`. Preservation does not waive a lost strict match
+or a newly introduced failure. The shared #813 dependency blocks index acceptance
+while previously correct legacy NULL/no-match results become overflow errors.
+Shared legacy BIGINT values (#813), nonfinite
+floating values (#897), primitive ANSI overflow identifiers (#922), inline
+VALUES wrappers (#722), and the remaining index validation facets (#788) stay
+explicit. A CAST cause does not establish Spark's inline VALUES wrapper.
+
+The 62 native-only controls comprise 32 selection profiles, six async profiles
+and 24 NoFold controls. They preserve whole callback phase counts, invocation
+inputs/types/fields, returned declarations, ordered values and precise failures.
+Profile keys and SQL must cover each input manifest exactly. These controls
+receive no Spark oracle credit. The alias regression also checks both ANSI modes
+for six existing references, including the required local LIMIT 0 overflow.
+
+Seed metadata erratum: the CSE, local-frontier and foldable-NULL files retain
+`input_only=true` and the original descriptions saying no expectations or
+outcomes. Those header fields describe the input seeds. Their completed captures
+contain eight, eighteen and sixteen expectation records respectively, including
+successful fields/values and required errors. The preserved runtime headers
+identify Spark 4.2.0, its build and JAR hashes, Java and Python; replay lineage
+identifies each seed and its hash. These completed per-record observations are
+the reference authority. The seed wording does not authorize rewriting the
+frozen capture bytes.
 
 ## Unicode ILIKE
 

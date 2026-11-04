@@ -15,6 +15,10 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
+#[path = "support/regexp_extract_index_native.rs"]
+mod index_native;
+use index_native::{control_key, native_controls, native_matches};
+
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static CALLS: AtomicUsize = AtomicUsize::new(0);
 static INVOCATIONS: Mutex<Vec<Value>> = Mutex::new(Vec::new());
@@ -123,6 +127,8 @@ async fn regexp_extract_index_selection_controls() -> TestResult {
         .as_array()
         .ok_or("missing callback inputs")?;
     assert_eq!(cases.len(), 32);
+    let keys = &["kind", "folding", "surface", "ansi"];
+    let mut controls = native_controls(cases, controls, keys)?;
     let mut observed = 0;
     for case in cases {
         let ansi_mode = case["ansi"].as_bool().ok_or("missing ANSI")?;
@@ -243,14 +249,8 @@ async fn regexp_extract_index_selection_controls() -> TestResult {
                 .clone()
         );
         observed += 1;
-        let contract = controls.iter().find(|value| {
-            value["kind"] == case["kind"]
-                && value["folding"] == case["folding"]
-                && value["surface"] == case["surface"]
-                && value["ansi"] == case["ansi"]
-                && value["reviewed"] == true
-        });
-        if !contract.is_some_and(|value| value["actual"] == actual) {
+        let contract = controls.remove(&control_key(case, keys)?).ok_or("missing native control")?;
+        if !native_matches(&contract, case, &actual) {
             differences.push(format!(
                 "{kind} folding={folding} surface={surface} ANSI={ansi_mode}: {actual}"
             ));
@@ -268,6 +268,7 @@ async fn regexp_extract_index_selection_controls() -> TestResult {
         json!({"run_label":label,"observations":observed,
         "collection_complete":true,"compatibility_evaluated":false,"spark_oracle_credit":false})
     );
+    assert!(controls.is_empty(), "unused native controls");
     assert!(
         differences.is_empty(),
         "unreviewed or changed native controls: {}",
