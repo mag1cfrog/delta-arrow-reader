@@ -60,24 +60,30 @@ async fn arrays_overlap_incompatible_element_types_match_spark() -> TestResult {
 }
 
 #[tokio::test]
+async fn arrays_overlap_narrowing_matches_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-narrowing-spark.jsonl"),
+        32,
+    )
+    .await
+}
+
+#[tokio::test]
 async fn arrays_overlap_common_element_types_match_spark() -> TestResult {
-    for (source, count) in [
-        (
-            include_str!("fixtures/arrays-overlap-narrowing-spark.jsonl"),
-            32,
-        ),
-        (
-            include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl"),
-            40,
-        ),
-        (
-            include_str!("fixtures/arrays-overlap-positive-coercion-result-fields-spark.jsonl"),
-            16,
-        ),
-    ] {
-        assert_arrays_overlap_result_fields(source, count).await?;
-    }
-    Ok(())
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl"),
+        40,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn arrays_overlap_positive_common_element_types_match_spark() -> TestResult {
+    assert_arrays_overlap_result_fields(
+        include_str!("fixtures/arrays-overlap-positive-coercion-result-fields-spark.jsonl"),
+        16,
+    )
+    .await
 }
 
 #[tokio::test]
