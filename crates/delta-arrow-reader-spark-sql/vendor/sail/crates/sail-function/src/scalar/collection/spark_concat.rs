@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -120,7 +121,8 @@ impl ScalarUDFImpl for SparkConcat {
         // the argument unchanged here would break the type contract advertised by
         // `concat_return_type`. Numeric, timestamp, and other non-string scalars are
         // also excluded so the invoke path can apply Spark-specific coercions
-        // (e.g. timestamp formatting via `spark_format_timestamp_str`).
+        // (e.g. timestamp formatting via `spark_format_timestamp_str`). BinaryView
+        // and FixedSizeBinary likewise need conversion to the variable binary type.
         if matches!(
             info.get_data_type(&arg)?,
             DataType::Utf8
@@ -128,7 +130,6 @@ impl ScalarUDFImpl for SparkConcat {
                 | DataType::Utf8View
                 | DataType::Binary
                 | DataType::LargeBinary
-                | DataType::BinaryView
                 | DataType::List(_)
         ) {
             Ok(ExprSimplifyResult::Simplified(arg))
@@ -435,16 +436,20 @@ fn concat_return_type(arg_types: &[DataType]) -> Result<DataType> {
         }
         // All arrays had Null element type (e.g. array() + array()) — keep as List(Null)
         Ok(expr_type.unwrap_or_else(|| arg_types[0].clone()))
-    } else if arg_types
-        .iter()
-        .all(|arg_type| matches!(arg_type, DataType::Binary))
-    {
-        Ok(DataType::Binary)
-    } else if arg_types
-        .iter()
-        .all(|arg_type| matches!(arg_type, DataType::Binary | DataType::LargeBinary))
-    {
-        Ok(DataType::LargeBinary)
+    } else if arg_types.iter().all(|arg_type| {
+        matches!(
+            arg_type,
+            DataType::Binary
+                | DataType::LargeBinary
+                | DataType::BinaryView
+                | DataType::FixedSizeBinary(_)
+        )
+    }) {
+        if arg_types.contains(&DataType::LargeBinary) {
+            Ok(DataType::LargeBinary)
+        } else {
+            Ok(DataType::Binary)
+        }
     } else {
         Ok(arg_types
             .iter()
@@ -478,5 +483,113 @@ fn merge_list_types(left: &DataType, right: &DataType) -> Option<DataType> {
         }
         _ if left.equals_datatype(right) => Some(left.clone()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use datafusion::arrow::array::{ArrayRef, AsArray, BinaryArray};
+    use datafusion_common::config::ConfigOptions;
+
+    use super::*;
+
+    #[test]
+    fn binary_concat_preserves_bytes_and_nulls_across_representations() -> Result<()> {
+        let left: ArrayRef = Arc::new(BinaryArray::from(vec![
+            Some(b"xxxxxxxxxxxxxxxx".as_slice()),
+            Some(b"\x00\xffabcdefghijklmn".as_slice()),
+            None,
+            Some(b"\x80aabcdefghijklmn".as_slice()),
+            Some(b"ababcdefghijklmn".as_slice()),
+            Some(b"zzzzzzzzzzzzzzzz".as_slice()),
+        ]));
+        let right: ArrayRef = Arc::new(BinaryArray::from(vec![
+            Some(b"xxxxxxxxxxxxxxxx".as_slice()),
+            Some(b"\x80bABCDEFGHIJKLMN".as_slice()),
+            Some(b"1234567890abcdef".as_slice()),
+            None,
+            Some(b"\xc3\xa9ABCDEFGHIJKLMN".as_slice()),
+            Some(b"zzzzzzzzzzzzzzzz".as_slice()),
+        ]));
+        let types = [
+            DataType::Binary,
+            DataType::LargeBinary,
+            DataType::BinaryView,
+            DataType::FixedSizeBinary(16),
+        ];
+        for left_type in &types {
+            for right_type in &types {
+                let args = vec![
+                    ColumnarValue::Array(cast(&left, left_type)?.slice(1, 4)),
+                    ColumnarValue::Array(cast(&right, right_type)?.slice(1, 4)),
+                ];
+                let arg_fields = args
+                    .iter()
+                    .map(|value| Arc::new(Field::new("v", value.data_type(), true)))
+                    .collect::<Vec<_>>();
+                let udf = SparkConcat::new();
+                let return_field = udf.return_field_from_args(ReturnFieldArgs {
+                    arg_fields: &arg_fields,
+                    scalar_arguments: &[None, None],
+                })?;
+                let expected_type = if left_type == &DataType::LargeBinary
+                    || right_type == &DataType::LargeBinary
+                {
+                    DataType::LargeBinary
+                } else {
+                    DataType::Binary
+                };
+                assert_eq!(return_field.data_type(), &expected_type);
+                assert!(return_field.is_nullable());
+                let result = udf
+                    .invoke_with_args(ScalarFunctionArgs {
+                        args,
+                        arg_fields,
+                        number_rows: 4,
+                        return_field,
+                        config_options: Arc::new(ConfigOptions::default()),
+                    })?
+                    .into_array(4)?;
+                assert_eq!(result.data_type(), &expected_type);
+                let result = cast(&result, &DataType::Binary)?;
+                assert_eq!(
+                    result.as_binary::<i32>(),
+                    &BinaryArray::from(vec![
+                        Some(b"\x00\xffabcdefghijklmn\x80bABCDEFGHIJKLMN".as_slice()),
+                        None,
+                        None,
+                        Some(b"ababcdefghijklmn\xc3\xa9ABCDEFGHIJKLMN".as_slice()),
+                    ])
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn binary_concat_identity_agrees_with_its_result_type() -> Result<()> {
+        let info = SimplifyContext::builder().build();
+        let udf = SparkConcat::new();
+        for value in [
+            ScalarValue::Binary(Some(vec![0, 255])),
+            ScalarValue::LargeBinary(Some(vec![0, 255])),
+            ScalarValue::BinaryView(Some(vec![0, 255])),
+            ScalarValue::FixedSizeBinary(2, Some(vec![0, 255])),
+        ] {
+            let input_type = value.data_type();
+            let result_type = concat_return_type(std::slice::from_ref(&input_type))?;
+            let expression = Expr::Literal(value, None);
+            match udf.simplify(vec![expression.clone()], &info)? {
+                ExprSimplifyResult::Simplified(actual) => {
+                    assert_eq!(input_type, result_type);
+                    assert_eq!(actual, expression);
+                }
+                ExprSimplifyResult::Original(actual) => {
+                    assert_ne!(input_type, result_type);
+                    assert_eq!(actual, vec![expression]);
+                }
+            }
+        }
+        Ok(())
     }
 }
