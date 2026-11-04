@@ -754,7 +754,8 @@ async fn case_conversion_closed_arguments_respect_folding_boundaries() -> TestRe
                     ansi_mode: ansi,
                     ..Default::default()
                 },
-            ).await?;
+            )
+            .await?;
             assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 0);
             let physical = query.create_physical_plan(&session).await?;
             assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 0);
@@ -763,7 +764,10 @@ async fn case_conversion_closed_arguments_respect_folding_boundaries() -> TestRe
             let mut values = Vec::new();
             for batch in batches {
                 for row in 0..batch.num_rows() {
-                    values.push(arrow::util::display::array_value_to_string(batch.column(0).as_ref(), row)?);
+                    values.push(arrow::util::display::array_value_to_string(
+                        batch.column(0).as_ref(),
+                        row,
+                    )?);
                 }
             }
             assert_eq!(values, ["ß"]);
