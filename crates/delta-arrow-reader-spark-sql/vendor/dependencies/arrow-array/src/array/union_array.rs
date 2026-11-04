@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -798,13 +799,13 @@ unsafe impl Array for UnionArray {
         };
 
         if fields.len() <= 1 {
-            return self.fields.iter().find_map(|field_opt| {
+            return self.fields.iter().enumerate().find_map(|(type_id, field_opt)| {
                 field_opt
                     .as_ref()
                     .and_then(|field| field.logical_nulls())
                     .map(|logical_nulls| {
                         if self.is_dense() {
-                            self.gather_nulls(vec![(0, logical_nulls)]).into()
+                            self.gather_nulls(vec![(type_id as i8, logical_nulls)]).into()
                         } else {
                             logical_nulls
                         }

@@ -32,13 +32,29 @@ Twelve dependencies have local source overrides in this crate's Cargo.toml:
 | --- | --- | --- |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
-| Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic and buffer handling changes |
+| Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
 
 The JSON inventory lists each package and its original crates.io archive checksum.
 Unmodified files came from those archives, rather than mutable Cargo source caches.
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
+
+Required List and LargeList elements use an exact logical NULL check when child
+storage reports conservative nullability. Unused dictionary NULL values,
+inactive Union children and NULL runs outside a sliced child's logical range
+therefore retain their original child arrays, buffers and declarations. Logical
+NULLs in the child array still fail construction, including under NULL parents
+or empty parent offsets. The existing offset, type and validity-length checks
+remain in place.
+
+Single-field dense Union NULL gathering uses the field's actual type ID. This
+keeps a selected NULL visible when the field ID is nonzero, so the List check
+cannot accept it as a required element. The
+[constructor tests](tests/list_constructor_logical_nulls.rs) cover both list
+widths, preserved storage and nested fields, slices, empty arrays and rejected
+inputs. Reusing child storage avoids rewriting it; the exact logical NULL
+check can still scan values or build a temporary validity bitmap.
 
 The DataFusion optimizer keeps complete window functions out of scalar
 common-expression projections. Equivalent windows retain their execution nodes;
