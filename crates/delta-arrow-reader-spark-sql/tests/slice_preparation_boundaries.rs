@@ -27,15 +27,22 @@ async fn slice_preparation_boundaries_match_spark() -> TestResult {
     for key in ["spark_version", "spark_revision", "timezone", "group"] {
         assert_eq!(records[0][key], manifest[key], "{key}");
     }
-    assert_eq!(records[0]["capture_sha256"], manifest["capture_script_sha256"]);
+    assert_eq!(
+        records[0]["capture_sha256"],
+        manifest["capture_script_sha256"]
+    );
     assert_eq!(records[0]["provider_input_roundtrip_checked"], true);
-    let identities = records[1..].iter()
+    let identities = records[1..]
+        .iter()
         .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
         .collect::<Vec<_>>();
     assert_eq!(json!(identities), manifest["identities"]);
     for case in &records[1..] {
-        let definition = manifest["scenarios"].as_array().ok_or("missing scenarios")?
-            .iter().find(|definition| definition["id"] == case["id"])
+        let definition = manifest["scenarios"]
+            .as_array()
+            .ok_or("missing scenarios")?
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
             .ok_or("missing scenario")?;
         for (key, value) in definition.as_object().ok_or("missing definition")? {
             assert_eq!(&case[key], value, "{} {key}", case["id"]);
@@ -65,9 +72,18 @@ async fn slice_preparation_boundaries_match_spark() -> TestResult {
             observation["batch"] = json!(batch);
             eprintln!("SLICE_PREPARATION_BOUNDARY_OBSERVATION {observation}");
             if [
-                "matches", "optimized_matches", "public_matches", "before_matches",
-                "physical_matches", "rows_match", "ordered_rows_match", "error_matches",
-            ].iter().any(|flag| observation[flag] != true) {
+                "matches",
+                "optimized_matches",
+                "public_matches",
+                "before_matches",
+                "physical_matches",
+                "rows_match",
+                "ordered_rows_match",
+                "error_matches",
+            ]
+            .iter()
+            .any(|flag| observation[flag] != true)
+            {
                 differences.push(observation.to_string());
             }
             assert!(completed.insert((
