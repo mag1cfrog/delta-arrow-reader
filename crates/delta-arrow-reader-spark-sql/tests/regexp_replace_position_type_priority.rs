@@ -79,8 +79,10 @@ fn reference_matches(actual: &Value, expected: &Value, representation: usize) ->
     actual["error"] == format!("resolve: External error: invalid argument: {cause}")
 }
 
-fn check_error_comparison(actual: &Value, expected: &Value, representation: usize) {
-    let error = actual["error"].as_str().expect("checked native error");
+fn check_error_comparison(actual: &Value, expected: &Value, representation: usize) -> TestResult {
+    let error = actual["error"]
+        .as_str()
+        .ok_or("missing checked native error")?;
     for stage in ["physical", "execute"] {
         let mut fault = actual.clone();
         fault["error_stage"] = json!(stage);
@@ -96,7 +98,7 @@ fn check_error_comparison(actual: &Value, expected: &Value, representation: usiz
         let mut fault = actual.clone();
         fault
             .as_object_mut()
-            .expect("native observation")
+            .ok_or("missing native observation object")?
             .remove(key);
         assert!(!reference_matches(&fault, expected, representation));
     }
@@ -109,6 +111,7 @@ fn check_error_comparison(actual: &Value, expected: &Value, representation: usiz
     }
     fault["error"] = json!("resolve: unrelated error");
     assert!(!reference_matches(&fault, expected, representation));
+    Ok(())
 }
 
 #[tokio::test]
@@ -164,7 +167,7 @@ async fn regexp_replace_position_type_precedes_foldability() -> TestResult {
                     case["ansi"]
                 );
                 if expected["status"] == "error" {
-                    check_error_comparison(&actual, expected, representation);
+                    check_error_comparison(&actual, expected, representation)?;
                     errors += 1;
                 } else {
                     successes += 1;
