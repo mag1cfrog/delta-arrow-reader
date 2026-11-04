@@ -2589,7 +2589,26 @@ zero rows. Bounded parameter and fallible-operand controls retain the actual
 Spark conditions and phases. `slice_result_fields.rs` observes all 140 exact
 identities at batches 1 and 32, including the optimized logical schema, and
 checks six successful native ARRAY_SLICE queries against unconfigured
-DataFusion. Query failures remain observations so later identities still run.
+DataFusion. It verifies the ordered internal output names before applying the
+public-name mapping and retains the raw optimized schema. Query failures remain
+observations so later identities still run.
+
+Of those 140 comparisons, 116 require complete Spark parity. The other 24 are
+inherited controls: 16 parameter-validation observations owned by #880 and eight
+ANSI NULL/fallible-operand observations owned by #881. Their raw `matches` and
+component flags remain false. `slice-inherited-controls.jsonl` contains 12
+current DAR observations for regression checks, rather than a Spark oracle;
+paired runs verified that batches 1 and 32 differ only in the batch label.
+The predicate accepts a complete Spark match or the exact issue-owned reference
+and full observed object. It compares all fields, metadata, rows, errors,
+phases and flags, including the components improved by the declaration fix.
+Negative controls reject changed references, components, metadata, panic fields
+and extra keys. These inherited checks do not establish full SLICE parity.
+
+The local storage check verifies that nullable-element SLICE results retain the
+native hidden span under a NULL parent, while required-element results compact
+that span before the original cast. Both retain visible values, NULL parents,
+element metadata and valid Arrow data.
 
 The Sail floating storage unit adds 240 evaluations across both widths/modes,
 both operand orders, five list-layout pairs and full/nonzero/empty slices. Those
@@ -2600,7 +2619,7 @@ and the separate constant STRUCT preparation boundary. Run the focused checks
 from this workspace with:
 
 ```sh
-cargo test --locked --workspace --test arrays_overlap_result_fields --test constant_folding_contract -- --nocapture
+cargo test --locked --workspace --test arrays_overlap_result_fields --test slice_result_fields --test constant_folding_contract -- --nocapture
 cargo test --locked --workspace -p sail-plan --lib arrays_overlap -- --nocapture
 ```
 
