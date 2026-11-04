@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use arrow::array::{Array, ArrayRef, Int32Array, RecordBatch, StringArray};
-use arrow::datatypes::{DataType, Field};
+use arrow::datatypes::{DataType, Field, Fields};
 use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::common::{DataFusionError, ScalarValue};
 use datafusion::datasource::MemTable;
@@ -21,7 +21,9 @@ use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties, collect,
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use futures_util::FutureExt;
+use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+use sail_plan::like_errors::set_spark_like_query_clock;
 use serde_json::{Value, json};
 
 #[allow(dead_code)]
@@ -186,6 +188,61 @@ fn projection_bindings(plan: &Arc<dyn ExecutionPlan>, path: Vec<usize>) -> TestR
     Ok(observations)
 }
 
+fn bound_schema_observation(
+    fields: &Fields,
+    internal_names: &[String],
+    public_names: &[String],
+) -> TestResult<Value> {
+    if fields.len() != internal_names.len() || fields.len() != public_names.len() {
+        return Err("schema stage field count differs from its output bindings".into());
+    }
+    let mut bindings = Vec::with_capacity(fields.len());
+    for (index, ((field, internal), public)) in
+        fields.iter().zip(internal_names).zip(public_names).enumerate()
+    {
+        if field.name() != internal {
+            return Err(format!("schema stage output {index} binds {:?}, expected {internal:?}", field.name()).into());
+        }
+        bindings.push(json!({"index":index,"internal_name":internal,"public_name":public}));
+    }
+    Ok(json!({
+        "raw_schema":spark_results::capture_schema(fields,None)?,
+        "arrow_fields":format!("{fields:?}"),
+        "schema":spark_results::capture_schema(fields,Some(public_names))?,
+        "output_bindings":bindings,
+    }))
+}
+
+#[test]
+fn stage_schema_capture_keeps_actual_declarations_and_checks_output_names() -> TestResult {
+    let internal = vec!["#4".to_owned()];
+    let public = vec!["r".to_owned()];
+    let base: Fields = vec![Field::new("#4", DataType::Int32, false)].into();
+    let expected = json!({"type":"struct","fields":[
+        {"name":"r","type":"integer","nullable":false,"metadata":{}}
+    ]});
+    let captured = bound_schema_observation(&base,&internal,&public)?;
+    assert_eq!(captured["schema"],expected);
+    assert_eq!(captured["raw_schema"]["fields"][0]["name"],"#4");
+    assert_eq!(captured["output_bindings"],json!([
+        {"index":0,"internal_name":"#4","public_name":"r"}
+    ]));
+    for field in [
+        Field::new("#4",DataType::Int64,false),
+        Field::new("#4",DataType::Int32,true),
+        Field::new("#4",DataType::Int32,false)
+            .with_metadata([("stage".into(),"changed".into())].into()),
+    ] {
+        let changed: Fields = vec![field].into();
+        assert_ne!(bound_schema_observation(&changed,&internal,&public)?["schema"],expected,
+            "a differing stage type, nullability, or metadata must not be replaced by resolved fields");
+    }
+    let renamed: Fields = vec![Field::new("#5",DataType::Int32,false)].into();
+    assert!(bound_schema_observation(&renamed,&internal,&public).is_err());
+    assert!(bound_schema_observation(&base,&internal,&[]).is_err());
+    Ok(())
+}
+
 async fn plan_observation(session: &SessionContext, case: &Value) -> TestResult<Value> {
     let query = plan_query(
         session,
@@ -197,12 +254,36 @@ async fn plan_observation(session: &SessionContext, case: &Value) -> TestResult<
         },
     )
     .await?;
+    let internal_names = query.logical_plan.schema().fields().iter()
+        .map(|field| field.name().clone()).collect::<Vec<_>>();
+    let resolved_schema = bound_schema_observation(
+        query.logical_plan.schema().fields(), &internal_names, &query.column_names,
+    )?;
     let mut state = session.state();
+    set_spark_like_query_clock(&mut state);
     let extensions = &mut state.config_mut().options_mut().extensions;
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());
+    // Observe the configured analyzer separately. Production state.optimize must
+    // still receive the original resolved plan, since it runs its own analyzer.
+    let analyzed = state.analyzer().execute_and_check(
+        query.logical_plan.clone(), state.config_options(), |_, _| {},
+    )?;
+    let analyzed_schema = bound_schema_observation(
+        analyzed.schema().fields(), &internal_names, &query.column_names,
+    )?;
     let optimized = state.optimize(&query.logical_plan)?;
-    let physical = query.create_physical_plan(session).await?;
+    let optimized_schema = bound_schema_observation(
+        optimized.schema().fields(), &internal_names, &query.column_names,
+    )?;
+    let planned = state.query_planner().create_physical_plan(&optimized, &state).await?;
+    let planned_schema = bound_schema_observation(
+        planned.schema().fields(), &internal_names, &query.column_names,
+    )?;
+    let physical = rename_physical_plan(planned, &query.column_names)?;
+    let execution_schema = bound_schema_observation(
+        physical.schema().fields(), &query.column_names, &query.column_names,
+    )?;
     let bindings = projection_bindings(&physical, vec![])?;
     let shared = bindings
         .iter()
@@ -214,11 +295,25 @@ async fn plan_observation(session: &SessionContext, case: &Value) -> TestResult<
         .sum::<usize>();
     Ok(
         json!({"logical_resolved":query.logical_plan.display_indent_schema().to_string(),
+        "logical_analyzed":analyzed.display_indent_schema().to_string(),
         "logical_optimized":optimized.display_indent_schema().to_string(),
         "physical":displayable(physical.as_ref()).indent(true).to_string(),
         "physical_partitions":physical.output_partitioning().partition_count(),
         "public_schema":spark_results::capture_schema(query.logical_plan.schema().fields(), Some(&query.column_names))?,
         "physical_schema":spark_results::capture_schema(physical.schema().fields(), None)?,
+        "schema_stages":{
+            "public":resolved_schema,"resolved":resolved_schema,
+            "analyzed":analyzed_schema,"optimized":optimized_schema,
+            "physical":planned_schema,"executed_before_collect":execution_schema,
+        },
+        "schema_stage_sources":{
+            "public":"Sail resolved output with its preserved public names",
+            "resolved":"plan_query logical_plan before session analysis",
+            "analyzed":"configured analyzer.execute_and_check result",
+            "optimized":"SessionState::optimize on the original resolved plan, including production analysis",
+            "physical":"completed query-planner physical plan before public output rename",
+            "executed_before_collect":"same completed physical boundary after production output rename; no separate initial/AQE stage is exposed",
+        },
         "optimizer_rules":state.optimizer().rules.iter().map(|rule| rule.name()).collect::<Vec<_>>(),
         "prefix_producers":bindings.iter().filter(|binding| binding["prefix_transport"] == true).count(),
         "projection_bindings":bindings,"shared_computed_projection_edges":shared,
@@ -408,14 +503,12 @@ async fn shared_projections_match_spark_and_input_sort_keeps_its_recorded_contro
                 .as_object()
                 .ok_or("missing reference stages")?;
             for stage in STAGES.iter().filter(|stage| required.contains_key(**stage)) {
-                let actual = match *stage {
-                    "public" | "resolved" | "analyzed" => &observation["public_schema"],
-                    "optimized" => &observation["optimized_schema"],
-                    "physical" | "executed_before_collect" => &observation["before_collect"],
-                    "executed" => &observation["physical_schema"],
-                    _ => &Value::Null,
-                }
-                .clone();
+                let evidence = plans.as_ref().ok()
+                    .map(|plan| plan["schema_stages"][stage].clone()).unwrap_or(Value::Null);
+                let actual = evidence["schema"].clone();
+                observation["schema_stage_evidence"][stage] = evidence;
+                observation["schema_stage_sources"][stage] = plans.as_ref().ok()
+                    .map(|plan| plan["schema_stage_sources"][stage].clone()).unwrap_or(Value::Null);
                 observation["schema_stage_observations"][stage] = actual.clone();
                 observation["schema_stage_matches"][stage] = json!(actual == required[*stage]);
             }
