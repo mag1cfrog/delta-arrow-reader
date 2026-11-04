@@ -170,7 +170,7 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
     for key in ["analyzed_schema", "analyzed_arrow_schema", "physical_schema", "physical_arrow_schema", "rows", "optimized_schema"] {
         available[key] = json!({"spark_reference":availability(expected,key),"actual":availability(actual,key)});
     }
-    json!({"facets":facets,"evidence":evidence,"availability":available,"strict_compatibility":strict,"full_compatibility":strict})
+    json!({"facets":facets,"evidence":evidence,"availability":available,"strict_compatibility":strict,"full_compatibility":false})
 }
 
 fn false_facets(comparison: &Value) -> Value {
@@ -498,7 +498,7 @@ async fn regexp_extract_index_checks_aliased_local_indices_before_limit_zero() -
                     "ansiConfig":"\"spark.sql.ansi.enabled\""
                 })
             );
-            // This measured native boundary is independent of the draft stage profiles.
+            // This measured native boundary is independent of the stage profiles.
             assert_eq!(actual["error_stage"], "physical");
             assert_eq!(
                 actual["error"],
@@ -526,6 +526,9 @@ async fn regexp_extract_index_checks_aliased_local_indices_before_limit_zero() -
             );
             assert!(actual.get("rows").is_some());
             assert_eq!(actual.get("rows"), expected.get("rows"), "{id} ANSI={ansi}");
+            let comparison = reference_comparison(&actual, expected, None);
+            assert_eq!(comparison["strict_compatibility"], true);
+            assert_eq!(comparison["full_compatibility"], false);
             true
         };
         eprintln!(
