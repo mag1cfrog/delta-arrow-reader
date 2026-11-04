@@ -1,0 +1,107 @@
+{
+  "group": "array-compact-input-types-891-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "source_commit": "02f1ca8f9572ac39c9e5ef1a6fd18e94185a6132",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "capture_script_sha256": "5ed485ab909f8e2401fdf0d5e525766d8de92201c151e99698a447b5dfc162d3",
+  "inputs": [],
+  "spark_config": {
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.shuffle.partitions": "1",
+    "spark.sql.ansi.enabled": "true"
+  },
+  "observation_count": 14,
+  "scenarios": [
+    {
+      "id": "integer",
+      "sql": "SELECT ARRAY_COMPACT(1) AS r"
+    },
+    {
+      "id": "string",
+      "sql": "SELECT ARRAY_COMPACT('abc') AS r"
+    },
+    {
+      "id": "struct",
+      "sql": "SELECT ARRAY_COMPACT(NAMED_STRUCT('a', 1)) AS r"
+    },
+    {
+      "id": "map",
+      "sql": "SELECT ARRAY_COMPACT(MAP('a', 1)) AS r"
+    },
+    {
+      "id": "typed_null_integer",
+      "sql": "SELECT ARRAY_COMPACT(CAST(NULL AS INT)) AS r"
+    },
+    {
+      "id": "array",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY(1, NULL, 2)) AS r"
+    },
+    {
+      "id": "untyped_null",
+      "sql": "SELECT ARRAY_COMPACT(NULL) AS r"
+    }
+  ],
+  "identities": [
+    {
+      "id": "integer",
+      "ansi": true
+    },
+    {
+      "id": "string",
+      "ansi": true
+    },
+    {
+      "id": "struct",
+      "ansi": true
+    },
+    {
+      "id": "map",
+      "ansi": true
+    },
+    {
+      "id": "typed_null_integer",
+      "ansi": true
+    },
+    {
+      "id": "array",
+      "ansi": true
+    },
+    {
+      "id": "untyped_null",
+      "ansi": true
+    },
+    {
+      "id": "integer",
+      "ansi": false
+    },
+    {
+      "id": "string",
+      "ansi": false
+    },
+    {
+      "id": "struct",
+      "ansi": false
+    },
+    {
+      "id": "map",
+      "ansi": false
+    },
+    {
+      "id": "typed_null_integer",
+      "ansi": false
+    },
+    {
+      "id": "array",
+      "ansi": false
+    },
+    {
+      "id": "untyped_null",
+      "ansi": false
+    }
+  ]
+}
