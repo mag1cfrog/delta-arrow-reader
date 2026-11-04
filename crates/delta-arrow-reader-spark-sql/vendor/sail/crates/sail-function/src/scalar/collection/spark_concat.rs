@@ -9,6 +9,7 @@ use datafusion::arrow::compute::kernels::concat_elements::concat_elements_dyn;
 use datafusion::arrow::compute::kernels::nullif::nullif;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::functions::string::concat::ConcatFunc;
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::utils::list_ndims;
 use datafusion_common::{Result, ScalarValue, internal_err, plan_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
@@ -83,9 +84,9 @@ impl ScalarUDFImpl for SparkConcat {
     /// * **R1** — flatten nested `concat` calls first, so deeply nested calls
     ///   collapse in one bottom-up pass and a NULL bubbled up from an inner call
     ///   is caught by R2. Only flattens when the return type is preserved.
-    /// * **R2** — `concat` propagates NULL: a literal NULL argument folds the whole
-    ///   call to a typed NULL at planning time, eliminating the other argument
-    ///   subtrees (DCE) and enabling column pruning. Falls through on a type-invalid
+    /// * **R2** - STRING/BINARY `concat` keeps permitted pending constants so
+    ///   their required errors survive. Folding-disabled extensions and list
+    ///   results retain the existing NULL path. Falls through on a type-invalid
     ///   combo (e.g. array + untyped NULL) so the normal path still raises the error.
     /// * **R3** — single-argument identity for string/array/binary inputs; other
     ///   types fall through so the invoke path can apply Spark coercions.
@@ -104,10 +105,23 @@ impl ScalarUDFImpl for SparkConcat {
                 .iter()
                 .map(|arg| info.get_data_type(arg))
                 .collect::<Result<Vec<_>>>()?;
-            if let Ok(null) = concat_return_type(&arg_types)
-                .and_then(|data_type| ScalarValue::try_from(&data_type))
-            {
-                return Ok(ExprSimplifyResult::Simplified(Expr::Literal(null, None)));
+            if let Ok(return_type) = concat_return_type(&arg_types) {
+                // STRING/BINARY CONCAT folds permitted constant operands before
+                // propagating NULL. ARRAY_CONCAT keeps its existing NULL rule.
+                if matches!(
+                    return_type,
+                    DataType::Utf8
+                        | DataType::LargeUtf8
+                        | DataType::Utf8View
+                        | DataType::Binary
+                        | DataType::LargeBinary
+                ) && has_unfolded_constant_argument(&args)?
+                {
+                    return Ok(ExprSimplifyResult::Original(args));
+                }
+                if let Ok(null) = ScalarValue::try_from(&return_type) {
+                    return Ok(ExprSimplifyResult::Simplified(Expr::Literal(null, None)));
+                }
             }
         }
 
@@ -219,6 +233,72 @@ impl ScalarUDFImpl for SparkConcat {
             &null_mask,
         )?))
     }
+}
+
+// Explicit folding opt-outs keep the whole CONCAT on its native NULL path.
+// Their descendants may fold when reachable; this guard must not force them.
+fn has_unfolded_constant_argument(args: &[Expr]) -> Result<bool> {
+    for arg in args {
+        if arg.exists(|expr| {
+            Ok(matches!(expr, Expr::ScalarFunction(function)
+                if !function.func.inner().supports_constant_folding()))
+        })? {
+            return Ok(false);
+        }
+    }
+    for arg in args {
+        if concat_constant_state(arg)?.1 {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+// Return (whole scalar constant, pending constant requiring native folding).
+// The caller has excluded folding-disabled extension contexts.
+// Summarize each child once so column-dependent chains take one syntax walk.
+fn concat_constant_state(expr: &Expr) -> Result<(bool, bool)> {
+    let mut constant = match expr {
+        Expr::Literal(_, _)
+        | Expr::Alias(_)
+        | Expr::Cast(_)
+        | Expr::TryCast(_)
+        | Expr::BinaryExpr(_)
+        | Expr::Case(_)
+        | Expr::Negative(_)
+        | Expr::Not(_)
+        | Expr::IsNull(_)
+        | Expr::IsNotNull(_)
+        | Expr::IsTrue(_)
+        | Expr::IsFalse(_)
+        | Expr::IsUnknown(_)
+        | Expr::IsNotTrue(_)
+        | Expr::IsNotFalse(_)
+        | Expr::IsNotUnknown(_)
+        | Expr::Between(_)
+        | Expr::InList(_)
+        | Expr::Like(_)
+        | Expr::SimilarTo(_) => true,
+        Expr::ScalarFunction(function) => {
+            function.func.signature().volatility != Volatility::Volatile
+        }
+        _ => return Ok((false, false)),
+    };
+    let mut pending = false;
+    expr.apply_children(|child| {
+        let (child_constant, child_pending) = concat_constant_state(child)?;
+        constant &= child_constant;
+        pending |= child_pending;
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    // Like native ConstEvaluator, defer failures under nonconstant CASE and
+    // short-circuit functions. Whole constant conditionals fold as one operand.
+    if constant {
+        pending = !matches!(expr, Expr::Literal(_, _));
+    } else if expr.short_circuits() && !matches!(expr, Expr::BinaryExpr(_)) {
+        pending = false;
+    }
+    Ok((constant, pending))
 }
 
 fn concat_binary_values(values: &[ColumnarValue], return_type: &DataType) -> Result<ColumnarValue> {

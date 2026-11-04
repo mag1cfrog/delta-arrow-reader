@@ -2889,3 +2889,45 @@ BinaryView identity declarations also require the separate #776 binary typing
 repair; the 96 comparisons remain strict before and after that integration.
 These references do not resolve the invalid-UTF8 STRING-byte gap in #780 or
 establish complete string/binary compatibility.
+
+## CONCAT constant operand errors (#883)
+
+`concat-constant-errors-spark.jsonl` retains all eight independent Spark records
+for nested CONCAT NULL arguments and constant division failures in both operand
+orders. `concat-constant-errors-controls-spark.jsonl` retains 14 further records
+for direct constants, constants alongside a registered STRING column, a NULL
+before a column-dependent division, and discarded CASE branches. Both captures
+use Spark 4.2.0 at revision `32f7299601108917fb01920a54e084595b7b3bf8` in UTC.
+
+`concat-constant-errors-descendants-spark.jsonl` preserves eight further records
+for constant division inside a column-dependent SUBSTRING argument, both CONCAT
+orders, a direct constant control and a dead CASE position operand. The complete
+independent capture is retained byte for byte.
+
+`concat_constant_errors.rs` compares all 30 references across Utf8, LargeUtf8 and
+Utf8View input contexts and batch sizes 1 and 32, retaining 180 complete native
+observations. Successful cases require exact analyzed and physical fields and
+rows. Constant failures require the Spark `DIVIDE_BY_ZERO` condition during
+optimization, the native Arrow divide-by-zero cause during physical planning,
+matching analyzed fields, absent physical fields and no rows. Native DataFusion
+controls compare schemas, rows and errors before and after Spark planning;
+counted volatile operands check that live computed inputs run once per row.
+`constant_folding_contract.rs` also checks constant descendants, native conditional
+reachability, UDF folding opt-outs and volatility. The guard inspects STRING/BINARY
+operands without evaluating them. An explicitly folding-disabled descendant keeps
+that whole CONCAT on its existing native NULL path, including independent constants
+in the same extension context. Full Spark error parity for arbitrary folding-disabled
+native extensions depends on #893. Volatility remains a separate contract. Children
+of retained calls keep their native folding permission.
+
+The complete supplemental baseline retains 16 Spark references and 96 native
+observations outside this focused fixture. Its two column-before-NULL references
+belong to #885: ANSI requires a runtime error while the current implementation
+returns NULL. #883 preserves that separate baseline. The original 1,752 CONCAT
+comparisons and the 96 unordered metadata comparisons remain separate gates;
+the 24 precise invalid UTF-8 failures under #780 remain strict failures.
+
+```sh
+cargo +1.96.0 test --locked --workspace --test concat_constant_errors -- --nocapture --test-threads=1
+cargo +1.96.0 test --locked --workspace --test constant_folding_contract concat_null_waits_for_constant_operands_and_honors_folding_permission -- --exact --nocapture
+```

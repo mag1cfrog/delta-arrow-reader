@@ -3,17 +3,18 @@
 use std::sync::{Arc, LazyLock};
 
 use arrow::array::{Int32Array, StructArray};
-use arrow::datatypes::{DataType, Field};
+use arrow::datatypes::{DataType, Field, Schema};
 use datafusion::common::config::ConfigOptions;
 use datafusion::common::{DFSchema, Result, ScalarValue, exec_err};
 use datafusion::logical_expr::simplify::SimplifyContext;
 use datafusion::logical_expr::{
     ColumnarValue, Expr, ExprSchemable, LogicalPlanBuilder, ScalarFunctionArgs, ScalarUDF,
-    ScalarUDFImpl, Signature, Volatility, cast, create_udf, lit,
+    ScalarUDFImpl, Signature, Volatility, cast, col, create_udf, lit,
 };
 use datafusion::optimizer::AnalyzerRule;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use sail_function::scalar::array::spark_array::SparkArray;
+use sail_function::scalar::collection::spark_concat::SparkConcat;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
@@ -130,6 +131,35 @@ fn immutable_folding_opt_out_and_aliases_preserve_simplifiable_children() -> Res
 }
 
 #[test]
+fn reachable_opt_out_call_keeps_native_child_folding() -> Result<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let allowed = create_udf(
+        "reachable_child",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(move |args| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(args[0].clone())
+        }),
+    );
+    let retained = ScalarUDF::from(RetainConstant);
+    for spark in [false, true] {
+        calls.store(0, Ordering::SeqCst);
+        let child = allowed.call(vec![lit(1_i32) + lit(2_i32)]);
+        assert_eq!(
+            simplify(retained.call(vec![child]), spark)?,
+            retained.call(vec![lit(3_i32)])
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+    Ok(())
+}
+
+#[test]
 fn spark_whole_nested_folding_retains_declarations_and_values() -> Result<()> {
     for spark in [false, true] {
         // Spark's cast declares nullable even when its literal input is valid.
@@ -207,5 +237,150 @@ fn failed_speculative_nested_folding_keeps_required_and_runtime_errors() -> Resu
         );
         assert!(simplify(bad_boolean.and(lit(false)), spark).is_err());
     }
+    Ok(())
+}
+
+#[test]
+fn concat_null_waits_for_constant_operands_and_honors_folding_permission() -> Result<()> {
+    use datafusion::logical_expr::simplify::ExprSimplifyResult;
+    let concat = SparkConcat::new();
+    let info = SimplifyContext::builder().build();
+    let null = lit(ScalarValue::Utf8(None));
+    let pending = cast(lit(1_i32) + lit(2_i32), DataType::Utf8);
+    for args in [
+        vec![null.clone(), pending.clone()],
+        vec![pending, null.clone()],
+    ] {
+        match concat.simplify(args.clone(), &info)? {
+            ExprSimplifyResult::Original(actual) => assert_eq!(actual, args),
+            other => return exec_err!("constant operand was discarded: {other:?}"),
+        }
+    }
+    let stable = create_udf(
+        "concat_stable",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Stable,
+        Arc::new(|args| Ok(args[0].clone())),
+    );
+    assert!(matches!(
+        concat.simplify(vec![null.clone(), stable.call(vec![lit(3_i32)])], &info)?,
+        ExprSimplifyResult::Original(_)
+    ));
+    let volatile = create_udf(
+        "concat_volatile",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Volatile,
+        Arc::new(|args| Ok(args[0].clone())),
+    );
+    for arg in [
+        lit("ready"),
+        ScalarUDF::from(RetainConstant).call(vec![lit(3_i32)]),
+        volatile.call(vec![lit(3_i32)]),
+    ] {
+        match concat.simplify(vec![null.clone(), arg], &info)? {
+            ExprSimplifyResult::Simplified(actual) => assert_eq!(actual, null),
+            other => return exec_err!("existing NULL fold changed: {other:?}"),
+        }
+    }
+    // Arguments may fold when an opt-out call remains reachable. A known NULL
+    // CONCAT can discard the opaque operand without visiting those arguments.
+    for function in [
+        ScalarUDF::from(RetainConstant),
+        ScalarUDF::from(RetainConstant).with_aliases(["retained_alias"]),
+    ] {
+        for child in [lit(1_i32) + lit(2_i32), lit(1_i32) / lit(0_i32)] {
+            let arg = function.call(vec![child]);
+            for args in [vec![null.clone(), arg.clone()], vec![arg, null.clone()]] {
+                match concat.simplify(args, &info)? {
+                    ExprSimplifyResult::Simplified(actual) => assert_eq!(actual, null),
+                    other => return exec_err!("opaque NULL operand was retained: {other:?}"),
+                }
+            }
+        }
+    }
+    // A folding-disabled descendant keeps the entire native extension context
+    // on its old NULL path, even beside an independent pending constant.
+    let opaque = stable.call(vec![ScalarUDF::from(RetainConstant).call(vec![lit(1_i32)])]);
+    let required = cast(lit(1_i32) / lit(0_i32), DataType::Utf8);
+    for args in [
+        vec![null.clone(), opaque.clone(), required.clone()],
+        vec![required, opaque, null.clone()],
+    ] {
+        match concat.simplify(args, &info)? {
+            ExprSimplifyResult::Simplified(actual) => assert_eq!(actual, null),
+            other => return exec_err!("opaque native NULL context changed: {other:?}"),
+        }
+    }
+    assert!(matches!(
+        concat.simplify(
+            vec![null.clone(), volatile.call(vec![lit(1_i32) + lit(2_i32)])],
+            &info
+        )?,
+        ExprSimplifyResult::Original(_)
+    ));
+    let array = ScalarUDF::from(SparkArray::new()).call(vec![lit(1_i32) + lit(2_i32)]);
+    let array_null = lit(ScalarValue::try_from(&array.get_type(&DFSchema::empty())?)?);
+    for args in [
+        vec![array_null.clone(), array.clone()],
+        vec![array, array_null.clone()],
+    ] {
+        match concat.simplify(args, &info)? {
+            ExprSimplifyResult::Simplified(actual) => assert_eq!(actual, array_null),
+            other => return exec_err!("ARRAY_CONCAT NULL rule changed: {other:?}"),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn concat_constant_descendants_keep_native_conditional_reachability() -> Result<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use datafusion::logical_expr::simplify::ExprSimplifyResult;
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::new(DFSchema::try_from(Schema::new(vec![
+            Field::new("s", DataType::Utf8, false),
+            Field::new("flag", DataType::Boolean, false),
+        ]))?))
+        .build();
+    let concat = SparkConcat::new();
+    let null = lit(ScalarValue::Utf8(None));
+    let operand_calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&operand_calls);
+    let ordinary = create_udf(
+        "concat_descendant",
+        vec![DataType::Utf8, DataType::Int32],
+        DataType::Utf8,
+        Volatility::Immutable,
+        Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            exec_err!("CONCAT guard evaluated an operand")
+        }),
+    );
+    let pending = cast(lit(1_i32) / lit(0_i32), DataType::Int32);
+    let argument = ordinary.call(vec![col("s"), pending.clone()]);
+    for args in [
+        vec![null.clone(), argument.clone()],
+        vec![argument, null.clone()],
+    ] {
+        match concat.simplify(args.clone(), &info)? {
+            ExprSimplifyResult::Original(actual) => assert_eq!(actual, args),
+            other => return exec_err!("constant descendant was discarded: {other:?}"),
+        }
+    }
+    let conditional =
+        datafusion::logical_expr::expr_fn::when(col("flag"), pending).otherwise(lit(1_i32))?;
+    for position in [lit(1_i32), conditional] {
+        match concat.simplify(
+            vec![null.clone(), ordinary.call(vec![col("s"), position])],
+            &info,
+        )? {
+            ExprSimplifyResult::Simplified(actual) => assert_eq!(actual, null),
+            other => return exec_err!("runtime operand pruning changed: {other:?}"),
+        }
+    }
+    assert_eq!(operand_calls.load(Ordering::SeqCst), 0);
     Ok(())
 }
