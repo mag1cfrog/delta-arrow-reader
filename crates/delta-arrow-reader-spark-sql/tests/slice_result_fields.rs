@@ -1,11 +1,9 @@
 //! SLICE parent fields and bounded controls match independently captured Spark plans.
 
 use datafusion::execution::SessionStateBuilder;
-use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use delta_arrow_reader_spark_sql::configure_spark_sql;
 use futures_util::FutureExt;
-use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -80,42 +78,6 @@ async fn capture_slice_observation(
     }
 }
 
-async fn capture_slice_optimized_observation(
-    session: &SessionContext,
-    case: &Value,
-) -> TestResult<Value> {
-    let query = plan_query(
-        session,
-        case["sql"].as_str().ok_or("missing SQL")?,
-        &SparkSqlOptions {
-            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
-            session_timezone: "UTC".into(),
-            ..SparkSqlOptions::default()
-        },
-    )
-    .await?;
-    let mut state = session.state();
-    let extensions = &mut state.config_mut().options_mut().extensions;
-    extensions.insert(SparkSqlExpressionSemantics::default());
-    extensions.insert(PreserveAggregateStatisticsSchema::default());
-    let optimized = state.optimize(&query.logical_plan)?;
-    let raw_schema = spark_results::capture_schema(optimized.schema().fields(), None)?;
-    let names_match = optimized.schema().fields().len()
-        == query.logical_plan.schema().fields().len()
-        && optimized
-            .schema()
-            .fields()
-            .iter()
-            .zip(query.logical_plan.schema().fields())
-            .all(|(actual, resolved)| actual.name() == resolved.name());
-    let schema = names_match
-        .then(|| {
-            spark_results::capture_schema(optimized.schema().fields(), Some(&query.column_names))
-        })
-        .transpose()?;
-    Ok(json!({"raw_schema":raw_schema,"schema":schema,"names_match":names_match}))
-}
-
 fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Value]) -> bool {
     if comparison["group"] != "slice-parent-878-current-v1"
         || comparison["id"] != case["id"]
@@ -171,12 +133,7 @@ fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Va
     let reference = json!({"sql":case["sql"],"family":case["family"],
         "consumer":case["consumer"],"expected":case["expected"],
         "schema_stages":case["schema_stages"],"spark_error_phase":case["spark_error_phase"]});
-    if control["reference"] != reference {
-        return false;
-    }
-    let mut expected = control["observation"].clone();
-    expected["batch"] = comparison["batch"].clone();
-    comparison == &expected
+    spark_results::matches_inherited_query_observation(&reference, comparison, control)
 }
 
 #[tokio::test]
@@ -234,13 +191,21 @@ async fn slice_parent_fields_match_spark() -> TestResult {
             let mut comparison = capture_slice_observation(async {
                 let mut comparison =
                     spark_results::compare_exact_spark_query_stages(&session, case).await?;
-                let optimized = capture_slice_optimized_observation(&session, case).await;
+                let optimized =
+                    spark_results::capture_spark_optimized_observation(&session, case).await;
                 comparison["optimized_matches"] = json!(match &optimized {
                     Ok(observation) =>
                         observation["names_match"] == true
                             && Some(&observation["schema"])
                                 == case["schema_stages"].get("optimized"),
-                    Err(_) => case["schema_stages"].get("optimized").is_none(),
+                    Err(error) =>
+                        case["schema_stages"].get("optimized").is_none()
+                            && comparison["error_matches"] == true
+                            && matches!(
+                                comparison["native_phase"].as_str(),
+                                Some("resolve" | "create_physical_plan")
+                            )
+                            && comparison["error"].as_str() == Some(error.to_string().as_str()),
                 });
                 comparison["optimized_schema"] = optimized
                     .as_ref()

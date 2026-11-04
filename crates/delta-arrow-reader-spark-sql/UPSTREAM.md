@@ -749,6 +749,29 @@ separate. Parameter validation and NULL/fallible-operand gaps remain owned by
 #880 and #881; their exact inherited observations stay visible in the
 [result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).
 
+### ARRAY_COMPACT result fields
+
+Spark ARRAY_COMPACT declares its immediate output elements non-null and derives
+parent nullability from its input field. It retains the immediate element's name,
+metadata and data type, including deeper nullable fields. Computed outer metadata
+is empty. An untyped NULL input returns a nullable ARRAY<VOID> with required
+elements.
+
+The shared List/LargeList kernel retains visible-range filtering for sliced
+inputs, discards children under NULL parents and keeps the parent validity.
+It rebuilds the result through checked list construction with the refined
+element field. Scalar values and zero-row calls use the same kernel. The nested
+scalar adapter retains the first typed List/LargeList row directly, preserving
+element fields, NULL parents and child buffers. An empty scalar list result
+returns an error. Encoded
+children use the dependency's logical NULL validation without rewriting their
+dictionary pools or changing storage types. The
+[result references](tests/fixtures/README.md#array_compact-result-fields) preserve
+complete Spark fields and values for direct and connected consumers.
+The constant bad-cast IS NULL gap remains under #890, and the invalid-input error
+category remains under #891. Their exact inherited observations stay visible in
+the references; they do not count as strict Spark matches.
+
 ### Projection metadata
 
 SELECT classifies original expressions before lowering: unaliased derived values
