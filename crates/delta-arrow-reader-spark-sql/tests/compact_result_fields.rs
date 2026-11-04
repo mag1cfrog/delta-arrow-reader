@@ -301,6 +301,8 @@ async fn compact_encoded_storage_boundaries() -> TestResult {
             Ok(json!({"rows":rows,"public_fields":format!("{:?}", query.logical_plan.schema().fields()),"physical_fields":format!("{:?}", physical.schema().fields())}))
         }.await;
         eprintln!("ARRAY_COMPACT_STORAGE_OBSERVATION {}", json!({"id":id,"expected":expected,"direct_rows":[integers],"direct_valid":true,"logical_null_count":output.values().logical_null_count(),"storage_nullable":output.values().is_nullable(),"required_constructor_error":required_constructor_error,"visible_null_rejected":true,"public_phase":phase,"public":public_result.as_ref().ok(),"public_error":public_result.as_ref().err().map(ToString::to_string)}));
+        assert!(required_constructor_error.is_none(), "{id}: {required_constructor_error:?}");
+        assert!(public_result.is_ok(), "{id}: {public_result:?}");
     }
     Ok(())
 }
