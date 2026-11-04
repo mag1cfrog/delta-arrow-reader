@@ -211,9 +211,10 @@ Spark compatibility credit, and complete raw diagnostic parity remains unverifie
 `regexp_replace_position_folding.rs` protects all 36 measured custom Rust UDF
 contexts, including all 24 standalone Spark-resolver/native-SQL controls. Newly
 coerced STRING/BIGINT callbacks that disable folding reject before invocation.
-Folding-enabled callbacks retain the observed resolution/physical/execution
-counts 1/2/2 as a native regression contract. The existing INT callback still
-runs once during resolution even when folding is disabled. Its folding-disabled
-cases in both ANSI modes remain strict host-contract differences under #893. These callback observations
-carry no Apache Spark oracle credit. Their fixture retains actual fields, names,
+Folding-enabled STRING/BIGINT REGEXP_REPLACE callbacks retain the observed
+resolution/physical/execution counts 1/2/2 as a native regression contract. The
+existing INT callback still runs once during resolution even when folding is
+disabled. Its folding-disabled cases in both ANSI modes remain strict host-contract
+differences under #893. These callback observations carry no Apache Spark oracle
+credit. Their fixture retains actual fields, names,
 rows, errors and counters, including absent later stages after rejection.

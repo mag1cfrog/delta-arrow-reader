@@ -6,6 +6,10 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
+#[allow(
+    dead_code,
+    reason = "This suite uses the shared observer without its Result-based wrapper."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
 use string_binary::{TestResult, capture_observation, register_inputs};
