@@ -183,8 +183,11 @@ async fn slice_parent_fields_match_spark() -> TestResult {
             comparison["id"] = case["id"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch_size);
-            comparison["owned_matches"] = json!(SLICE_COMPARISON_FLAGS
-                .iter().all(|flag| comparison[flag] == true));
+            comparison["owned_matches"] = json!(
+                SLICE_COMPARISON_FLAGS
+                    .iter()
+                    .all(|flag| comparison[flag] == true)
+            );
             assert!(completed.insert((
                 case["id"].as_str().ok_or("missing ID")?,
                 case["ansi"].as_bool().ok_or("missing ANSI")?,
