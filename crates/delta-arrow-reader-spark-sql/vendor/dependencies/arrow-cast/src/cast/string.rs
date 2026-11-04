@@ -452,9 +452,11 @@ pub(crate) fn cast_binary_to_string<O: OffsetSizeTrait>(
 
     match GenericStringArray::<O>::try_from_binary(array.clone()) {
         Ok(a) => Ok(Arc::new(a)),
-        Err(e) => match cast_options.safe {
+        Err(e) => match cast_options.safe
+            || array.iter().flatten().all(|value| std::str::from_utf8(value).is_ok())
+        {
             true => {
-                // Fallback to slow method to convert invalid sequences to nulls
+                // Only visible non-NULL values contribute to this fallback.
                 let mut builder =
                     GenericStringBuilder::<O>::with_capacity(array.len(), array.value_data().len());
 
@@ -474,7 +476,9 @@ pub(crate) fn cast_binary_view_to_string_view(
 
     match array.clone().to_string_view() {
         Ok(result) => Ok(Arc::new(result)),
-        Err(error) => match cast_options.safe {
+        Err(error) => match cast_options.safe
+            || array.iter().flatten().all(|value| std::str::from_utf8(value).is_ok())
+        {
             true => {
                 let mut builder = StringViewBuilder::with_capacity(array.len());
                 extend_valid_utf8(&mut builder, array.iter());
