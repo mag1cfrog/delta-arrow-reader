@@ -2805,3 +2805,28 @@ native admission errors. The volatile-function controls in
 cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_nested
 cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_evaluation conditional_arguments_run_once_only_where_needed
 ```
+
+## Unordered CONCAT metadata
+
+`concat-unordered-metadata-spark.jsonl` preserves 16 independent Spark 4.2.0
+observations for required/nullable column identities, nested aliases and
+nonidentity controls, in both ANSI modes. The header retains exact build
+identity, settings and registered inputs. `concat_metadata.rs` compares all 96
+observations across three string/binary representations and batch sizes 1/32.
+Every actual analyzed and physical field must match the complete reference.
+Raw rows are retained and compared as counted multisets because these queries
+have no ORDER BY. No metadata alternative or failed result counts as a match.
+
+Direct Spark column controls preserve the provider fields and values. Native
+DataFusion projections retain complete schemas and row multisets before and
+after Spark execution. Eligible single-argument STRING/BINARY identities receive
+the existing permanent metadata annotation, which retains Arrow extension
+metadata and forwards the original value buffers. Multi-argument and raw nested
+CONCAT calls remain visible to CombineConcats. Optimized-plan controls require one flattened STRING CONCAT for
+nested calls and `||` chains at widths 3 and 16, including nested identity,
+outer single-argument and empty-call boundaries. These controls assert plan
+shape; they do not claim a measured timing result.
+BinaryView identity declarations also require the separate #776 binary typing
+repair; the 96 comparisons remain strict before and after that integration.
+These references do not resolve the invalid-UTF8 STRING-byte gap in #780 or
+establish complete string/binary compatibility.

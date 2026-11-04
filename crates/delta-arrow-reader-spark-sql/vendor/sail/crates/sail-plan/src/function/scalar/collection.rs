@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::datatypes::DataType;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
@@ -9,7 +10,9 @@ use sail_function::scalar::collection::spark_reverse::SparkReverse;
 use sail_function::scalar::misc::raise_error::RaiseError;
 
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+use crate::function::common::{
+    ScalarFunction, ScalarFunctionInput, drop_inherited_column_metadata,
+};
 
 fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let value = input.arguments.one()?;
@@ -77,13 +80,42 @@ fn element_at(input: ScalarFunctionInput, is_try: bool) -> PlanResult<expr::Expr
 pub(super) fn list_built_in_collection_functions() -> Vec<(&'static str, ScalarFunction)> {
     use crate::function::common::ScalarFunctionBuilder as F;
 
+    let concat = F::udf(SparkConcat::new());
     vec![
         ("cardinality", F::custom(size)),
         ("deep_size", F::unary(expr_fn::cardinality)),
         ("element_at", F::custom(|input| element_at(input, false))),
         ("size", F::custom(size)),
         ("array_concat", F::udf(SparkConcat::new())),
-        ("concat", F::udf(SparkConcat::new())),
+        (
+            "concat",
+            F::custom(move |input| {
+                // Guard C06 STRING/BINARY identities while leaving multi-argument
+                // and raw nested CONCATs visible to CombineConcats.
+                let string_binary_identity = match input.arguments.as_slice() {
+                    [value]
+                        if !matches!(value, expr::Expr::ScalarFunction(function)
+                            if function.func.inner().is::<SparkConcat>()) =>
+                    {
+                        matches!(
+                            value.get_type(input.function_context.schema),
+                            Ok(DataType::Utf8
+                                | DataType::LargeUtf8
+                                | DataType::Utf8View
+                                | DataType::Binary
+                                | DataType::LargeBinary)
+                        )
+                    }
+                    _ => false,
+                };
+                let value = concat(input)?;
+                Ok(if string_binary_identity {
+                    drop_inherited_column_metadata(value)
+                } else {
+                    value
+                })
+            }),
+        ),
         ("reverse", F::udf(SparkReverse::new())),
         ("try_element_at", F::custom(|input| element_at(input, true))),
     ]
