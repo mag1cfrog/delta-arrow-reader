@@ -46,8 +46,8 @@ use datafusion_expr::interval_arithmetic::Interval;
 use datafusion_expr::sort_properties::ExprProperties;
 use datafusion_expr::type_coercion::functions::fields_with_udf;
 use datafusion_expr::{
-    ColumnarValue, ExpressionPlacement, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
-    ScalarUDFImpl, Volatility, expr_vec_fmt,
+    ColumnarValue, EvaluatedRowPrefix, ExpressionPlacement, ReturnFieldArgs, ScalarFunctionArgs,
+    ScalarUDF, ScalarUDFImpl, Volatility, expr_vec_fmt,
 };
 
 /// Physical expression of a scalar function
@@ -61,6 +61,7 @@ pub struct ScalarFunctionExpr {
     short_circuit_first_arg_null: bool,
     short_circuit_any_arg_null: bool,
     returns_first_non_null: bool,
+    requires_row_ordered_errors: bool,
 }
 
 impl Debug for ScalarFunctionExpr {
@@ -75,53 +76,115 @@ impl Debug for ScalarFunctionExpr {
 }
 
 impl ScalarFunctionExpr {
-    fn evaluate_null_short_circuit(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+    fn evaluate_arguments(
+        &self,
+        batch: &RecordBatch,
+        retain_row_errors: bool,
+    ) -> Result<EvaluatedRowPrefix> {
         use arrow::array::BooleanArray;
 
         let mut active: Option<BooleanArray> = None;
-        let mut args = Vec::with_capacity(self.args.len());
+        let mut args: Vec<ColumnarValue> = Vec::with_capacity(self.args.len());
+        let mut pending_failure = None;
+        let mut rows = batch.num_rows();
+        let evaluate_selected =
+            |expr: &dyn PhysicalExpr, input: &RecordBatch, mask: &BooleanArray| {
+                if retain_row_errors {
+                    expr.evaluate_selected_rows_until_error(input, mask)
+                } else {
+                    expr.evaluate_selection(input, mask)
+                        .map(EvaluatedRowPrefix::complete)
+                }
+            };
         for expr in &self.args {
-            let value = match &active {
+            let prefix_batch;
+            let input = if rows == batch.num_rows() {
+                batch
+            } else {
+                prefix_batch = batch.slice(0, rows);
+                &prefix_batch
+            };
+            let mut output = match &active {
                 Some(mask) => {
                     if !mask.has_true() {
-                        expr.evaluate_selection(batch, mask)?
+                        evaluate_selected(expr.as_ref(), input, mask)?
                     } else if let Some(literal) = expr.downcast_ref::<Literal>() {
                         // Reuse the stored scalar instead of filtering the whole input batch.
-                        ColumnarValue::Scalar(literal.value().clone())
+                        EvaluatedRowPrefix::complete(ColumnarValue::Scalar(literal.value().clone()))
                     } else {
                         let (projection, projected) = plan_expression_input_projection(expr)?;
                         // Nested lambda variables are appended after the current input columns.
                         let projection = projection
                             .into_iter()
-                            .filter(|index| *index < batch.num_columns())
+                            .filter(|index| *index < input.num_columns())
                             .collect::<Vec<_>>();
-                        if projection.len() < batch.num_columns() {
-                            let input = batch.project(&projection)?;
-                            projected.evaluate_selection(&input, mask)?
+                        if projection.len() < input.num_columns() {
+                            let selected_input = input.project(&projection)?;
+                            evaluate_selected(projected.as_ref(), &selected_input, mask)?
                         } else {
-                            expr.evaluate_selection(batch, mask)?
+                            evaluate_selected(expr.as_ref(), input, mask)?
                         }
                     }
                 }
-                None => expr.evaluate(batch)?,
+                None if retain_row_errors => expr.evaluate_rows_until_error(input)?,
+                None => EvaluatedRowPrefix::complete(expr.evaluate(input)?),
             };
-            match &value {
-                ColumnarValue::Scalar(value) if value.is_null() => {
-                    active = Some(BooleanArray::from(vec![false; batch.num_rows()]));
+            if retain_row_errors {
+                output.validate(rows)?;
+            }
+            if let Some(failure) = output.failure.take() {
+                rows = failure.row_index;
+                if rows == 0 {
+                    return Ok(EvaluatedRowPrefix {
+                        values: ColumnarValue::Array(arrow::array::new_empty_array(
+                            self.return_type(),
+                        )),
+                        failure: Some(failure),
+                    });
                 }
-                ColumnarValue::Array(array) => {
-                    if let Some(nulls) = array.logical_nulls()
-                        && nulls.null_count() > 0
-                    {
-                        // Selection already restores NULLs for previously skipped rows.
-                        active = Some(BooleanArray::new(nulls.inner().clone(), None));
+                for value in &mut args {
+                    if let ColumnarValue::Array(array) = value {
+                        *array = array.slice(0, rows);
                     }
                 }
-                _ => {}
+                if let Some(mask) = &mut active {
+                    *mask = mask.slice(0, rows);
+                }
+                pending_failure = Some(failure);
             }
-            args.push(value);
+            if self.short_circuit_any_arg_null {
+                match &output.values {
+                    ColumnarValue::Scalar(value) if value.is_null() => {
+                        active = Some(BooleanArray::from(vec![false; rows]));
+                    }
+                    ColumnarValue::Array(array) => {
+                        if let Some(nulls) = array.logical_nulls()
+                            && nulls.null_count() > 0
+                        {
+                            // Selection already restores NULLs for previously skipped rows.
+                            active = Some(BooleanArray::new(nulls.inner().clone(), None));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            args.push(output.values);
         }
-        self.invoke_evaluated(batch, args)
+        let prefix_batch;
+        let input = if rows == batch.num_rows() {
+            batch
+        } else {
+            prefix_batch = batch.slice(0, rows);
+            &prefix_batch
+        };
+        let mut output = self.invoke_evaluated_rows(input, args, retain_row_errors)?;
+        if output.failure.is_none() {
+            output.failure = pending_failure;
+        }
+        if retain_row_errors {
+            output.validate(batch.num_rows())?;
+        }
+        Ok(output)
     }
 
     fn evaluate_first_non_null(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
@@ -161,6 +224,16 @@ impl ScalarFunctionExpr {
         batch: &RecordBatch,
         args: Vec<ColumnarValue>,
     ) -> Result<ColumnarValue> {
+        self.invoke_evaluated_rows(batch, args, false)?
+            .into_result()
+    }
+
+    fn invoke_evaluated_rows(
+        &self,
+        batch: &RecordBatch,
+        args: Vec<ColumnarValue>,
+        retain_row_errors: bool,
+    ) -> Result<EvaluatedRowPrefix> {
         let arg_fields = self
             .args
             .iter()
@@ -173,32 +246,117 @@ impl ScalarFunctionExpr {
             .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
 
         // evaluate the function
-        let output = self.fun.invoke_with_args(ScalarFunctionArgs {
+        let function_args = ScalarFunctionArgs {
             args,
             arg_fields,
             number_rows: batch.num_rows(),
             return_field: Arc::clone(&self.return_field),
             config_options: Arc::clone(&self.config_options),
-        })?;
+        };
+        let mut output = if retain_row_errors {
+            self.fun.invoke_rows_until_error(function_args)?
+        } else {
+            EvaluatedRowPrefix::complete(self.fun.invoke_with_args(function_args)?)
+        };
+        let rows = output
+            .failure
+            .as_ref()
+            .map_or(batch.num_rows(), |failure| failure.row_index);
 
-        if let ColumnarValue::Array(array) = &output
-            && array.len() != batch.num_rows()
+        if let ColumnarValue::Array(array) = &output.values
+            && array.len() != rows
         {
             // If the arguments are a non-empty slice of scalar values, we can assume that
             // returning a one-element array is equivalent to returning a scalar.
             let preserve_scalar = array.len() == 1 && !input_empty && input_all_scalar;
-            return if preserve_scalar {
-                ScalarValue::try_from_array(array, 0).map(ColumnarValue::Scalar)
+            if preserve_scalar && output.failure.is_none() {
+                output.values = ColumnarValue::Scalar(ScalarValue::try_from_array(array, 0)?);
             } else {
-                internal_err!(
+                return internal_err!(
                     "UDF {} returned a different number of rows than expected. Expected: {}, Got: {}",
                     self.name,
-                    batch.num_rows(),
+                    rows,
                     array.len()
-                )
-            };
+                );
+            }
+        }
+        if retain_row_errors {
+            output.validate(batch.num_rows())?;
         }
         Ok(output)
+    }
+
+    fn evaluate_legacy(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+        // Empty batches skip all arguments on conditional evaluation paths.
+        if batch.num_rows() == 0
+            && (self.returns_first_non_null
+                || self.short_circuit_first_arg_null
+                || self.short_circuit_any_arg_null)
+        {
+            return Ok(ColumnarValue::Array(arrow::array::new_empty_array(
+                self.return_type(),
+            )));
+        }
+        if self.returns_first_non_null {
+            return self.evaluate_first_non_null(batch);
+        }
+        if self.short_circuit_any_arg_null {
+            return self.evaluate_arguments(batch, false)?.into_result();
+        }
+        let Some(first) = self.args.first() else {
+            return self.invoke_evaluated(batch, Vec::new());
+        };
+        let first = first.evaluate(batch)?;
+        if self.short_circuit_first_arg_null {
+            use arrow::array::{Array, BooleanArray, new_null_array};
+            use arrow::compute::{filter, filter_record_batch};
+            use datafusion_physical_expr_common::utils::scatter;
+            match &first {
+                ColumnarValue::Scalar(value) if value.is_null() => {
+                    return Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(
+                        self.return_type(),
+                    )?));
+                }
+                ColumnarValue::Array(array) => {
+                    if let Some(nulls) = array.logical_nulls()
+                        && nulls.null_count() > 0
+                    {
+                        if nulls.null_count() == array.len() {
+                            return Ok(ColumnarValue::Array(new_null_array(
+                                self.return_type(),
+                                array.len(),
+                            )));
+                        }
+                        let mask = BooleanArray::new(nulls.inner().clone(), None);
+                        let selected = filter_record_batch(batch, &mask)?;
+                        // A column has already been filtered with the input batch.
+                        // Reuse it; computed left operands still need their own selection.
+                        let selected_first =
+                            if let Some(column) = self.args[0].downcast_ref::<Column>() {
+                                Arc::clone(selected.column(column.index()))
+                            } else {
+                                filter(array.as_ref(), &mask)?
+                            };
+                        let mut args = Vec::with_capacity(self.args.len());
+                        args.push(ColumnarValue::Array(selected_first));
+                        for expr in &self.args[1..] {
+                            args.push(expr.evaluate(&selected)?);
+                        }
+                        let result = self
+                            .invoke_evaluated(&selected, args)?
+                            .into_array(selected.num_rows())?;
+                        return Ok(ColumnarValue::Array(scatter(&mask, result.as_ref())?));
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut args = Vec::with_capacity(self.args.len());
+        args.push(first);
+        for expr in &self.args[1..] {
+            args.push(expr.evaluate(batch)?);
+        }
+        self.invoke_evaluated(batch, args)
     }
 
     /// Create a new Scalar function
@@ -210,6 +368,7 @@ impl ScalarFunctionExpr {
         config_options: Arc<ConfigOptions>,
     ) -> Self {
         Self {
+            requires_row_ordered_errors: fun.inner().requires_row_ordered_errors(),
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
             short_circuit_first_arg_null: fun.inner().short_circuits_on_null_first_arg(),
             short_circuit_any_arg_null: fun.inner().short_circuits_on_any_null_argument(),
@@ -247,6 +406,7 @@ impl ScalarFunctionExpr {
         };
         let return_field = fun.return_field_from_args(ret_args)?;
         Ok(Self {
+            requires_row_ordered_errors: fun.inner().requires_row_ordered_errors(),
             returns_first_non_null: fun.inner().returns_first_non_null_argument(),
             short_circuit_first_arg_null: fun.inner().short_circuits_on_null_first_arg(),
             short_circuit_any_arg_null: fun.inner().short_circuits_on_any_null_argument(),
@@ -329,9 +489,10 @@ impl PartialEq for ScalarFunctionExpr {
             args,
             return_field,
             config_options,
-            short_circuit_first_arg_null: _,     // derived from fun
-            short_circuit_any_arg_null: _, // derived from fun
-            returns_first_non_null: _, // derived from fun
+            short_circuit_first_arg_null: _, // derived from fun
+            short_circuit_any_arg_null: _,   // derived from fun
+            returns_first_non_null: _,       // derived from fun
+            requires_row_ordered_errors: _,  // derived from fun
         } = self;
         fun.eq(&o.fun)
             && name.eq(&o.name)
@@ -350,10 +511,11 @@ impl Hash for ScalarFunctionExpr {
             name,
             args,
             return_field,
-            config_options: _,         // expensive to hash, and often equal
-            short_circuit_first_arg_null: _,     // derived from fun
-            short_circuit_any_arg_null: _, // derived from fun
-            returns_first_non_null: _, // derived from fun
+            config_options: _,               // expensive to hash, and often equal
+            short_circuit_first_arg_null: _, // derived from fun
+            short_circuit_any_arg_null: _,   // derived from fun
+            returns_first_non_null: _,       // derived from fun
+            requires_row_ordered_errors: _,  // derived from fun
         } = self;
         fun.hash(state);
         name.hash(state);
@@ -378,76 +540,36 @@ impl PhysicalExpr for ScalarFunctionExpr {
     }
 
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
-        // Empty batches skip all arguments on conditional evaluation paths.
-        if batch.num_rows() == 0
-            && (self.returns_first_non_null
-                || self.short_circuit_first_arg_null
-                || self.short_circuit_any_arg_null)
-        {
-            return Ok(ColumnarValue::Array(arrow::array::new_empty_array(
-                self.return_type(),
+        if self.requires_row_ordered_errors {
+            self.evaluate_rows_until_error(batch)?.into_result()
+        } else {
+            self.evaluate_legacy(batch)
+        }
+    }
+
+    fn evaluate_rows_until_error(&self, batch: &RecordBatch) -> Result<EvaluatedRowPrefix> {
+        if self.returns_first_non_null || self.short_circuit_first_arg_null {
+            // shortcut: these conditional owners return opaque errors, add branch-prefix assembly when needed.
+            return self
+                .evaluate_legacy(batch)
+                .map(EvaluatedRowPrefix::complete);
+        }
+        if batch.num_rows() == 0 && self.short_circuit_any_arg_null {
+            return Ok(EvaluatedRowPrefix::complete(ColumnarValue::Array(
+                arrow::array::new_empty_array(self.return_type()),
             )));
         }
-        if self.returns_first_non_null {
-            return self.evaluate_first_non_null(batch);
-        }
-        if self.short_circuit_any_arg_null {
-            return self.evaluate_null_short_circuit(batch);
-        }
-        let Some(first) = self.args.first() else {
-            return self.invoke_evaluated(batch, Vec::new());
-        };
-        let first = first.evaluate(batch)?;
-        if self.short_circuit_first_arg_null {
-            use arrow::array::{Array, BooleanArray, new_null_array};
-            use arrow::compute::{filter, filter_record_batch};
-            use datafusion_physical_expr_common::utils::scatter;
-            match &first {
-                ColumnarValue::Scalar(value) if value.is_null() => {
-                    return Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(
-                        self.return_type(),
-                    )?));
-                }
-                ColumnarValue::Array(array) => {
-                    if let Some(nulls) = array.logical_nulls()
-                        && nulls.null_count() > 0
-                    {
-                        if nulls.null_count() == array.len() {
-                            return Ok(ColumnarValue::Array(new_null_array(
-                                self.return_type(),
-                                array.len(),
-                            )));
-                        }
-                        let mask = BooleanArray::new(nulls.inner().clone(), None);
-                        let selected = filter_record_batch(batch, &mask)?;
-                        // A column has already been filtered with the input batch.
-                        // Reuse it; computed left operands still need their own selection.
-                        let selected_first =
-                            if let Some(column) = self.args[0].downcast_ref::<Column>() {
-                                Arc::clone(selected.column(column.index()))
-                            } else {
-                                filter(array.as_ref(), &mask)?
-                            };
-                        let mut args = Vec::with_capacity(self.args.len());
-                        args.push(ColumnarValue::Array(selected_first));
-                        for expr in &self.args[1..] {
-                            args.push(expr.evaluate(&selected)?);
-                        }
-                        let result = self
-                            .invoke_evaluated(&selected, args)?
-                            .into_array(selected.num_rows())?;
-                        return Ok(ColumnarValue::Array(scatter(&mask, result.as_ref())?));
-                    }
-                }
-                _ => {}
-            }
-        }
-        let mut args = Vec::with_capacity(self.args.len());
-        args.push(first);
-        for expr in &self.args[1..] {
-            args.push(expr.evaluate(batch)?);
-        }
-        self.invoke_evaluated(batch, args)
+        self.evaluate_arguments(batch, true)
+    }
+
+    fn evaluate_selected_rows_until_error(
+        &self,
+        batch: &RecordBatch,
+        selection: &arrow::array::BooleanArray,
+    ) -> Result<EvaluatedRowPrefix> {
+        datafusion_physical_expr_common::physical_expr::evaluate_selected_rows_until_error(
+            self, batch, selection,
+        )
     }
 
     fn return_field(&self, _input_schema: &Schema) -> Result<FieldRef> {

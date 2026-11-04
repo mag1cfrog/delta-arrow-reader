@@ -31,32 +31,10 @@ const COMPARISON_FLAGS: &[&str] = &[
     "cast_input_matches",
 ];
 
-fn slice_null_comparison_matches(case: &Value, comparison: &Value, controls: &[Value]) -> bool {
-    if comparison["id"] != case["id"] || comparison["ansi"] != case["ansi"] {
-        return false;
-    }
-    if COMPARISON_FLAGS.iter().all(|flag| comparison[flag] == true) {
-        return true;
-    }
-    // shortcut: #902 retains only these two unchanged ANSI batch-32 error-priority observations.
-    if comparison["group"] != "slice-881-null-evaluation-current-v1"
-        || comparison["ansi"] != true
-        || comparison["batch"] != 32
-        || !matches!(
-            comparison["id"].as_str(),
-            Some(
-                "rows_zero_start_before_later_fallible_operands"
-                    | "rows_negative_length_before_later_fallible_operands"
-            )
-        )
-    {
-        return false;
-    }
-    controls.iter().any(|control| {
-        control["issue"] == 902
-            && control["reference"] == *case
-            && control["observation"] == *comparison
-    })
+fn slice_null_comparison_matches(case: &Value, comparison: &Value) -> bool {
+    comparison["id"] == case["id"]
+        && comparison["ansi"] == case["ansi"]
+        && COMPARISON_FLAGS.iter().all(|flag| comparison[flag] == true)
 }
 
 fn cast_input_matches(case: &Value, comparison: &Value) -> bool {
@@ -147,15 +125,6 @@ async fn ordered_observer_rejects_unexpected_success_and_reordered_rows() -> Tes
 }
 
 async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestResult {
-    let controls = include_str!("fixtures/slice-null-evaluation/inherited-controls.jsonl")
-        .lines()
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(controls.len(), 3);
-    assert_eq!(controls[0]["issue"], 902);
-    assert_eq!(controls[0]["comparisons"], 2);
-    assert_eq!(controls[0]["ansi"], true);
-    assert_eq!(controls[0]["batch"], 32);
     let mut completed = std::collections::BTreeSet::new();
     let mut differences = Vec::new();
     for batch in [1, 32] {
@@ -180,7 +149,7 @@ async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestRes
             comparison["batch"] = json!(batch);
             comparison["cast_input_matches"] = json!(cast_input_matches(case, &comparison));
             eprintln!("SLICE_NULL_EVALUATION_OBSERVATION {comparison}");
-            if !slice_null_comparison_matches(case, &comparison, &controls[1..]) {
+            if !slice_null_comparison_matches(case, &comparison) {
                 differences.push(comparison.to_string());
             }
             assert!(completed.insert((
@@ -192,73 +161,6 @@ async fn compare_null_evaluation(records: &[Value], cases: &[&Value]) -> TestRes
     }
     assert_eq!(completed.len(), cases.len() * 2);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
-    Ok(())
-}
-
-#[test]
-fn inherited_row_priority_controls_reject_new_differences() -> TestResult {
-    let controls = include_str!("fixtures/slice-null-evaluation/inherited-controls.jsonl")
-        .lines()
-        .skip(1)
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(controls.len(), 2);
-    for control in &controls {
-        let case = &control["reference"];
-        let comparison = &control["observation"];
-        assert!(slice_null_comparison_matches(case, comparison, &controls));
-        for key in comparison.as_object().ok_or("missing comparison")?.keys() {
-            let mut wrong = comparison.clone();
-            wrong[key] = json!("new difference");
-            assert!(
-                !slice_null_comparison_matches(case, &wrong, &controls),
-                "{key}"
-            );
-        }
-        for (key, value) in [
-            ("batch", json!(1)),
-            ("ansi", json!(false)),
-            ("extra", json!(true)),
-        ] {
-            let mut wrong = comparison.clone();
-            wrong[key] = value;
-            assert!(
-                !slice_null_comparison_matches(case, &wrong, &controls),
-                "{key}"
-            );
-        }
-        for stage in [
-            "/public_schema",
-            "/before_collect",
-            "/physical_schema",
-            "/optimized_schema",
-            "/optimized_observation/schema",
-            "/optimized_observation/raw_schema",
-        ] {
-            for (field, value) in [
-                ("name", json!("changed")),
-                ("type", json!("string")),
-                ("nullable", json!(true)),
-                ("metadata", json!({"changed":true})),
-            ] {
-                let mut wrong = comparison.clone();
-                let pointer = format!("{stage}/fields/0/{field}");
-                *wrong.pointer_mut(&pointer).ok_or("missing schema field")? = value;
-                assert!(
-                    !slice_null_comparison_matches(case, &wrong, &controls),
-                    "{pointer}"
-                );
-            }
-        }
-        for key in case.as_object().ok_or("missing reference")?.keys() {
-            let mut wrong = case.clone();
-            wrong[key] = json!("changed reference");
-            assert!(
-                !slice_null_comparison_matches(&wrong, comparison, &controls),
-                "{key}"
-            );
-        }
-    }
     Ok(())
 }
 
@@ -333,6 +235,50 @@ async fn slice_null_evaluation_matches_fresh_spark_capture() -> TestResult {
         .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
         .collect::<Vec<_>>();
     assert_eq!(json!(identities), manifest["identities"]);
+    let row_priority_ids = [
+        "rows_zero_start_before_later_fallible_operands",
+        "rows_negative_length_before_later_fallible_operands",
+    ];
+    let row_priority = records[1..]
+        .iter()
+        .filter(|case| {
+            case["id"]
+                .as_str()
+                .is_some_and(|id| row_priority_ids.contains(&id))
+        })
+        .collect::<Vec<_>>();
+    let expected_row_priority = [true, false]
+        .into_iter()
+        .flat_map(|ansi| {
+            row_priority_ids
+                .iter()
+                .map(move |id| json!({"id":id,"ansi":ansi}))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        row_priority
+            .iter()
+            .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
+            .collect::<Vec<_>>(),
+        expected_row_priority,
+    );
+    for case in row_priority {
+        assert_eq!(case["spark_error_phase"], "collect");
+        let stages = case["schema_stages"]
+            .as_object()
+            .ok_or("missing row-priority schema stages")?;
+        assert_eq!(stages.len(), 6);
+        for stage in [
+            "public",
+            "resolved",
+            "analyzed",
+            "optimized",
+            "physical",
+            "executed_before_collect",
+        ] {
+            assert!(stages.get(stage).is_some_and(Value::is_object), "{stage}");
+        }
+    }
     let original = include_str!("fixtures/slice-parent-fields-spark.jsonl")
         .lines()
         .skip(1)

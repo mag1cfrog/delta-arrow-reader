@@ -795,8 +795,21 @@ bypass that distinction.
 The existing logical simplifier prepares closed SLICE results before constant
 parameter validation, so CASE pruning uses the same interpreted bounds.
 The dedicated [coordinate references](tests/fixtures/README.md#arrays_overlap-floating-operands)
-and broad parameter suite require full parity. Two non-NULL batch error-priority
-observations (#902) retain their separate inherited controls.
+and broad parameter suite require full parity. Spark SLICE also requests
+successful row prefixes from its scalar operands. Strict string-to-integer casts
+retain the first failing row and original Arrow error through eager scalar
+wrappers, ARRAY construction, selection, and declaration casts. SLICE validates
+the completed prefix before forwarding a later operand failure, preserving
+same-row operand order and cumulative NULL selection without replay. Its own
+parameter failures retain earlier output rows for a nested consumer. The
+[row-priority references](tests/fixtures/slice-row-priority-902/README.md)
+require exact error causes at batch sizes 1 and 32. Ordinary/native evaluation
+and TRY casts retain their existing paths; opaque callback failures stay opaque.
+
+Shared producer projections still need separate prefix transport (#920), and
+preserving a user logical sort below SLICE remains separate work (#919). The
+expression-local prefix API does not change projection streams or claim general
+row localization for CASE, arithmetic/cast kernels, or higher-order functions.
 
 ### ARRAY_COMPACT result fields
 
