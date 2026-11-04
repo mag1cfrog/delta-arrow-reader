@@ -75,7 +75,10 @@ use arrow_select::take::take;
 use num_traits::{NumCast, ToPrimitive, cast::AsPrimitive};
 
 pub use decimal::{DecimalCast, rescale_decimal};
-pub use string::cast_single_string_to_boolean_default;
+pub use string::{
+    ParsedStringRows, StringParseFailure, cast_single_string_to_boolean_default,
+    parse_string_rows_until_error,
+};
 
 /// CastOptions provides a way to override the default cast behaviors
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

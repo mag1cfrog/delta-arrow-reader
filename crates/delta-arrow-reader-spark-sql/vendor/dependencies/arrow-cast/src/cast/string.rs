@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -17,6 +18,80 @@
 
 use crate::cast::*;
 use arrow_buffer::NullBuffer;
+
+/// The first input row that the strict string parser could not convert.
+#[derive(Debug)]
+pub struct StringParseFailure {
+    /// Zero-based row index in the supplied array, including NULL rows.
+    pub row_index: usize,
+    /// The original error returned by the strict cast parser.
+    pub error: ArrowError,
+}
+
+/// Successfully parsed input rows, stopping before the first invalid value.
+#[derive(Debug)]
+pub struct ParsedStringRows<P: Parser> {
+    /// Exactly the rows before `failure.row_index`, or all rows on success.
+    /// Input NULLs remain NULL, and the datatype is `P::DATA_TYPE`.
+    pub values: PrimitiveArray<P>,
+    /// The first invalid row and its original error, if parsing stopped early.
+    pub failure: Option<StringParseFailure>,
+}
+
+/// Strictly parse string rows, retaining the rows before the first parse error.
+///
+/// Accepts [`DataType::Utf8`], [`DataType::LargeUtf8`] and [`DataType::Utf8View`].
+/// Parsing stops at the first invalid non-NULL value. If its zero-based input
+/// index is `r`, `values` contains exactly rows `[0, r)`, preserving NULLs. The
+/// failing value is excluded. Indices are relative to the supplied array, even
+/// when it is a slice. Each reached non-NULL value is parsed once.
+///
+/// Invalid values produce a [`StringParseFailure`] inside the successful result.
+/// Unsupported input types or invalid primitive array construction return an
+/// outer [`ArrowError`]. Existing [`cast_with_options`] entrypoints still return
+/// a parse error directly when `safe` is false.
+///
+/// # Example
+///
+/// ```
+/// use arrow_array::{Int32Array, StringArray};
+/// use arrow_array::types::Int32Type;
+/// use arrow_cast::parse_string_rows_until_error;
+/// use arrow_schema::ArrowError;
+///
+/// let input = StringArray::from(vec![Some("12"), None, Some("bad"), Some("34")]);
+/// let parsed = parse_string_rows_until_error::<Int32Type>(&input)?;
+/// assert_eq!(parsed.values, Int32Array::from(vec![Some(12), None]));
+/// let failure = parsed.failure.unwrap();
+/// assert_eq!(failure.row_index, 2);
+/// assert!(matches!(failure.error, ArrowError::CastError(_)));
+/// # Ok::<(), ArrowError>(())
+/// ```
+pub fn parse_string_rows_until_error<P: Parser>(
+    array: &dyn Array,
+) -> Result<ParsedStringRows<P>, ArrowError> {
+    let (values, failure) = match array.data_type() {
+        DataType::Utf8 => parse_string_rows_iter::<P, _>(array.as_string::<i32>().iter()),
+        DataType::LargeUtf8 => parse_string_rows_iter::<P, _>(array.as_string::<i64>().iter()),
+        DataType::Utf8View => parse_string_rows_iter::<P, _>(array.as_string_view().iter()),
+        other => {
+            return Err(ArrowError::CastError(format!(
+                "Cannot parse string rows from {other} type"
+            )));
+        }
+    };
+    let nulls = array.nulls().map(|nulls| {
+        if values.len() == array.len() {
+            nulls.clone()
+        } else {
+            nulls.slice(0, values.len())
+        }
+    });
+    Ok(ParsedStringRows {
+        values: PrimitiveArray::try_new(values.into(), nulls)?,
+        failure,
+    })
+}
 
 pub(crate) fn value_to_string<O: OffsetSizeTrait>(
     array: &dyn Array,
@@ -103,21 +178,37 @@ fn parse_string_iter<
         //     The iterator is trustedLen because it comes from an `StringArray`.
         unsafe { PrimitiveArray::<P>::from_trusted_len_iter(iter) }
     } else {
-        let v = iter
-            .map(|x| match x {
-                Some(v) => P::parse(v).ok_or_else(|| {
-                    ArrowError::CastError(format!(
-                        "Cannot cast string '{v}' to value of {} type",
-                        P::DATA_TYPE
-                    ))
-                }),
-                None => Ok(P::Native::default()),
-            })
-            .collect::<Result<Vec<_>, ArrowError>>()?;
-        PrimitiveArray::try_new(v.into(), nulls())?
+        let (values, failure) = parse_string_rows_iter::<P, _>(iter);
+        if let Some(failure) = failure {
+            return Err(failure.error);
+        }
+        PrimitiveArray::try_new(values.into(), nulls())?
     };
 
     Ok(Arc::new(array) as ArrayRef)
+}
+
+fn parse_string_rows_iter<'a, P: Parser, I: Iterator<Item = Option<&'a str>>>(
+    iter: I,
+) -> (Vec<P::Native>, Option<StringParseFailure>) {
+    let mut failure = None;
+    let values = iter
+        .enumerate()
+        .map_while(|(row_index, value)| match value {
+            Some(value) => P::parse(value).or_else(|| {
+                failure = Some(StringParseFailure {
+                    row_index,
+                    error: ArrowError::CastError(format!(
+                        "Cannot cast string '{value}' to value of {} type",
+                        P::DATA_TYPE
+                    )),
+                });
+                None
+            }),
+            None => Some(P::Native::default()),
+        })
+        .collect();
+    (values, failure)
 }
 
 /// Casts generic string arrays to an ArrowTimestampType (TimeStampNanosecondArray, etc.)
