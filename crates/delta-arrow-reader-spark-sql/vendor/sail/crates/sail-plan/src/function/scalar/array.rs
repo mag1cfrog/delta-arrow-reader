@@ -9,6 +9,7 @@ use datafusion_expr::{
     ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
     ScalarUDFImpl, Signature, Volatility, cast, expr, is_null, lit, not, or, when,
 };
+use datafusion_functions_nested::extract::array_slice_udf;
 use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
 use datafusion_spark::function::array::expr_fn as array_fn;
@@ -111,14 +112,68 @@ fn slice_expr(
     schema: &datafusion_common::DFSchemaRef,
 ) -> PlanResult<expr::Expr> {
     let output_type = array.get_type(schema.as_ref())?;
+    let required_elements =
+        array_element_field(&output_type).is_some_and(|field| !field.is_nullable());
     let array = cast_list_value_nullability(array, schema, true)?;
     let start = cast(start, DataType::Int64);
     let length = cast(length, DataType::Int64);
     let end = start.clone() + length - lit(1_i64);
     Ok(cast(
-        expr_fn::array_slice(array, start, end, None),
+        ScalarUDF::from(SparkArraySlice {
+            native: array_slice_udf(),
+            required_elements,
+        })
+        .call(vec![array, start, end]),
         output_type,
     ))
+}
+
+// Spark's result is NULL only when an array or numeric argument is NULL.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SparkArraySlice {
+    native: Arc<ScalarUDF>,
+    required_elements: bool,
+}
+
+impl ScalarUDFImpl for SparkArraySlice {
+    fn name(&self) -> &str {
+        "spark_slice"
+    }
+
+    fn signature(&self) -> &Signature {
+        self.native.signature()
+    }
+
+    fn return_type(&self, arguments: &[DataType]) -> datafusion_common::Result<DataType> {
+        self.native.return_type(arguments)
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+        let nullable = args.arg_fields.iter().any(|field| field.is_nullable());
+        let field = self.native.return_field_from_args(args)?;
+        Ok(Arc::new(field.as_ref().clone().with_nullable(nullable)))
+    }
+
+    fn invoke_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<ColumnarValue> {
+        match self.native.invoke_with_args(args)? {
+            ColumnarValue::Array(array)
+                if self.required_elements
+                    && matches!(
+                        array.data_type(),
+                        DataType::List(_) | DataType::LargeList(_)
+                    ) =>
+            {
+                // Native NULL rows hold a NULL child that cannot acquire a required element field.
+                Ok(ColumnarValue::Array(
+                    datafusion_common::utils::remove_list_null_values(&array)?,
+                ))
+            }
+            value => Ok(value),
+        }
+    }
 }
 
 fn sort_array(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -1216,6 +1271,51 @@ mod tests {
                     }
                 }
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn slice_cleans_hidden_null_children_only_for_required_elements() -> PlanResult<()> {
+        use arrow::array::{Array, ArrayRef, AsArray, Int32Array};
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use arrow::datatypes::Schema;
+
+        for element_nullable in [false, true] {
+            let element = Arc::new(
+                Field::new("kept_element", DataType::Int32, element_nullable).with_metadata(
+                    std::collections::HashMap::from([("tag".into(), "kept".into())]),
+                ),
+            );
+            let input: ArrayRef = Arc::new(ListArray::try_new(
+                element,
+                OffsetBuffer::new(vec![0, 2, 4].into()),
+                Arc::new(Int32Array::from(vec![1, 2, 7, 8])),
+                Some(NullBuffer::from(vec![true, false])),
+            )?);
+            let data_type = input.data_type().clone();
+            let batch = RecordBatch::try_new(
+                Arc::new(Schema::new(vec![Field::new("a", data_type.clone(), true)])),
+                vec![input],
+            )?;
+            let schema = Arc::new(DFSchema::try_from(batch.schema())?);
+            let expression = slice_expr(col("a"), lit(1), lit(1), &schema)?;
+            let physical =
+                SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
+            let result = physical.evaluate(&batch)?.into_array(2)?;
+            result.to_data().validate_full()?;
+            assert_eq!(result.data_type(), &data_type);
+            let result = result.as_list::<i32>();
+            assert_eq!(result.value(0).as_primitive::<Int32Type>().value(0), 1);
+            assert!(result.is_null(1));
+            assert_eq!(
+                result.value_offsets(),
+                if element_nullable {
+                    &[0, 1, 2]
+                } else {
+                    &[0, 1, 1]
+                }
+            );
         }
         Ok(())
     }
