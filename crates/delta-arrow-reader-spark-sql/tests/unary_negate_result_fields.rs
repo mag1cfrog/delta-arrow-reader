@@ -30,9 +30,7 @@ fn unary_negate_matches_spark_or_inherited_control(
         return true;
     }
     let Some(control) = controls.iter().find(|control| {
-        control["issue"] == 896
-            && control["id"] == case["id"]
-            && control["ansi"] == case["ansi"]
+        control["issue"] == 896 && control["id"] == case["id"] && control["ansi"] == case["ansi"]
     }) else {
         return false;
     };
@@ -157,11 +155,18 @@ fn inherited_unary_overflow_controls_reject_new_differences() -> TestResult {
         for batch_size in [1, 32] {
             let mut comparison = control["observation"].clone();
             comparison["batch"] = json!(batch_size);
-            assert!(unary_negate_matches_spark_or_inherited_control(case, &comparison, controls));
+            assert!(unary_negate_matches_spark_or_inherited_control(
+                case,
+                &comparison,
+                controls
+            ));
             for key in comparison.as_object().ok_or("missing observation")?.keys() {
                 let mut wrong = comparison.clone();
                 wrong[key] = json!("new difference");
-                assert!(!unary_negate_matches_spark_or_inherited_control(case, &wrong, controls), "{key}");
+                assert!(
+                    !unary_negate_matches_spark_or_inherited_control(case, &wrong, controls),
+                    "{key}"
+                );
             }
             for (key, value) in [
                 ("batch", json!(2)),
@@ -175,7 +180,10 @@ fn inherited_unary_overflow_controls_reject_new_differences() -> TestResult {
             ] {
                 let mut wrong = comparison.clone();
                 wrong[key] = value;
-                assert!(!unary_negate_matches_spark_or_inherited_control(case, &wrong, controls), "{key}");
+                assert!(
+                    !unary_negate_matches_spark_or_inherited_control(case, &wrong, controls),
+                    "{key}"
+                );
             }
             for stage in [
                 "/public_schema",
@@ -200,7 +208,12 @@ fn inherited_unary_overflow_controls_reject_new_differences() -> TestResult {
                             } else {
                                 value
                             };
-                            assert!(!unary_negate_matches_spark_or_inherited_control(case, &wrong, controls), "{pointer}");
+                            assert!(
+                                !unary_negate_matches_spark_or_inherited_control(
+                                    case, &wrong, controls
+                                ),
+                                "{pointer}"
+                            );
                         }
                     }
                 }
@@ -208,24 +221,30 @@ fn inherited_unary_overflow_controls_reject_new_differences() -> TestResult {
             for key in case.as_object().ok_or("missing reference")?.keys() {
                 let mut wrong = case.clone();
                 wrong[key] = json!("different reference");
-                assert!(!unary_negate_matches_spark_or_inherited_control(&wrong, &comparison, controls), "{key}");
+                assert!(
+                    !unary_negate_matches_spark_or_inherited_control(&wrong, &comparison, controls),
+                    "{key}"
+                );
             }
         }
     }
-    assert_eq!(identities, std::collections::BTreeSet::from([
-        "required_operator_int_min_direct",
-        "required_operator_int_min_struct",
-        "required_function_int_min_direct",
-        "required_function_int_min_struct",
-        "nullable_operator_int_min_direct",
-        "nullable_operator_int_min_is_null",
-        "nullable_operator_int_min_struct",
-        "nullable_function_int_min_direct",
-        "nullable_function_int_min_is_null",
-        "nullable_function_int_min_struct",
-        "constant_int_min_operator",
-        "constant_int_min_function",
-    ]));
+    assert_eq!(
+        identities,
+        std::collections::BTreeSet::from([
+            "required_operator_int_min_direct",
+            "required_operator_int_min_struct",
+            "required_function_int_min_direct",
+            "required_function_int_min_struct",
+            "nullable_operator_int_min_direct",
+            "nullable_operator_int_min_is_null",
+            "nullable_operator_int_min_struct",
+            "nullable_function_int_min_direct",
+            "nullable_function_int_min_is_null",
+            "nullable_function_int_min_struct",
+            "constant_int_min_operator",
+            "constant_int_min_function",
+        ])
+    );
     Ok(())
 }
 
