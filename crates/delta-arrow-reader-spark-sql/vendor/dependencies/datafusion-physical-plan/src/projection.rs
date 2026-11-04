@@ -43,23 +43,17 @@ use std::task::{Context, Poll};
 use arrow::datatypes::SchemaRef;
 use arrow::record_batch::RecordBatch;
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::tree_node::{
-    Transformed, TransformedResult, TreeNode, TreeNodeRecursion,
-};
+use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DataFusionError, JoinSide, JoinType, Result, internal_err};
 use datafusion_execution::TaskContext;
 use datafusion_expr::ExpressionPlacement;
 use datafusion_physical_expr::equivalence::ProjectionMapping;
 use datafusion_physical_expr::projection::Projector;
 use datafusion_physical_expr_common::physical_expr::{PhysicalExprRef, fmt_sql};
-use datafusion_physical_expr_common::sort_expr::{
-    LexOrdering, LexRequirement, PhysicalSortExpr,
-};
+use datafusion_physical_expr_common::sort_expr::{LexOrdering, LexRequirement, PhysicalSortExpr};
 // Re-exported from datafusion-physical-expr for backwards compatibility
 // We recommend updating your imports to use datafusion-physical-expr directly
-pub use datafusion_physical_expr::projection::{
-    ProjectionExpr, ProjectionExprs, update_expr,
-};
+pub use datafusion_physical_expr::projection::{ProjectionExpr, ProjectionExprs, update_expr};
 
 use futures::stream::{Stream, StreamExt};
 use log::trace;
@@ -79,6 +73,8 @@ pub struct ProjectionExec {
     metrics: ExecutionPlanMetricsSet,
     /// Cache holding plan properties like equivalences, output partitioning etc.
     cache: Arc<PlanProperties>,
+    /// An admitted consumer needs real rows preceding a localized failure.
+    row_error_prefix: bool,
 }
 
 impl ProjectionExec {
@@ -143,13 +139,9 @@ impl ProjectionExec {
         Self::try_from_projector(projector, input)
     }
 
-    fn try_from_projector(
-        projector: Projector,
-        input: Arc<dyn ExecutionPlan>,
-    ) -> Result<Self> {
+    fn try_from_projector(projector: Projector, input: Arc<dyn ExecutionPlan>) -> Result<Self> {
         // Construct a map from the input expressions to the output expression of the Projection
-        let projection_mapping =
-            projector.projection().projection_mapping(&input.schema())?;
+        let projection_mapping = projector.projection().projection_mapping(&input.schema())?;
         let cache = Self::compute_properties(
             &input,
             &projection_mapping,
@@ -160,7 +152,23 @@ impl ProjectionExec {
             input,
             metrics: ExecutionPlanMetricsSet::new(),
             cache: Arc::new(cache),
+            row_error_prefix: false,
         })
+    }
+
+    /// Retain a computed batch's successful prefix and defer its owned failure.
+    ///
+    /// The planner must establish a requesting consumer through actual column
+    /// bindings without crossing an original blocking evaluation boundary.
+    /// Ordinary projections leave this disabled.
+    pub fn with_row_error_prefix(mut self, enabled: bool) -> Self {
+        self.row_error_prefix = enabled;
+        self
+    }
+
+    /// Whether this producer transports rows before a localized failure.
+    pub fn preserves_row_error_prefix(&self) -> bool {
+        self.row_error_prefix
     }
 
     /// The projection expressions stored as tuples of (expression, output column name)
@@ -236,11 +244,7 @@ impl ProjectionExec {
 }
 
 impl DisplayAs for ProjectionExec {
-    fn fmt_as(
-        &self,
-        t: DisplayFormatType,
-        f: &mut std::fmt::Formatter,
-    ) -> std::fmt::Result {
+    fn fmt_as(&self, t: DisplayFormatType, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match t {
             DisplayFormatType::Default | DisplayFormatType::Verbose => {
                 let expr: Vec<String> = self
@@ -292,17 +296,14 @@ impl ExecutionPlan for ProjectionExec {
     }
 
     fn benefits_from_input_partitioning(&self) -> Vec<bool> {
-        let all_simple_exprs =
-            self.projector
-                .projection()
-                .as_ref()
-                .iter()
-                .all(|proj_expr| {
-                    !matches!(
-                        proj_expr.expr.placement(),
-                        ExpressionPlacement::KeepInPlace
-                    )
-                });
+        let all_simple_exprs = self
+            .projector
+            .projection()
+            .as_ref()
+            .iter()
+            .all(|proj_expr| {
+                !matches!(proj_expr.expr.placement(), ExpressionPlacement::KeepInPlace)
+            });
         // If expressions are all either column_expr or Literal (or other cheap expressions),
         // then all computations in this projection are reorder or rename,
         // and projection would not benefit from the repartition, benefits_from_input_partitioning will return false.
@@ -318,11 +319,8 @@ impl ExecutionPlan for ProjectionExec {
         mut children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         check_if_same_properties!(self, children);
-        ProjectionExec::try_from_projector(
-            self.projector.clone(),
-            children.swap_remove(0),
-        )
-        .map(|p| Arc::new(p) as _)
+        ProjectionExec::try_from_projector(self.projector.clone(), children.swap_remove(0))
+            .map(|p| Arc::new(p.with_row_error_prefix(self.row_error_prefix)) as _)
     }
 
     fn execute(
@@ -342,6 +340,7 @@ impl ExecutionPlan for ProjectionExec {
             projector,
             self.input.execute(partition, context)?,
             BaselineMetrics::new(&self.metrics, partition),
+            self.row_error_prefix,
         )?))
     }
 
@@ -350,8 +349,7 @@ impl ExecutionPlan for ProjectionExec {
     }
 
     fn partition_statistics(&self, partition: Option<usize>) -> Result<Arc<Statistics>> {
-        let input_stats =
-            Arc::unwrap_or_clone(self.input.partition_statistics(partition)?);
+        let input_stats = Arc::unwrap_or_clone(self.input.partition_statistics(partition)?);
         let output_schema = self.schema();
         Ok(Arc::new(
             self.projector
@@ -478,16 +476,11 @@ impl ExecutionPlan for ProjectionExec {
                 let new_exec = Arc::new(self.clone()).with_new_children(vec![inner])?;
                 Ok(SortOrderPushdownResult::Inexact { inner: new_exec })
             }
-            SortOrderPushdownResult::Unsupported => {
-                Ok(SortOrderPushdownResult::Unsupported)
-            }
+            SortOrderPushdownResult::Unsupported => Ok(SortOrderPushdownResult::Unsupported),
         }
     }
 
-    fn with_preserve_order(
-        &self,
-        preserve_order: bool,
-    ) -> Option<Arc<dyn ExecutionPlan>> {
+    fn with_preserve_order(&self, preserve_order: bool) -> Option<Arc<dyn ExecutionPlan>> {
         self.input
             .with_preserve_order(preserve_order)
             .and_then(|new_input| {
@@ -504,11 +497,15 @@ impl ProjectionStream {
         projector: Projector,
         input: SendableRecordBatchStream,
         baseline_metrics: BaselineMetrics,
+        row_error_prefix: bool,
     ) -> Result<Self> {
         Ok(Self {
             projector,
             input,
             baseline_metrics,
+            row_error_prefix,
+            pending_error: None,
+            finished: false,
         })
     }
 
@@ -517,6 +514,41 @@ impl ProjectionStream {
         let _timer = self.baseline_metrics.elapsed_compute().timer();
         self.projector.project_batch(batch)
     }
+
+    fn poll_prefix(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<RecordBatch>>> {
+        if let Some(error) = self.pending_error.take() {
+            self.finished = true;
+            return Poll::Ready(Some(Err(error)));
+        }
+        if self.finished {
+            return Poll::Ready(None);
+        }
+        let batch = match self.input.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(batch))) => batch,
+            Poll::Ready(other) => {
+                self.finished = true;
+                return Poll::Ready(other);
+            }
+            Poll::Pending => return Poll::Pending,
+        };
+        let _timer = self.baseline_metrics.elapsed_compute().timer();
+        match self.projector.project_batch_until_error(&batch) {
+            Ok(prefix) => {
+                if let Some(failure) = prefix.failure {
+                    if failure.row_index == 0 {
+                        self.finished = true;
+                        return Poll::Ready(Some(Err(failure.error)));
+                    }
+                    self.pending_error = Some(failure.error);
+                }
+                Poll::Ready(Some(Ok(prefix.batch)))
+            }
+            Err(error) => {
+                self.finished = true;
+                Poll::Ready(Some(Err(error)))
+            }
+        }
+    }
 }
 
 /// Projection iterator
@@ -524,26 +556,43 @@ struct ProjectionStream {
     projector: Projector,
     input: SendableRecordBatchStream,
     baseline_metrics: BaselineMetrics,
+    row_error_prefix: bool,
+    pending_error: Option<DataFusionError>,
+    finished: bool,
 }
 
 impl Stream for ProjectionStream {
     type Item = Result<RecordBatch>;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        let poll = self.input.poll_next_unpin(cx).map(|x| match x {
-            Some(Ok(batch)) => Some(self.batch_project(&batch)),
-            other => other,
-        });
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let poll = if self.row_error_prefix {
+            self.poll_prefix(cx)
+        } else {
+            self.input.poll_next_unpin(cx).map(|x| match x {
+                Some(Ok(batch)) => Some(self.batch_project(&batch)),
+                other => other,
+            })
+        };
 
         self.baseline_metrics.record_poll(poll)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        // Same number of record batches
-        self.input.size_hint()
+        if !self.row_error_prefix {
+            self.input.size_hint()
+        } else if self.pending_error.is_some() {
+            (1, Some(1))
+        } else if self.finished {
+            (0, Some(0))
+        } else {
+            (
+                0,
+                self.input
+                    .size_hint()
+                    .1
+                    .and_then(|upper| upper.checked_mul(2)),
+            )
+        }
     }
 }
 
@@ -608,8 +657,7 @@ pub fn try_embed_projection<Exec: EmbeddedProjection + 'static>(
 
     for proj_expr in projection.expr() {
         // update column index for projection expression since the input schema has been changed.
-        let Some(expr) =
-            update_expr(&proj_expr.expr, embed_project_exprs.as_slice(), false)?
+        let Some(expr) = update_expr(&proj_expr.expr, embed_project_exprs.as_slice(), false)?
         else {
             return Ok(None);
         };
@@ -619,10 +667,10 @@ pub fn try_embed_projection<Exec: EmbeddedProjection + 'static>(
         });
     }
     // Old projection may contain some alias or expression such as `a + 1` and `CAST('true' AS BOOLEAN)`, but our projection_exprs in hash join just contain column, so we need to create the new projection to keep the original projection.
-    let new_projection = Arc::new(ProjectionExec::try_new(
-        new_projection_exprs,
-        Arc::clone(&new_execution_plan) as _,
-    )?);
+    let new_projection = Arc::new(
+        ProjectionExec::try_new(new_projection_exprs, Arc::clone(&new_execution_plan) as _)?
+            .with_row_error_prefix(projection.row_error_prefix),
+    );
     if is_projection_removable(&new_projection) {
         // Residual is identity — embedding fully absorbed the projection.
         Ok(Some(new_execution_plan))
@@ -656,7 +704,10 @@ pub fn try_pushdown_through_join(
     // ponytail: this mapper assumes concatenated left/right output columns.
     // Semi/anti/mark joins use embedded projection until child pushdown maps
     // their actual output indices.
-    if !matches!(join_type, JoinType::Inner | JoinType::Left | JoinType::Right | JoinType::Full) {
+    if !matches!(
+        join_type,
+        JoinType::Inner | JoinType::Left | JoinType::Right | JoinType::Full
+    ) {
         return Ok(None);
     }
 
@@ -768,10 +819,7 @@ pub fn all_alias_free_columns(exprs: &[ProjectionExpr]) -> bool {
 /// Updates a source provider's projected columns according to the given
 /// projection operator's expressions. To use this function safely, one must
 /// ensure that all expressions are `Column` expressions without aliases.
-pub fn new_projections_for_columns(
-    projection: &[ProjectionExpr],
-    source: &[usize],
-) -> Vec<usize> {
+pub fn new_projections_for_columns(projection: &[ProjectionExpr], source: &[usize]) -> Vec<usize> {
     projection
         .iter()
         .filter_map(|proj_expr| {
@@ -790,7 +838,7 @@ pub fn make_with_child(
     child: &Arc<dyn ExecutionPlan>,
 ) -> Result<Arc<dyn ExecutionPlan>> {
     ProjectionExec::try_new(projection.expr().to_vec(), Arc::clone(child))
-        .map(|e| Arc::new(e) as _)
+        .map(|e| Arc::new(e.with_row_error_prefix(projection.row_error_prefix)) as _)
 }
 
 /// Returns `true` if all the expressions in the argument are `Column`s.
@@ -806,8 +854,7 @@ pub fn update_ordering(
 ) -> Result<Option<LexOrdering>> {
     let mut updated_exprs = vec![];
     for mut sort_expr in ordering.into_iter() {
-        let Some(updated_expr) = update_expr(&sort_expr.expr, projected_exprs, false)?
-        else {
+        let Some(updated_expr) = update_expr(&sort_expr.expr, projected_exprs, false)? else {
             return Ok(None);
         };
         sort_expr.expr = updated_expr;
@@ -824,8 +871,7 @@ pub fn update_ordering_requirement(
 ) -> Result<Option<LexRequirement>> {
     let mut updated_exprs = vec![];
     for mut sort_expr in reqs.into_iter() {
-        let Some(updated_expr) = update_expr(&sort_expr.expr, projected_exprs, false)?
-        else {
+        let Some(updated_expr) = update_expr(&sort_expr.expr, projected_exprs, false)? else {
             return Ok(None);
         };
         sort_expr.expr = updated_expr;
@@ -836,9 +882,7 @@ pub fn update_ordering_requirement(
 
 /// Downcasts all the expressions in `exprs` to `Column`s. If any of the given
 /// expressions is not a `Column`, returns `None`.
-pub fn physical_to_column_exprs(
-    exprs: &[ProjectionExpr],
-) -> Option<Vec<(Column, String)>> {
+pub fn physical_to_column_exprs(exprs: &[ProjectionExpr]) -> Option<Vec<(Column, String)>> {
     exprs
         .iter()
         .map(|proj_expr| {
@@ -957,8 +1001,7 @@ pub fn update_join_on(
         .unzip();
 
     let new_left_columns = new_columns_for_join_on(&left_idx, proj_left_exprs, 0);
-    let new_right_columns =
-        new_columns_for_join_on(&right_idx, proj_right_exprs, left_field_size);
+    let new_right_columns = new_columns_for_join_on(&right_idx, proj_right_exprs, left_field_size);
 
     match (new_left_columns, new_right_columns) {
         (Some(left), Some(right)) => Some(left.into_iter().zip(right).collect()),
@@ -974,13 +1017,9 @@ pub fn update_join_filter(
     join_filter: &JoinFilter,
     left_field_size: usize,
 ) -> Option<JoinFilter> {
-    let mut new_left_indices = new_indices_for_join_filter(
-        join_filter,
-        JoinSide::Left,
-        projection_left_exprs,
-        0,
-    )
-    .into_iter();
+    let mut new_left_indices =
+        new_indices_for_join_filter(join_filter, JoinSide::Left, projection_left_exprs, 0)
+            .into_iter();
     let mut new_right_indices = new_indices_for_join_filter(
         join_filter,
         JoinSide::Right,
@@ -990,26 +1029,26 @@ pub fn update_join_filter(
     .into_iter();
 
     // Check if all columns match:
-    (new_right_indices.len() + new_left_indices.len()
-        == join_filter.column_indices().len())
-    .then(|| {
-        JoinFilter::new(
-            Arc::clone(join_filter.expression()),
-            join_filter
-                .column_indices()
-                .iter()
-                .map(|col_idx| ColumnIndex {
-                    index: if col_idx.side == JoinSide::Left {
-                        new_left_indices.next().unwrap()
-                    } else {
-                        new_right_indices.next().unwrap()
-                    },
-                    side: col_idx.side,
-                })
-                .collect(),
-            Arc::clone(join_filter.schema()),
-        )
-    })
+    (new_right_indices.len() + new_left_indices.len() == join_filter.column_indices().len()).then(
+        || {
+            JoinFilter::new(
+                Arc::clone(join_filter.expression()),
+                join_filter
+                    .column_indices()
+                    .iter()
+                    .map(|col_idx| ColumnIndex {
+                        index: if col_idx.side == JoinSide::Left {
+                            new_left_indices.next().unwrap()
+                        } else {
+                            new_right_indices.next().unwrap()
+                        },
+                        side: col_idx.side,
+                    })
+                    .collect(),
+                Arc::clone(join_filter.schema()),
+            )
+        },
+    )
 }
 
 /// Unifies `projection` with its input (which is also a [`ProjectionExec`]).
@@ -1017,6 +1056,11 @@ fn try_unifying_projections(
     projection: &ProjectionExec,
     child: &ProjectionExec,
 ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
+    // Inlining a prefix producer can change its output evaluation order and
+    // duplicate the computation whose failure the stream owns.
+    if child.row_error_prefix {
+        return Ok(None);
+    }
     let mut projected_exprs = vec![];
     let mut column_ref_map: HashMap<Column, usize> = HashMap::new();
 
@@ -1060,7 +1104,7 @@ fn try_unifying_projections(
         });
     }
     ProjectionExec::try_new(projected_exprs, Arc::clone(child.input()))
-        .map(|e| Some(Arc::new(e) as _))
+        .map(|e| Some(Arc::new(e.with_row_error_prefix(projection.row_error_prefix)) as _))
 }
 
 /// Collect all column indices from the given projection expressions.
@@ -1149,8 +1193,7 @@ fn new_columns_for_join_on(
                             .enumerate()
                             .find(|(_, (proj_column, _))| {
                                 column.name() == proj_column.name()
-                                    && column.index() + column_index_offset
-                                        == proj_column.index()
+                                    && column.index() + column_index_offset == proj_column.index()
                             })
                             .map(|(index, (_, alias))| Column::new(alias, index));
                         if let Some(new_column) = new_column {
@@ -1159,10 +1202,7 @@ fn new_columns_for_join_on(
                             // If the column is not found in the projection expressions,
                             // it means that the column is not projected. In this case,
                             // we cannot push the projection down.
-                            internal_err!(
-                                "Column {:?} not found in projection expressions",
-                                column
-                            )
+                            internal_err!("Column {:?} not found in projection expressions", column)
                         }
                     } else {
                         Ok(Transformed::no(expr))
@@ -1739,8 +1779,7 @@ mod tests {
     /// with projection [b - 1 as a], the pushed down filter should be `b - 1 > 5`
     #[test]
     fn test_basic_dyn_filter_projection_pushdown_update_child() -> Result<()> {
-        let input_schema =
-            Arc::new(Schema::new(vec![Field::new("b", DataType::Int32, false)]));
+        let input_schema = Arc::new(Schema::new(vec![Field::new("b", DataType::Int32, false)]));
 
         let input = Arc::new(StatisticsExec::new(
             Statistics {
@@ -1793,8 +1832,7 @@ mod tests {
         );
 
         // Update to a > 5 (after projection, b is now called a)
-        let new_expr =
-            Arc::new(BinaryExpr::new(Arc::clone(&col_a), Operator::Gt, lit(5i32)));
+        let new_expr = Arc::new(BinaryExpr::new(Arc::clone(&col_a), Operator::Gt, lit(5i32)));
         dynamic_filter.update(new_expr)?;
 
         // Now it should be a > 5
@@ -1814,31 +1852,65 @@ mod tests {
 #[cfg(test)]
 #[test]
 fn projected_join_preserves_output_column_mapping() -> datafusion_common::Result<()> {
+    use crate::{
+        ExecutionPlan, empty::EmptyExec, joins::NestedLoopJoinExec, projection::ProjectionExec,
+    };
     use arrow::datatypes::{DataType, Field, Schema};
     use datafusion_common::JoinType;
     use datafusion_physical_expr::expressions::Column;
-    use crate::{ExecutionPlan, empty::EmptyExec, joins::NestedLoopJoinExec, projection::ProjectionExec};
     use std::sync::Arc;
 
-    for join_type in [JoinType::RightMark, JoinType::RightSemi, JoinType::RightAnti,
-                      JoinType::LeftMark, JoinType::LeftSemi, JoinType::LeftAnti,
-                      JoinType::Inner, JoinType::Left, JoinType::Right, JoinType::Full] {
+    for join_type in [
+        JoinType::RightMark,
+        JoinType::RightSemi,
+        JoinType::RightAnti,
+        JoinType::LeftMark,
+        JoinType::LeftSemi,
+        JoinType::LeftAnti,
+        JoinType::Inner,
+        JoinType::Left,
+        JoinType::Right,
+        JoinType::Full,
+    ] {
         for rename in [false, true] {
-            let left = Arc::new(EmptyExec::new(Arc::new(Schema::new(vec![Field::new("l", DataType::Int64, true)]))));
+            let left = Arc::new(EmptyExec::new(Arc::new(Schema::new(vec![Field::new(
+                "l",
+                DataType::Int64,
+                true,
+            )]))));
             let right = Arc::new(EmptyExec::new(Arc::new(Schema::new(vec![
                 Field::new("r0", DataType::Int64, true),
                 Field::new("r1", DataType::Int64, true),
                 Field::new("r2", DataType::Int64, true),
             ]))));
-            let join = Arc::new(NestedLoopJoinExec::try_new(left, right, None, &join_type, None)?);
+            let join = Arc::new(NestedLoopJoinExec::try_new(
+                left, right, None, &join_type, None,
+            )?);
             let schema = join.schema();
-            let expr = schema.fields().iter().enumerate().take(schema.fields().len().saturating_sub(1))
-                .map(|(i,f)| (Arc::new(Column::new(f.name(),i)) as Arc<dyn datafusion_physical_expr::PhysicalExpr>,
-                             if rename { format!("output_{i}") } else { f.name().clone() }))
+            let expr = schema
+                .fields()
+                .iter()
+                .enumerate()
+                .take(schema.fields().len().saturating_sub(1))
+                .map(|(i, f)| {
+                    (
+                        Arc::new(Column::new(f.name(), i))
+                            as Arc<dyn datafusion_physical_expr::PhysicalExpr>,
+                        if rename {
+                            format!("output_{i}")
+                        } else {
+                            f.name().clone()
+                        },
+                    )
+                })
                 .collect::<Vec<_>>();
             let projection = ProjectionExec::try_new(expr, join.clone())?;
             if let Some(rewritten) = join.try_swapping_with_projection(&projection)? {
-                assert_eq!(rewritten.schema(),projection.schema(),"{join_type:?}, rename={rename}");
+                assert_eq!(
+                    rewritten.schema(),
+                    projection.schema(),
+                    "{join_type:?}, rename={rename}"
+                );
             }
         }
     }
