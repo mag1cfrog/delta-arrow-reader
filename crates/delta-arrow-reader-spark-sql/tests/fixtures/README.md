@@ -2001,6 +2001,38 @@ other non-byte arguments retain the original native HEX expression; these
 references do not expand numeric HEX compatibility or cover binary
 TO_CHAR/TO_VARCHAR and hashing.
 
+## Binary CONCAT types and NULL controls
+
+`binary-concat-spark.jsonl` preserves 110 independent Spark 4.2.0 observations
+for binary literals, required/nullable/empty providers, nested and single-argument
+CONCAT, and the existing string CONCAT/CONCAT_WS NULL policy in both ANSI modes.
+`binary-concat-null-spark.jsonl` adds 44 observations for untyped and typed NULLs,
+all-NULL binary columns, NULL separators, and valid/invalid UTF-8 binary values.
+`binary-concat-expanded-spark.jsonl` adds 108 observations for long binary data,
+all 256 byte values, and binary providers equivalent to Arrow fixed widths 0, 3
+and 20. Each capture retains exact runtime identity, inputs, settings, complete
+Spark schema stages and ordered results. The shared replayer ignores expected
+results when collecting fresh references.
+
+`binary_concat.rs` compares all 262 references across Binary, LargeBinary and
+BinaryView at batch sizes 1 and 32. Another 180 comparisons replay fixed-width
+provider references as sliced FixedSizeBinary arrays. View controls require
+out-of-line buffers. The comparison retains actual analyzed and physical fields
+through planning or execution errors and checks names, types, nullability,
+metadata and values. Native DataFusion controls compare complete projection
+batches and exact Arrow types for all four binary representations before and
+after Spark queries. Native CONCAT batches match for Binary, LargeBinary and
+BinaryView. Collecting a native FixedSizeBinary(17) CONCAT retains the exact
+type-coercion error in both plain and Spark-configured sessions. Library tests
+check exact Arrow result types, arbitrary bytes, NULLs and sliced representation
+pairs.
+
+Single-argument identities must preserve Spark's empty derived-field metadata.
+Invalid UTF-8 STRING bytes remain under #780, including CONCAT_WS and a binary
+round trip; Spark's displayed replacement character does not establish byte
+preservation. The assertions retain those required successes and every field.
+This fixture does not establish complete string/binary compatibility.
+
 ## Regular expression extraction
 
 `regexp-extract-spark.jsonl` preserves all 82 extraction observations selected
