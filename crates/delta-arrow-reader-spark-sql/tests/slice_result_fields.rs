@@ -79,9 +79,10 @@ async fn capture_slice_observation(
 }
 
 fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Value]) -> bool {
-    if !matches!(comparison["group"].as_str(),
-        Some("slice-parent-878-current-v1" | "slice-parameters-880-current-v1"))
-        || comparison["id"] != case["id"]
+    if !matches!(
+        comparison["group"].as_str(),
+        Some("slice-parent-878-current-v1" | "slice-parameters-880-current-v1")
+    ) || comparison["id"] != case["id"]
         || comparison["ansi"] != case["ansi"]
         || case["ansi"].as_bool().is_none()
         || !matches!(comparison["batch"].as_u64(), Some(1 | 32))
@@ -106,7 +107,9 @@ fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Va
     }
     // shortcut: #881/#894 retain these exact inherited observations until their fixes.
     let issue = match (
-        comparison["group"].as_str(), case["id"].as_str(), case["ansi"].as_bool(),
+        comparison["group"].as_str(),
+        case["id"].as_str(),
+        case["ansi"].as_bool(),
     ) {
         (
             Some("slice-parent-878-current-v1"),
@@ -120,19 +123,23 @@ fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Va
         ) => 881,
         (
             Some("slice-parameters-880-current-v1"),
-            Some("inherited_881_null_array_bad_start"
+            Some(
+                "inherited_881_null_array_bad_start"
                 | "inherited_881_bad_array_null_start"
                 | "inherited_881_bad_array_null_start_is_null"
-                | "inherited_881_constant_bad_array_null_start"),
+                | "inherited_881_constant_bad_array_null_start",
+            ),
             Some(true),
         ) => 881,
         (
             Some("slice-parameters-880-current-v1"),
-            Some("literal_last_max_length"
+            Some(
+                "literal_last_max_length"
                 | "literal_min_start_zero_length"
                 | "literal_negative_start_cross_end"
                 | "literal_negative_start_past_end"
-                | "provider_valid_boundaries"),
+                | "provider_valid_boundaries",
+            ),
             Some(_),
         ) => 894,
         _ => return false,
@@ -328,15 +335,19 @@ fn inherited_slice_controls_reject_new_differences() -> TestResult {
     let references = [
         include_str!("fixtures/slice-parent-fields-spark.jsonl"),
         include_str!("fixtures/slice-parameters/spark-reference.jsonl"),
-    ].into_iter().flat_map(str::lines)
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
+    ]
+    .into_iter()
+    .flat_map(str::lines)
+    .map(serde_json::from_str::<Value>)
+    .collect::<Result<Vec<_>, _>>()?;
     let controls = [
         include_str!("fixtures/slice-inherited-controls.jsonl"),
         include_str!("fixtures/slice-parameters/inherited-controls.jsonl"),
-    ].into_iter().flat_map(|fixture| fixture.lines().skip(1))
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
+    ]
+    .into_iter()
+    .flat_map(|fixture| fixture.lines().skip(1))
+    .map(serde_json::from_str::<Value>)
+    .collect::<Result<Vec<_>, _>>()?;
     let controls = controls.as_slice();
     let mut identities = std::collections::BTreeSet::new();
     for control in controls {
@@ -439,10 +450,10 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use arrow::datatypes::DataType;
+    use datafusion::logical_expr::simplify::{ExprSimplifyResult, SimplifyContext};
     use datafusion::logical_expr::{
         ColumnarValue, Expr, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
     };
-    use datafusion::logical_expr::simplify::{ExprSimplifyResult, SimplifyContext};
     use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
 
     static INVOCATIONS: AtomicUsize = AtomicUsize::new(0);
@@ -475,14 +486,19 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
             Ok(args[0].clone())
         }
 
-        fn simplify(&self, args: Vec<Expr>, _: &SimplifyContext)
-        -> datafusion::common::Result<ExprSimplifyResult> {
+        fn simplify(
+            &self,
+            args: Vec<Expr>,
+            _: &SimplifyContext,
+        ) -> datafusion::common::Result<ExprSimplifyResult> {
             SIMPLIFICATIONS.fetch_add(1, Ordering::SeqCst);
             Ok(ExprSimplifyResult::Original(args))
         }
 
-        fn invoke_with_args(&self, args: ScalarFunctionArgs)
-        -> datafusion::common::Result<ColumnarValue> {
+        fn invoke_with_args(
+            &self,
+            args: ScalarFunctionArgs,
+        ) -> datafusion::common::Result<ColumnarValue> {
             INVOCATIONS.fetch_add(1, Ordering::SeqCst);
             if self.fail {
                 datafusion::common::exec_err!("SLICE extension boundary was invoked")
@@ -503,8 +519,14 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                 ("SELECT SLICE(ARRAY(1, 2), slice_boundary(1), 1) AS r", true),
                 ("SELECT SLICE(ARRAY(1, 2), 1, slice_boundary(1)) AS r", true),
                 ("SELECT slice_boundary(SLICE(ARRAY(1, 2), 1, 1)) AS r", true),
-                ("SELECT CASE WHEN false THEN SLICE(ARRAY(1, 2), slice_boundary(0), 1) ELSE ARRAY(9) END AS r", false),
-                ("SELECT CASE WHEN false THEN slice_boundary(1) ELSE 7 END AS r, SLICE(ARRAY(1, 2), 1, 1) AS neighbor", false),
+                (
+                    "SELECT CASE WHEN false THEN SLICE(ARRAY(1, 2), slice_boundary(0), 1) ELSE ARRAY(9) END AS r",
+                    false,
+                ),
+                (
+                    "SELECT CASE WHEN false THEN slice_boundary(1) ELSE 7 END AS r, SLICE(ARRAY(1, 2), 1, 1) AS neighbor",
+                    false,
+                ),
             ] {
                 INVOCATIONS.store(0, Ordering::SeqCst);
                 SIMPLIFICATIONS.store(0, Ordering::SeqCst);
@@ -517,14 +539,17 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                 let result = datafusion::physical_plan::collect(physical, session.task_ctx()).await;
                 assert_eq!(result.is_err(), reached && fail, "{sql}: {result:?}");
                 assert_eq!(INVOCATIONS.load(Ordering::SeqCst) > 0, reached, "{sql}");
-                eprintln!("SLICE_FOLDING_BOUNDARY_OBSERVATION {}", json!({
-                    "sql":sql,"volatile":volatile,"fail":fail,
-                    "planning_simplifications":planning_calls,
-                    "physical_simplifications":physical_calls,
-                    "final_simplifications":SIMPLIFICATIONS.load(Ordering::SeqCst),
-                    "invocations":INVOCATIONS.load(Ordering::SeqCst),
-                    "failed":result.is_err(),
-                }));
+                eprintln!(
+                    "SLICE_FOLDING_BOUNDARY_OBSERVATION {}",
+                    json!({
+                        "sql":sql,"volatile":volatile,"fail":fail,
+                        "planning_simplifications":planning_calls,
+                        "physical_simplifications":physical_calls,
+                        "final_simplifications":SIMPLIFICATIONS.load(Ordering::SeqCst),
+                        "invocations":INVOCATIONS.load(Ordering::SeqCst),
+                        "failed":result.is_err(),
+                    })
+                );
             }
         }
     }

@@ -1326,9 +1326,9 @@ mod tests {
     #[test]
     fn slice_parameter_error_identity_is_exact() {
         for message in [SparkArraySlice::START_ERROR, SparkArraySlice::LENGTH_ERROR] {
-            assert!(SparkArraySlice::is_parameter_error(&DataFusionError::Execution(
-                message.into(),
-            )));
+            assert!(SparkArraySlice::is_parameter_error(
+                &DataFusionError::Execution(message.into(),)
+            ));
             for error in [
                 DataFusionError::Plan(message.into()),
                 DataFusionError::Execution(format!("{message} from another function")),
@@ -1362,12 +1362,18 @@ mod tests {
                 ),
                 (
                     "length",
-                    Arc::new(Int32Array::from(vec![Some(-1), Some(-1), None, Some(length)])) as _,
+                    Arc::new(Int32Array::from(vec![
+                        Some(-1),
+                        Some(-1),
+                        None,
+                        Some(length),
+                    ])) as _,
                 ),
             ])?;
             let schema = Arc::new(DFSchema::try_from(batch.schema())?);
             let expression = slice_expr(col("a"), col("start"), col("length"), &schema)?;
-            let physical = SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
+            let physical =
+                SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
             let result = physical.evaluate(&batch);
             if let Some(condition) = condition {
                 assert!(
