@@ -770,9 +770,15 @@ arguments are non-NULL. A targeted preparation check reports constant parameter
 errors after required ISNULL and dead CASE pruning; provider-dependent errors
 remain at collection. Constant lambda bodies validate before whole higher-order
 calls fold, including empty inputs. Folding-disabled and volatile extension
-contexts retain their existing preparation path. The native delegate still determines valid
-coordinates. NULL/fallible-operand and signed-coordinate gaps remain owned by
-#881 and #894; their exact inherited observations stay visible in the
+contexts retain their existing preparation path. A known literal NULL discards
+ordinary scalar children before folding. Runtime NULL array and start rows skip
+later arguments through the shared scalar selection path, while reached
+constant argument failures retain their optimization stage. Selected arguments
+reuse lambda input projection before filtering, so unrelated sibling columns
+stay shared. Index rewrites preserve column and lambda-variable fields, and
+empty projections retain the selected row count. The native delegate
+still determines valid coordinates. Signed-coordinate gaps (#894) and two
+non-NULL batch error-priority observations (#902) retain exact inherited
 [result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).
 
 ### ARRAY_COMPACT result fields
