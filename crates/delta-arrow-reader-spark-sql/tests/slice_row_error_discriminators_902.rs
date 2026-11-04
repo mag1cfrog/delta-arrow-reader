@@ -13,6 +13,7 @@ use delta_arrow_reader_spark_sql::configure_spark_sql;
 use futures_util::FutureExt;
 use serde_json::{Value, json};
 
+#[allow(dead_code)]
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
 #[allow(dead_code)]
