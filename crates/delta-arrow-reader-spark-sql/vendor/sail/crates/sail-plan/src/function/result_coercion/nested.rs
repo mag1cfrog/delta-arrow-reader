@@ -867,8 +867,10 @@ mod tests {
         let config = Arc::new(crate::config::PlanConfig::default());
         let schema = Arc::new(DFSchema::empty());
         let context = FunctionContextInput {
-            argument_display_names: &[], plan_config: &config,
-            session_context: &session, schema: &schema,
+            argument_display_names: &[],
+            plan_config: &config,
+            session_context: &session,
+            schema: &schema,
         };
         let values: ArrayRef = Arc::new(ListArray::try_new(
             Arc::new(Field::new_list_field(DataType::Float64, false)),
@@ -876,19 +878,34 @@ mod tests {
             Arc::new(Float64Array::from(vec![1.0, 2.0])),
             Some(NullBuffer::from(vec![true, false, true])),
         )?);
-        let target_list = DataType::List(Arc::new(Field::new_list_field(DataType::Float64, true)
-            .with_metadata([("origin".into(), "planned-item".into())].into())));
+        let target_list = DataType::List(Arc::new(
+            Field::new_list_field(DataType::Float64, true)
+                .with_metadata([("origin".into(), "planned-item".into())].into()),
+        ));
         let structure: ArrayRef = Arc::new(StructArray::try_new(
-            vec![Field::new("x", values.data_type().clone(), true)].into(), vec![values.clone()], None,
+            vec![Field::new("x", values.data_type().clone(), true)].into(),
+            vec![values.clone()],
+            None,
         )?);
-        let target_struct = DataType::Struct(vec![Field::new("x", target_list.clone(), true)
-            .with_metadata([("origin".into(), "planned-struct".into())].into())].into());
+        let target_struct = DataType::Struct(
+            vec![
+                Field::new("x", target_list.clone(), true)
+                    .with_metadata([("origin".into(), "planned-struct".into())].into()),
+            ]
+            .into(),
+        );
         let outer: ArrayRef = Arc::new(ListArray::try_new(
             Arc::new(Field::new_list_field(structure.data_type().clone(), false)),
-            OffsetBuffer::from_lengths([1; 3]), structure.clone(), None,
+            OffsetBuffer::from_lengths([1; 3]),
+            structure.clone(),
+            None,
         )?);
-        let target_outer = DataType::List(Arc::new(Field::new_list_field(target_struct.clone(), true)));
-        let planned_outer = DataType::List(Arc::new(Field::new_list_field(target_struct.clone(), false)));
+        let target_outer =
+            DataType::List(Arc::new(Field::new_list_field(target_struct.clone(), true)));
+        let planned_outer = DataType::List(Arc::new(Field::new_list_field(
+            target_struct.clone(),
+            false,
+        )));
         for (runtime, planned_source, target) in [
             (values, target_list.clone(), target_list.clone()),
             (structure, target_struct.clone(), target_struct),
@@ -905,22 +922,40 @@ mod tests {
                 assert_eq!(actual.nulls(), input.nulls());
                 let leaf = match actual.data_type() {
                     DataType::Struct(_) => actual.as_struct().column(0).clone(),
-                    DataType::List(field) if matches!(field.data_type(), DataType::Struct(_)) =>
-                        list_values(actual.as_ref())?.as_struct().column(0).clone(),
+                    DataType::List(field) if matches!(field.data_type(), DataType::Struct(_)) => {
+                        list_values(actual.as_ref())?.as_struct().column(0).clone()
+                    }
                     _ => actual,
                 };
-                assert_eq!(list_values(leaf.as_ref())?.as_primitive::<Float64Type>().values().as_ref(),
-                    match (offset, len) { (0, 3) => &[1.0, 2.0][..], (1, 2) => &[2.0][..], _ => &[][..] });
+                assert_eq!(
+                    list_values(leaf.as_ref())?
+                        .as_primitive::<Float64Type>()
+                        .values()
+                        .as_ref(),
+                    match (offset, len) {
+                        (0, 3) => &[1.0, 2.0][..],
+                        (1, 2) => &[2.0][..],
+                        _ => &[][..],
+                    }
+                );
             }
         }
         let wrong_leaf: ArrayRef = Arc::new(Int64Array::from(vec![1]));
         let wrong_list: ArrayRef = Arc::new(ListArray::try_new(
             Arc::new(Field::new_list_field(DataType::Int64, false)),
-            OffsetBuffer::from_lengths([1]), wrong_leaf.clone(), None,
+            OffsetBuffer::from_lengths([1]),
+            wrong_leaf.clone(),
+            None,
         )?);
         for (input, target) in [(wrong_leaf, DataType::Float64), (wrong_list, target_list)] {
-            let error = ResultCast::new(&target, &target, &context)?.cast_array(&input).unwrap_err();
-            assert!(error.to_string().contains("nested identity cast received incompatible value type"));
+            let error = ResultCast::new(&target, &target, &context)?
+                .cast_array(&input)
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("nested identity cast received incompatible value type")
+            );
         }
         Ok(())
     }
