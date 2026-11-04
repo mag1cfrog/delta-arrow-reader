@@ -753,8 +753,13 @@ ArraySlice delegate. When restoring required element fields, it removes
 synthetic children stored under NULL list parents. Nullable element outputs
 retain the native storage. Direct, STRUCT, ISNULL and overlap consumers share
 that declaration. Native ARRAY_SLICE registration and evaluation remain
-separate. Parameter validation and NULL/fallible-operand gaps remain owned by
-#880 and #881; their exact inherited observations stay visible in the
+separate. SLICE rejects zero starts before negative lengths on rows whose three
+arguments are non-NULL. A targeted preparation check reports constant parameter
+errors after required ISNULL and dead CASE pruning; provider-dependent errors
+remain at collection. Folding-disabled and volatile extension contexts retain
+their existing preparation path. The native delegate still determines valid
+coordinates. NULL/fallible-operand and signed-coordinate gaps remain owned by
+#881 and #894; their exact inherited observations stay visible in the
 [result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).
 
 ### ARRAY_COMPACT result fields

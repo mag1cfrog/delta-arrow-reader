@@ -2647,11 +2647,10 @@ DataFusion. It verifies the ordered internal output names before applying the
 public-name mapping and retains the raw optimized schema. Query failures remain
 observations so later identities still run.
 
-Of those 140 comparisons, 116 require complete Spark parity. The other 24 are
-inherited controls: 16 parameter-validation observations owned by #880 and eight
-ANSI NULL/fallible-operand observations owned by #881. Their raw `matches` and
-component flags remain false. `slice-inherited-controls.jsonl` contains 12
-current DAR observations for regression checks, rather than a Spark oracle;
+Of those 140 comparisons, 132 require complete Spark parity. The other eight are
+inherited ANSI NULL/fallible-operand observations owned by #881. Their raw
+`matches` and component flags remain visible. `slice-inherited-controls.jsonl`
+contains four current DAR observations for regression checks;
 paired runs verified that batches 1 and 32 differ only in the batch label.
 The predicate accepts a complete Spark match or the exact issue-owned reference
 and full observed object. It compares all fields, metadata, rows, errors,
@@ -2659,9 +2658,18 @@ phases and flags, including the components improved by the declaration fix.
 Negative controls reject changed references, components, metadata, panic fields
 and extra keys. These inherited checks do not establish full SLICE parity.
 
-The two stored `negative_length_runtime` objects include the #895 unary
-negation field correction, covering four batch comparisons. Their complete
-schemas now match Spark; their parameter-error difference remains owned by #880.
+`slice-parameters/spark-reference.jsonl` adds 308 independent Spark observations
+for 154 scenarios in both ANSI modes, with SHA256
+`d3d5001f84003b5756483f8f2699100746b1fd105ffcf92d8a974c219abafeb0`.
+The test compares all 616 batch identities. It requires complete Spark parity
+for 588 and retains 28 exact inherited comparisons: eight NULL/fallible-operand
+observations owned by #881 and 20 signed-coordinate/boundary observations owned
+by #894. `slice-parameters/inherited-controls.jsonl` stores their 14 complete
+baseline objects from `bbecae8d`, with the full raw reference for each identity.
+The parameter tests cover zero starts, negative lengths, numeric error priority,
+NULL masks, required/nullable fields, constant and provider evaluation stages,
+empty providers and CASE reachability. Required unary lengths use the #895
+negation field correction. The owned #880 cases have no inherited allowance.
 
 The local storage check verifies that nullable-element SLICE results retain the
 native hidden span under a NULL parent, while required-element results compact
