@@ -185,6 +185,13 @@ chosen names. The [output-name references](tests/fixtures/README.md#integer-div-
 check names, values, types, nullability and arithmetic errors separately from
 the generated-alias metadata work in #710.
 
+Spark unary negation derives its result nullability from the coerced operand.
+The local wrapper delegates the remaining result field and type to the pinned
+DataFusion Spark function; computed metadata stays empty. Required operands
+therefore keep required results in direct, STRUCT and NULL-predicate consumers.
+The existing kernel and captured ANSI configuration still control evaluation.
+Overflow error conditions and constant-error stages remain tracked in #896.
+
 For Spark queries, deterministic correlated scalar projections and aliases over
 a guaranteed one-row relation reuse the existing expression substitution even
 without a CAST elsewhere in the query. This path does not evaluate rows during
