@@ -693,6 +693,86 @@ async fn explicit_string_casts_keep_utf8_arrow_results() -> TestResult {
 }
 
 #[tokio::test]
+async fn case_conversion_closed_arguments_respect_folding_boundaries() -> TestResult {
+    use std::sync::LazyLock;
+
+    use datafusion::logical_expr::{ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature};
+
+    static INVOCATIONS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    struct ClosedCaseInput {
+        volatile: bool,
+    }
+
+    impl ScalarUDFImpl for ClosedCaseInput {
+        fn name(&self) -> &str {
+            "closed_case_input"
+        }
+
+        fn signature(&self) -> &Signature {
+            static IMMUTABLE: LazyLock<Signature> =
+                LazyLock::new(|| Signature::exact(vec![DataType::Utf8], Volatility::Immutable));
+            static VOLATILE: LazyLock<Signature> =
+                LazyLock::new(|| Signature::exact(vec![DataType::Utf8], Volatility::Volatile));
+            if self.volatile { &VOLATILE } else { &IMMUTABLE }
+        }
+
+        fn supports_constant_folding(&self) -> bool {
+            self.volatile
+        }
+
+        fn return_type(&self, _: &[DataType]) -> datafusion::common::Result<DataType> {
+            Ok(DataType::Utf8)
+        }
+
+        fn invoke_with_args(
+            &self,
+            args: ScalarFunctionArgs,
+        ) -> datafusion::common::Result<ColumnarValue> {
+            INVOCATIONS.fetch_add(1, Ordering::SeqCst);
+            Ok(args.args[0].clone())
+        }
+    }
+
+    for volatile in [true, false] {
+        let session = session(32);
+        session.register_udf(ScalarUDF::from(ClosedCaseInput { volatile }));
+        session.register_batch(
+            "case_closed_rows",
+            arrow::record_batch::RecordBatch::try_from_iter(vec![(
+                "k",
+                Arc::new(arrow::array::Int32Array::from(vec![0])) as arrow::array::ArrayRef,
+            )])?,
+        )?;
+        for ansi in [true, false] {
+            INVOCATIONS.store(0, Ordering::SeqCst);
+            let query = plan_query(
+                &session,
+                "SELECT lower(upper(closed_case_input('ß'))) AS r FROM case_closed_rows",
+                &SparkSqlOptions {
+                    ansi_mode: ansi,
+                    ..Default::default()
+                },
+            ).await?;
+            assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 0);
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 0);
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 1);
+            let mut values = Vec::new();
+            for batch in batches {
+                for row in 0..batch.num_rows() {
+                    values.push(arrow::util::display::array_value_to_string(batch.column(0).as_ref(), row)?);
+                }
+            }
+            assert_eq!(values, ["ß"]);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn nested_case_conversion_evaluates_volatile_input_once() -> TestResult {
     let session = session(32);
     session.register_batch(
