@@ -71,6 +71,7 @@ async fn observe_slice_preparation_boundaries() -> TestResult {
         ),
     ];
     let mut completed = std::collections::BTreeSet::new();
+    let mut differences = Vec::new();
     for batch in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -87,20 +88,21 @@ async fn observe_slice_preparation_boundaries() -> TestResult {
                     "expected":{},"schema_stages":{}});
                 let mut observation =
                     spark_results::compare_exact_spark_query_stages_with_optimized(&session, &case)
-                        .await?;
-                assert!(
-                    observation["public_schema"].is_object(),
-                    "{id}: {observation}"
-                );
+                        .await
+                        .unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
                 observation["id"] = json!(id);
                 observation["sql"] = json!(sql);
                 observation["ansi"] = json!(ansi);
                 observation["batch"] = json!(batch);
                 assert!(completed.insert((id, ansi, batch)));
                 eprintln!("SLICE_PREPARATION_BOUNDARY_OBSERVATION {observation}");
+                if !observation["public_schema"].is_object() {
+                    differences.push(observation.to_string());
+                }
             }
         }
     }
     assert_eq!(completed.len(), 48);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

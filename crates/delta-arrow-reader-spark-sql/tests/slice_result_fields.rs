@@ -508,51 +508,107 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
         }
     }
 
+    fn phase_observation<T, E: std::fmt::Display>(result: &Result<T, E>) -> Value {
+        json!({
+            "simplifications":SIMPLIFICATIONS.swap(0, Ordering::SeqCst),
+            "invocations":INVOCATIONS.swap(0, Ordering::SeqCst),
+            "error":result.as_ref().err().map(ToString::to_string),
+        })
+    }
+
     let session = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
+    let mut differences = Vec::new();
+    let mut completed = std::collections::BTreeSet::new();
     for volatile in [false, true] {
         for fail in [false, true] {
             session.register_udf(ScalarUDF::from(SliceBoundary { volatile, fail }));
-            for (sql, reached) in [
-                ("SELECT SLICE(slice_boundary(ARRAY(1, 2)), 1, 1) AS r", true),
-                ("SELECT SLICE(ARRAY(1, 2), slice_boundary(1), 1) AS r", true),
-                ("SELECT SLICE(ARRAY(1, 2), 1, slice_boundary(1)) AS r", true),
-                ("SELECT slice_boundary(SLICE(ARRAY(1, 2), 1, 1)) AS r", true),
-                (
-                    "SELECT CASE WHEN false THEN SLICE(ARRAY(1, 2), slice_boundary(0), 1) ELSE ARRAY(9) END AS r",
-                    false,
-                ),
-                (
-                    "SELECT CASE WHEN false THEN slice_boundary(1) ELSE 7 END AS r, SLICE(ARRAY(1, 2), 1, 1) AS neighbor",
-                    false,
-                ),
-            ] {
-                INVOCATIONS.store(0, Ordering::SeqCst);
-                SIMPLIFICATIONS.store(0, Ordering::SeqCst);
-                let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-                let planning_calls = SIMPLIFICATIONS.load(Ordering::SeqCst);
-                assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 0, "planning: {sql}");
-                let physical = query.create_physical_plan(&session).await?;
-                let physical_calls = SIMPLIFICATIONS.load(Ordering::SeqCst);
-                assert_eq!(INVOCATIONS.load(Ordering::SeqCst), 0, "physical: {sql}");
-                let result = datafusion::physical_plan::collect(physical, session.task_ctx()).await;
-                assert_eq!(result.is_err(), reached && fail, "{sql}: {result:?}");
-                assert_eq!(INVOCATIONS.load(Ordering::SeqCst) > 0, reached, "{sql}");
-                eprintln!(
-                    "SLICE_FOLDING_BOUNDARY_OBSERVATION {}",
-                    json!({
-                        "sql":sql,"volatile":volatile,"fail":fail,
-                        "planning_simplifications":planning_calls,
-                        "physical_simplifications":physical_calls,
-                        "final_simplifications":SIMPLIFICATIONS.load(Ordering::SeqCst),
-                        "invocations":INVOCATIONS.load(Ordering::SeqCst),
-                        "failed":result.is_err(),
-                    })
-                );
+            for ansi in [true, false] {
+                for (id, sql, reached) in [
+                    ("array_argument", "SELECT SLICE(slice_boundary(ARRAY(1, 2)), 1, 1) AS r", true),
+                    ("start_argument", "SELECT SLICE(ARRAY(1, 2), slice_boundary(1), 1) AS r", true),
+                    ("length_argument", "SELECT SLICE(ARRAY(1, 2), 1, slice_boundary(1)) AS r", true),
+                    ("parent", "SELECT slice_boundary(SLICE(ARRAY(1, 2), 1, 1)) AS r", true),
+                    ("discarded_case", "SELECT CASE WHEN false THEN SLICE(ARRAY(1, 2), slice_boundary(0), 1) ELSE ARRAY(9) END AS r", false),
+                    ("unrelated_neighbor", "SELECT CASE WHEN false THEN slice_boundary(1) ELSE 7 END AS r, SLICE(ARRAY(1, 2), 1, 1) AS neighbor", false),
+                ] {
+                    INVOCATIONS.store(0, Ordering::SeqCst);
+                    SIMPLIFICATIONS.store(0, Ordering::SeqCst);
+                    let mut phase = "planning";
+                    let mut observation = json!({"id":id,"sql":sql,"ansi":ansi,
+                        "volatile":volatile,"fail":fail,"planning":null,"physical":null,
+                        "collection":null,"public_schema":null,"physical_schema":null,"rows":null});
+                    let result = capture_slice_observation(async {
+                        let query = plan_query(&session, sql, &SparkSqlOptions {
+                            ansi_mode: ansi, ..Default::default()
+                        }).await;
+                        observation["planning"] = phase_observation(&query);
+                        let query = query?;
+                        observation["public_schema"] = spark_results::capture_schema(
+                            query.logical_plan.schema().fields(), Some(&query.column_names),
+                        )?;
+                        phase = "physical";
+                        let physical = query.create_physical_plan(&session).await;
+                        observation["physical"] = phase_observation(&physical);
+                        let physical = physical?;
+                        let schema = physical.schema();
+                        observation["physical_schema"] =
+                            spark_results::capture_schema(schema.fields(), None)?;
+                        phase = "collect";
+                        let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await;
+                        observation["collection"] = phase_observation(&batches);
+                        let batches = batches?;
+                        phase = "encode";
+                        let mut rows = Vec::new();
+                        for batch in batches {
+                            spark_results::validate_batch(schema.as_ref(), &batch)?;
+                            for row in 0..batch.num_rows() {
+                                rows.push(batch.columns().iter().map(|column| {
+                                    spark_results::encode_value(column.as_ref(), row)
+                                }).collect::<TestResult<Vec<_>>>()?);
+                            }
+                        }
+                        observation["rows"] = json!(rows);
+                        Ok(Value::Null)
+                    }).await;
+                    observation["phase"] = json!(phase);
+                    observation["error"] = json!(result.as_ref().err().map(ToString::to_string));
+                    if let Ok(value) = &result
+                        && let Some(panic) = value.get("panic")
+                    {
+                        observation["panic"] = panic.clone();
+                    }
+                    eprintln!("SLICE_FOLDING_BOUNDARY_OBSERVATION {observation}");
+                    let expected_rows = match id {
+                        "discarded_case" => json!([[["9"]]]),
+                        "unrelated_neighbor" => json!([["7", ["1"]]]),
+                        _ => json!([[["1"]]]),
+                    };
+                    let runtime_invocations = observation["collection"]["invocations"].as_u64();
+                    let expected_error = reached && fail;
+                    let outcome_matches = if expected_error {
+                        phase == "collect" && observation["error"].as_str().is_some_and(|error| {
+                            error.contains("SLICE extension boundary was invoked")
+                        })
+                    } else {
+                        phase == "encode" && result.is_ok() && observation["rows"] == expected_rows
+                    };
+                    if !outcome_matches
+                        || observation.get("panic").is_some()
+                        || observation["planning"]["invocations"] != 0
+                        || observation["physical"]["invocations"] != 0
+                        || runtime_invocations.is_none_or(|calls| (calls > 0) != reached)
+                    {
+                        differences.push(observation.to_string());
+                    }
+                    assert!(completed.insert((id, ansi, volatile, fail)));
+                }
             }
         }
     }
+    assert_eq!(completed.len(), 48);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
 
