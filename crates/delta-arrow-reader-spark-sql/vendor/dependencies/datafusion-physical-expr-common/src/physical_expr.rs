@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -27,11 +28,10 @@ use arrow::array::{Array, ArrayRef, BooleanArray, new_empty_array};
 use arrow::compute::filter_record_batch;
 use arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use arrow::record_batch::RecordBatch;
-use datafusion_common::tree_node::{
-    Transformed, TransformedResult, TreeNode, TreeNodeRecursion,
-};
+use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_common::{
-    Result, ScalarValue, assert_eq_or_internal_err, exec_err, not_impl_err,
+    DataFusionError, Result, ScalarValue, assert_eq_or_internal_err, exec_err, internal_err,
+    not_impl_err,
 };
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::interval_arithmetic::Interval;
@@ -44,6 +44,152 @@ use itertools::izip;
 
 /// Shared [`PhysicalExpr`].
 pub type PhysicalExprRef = Arc<dyn PhysicalExpr>;
+
+/// A failure at a zero-based row of the caller's input batch.
+#[derive(Debug)]
+pub struct RowEvaluationFailure {
+    /// Input row where evaluation stopped, excluding any Arrow storage offset.
+    pub row_index: usize,
+    /// The original owned error, including its context and source chain.
+    pub error: DataFusionError,
+}
+
+/// Successful rows preceding a localized failure, or the complete input domain.
+///
+/// With a failure at row r, arrays contain exactly [0, r), including NULLs.
+/// Scalars describe that same domain without broadcasting. Row 0 failures must
+/// have an empty typed array prefix. An outer Err represents an opaque failure
+/// whose row and preceding values are unavailable; it must never be replayed.
+#[derive(Debug)]
+pub struct EvaluatedRowPrefix {
+    /// Evaluated values, excluding the failing row and every later row.
+    pub values: ColumnarValue,
+    /// The first localized failure, if evaluation stopped before the end.
+    pub failure: Option<RowEvaluationFailure>,
+}
+
+impl EvaluatedRowPrefix {
+    /// Wrap a successful evaluation covering the complete supplied domain.
+    pub fn complete(values: ColumnarValue) -> Self {
+        Self {
+            values,
+            failure: None,
+        }
+    }
+
+    /// Return the ordinary value or move out the original deferred error.
+    pub fn into_result(self) -> Result<ColumnarValue> {
+        match self.failure {
+            Some(failure) => Err(failure.error),
+            None => Ok(self.values),
+        }
+    }
+
+    /// Check row bounds and prefix shape against the supplied input domain.
+    pub fn validate(&self, input_rows: usize) -> Result<()> {
+        let rows = match &self.failure {
+            Some(failure) => {
+                if failure.row_index >= input_rows {
+                    return internal_err!(
+                        "Row evaluation failure index {} is outside {input_rows} input rows",
+                        failure.row_index
+                    );
+                }
+                if failure.row_index == 0 && matches!(&self.values, ColumnarValue::Scalar(_)) {
+                    return internal_err!("A row-0 failure requires an empty typed array prefix");
+                }
+                failure.row_index
+            }
+            None => input_rows,
+        };
+        if let ColumnarValue::Array(array) = &self.values
+            && array.len() != rows
+        {
+            return internal_err!(
+                "Row evaluation prefix has {} rows, expected {rows}",
+                array.len()
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Apply the standard selection/scatter rules to a prefix-aware expression.
+/// Localized failures are mapped from selected ranks to the presented input rows.
+/// Opaque expressions keep their custom selection path through the trait default.
+pub fn evaluate_selected_rows_until_error(
+    expr: &dyn PhysicalExpr,
+    batch: &RecordBatch,
+    selection: &BooleanArray,
+) -> Result<EvaluatedRowPrefix> {
+    evaluate_selected_rows(expr, batch, selection, true)
+}
+
+fn evaluate_selected_rows<E: PhysicalExpr + ?Sized>(
+    expr: &E,
+    batch: &RecordBatch,
+    selection: &BooleanArray,
+    retain_row_errors: bool,
+) -> Result<EvaluatedRowPrefix> {
+    let row_count = batch.num_rows();
+    if row_count != selection.len() {
+        return exec_err!(
+            "Selection array length does not match batch row count: {} != {row_count}",
+            selection.len()
+        );
+    }
+    let evaluate = |input: &RecordBatch| {
+        if retain_row_errors {
+            let output = expr.evaluate_rows_until_error(input)?;
+            output.validate(input.num_rows())?;
+            Ok(output)
+        } else {
+            expr.evaluate(input).map(EvaluatedRowPrefix::complete)
+        }
+    };
+    if selection.null_count() == 0 && !selection.has_false() {
+        return evaluate(batch);
+    }
+    let mut output = if !selection.has_true() {
+        // Empty conditional selections must not invoke fallible children.
+        EvaluatedRowPrefix::complete(ColumnarValue::Array(new_empty_array(
+            &expr.data_type(batch.schema_ref().as_ref())?,
+        )))
+    } else {
+        evaluate(&filter_record_batch(batch, selection)?)?
+    };
+    let rows = if let Some(failure) = &mut output.failure {
+        failure.row_index = selection
+            .iter()
+            .enumerate()
+            .filter_map(|(row, selected)| (selected == Some(true)).then_some(row))
+            .nth(failure.row_index)
+            .ok_or_else(|| {
+                datafusion_common::internal_datafusion_err!(
+                    "Row evaluation failure is outside selected rows"
+                )
+            })?;
+        failure.row_index
+    } else {
+        row_count
+    };
+    let selection = selection.slice(0, rows);
+    output.values = match &output.values {
+        ColumnarValue::Array(array) => ColumnarValue::Array(scatter(&selection, array.as_ref())?),
+        ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))) => {
+            ColumnarValue::from(Arc::new(selection) as ArrayRef)
+        }
+        ColumnarValue::Scalar(ScalarValue::Boolean(None)) => {
+            let array = BooleanArray::from(vec![None; rows]);
+            ColumnarValue::Array(scatter(&selection, &array)?)
+        }
+        _ => output.values,
+    };
+    if retain_row_errors {
+        output.validate(row_count)?;
+    }
+    Ok(output)
+}
 
 /// [`PhysicalExpr`]s represent expressions such as `A + 1` or `CAST(c1 AS int)`.
 ///
@@ -85,6 +231,26 @@ pub trait PhysicalExpr: Any + Send + Sync + Display + Debug + DynEq + DynHash {
     }
     /// Evaluate an expression against a RecordBatch
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue>;
+
+    /// Evaluate once, retaining values before a localized row failure when supported.
+    ///
+    /// The default calls evaluate once. Its opaque errors remain unchanged.
+    /// Implementations must not retry a callback to recover a lost prefix.
+    fn evaluate_rows_until_error(&self, batch: &RecordBatch) -> Result<EvaluatedRowPrefix> {
+        self.evaluate(batch).map(EvaluatedRowPrefix::complete)
+    }
+
+    /// Evaluate selected rows once, optionally retaining a localized failure.
+    /// The default preserves any custom evaluate_selection implementation and
+    /// its opaque errors. Participating owners can use the shared prefix mapper.
+    fn evaluate_selected_rows_until_error(
+        &self,
+        batch: &RecordBatch,
+        selection: &BooleanArray,
+    ) -> Result<EvaluatedRowPrefix> {
+        self.evaluate_selection(batch, selection)
+            .map(EvaluatedRowPrefix::complete)
+    }
     /// The output field associated with this expression
     fn return_field(&self, input_schema: &Schema) -> Result<FieldRef> {
         Ok(Arc::new(Field::new(
@@ -104,60 +270,7 @@ pub trait PhysicalExpr: Any + Send + Sync + Display + Debug + DynEq + DynHash {
         batch: &RecordBatch,
         selection: &BooleanArray,
     ) -> Result<ColumnarValue> {
-        let row_count = batch.num_rows();
-        if row_count != selection.len() {
-            return exec_err!(
-                "Selection array length does not match batch row count: {} != {row_count}",
-                selection.len()
-            );
-        }
-
-        // First, check if we can avoid filtering altogether.
-        if selection.null_count() == 0 && !selection.has_false() {
-            // All values from the `selection` filter are true and match the input batch.
-            // No need to perform any filtering.
-            return self.evaluate(batch);
-        }
-
-        // Next, prepare the result array for each 'true' row in the selection vector.
-        let filtered_result = if !selection.has_true() {
-            // Do not call `evaluate` when the selection is empty.
-            // `evaluate_selection` is used to conditionally evaluate expressions.
-            // When the expression in question is fallible, evaluating it with an empty
-            // record batch may trigger a runtime error (e.g. division by zero).
-            //
-            // Instead, create an empty array matching the expected return type.
-            let datatype = self.data_type(batch.schema_ref().as_ref())?;
-            ColumnarValue::Array(new_empty_array(&datatype))
-        } else {
-            // If we reach this point, there's no other option than to filter the batch.
-            // This is a fairly costly operation since it requires creating partial copies
-            // (worst case of length `row_count - 1`) of all the arrays in the record batch.
-            // The resulting `filtered_batch` will contain one row per true in `selection`.
-            let filtered_batch = filter_record_batch(batch, selection)?;
-            self.evaluate(&filtered_batch)?
-        };
-
-        // Finally, scatter the filtered result array so that the indices match the input rows again.
-        match &filtered_result {
-            ColumnarValue::Array(a) => {
-                scatter(selection, a.as_ref()).map(ColumnarValue::Array)
-            }
-            ColumnarValue::Scalar(ScalarValue::Boolean(value)) => {
-                // When the scalar is true or false, skip the scatter process
-                if let Some(v) = value {
-                    if *v {
-                        Ok(ColumnarValue::from(Arc::new(selection.clone()) as ArrayRef))
-                    } else {
-                        Ok(filtered_result)
-                    }
-                } else {
-                    let array = BooleanArray::from(vec![None; row_count]);
-                    scatter(selection, &array).map(ColumnarValue::Array)
-                }
-            }
-            ColumnarValue::Scalar(_) => Ok(filtered_result),
-        }
+        evaluate_selected_rows(self, batch, selection, false)?.into_result()
     }
 
     /// Get a list of child PhysicalExpr that provide the input for this expr.
@@ -642,9 +755,7 @@ pub fn fmt_sql(expr: &dyn PhysicalExpr) -> impl Display + '_ {
 ///
 /// Returns a snapshot of the `PhysicalExpr` if it is dynamic, otherwise
 /// returns itself.
-pub fn snapshot_physical_expr(
-    expr: Arc<dyn PhysicalExpr>,
-) -> Result<Arc<dyn PhysicalExpr>> {
+pub fn snapshot_physical_expr(expr: Arc<dyn PhysicalExpr>) -> Result<Arc<dyn PhysicalExpr>> {
     snapshot_physical_expr_opt(expr).data()
 }
 
@@ -747,10 +858,7 @@ mod test {
             Ok(false)
         }
 
-        fn evaluate(
-            &self,
-            batch: &RecordBatch,
-        ) -> datafusion_common::Result<ColumnarValue> {
+        fn evaluate(&self, batch: &RecordBatch) -> datafusion_common::Result<ColumnarValue> {
             let data = vec![1; batch.num_rows()];
             Ok(ColumnarValue::Array(Arc::new(Int64Array::from(data))))
         }
@@ -873,8 +981,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_evaluate_selection_with_non_empty_record_batch_with_larger_false_selection()
-     {
+    pub fn test_evaluate_selection_with_non_empty_record_batch_with_larger_false_selection() {
         test_evaluate_selection_error(
             &unsafe { RecordBatch::new_unchecked(Arc::new(Schema::empty()), vec![], 10) },
             &BooleanArray::from(vec![false; 20]),
@@ -882,8 +989,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_evaluate_selection_with_non_empty_record_batch_with_larger_true_selection()
-     {
+    pub fn test_evaluate_selection_with_non_empty_record_batch_with_larger_true_selection() {
         test_evaluate_selection_error(
             &unsafe { RecordBatch::new_unchecked(Arc::new(Schema::empty()), vec![], 10) },
             &BooleanArray::from(vec![true; 20]),
@@ -891,8 +997,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_evaluate_selection_with_non_empty_record_batch_with_smaller_false_selection()
-     {
+    pub fn test_evaluate_selection_with_non_empty_record_batch_with_smaller_false_selection() {
         test_evaluate_selection_error(
             &unsafe { RecordBatch::new_unchecked(Arc::new(Schema::empty()), vec![], 10) },
             &BooleanArray::from(vec![false; 5]),
@@ -900,8 +1005,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_evaluate_selection_with_non_empty_record_batch_with_smaller_true_selection()
-     {
+    pub fn test_evaluate_selection_with_non_empty_record_batch_with_smaller_true_selection() {
         test_evaluate_selection_error(
             &unsafe { RecordBatch::new_unchecked(Arc::new(Schema::empty()), vec![], 10) },
             &BooleanArray::from(vec![true; 5]),

@@ -1,7 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, AsArray, Int64Array, builder::Int64Builder};
+use datafusion::arrow::array::{
+    Array, AsArray, Int64Array, builder::Int64Builder, new_empty_array,
+};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, TimeUnit};
 use datafusion::functions::expr_fn::{btrim, nvl};
 use datafusion::functions_nested::expr_fn;
@@ -9,8 +11,9 @@ use datafusion_common::cast::as_int64_array;
 use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
-    ScalarUDFImpl, Signature, Volatility, cast, expr, is_null, lit, not, or, when,
+    ColumnarValue, EvaluatedRowPrefix, ExprSchemable, HigherOrderUDF, ReturnFieldArgs,
+    RowEvaluationFailure, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    cast, expr, is_null, lit, not, or, when,
 };
 use datafusion_functions_nested::extract::array_slice_udf;
 use datafusion_functions_nested::flatten::Flatten;
@@ -175,6 +178,113 @@ impl SparkArraySlice {
             start - 1
         }
     }
+
+    fn slice_rows(
+        &self,
+        mut args: ScalarFunctionArgs,
+        retain_row_errors: bool,
+    ) -> datafusion_common::Result<EvaluatedRowPrefix> {
+        let [array, start, length] = args.args.as_slice() else {
+            return internal_err!("spark_slice requires three arguments");
+        };
+        // Keep scalars at one row instead of broadcasting them for validation.
+        let array_values = array.to_array(1)?;
+        let start_values = start.to_array(1)?;
+        let length_values = length.to_array(1)?;
+        let starts = as_int64_array(start_values.as_ref())?;
+        let lengths = as_int64_array(length_values.as_ref())?;
+        let row_index = |value: &ColumnarValue, row| match value {
+            ColumnarValue::Scalar(_) => 0,
+            ColumnarValue::Array(_) => row,
+        };
+        // Preserve scalar broadcasting without copying the array for each row.
+        let scalar_result = args
+            .args
+            .iter()
+            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+        let rows = if scalar_result {
+            args.number_rows.min(1)
+        } else {
+            args.number_rows
+        };
+        let mut native_starts = Int64Builder::with_capacity(rows);
+        let mut native_ends = Int64Builder::with_capacity(rows);
+        let mut failure = None;
+        for row in 0..rows {
+            let array_row = row_index(array, row);
+            let start_row = row_index(start, row);
+            let length_row = row_index(length, row);
+            if array_values.is_null(array_row)
+                || starts.is_null(start_row)
+                || lengths.is_null(length_row)
+            {
+                native_starts.append_null();
+                native_ends.append_null();
+                continue;
+            }
+            let start = starts.value(start_row);
+            let length = lengths.value(length_row);
+            if let Err(error) = Self::validate_parameters(start, length) {
+                if !retain_row_errors {
+                    return Err(error);
+                }
+                failure = Some(RowEvaluationFailure {
+                    row_index: row,
+                    error,
+                });
+                break;
+            }
+            let array_length = Self::list_length(array_values.as_ref(), array_row)?;
+            let start_index = Self::start_index(start, array_length);
+            let (start, end) = if start_index < 0 || start_index >= array_length || length == 0 {
+                (1, 0)
+            } else {
+                (
+                    start_index + 1,
+                    start_index + length.min(array_length - start_index),
+                )
+            };
+            native_starts.append_value(start);
+            native_ends.append_value(end);
+        }
+        if let Some(row_index) = failure.as_ref().map(|failure| failure.row_index) {
+            if row_index == 0 {
+                return Ok(EvaluatedRowPrefix {
+                    values: ColumnarValue::Array(new_empty_array(args.return_type())),
+                    failure,
+                });
+            }
+            args.number_rows = row_index;
+            for value in &mut args.args {
+                if let ColumnarValue::Array(array) = value {
+                    *array = array.slice(0, row_index);
+                }
+            }
+        }
+        let coordinate = |values: Int64Array| {
+            if scalar_result {
+                ColumnarValue::Scalar(ScalarValue::Int64(values.iter().next().flatten()))
+            } else {
+                ColumnarValue::Array(Arc::new(values))
+            }
+        };
+        args.args[1] = coordinate(native_starts.finish());
+        args.args[2] = coordinate(native_ends.finish());
+        let values = match self.native.invoke_with_args(args)? {
+            ColumnarValue::Array(array)
+                if self.required_elements
+                    && matches!(
+                        array.data_type(),
+                        DataType::List(_) | DataType::LargeList(_)
+                    ) =>
+            {
+                // Native NULL rows hold a NULL child that cannot acquire a required element field.
+                ColumnarValue::Array(datafusion_common::utils::remove_list_null_values(&array)?)
+            }
+            value => value,
+        };
+        Ok(EvaluatedRowPrefix { values, failure })
+    }
 }
 
 impl ScalarUDFImpl for SparkArraySlice {
@@ -191,6 +301,10 @@ impl ScalarUDFImpl for SparkArraySlice {
     }
 
     fn short_circuits_on_any_null_argument(&self) -> bool {
+        true
+    }
+
+    fn requires_row_ordered_errors(&self) -> bool {
         true
     }
 
@@ -256,85 +370,16 @@ impl ScalarUDFImpl for SparkArraySlice {
 
     fn invoke_with_args(
         &self,
-        mut args: ScalarFunctionArgs,
+        args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
-        let [array, start, length] = args.args.as_slice() else {
-            return internal_err!("spark_slice requires three arguments");
-        };
-        // Keep scalars at one row instead of broadcasting them for validation.
-        let array_values = array.to_array(1)?;
-        let start_values = start.to_array(1)?;
-        let length_values = length.to_array(1)?;
-        let starts = as_int64_array(start_values.as_ref())?;
-        let lengths = as_int64_array(length_values.as_ref())?;
-        let row_index = |value: &ColumnarValue, row| match value {
-            ColumnarValue::Scalar(_) => 0,
-            ColumnarValue::Array(_) => row,
-        };
-        // Preserve scalar broadcasting without copying the array for each row.
-        let scalar_result = args
-            .args
-            .iter()
-            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
-        let rows = if scalar_result {
-            args.number_rows.min(1)
-        } else {
-            args.number_rows
-        };
-        let mut native_starts = Int64Builder::with_capacity(rows);
-        let mut native_ends = Int64Builder::with_capacity(rows);
-        for row in 0..rows {
-            let array_row = row_index(array, row);
-            let start_row = row_index(start, row);
-            let length_row = row_index(length, row);
-            if array_values.is_null(array_row)
-                || starts.is_null(start_row)
-                || lengths.is_null(length_row)
-            {
-                native_starts.append_null();
-                native_ends.append_null();
-                continue;
-            }
-            let start = starts.value(start_row);
-            let length = lengths.value(length_row);
-            Self::validate_parameters(start, length)?;
-            let array_length = Self::list_length(array_values.as_ref(), array_row)?;
-            let start_index = Self::start_index(start, array_length);
-            let (start, end) = if start_index < 0 || start_index >= array_length || length == 0 {
-                (1, 0)
-            } else {
-                (
-                    start_index + 1,
-                    start_index + length.min(array_length - start_index),
-                )
-            };
-            native_starts.append_value(start);
-            native_ends.append_value(end);
-        }
-        let coordinate = |values: Int64Array| {
-            if scalar_result {
-                ColumnarValue::Scalar(ScalarValue::Int64(values.iter().next().flatten()))
-            } else {
-                ColumnarValue::Array(Arc::new(values))
-            }
-        };
-        args.args[1] = coordinate(native_starts.finish());
-        args.args[2] = coordinate(native_ends.finish());
-        match self.native.invoke_with_args(args)? {
-            ColumnarValue::Array(array)
-                if self.required_elements
-                    && matches!(
-                        array.data_type(),
-                        DataType::List(_) | DataType::LargeList(_)
-                    ) =>
-            {
-                // Native NULL rows hold a NULL child that cannot acquire a required element field.
-                Ok(ColumnarValue::Array(
-                    datafusion_common::utils::remove_list_null_values(&array)?,
-                ))
-            }
-            value => Ok(value),
-        }
+        self.slice_rows(args, false)?.into_result()
+    }
+
+    fn invoke_rows_until_error(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> datafusion_common::Result<EvaluatedRowPrefix> {
+        self.slice_rows(args, true)
     }
 }
 
@@ -1883,6 +1928,7 @@ mod tests {
         )?;
         let native = array_slice_udf();
         assert!(!native.inner().short_circuits_on_any_null_argument());
+        assert!(!native.inner().requires_row_ordered_errors());
         assert!(
             native
                 .conditional_arguments(&[col("a"), lit(1), lit(1)])
@@ -1899,6 +1945,7 @@ mod tests {
                 slice
             };
             assert!(slice.inner().short_circuits_on_any_null_argument());
+            assert!(slice.inner().requires_row_ordered_errors());
             assert!(!slice.short_circuits());
             let repeated = cast(col("text"), DataType::Int64);
             let args = vec![col("a"), repeated.clone(), repeated];

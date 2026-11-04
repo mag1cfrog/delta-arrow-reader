@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::array::{ArrayRef, PrimitiveArray};
+use datafusion::arrow::array::{ArrayRef, PrimitiveArray, new_empty_array};
 use datafusion::arrow::compute::CastOptions;
+use datafusion::arrow::compute::kernels::cast::parse_string_rows_until_error;
+use datafusion::arrow::compute::kernels::cast_utils::Parser;
 use datafusion::arrow::datatypes::{
     ArrowPrimitiveType, DataType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
 };
@@ -16,8 +18,8 @@ use datafusion_common::{
 };
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
-    Volatility, lit, try_cast,
+    ColumnarValue, EvaluatedRowPrefix, Expr, ReturnFieldArgs, RowEvaluationFailure,
+    ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility, lit, try_cast,
 };
 use num::{PrimInt, Signed};
 
@@ -59,6 +61,29 @@ impl SparkCastStringToInteger {
 
     pub fn mode(&self) -> StringIntegerCastMode {
         self.mode
+    }
+
+    fn trim_input(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let [input_field] = take_function_args(self.name(), args.arg_fields.as_slice())?;
+        args.return_field = input_field.clone();
+        args.args.push(ColumnarValue::Scalar(ScalarValue::Utf8(Some(
+            integer_trim_characters(),
+        ))));
+        args.arg_fields
+            .push(Arc::new(Field::new("trim", DataType::Utf8, false)));
+        BTrimFunc::new().invoke_with_args(args)
+    }
+
+    fn cast_error_context(&self, error: DataFusionError) -> DataFusionError {
+        match &error {
+            DataFusionError::ArrowError(cause, _)
+                if self.mode == StringIntegerCastMode::Ansi
+                    && matches!(cause.as_ref(), ArrowError::CastError(_)) =>
+            {
+                error.context("[CAST_INVALID_INPUT]")
+            }
+            _ => error,
+        }
     }
 
     pub fn into_expr(self, input: Expr) -> Expr {
@@ -129,18 +154,11 @@ impl ScalarUDFImpl for SparkCastStringToInteger {
         Ok(ExprSimplifyResult::Original(args))
     }
 
-    fn invoke_with_args(&self, mut args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let [_] = take_function_args(self.name(), args.args.as_slice())?;
         if self.mode != StringIntegerCastMode::Legacy {
-            let [input_field] = take_function_args(self.name(), args.arg_fields.as_slice())?;
-            args.return_field = input_field.clone();
-            args.args.push(ColumnarValue::Scalar(ScalarValue::Utf8(Some(
-                integer_trim_characters(),
-            ))));
-            args.arg_fields
-                .push(Arc::new(Field::new("trim", DataType::Utf8, false)));
-            return BTrimFunc::new()
-                .invoke_with_args(args)?
+            return self
+                .trim_input(args)?
                 .cast_to(
                     &self.data_type,
                     Some(&CastOptions {
@@ -148,15 +166,7 @@ impl ScalarUDFImpl for SparkCastStringToInteger {
                         ..Default::default()
                     }),
                 )
-                .map_err(|error| match &error {
-                    DataFusionError::ArrowError(cause, _)
-                        if self.mode == StringIntegerCastMode::Ansi
-                            && matches!(cause.as_ref(), ArrowError::CastError(_)) =>
-                    {
-                        error.context("[CAST_INVALID_INPUT]")
-                    }
-                    _ => error,
-                });
+                .map_err(|error| self.cast_error_context(error));
         }
         let data_type = self.data_type.clone();
         make_scalar_function(
@@ -164,6 +174,55 @@ impl ScalarUDFImpl for SparkCastStringToInteger {
             vec![],
         )(&args.args)
     }
+
+    fn invoke_rows_until_error(&self, args: ScalarFunctionArgs) -> Result<EvaluatedRowPrefix> {
+        if self.mode != StringIntegerCastMode::Ansi {
+            return self
+                .invoke_with_args(args)
+                .map(EvaluatedRowPrefix::complete);
+        }
+        let [_] = take_function_args(self.name(), args.args.as_slice())?;
+        if args.number_rows == 0 {
+            return Ok(EvaluatedRowPrefix::complete(ColumnarValue::Array(
+                new_empty_array(&self.data_type),
+            )));
+        }
+        let value = self.trim_input(args)?;
+        let scalar = matches!(&value, ColumnarValue::Scalar(_));
+        let array = value.to_array(1)?;
+        let parse = match self.data_type {
+            DataType::Int8 => parse_integer_rows::<Int8Type>(&array, scalar),
+            DataType::Int16 => parse_integer_rows::<Int16Type>(&array, scalar),
+            DataType::Int32 => parse_integer_rows::<Int32Type>(&array, scalar),
+            _ => parse_integer_rows::<Int64Type>(&array, scalar),
+        };
+        let mut output = parse.map_err(|error| self.cast_error_context(error))?;
+        if let Some(RowEvaluationFailure { row_index, error }) = output.failure.take() {
+            // Move the parser's original cause into the same ANSI context as CAST.
+            output.failure = Some(RowEvaluationFailure {
+                row_index,
+                error: self.cast_error_context(error),
+            });
+        }
+        Ok(output)
+    }
+}
+
+fn parse_integer_rows<P: Parser>(array: &ArrayRef, scalar: bool) -> Result<EvaluatedRowPrefix> {
+    let parsed = parse_string_rows_until_error::<P>(array.as_ref())?;
+    let values: ArrayRef = Arc::new(parsed.values);
+    let values = if scalar && parsed.failure.is_none() {
+        ColumnarValue::Scalar(ScalarValue::try_from_array(&values, 0)?)
+    } else {
+        ColumnarValue::Array(values)
+    };
+    Ok(EvaluatedRowPrefix {
+        values,
+        failure: parsed.failure.map(|failure| RowEvaluationFailure {
+            row_index: failure.row_index,
+            error: failure.error.into(),
+        }),
+    })
 }
 
 fn cast_string_array_to_integer(args: &[ArrayRef], data_type: &DataType) -> Result<ArrayRef> {

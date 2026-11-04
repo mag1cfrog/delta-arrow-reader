@@ -18,6 +18,29 @@ use serde_json::{Value, json};
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
+/// Compare the observed Int32 cast cause with Spark's recorded failing input.
+/// Only CAST_INVALID_INPUT records require this additional input check.
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared result checks."
+)]
+pub(crate) fn matches_spark_int32_cast_input(case: &Value, observation: &Value) -> bool {
+    if case["expected"]["condition"] != "CAST_INVALID_INPUT" {
+        return true;
+    }
+    let Some(input) = case["spark_error_details"]["message_parameters"]["expression"].as_str()
+    else {
+        return false;
+    };
+    let expected = format!("Cannot cast string {input} to value of Int32 type");
+    observation["error"].as_str().is_some_and(|error| {
+        error
+            .lines()
+            .filter_map(|line| line.strip_prefix("Arrow error: Cast error: "))
+            .any(|cause| cause == expected)
+    })
+}
+
 /// Observe native schemas, rows and the exact failure phase, including expected errors.
 #[allow(
     dead_code,
