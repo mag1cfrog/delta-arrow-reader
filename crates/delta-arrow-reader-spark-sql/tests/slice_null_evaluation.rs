@@ -210,7 +210,10 @@ fn inherited_row_priority_controls_reject_new_differences() -> TestResult {
         for key in comparison.as_object().ok_or("missing comparison")?.keys() {
             let mut wrong = comparison.clone();
             wrong[key] = json!("new difference");
-            assert!(!slice_null_comparison_matches(case, &wrong, &controls), "{key}");
+            assert!(
+                !slice_null_comparison_matches(case, &wrong, &controls),
+                "{key}"
+            );
         }
         for (key, value) in [
             ("batch", json!(1)),
@@ -219,7 +222,10 @@ fn inherited_row_priority_controls_reject_new_differences() -> TestResult {
         ] {
             let mut wrong = comparison.clone();
             wrong[key] = value;
-            assert!(!slice_null_comparison_matches(case, &wrong, &controls), "{key}");
+            assert!(
+                !slice_null_comparison_matches(case, &wrong, &controls),
+                "{key}"
+            );
         }
         for stage in [
             "/public_schema",
@@ -238,13 +244,19 @@ fn inherited_row_priority_controls_reject_new_differences() -> TestResult {
                 let mut wrong = comparison.clone();
                 let pointer = format!("{stage}/fields/0/{field}");
                 *wrong.pointer_mut(&pointer).ok_or("missing schema field")? = value;
-                assert!(!slice_null_comparison_matches(case, &wrong, &controls), "{pointer}");
+                assert!(
+                    !slice_null_comparison_matches(case, &wrong, &controls),
+                    "{pointer}"
+                );
             }
         }
         for key in case.as_object().ok_or("missing reference")?.keys() {
             let mut wrong = case.clone();
             wrong[key] = json!("changed reference");
-            assert!(!slice_null_comparison_matches(&wrong, comparison, &controls), "{key}");
+            assert!(
+                !slice_null_comparison_matches(&wrong, comparison, &controls),
+                "{key}"
+            );
         }
     }
     Ok(())

@@ -9,11 +9,11 @@ use datafusion::functions_nested::expr_fn;
 use datafusion::physical_expr_common::datum::apply;
 use datafusion_common::cast::as_int64_array;
 use datafusion_common::{DataFusionError, ScalarValue, exec_err, internal_err};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
     ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
     ScalarUDFImpl, Signature, Volatility, cast, expr, is_null, lit, not, or, when,
 };
-use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_functions_nested::extract::array_slice_udf;
 use datafusion_functions_nested::flatten::Flatten;
 use datafusion_functions_nested::make_array::make_array;
@@ -171,7 +171,9 @@ impl ScalarUDFImpl for SparkArraySlice {
         args: Vec<expr::Expr>,
         info: &SimplifyContext,
     ) -> datafusion_common::Result<ExprSimplifyResult> {
-        if args.iter().any(|arg| matches!(arg, expr::Expr::Literal(value, _) if value.is_null()))
+        if args
+            .iter()
+            .any(|arg| matches!(arg, expr::Expr::Literal(value, _) if value.is_null()))
             && !args.iter().any(expr::Expr::contains_scalar_subquery)
         {
             let types = args
@@ -1401,11 +1403,17 @@ mod tests {
                 Ok(args[0].clone())
             }
 
-            fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
+            fn return_field_from_args(
+                &self,
+                args: ReturnFieldArgs,
+            ) -> datafusion_common::Result<FieldRef> {
                 Ok(args.arg_fields[0].clone())
             }
 
-            fn invoke_with_args(&self, args: ScalarFunctionArgs) -> datafusion_common::Result<ColumnarValue> {
+            fn invoke_with_args(
+                &self,
+                args: ScalarFunctionArgs,
+            ) -> datafusion_common::Result<ColumnarValue> {
                 let keys = args.args[1].to_array(args.number_rows)?;
                 let keys = keys.as_primitive::<Int32Type>();
                 let mut calls = CALLS.lock().map_err(|_| {
@@ -1433,34 +1441,87 @@ mod tests {
                 element,
                 OffsetBuffer::from_lengths([2; 9]),
                 Arc::new(Int32Array::from([10, 11].repeat(9))),
-                Some(NullBuffer::from(vec![true, false, true, true, true, false, true, true, true])),
+                Some(NullBuffer::from(vec![
+                    true, false, true, true, true, false, true, true, true,
+                ])),
             )?);
             let data_type = array.data_type().clone();
             let batch = RecordBatch::try_from_iter([
                 ("a", array),
-                ("s", Arc::new(Int32Array::from(vec![Some(1), Some(1), None, Some(1), Some(1), Some(1), None, Some(1), Some(1)])) as _),
-                ("l", Arc::new(Int32Array::from(vec![Some(1), Some(1), Some(1), None, Some(1), Some(1), Some(1), None, Some(1)])) as _),
-                ("k", Arc::new(Int32Array::from(vec![999, 0, 1, 2, 3, 4, 5, 6, 7])) as _),
-            ])?.slice(1, 8);
+                (
+                    "s",
+                    Arc::new(Int32Array::from(vec![
+                        Some(1),
+                        Some(1),
+                        None,
+                        Some(1),
+                        Some(1),
+                        Some(1),
+                        None,
+                        Some(1),
+                        Some(1),
+                    ])) as _,
+                ),
+                (
+                    "l",
+                    Arc::new(Int32Array::from(vec![
+                        Some(1),
+                        Some(1),
+                        Some(1),
+                        None,
+                        Some(1),
+                        Some(1),
+                        Some(1),
+                        None,
+                        Some(1),
+                    ])) as _,
+                ),
+                (
+                    "k",
+                    Arc::new(Int32Array::from(vec![999, 0, 1, 2, 3, 4, 5, 6, 7])) as _,
+                ),
+            ])?
+            .slice(1, 8);
             let schema = Arc::new(DFSchema::try_from(batch.schema())?);
             for volatile in [false, true] {
                 for fail in [false, true] {
-                    let operand = |name, column| ScalarUDF::from(SliceOperand {
-                        name, volatile, fail: fail && name == "length",
-                    }).call(vec![col(column), col("k")]);
+                    let operand = |name, column| {
+                        ScalarUDF::from(SliceOperand {
+                            name,
+                            volatile,
+                            fail: fail && name == "length",
+                        })
+                        .call(vec![col(column), col("k")])
+                    };
                     let expression = slice_expr(
-                        operand("array", "a"), operand("start", "s"), operand("length", "l"), &schema,
+                        operand("array", "a"),
+                        operand("start", "s"),
+                        operand("length", "l"),
+                        &schema,
                     )?;
-                    let physical = SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
+                    let physical =
+                        SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
                     for _ in 0..2 {
                         let result = physical.evaluate(&batch);
-                        assert_eq!(take_calls()?, [
-                            (0..8).map(|key| ("array", key)).collect::<Vec<_>>(),
-                            [1, 2, 3, 5, 6, 7].into_iter().map(|key| ("start", key)).collect(),
-                            [2, 3, 6, 7].into_iter().map(|key| ("length", key)).collect(),
-                        ].concat());
+                        assert_eq!(
+                            take_calls()?,
+                            [
+                                (0..8).map(|key| ("array", key)).collect::<Vec<_>>(),
+                                [1, 2, 3, 5, 6, 7]
+                                    .into_iter()
+                                    .map(|key| ("start", key))
+                                    .collect(),
+                                [2, 3, 6, 7]
+                                    .into_iter()
+                                    .map(|key| ("length", key))
+                                    .collect(),
+                            ]
+                            .concat()
+                        );
                         if fail {
-                            assert!(result.is_err_and(|error| error.to_string().contains("SLICE length callback failed")));
+                            assert!(result.is_err_and(|error| {
+                                error.to_string().contains("SLICE length callback failed")
+                            }));
                             continue;
                         }
                         let result = result?.into_array(8)?;
@@ -1471,7 +1532,10 @@ mod tests {
                         for row in 0..8 {
                             assert_eq!(result.is_null(row), row % 4 != 3);
                             if row % 4 == 3 {
-                                assert_eq!(result.value(row).as_primitive::<Int32Type>().values(), &[10]);
+                                assert_eq!(
+                                    result.value(row).as_primitive::<Int32Type>().values(),
+                                    &[10]
+                                );
                             }
                         }
                         if !element_nullable {
@@ -1512,18 +1576,33 @@ mod tests {
 
         let session = SessionContext::new();
         let array: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
-            None, Some(vec![Some(10), Some(11)]),
+            None,
+            Some(vec![Some(10), Some(11)]),
         ]));
-        session.register_batch("slice_cse", RecordBatch::try_from_iter([
-            ("a", array),
-            ("text", Arc::new(StringArray::from(vec!["bad", "1"])) as _),
-        ])?)?;
+        session.register_batch(
+            "slice_cse",
+            RecordBatch::try_from_iter([
+                ("a", array),
+                ("text", Arc::new(StringArray::from(vec!["bad", "1"])) as _),
+            ])?,
+        )?;
         let native = array_slice_udf();
         assert!(!native.inner().short_circuits_on_any_null_argument());
-        assert!(native.conditional_arguments(&[col("a"), lit(1), lit(1)]).is_none());
+        assert!(
+            native
+                .conditional_arguments(&[col("a"), lit(1), lit(1)])
+                .is_none()
+        );
         for alias in [false, true] {
-            let slice = ScalarUDF::from(SparkArraySlice { native: native.clone(), required_elements: false });
-            let slice = if alias { slice.with_aliases(["slice_alias"]) } else { slice };
+            let slice = ScalarUDF::from(SparkArraySlice {
+                native: native.clone(),
+                required_elements: false,
+            });
+            let slice = if alias {
+                slice.with_aliases(["slice_alias"])
+            } else {
+                slice
+            };
             assert!(slice.inner().short_circuits_on_any_null_argument());
             assert!(!slice.short_circuits());
             let repeated = cast(col("text"), DataType::Int64);
@@ -1533,23 +1612,45 @@ mod tests {
             })?;
             assert_eq!(eager, vec![&args[0]]);
             assert_eq!(conditional, vec![&args[1], &args[2]]);
-            let batches = session.table("slice_cse").await?
-                .select(vec![slice.call(args).alias("r")])?.collect().await?;
+            let batches = session
+                .table("slice_cse")
+                .await?
+                .select(vec![slice.call(args).alias("r")])?
+                .collect()
+                .await?;
             let mut rows = Vec::new();
             for batch in batches {
                 batch.column(0).to_data().validate_full()?;
                 let result = batch.column(0).as_list::<i32>();
                 for row in 0..result.len() {
-                    rows.push(if result.is_null(row) { None } else {
-                        Some(result.value(row).as_primitive::<Int32Type>().values().to_vec())
+                    rows.push(if result.is_null(row) {
+                        None
+                    } else {
+                        Some(
+                            result
+                                .value(row)
+                                .as_primitive::<Int32Type>()
+                                .values()
+                                .to_vec(),
+                        )
                     });
                 }
             }
             assert_eq!(rows, vec![None, Some(vec![10])]);
-            let batches = session.table("slice_cse").await?.select(vec![slice.call(vec![
-                make_array(vec![cast(lit("bad"), DataType::Int32)]),
-                lit(ScalarValue::Int64(None)), lit(1_i64),
-            ]).alias("r")])?.collect().await?;
+            let batches = session
+                .table("slice_cse")
+                .await?
+                .select(vec![
+                    slice
+                        .call(vec![
+                            make_array(vec![cast(lit("bad"), DataType::Int32)]),
+                            lit(ScalarValue::Int64(None)),
+                            lit(1_i64),
+                        ])
+                        .alias("r"),
+                ])?
+                .collect()
+                .await?;
             let mut null_rows = 0;
             for batch in batches {
                 batch.column(0).to_data().validate_full()?;
