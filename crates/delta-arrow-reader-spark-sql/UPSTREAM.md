@@ -883,3 +883,18 @@ derives result nullability from every supplied argument. LCASE and UCASE share
 the corresponding case-conversion path. Native signatures, return types and
 value kernels remain in use. Separately registered BTRIM and native DataFusion
 SQL retain their existing declarations.
+
+Nested LOWER/UPPER calls follow Spark's case-conversion simplification order.
+The private adapter preserves intermediate conversions on early local VALUES
+paths. For provider projections, a singly consumed deterministic opposite-case
+producer can use the outer conversion while keeping the existing projection
+and field nodes. Nondeterministic producers retain their boundary. Output
+metadata annotations are inspected without removing or rebuilding them. Reused
+nontrivial producers retain their boundary; reused foldable siblings can collapse.
+Single-row foldability propagates output eligibility
+without substituting producer expressions. No rows or volatile arguments are
+evaluated by this structural preparation. Direct and projected case rewrites
+retain each admitted STRING CAST/TRY_CAST, metadata-clearing shell and exact cast
+field declaration.
+The [trim and case references](tests/fixtures/README.md#trim-and-case-fields)
+cover these paths and compare analyzed fields separately from executed fields.

@@ -7,11 +7,13 @@ use datafusion::functions::regex::expr_fn as regex_fn;
 use datafusion::functions::regex::regexpcount::RegexpCountFunc;
 use datafusion::functions::regex::regexpinstr::RegexpInstrFunc;
 use datafusion::functions::string as native_string;
+use datafusion::functions::string::{lower::LowerFunc, upper::UpperFunc};
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{DFSchema, ScalarValue};
+use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
-    ColumnarValue, ExprSchemable, HigherOrderUDF, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
-    ScalarUDFImpl, Signature, cast, expr, lit, try_cast, when,
+    ColumnarValue, ExprSchemable, HigherOrderUDF, LogicalPlan, ReturnFieldArgs, ScalarFunctionArgs,
+    ScalarUDF, ScalarUDFImpl, Signature, cast, expr, lit, try_cast, when,
 };
 use datafusion_functions_nested::expr_fn::array_element;
 use datafusion_spark::function::math::expr_fn as math_fn;
@@ -51,6 +53,7 @@ use sail_function::scalar::string::spark_to_number::SparkToNumber;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, literal_value_without_evaluation,
+    without_inherited_column_metadata, without_metadata_annotations,
 };
 use crate::function::scalar::datetime::date_format;
 use crate::function::scalar::lambda::lambda_with_fresh_parameter;
@@ -308,25 +311,84 @@ fn replace(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
 }
 
 /// Field policy for TRIM/LTRIM/RTRIM/LOWER/UPPER: every supplied argument can
-/// propagate NULL. Signature, output type, metadata and values remain native.
+/// propagate NULL. Signatures, output types, metadata and value kernels remain
+/// native; nested case calls follow Spark simplification and local-phase policy.
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct NullPropagatingStringFunction(Arc<ScalarUDF>);
+struct NullPropagatingStringFunction {
+    function: Arc<ScalarUDF>,
+    preserve_intermediate_case: bool,
+}
+
+impl NullPropagatingStringFunction {
+    fn is_case_conversion(&self) -> bool {
+        self.function.inner().is::<LowerFunc>() || self.function.inner().is::<UpperFunc>()
+    }
+}
+
+// Retain unary value shells while locating a case call or its column input.
+// The shared metadata classifier admits only permanent empty clearing shells.
+fn case_conversion_shells<'a>(
+    mut value: &'a expr::Expr,
+    schema: &DFSchema,
+) -> datafusion_common::Result<(&'a expr::Expr, Vec<&'a expr::Expr>)> {
+    let mut shells = Vec::new();
+    loop {
+        let child = match value {
+            expr::Expr::Alias(alias) => alias.expr.as_ref(),
+            expr::Expr::Cast(cast)
+                if cast.field.data_type().is_string()
+                    && cast.expr.get_type(schema)?.is_string() =>
+            {
+                cast.expr.as_ref()
+            }
+            expr::Expr::TryCast(cast)
+                if cast.field.data_type().is_string()
+                    && cast.expr.get_type(schema)?.is_string() =>
+            {
+                cast.expr.as_ref()
+            }
+            expr::Expr::ScalarFunction(function)
+                if !std::ptr::eq(value, without_inherited_column_metadata(value)) =>
+            {
+                &function.args[0]
+            }
+            _ => break,
+        };
+        shells.push(value);
+        value = child;
+    }
+    Ok((value, shells))
+}
+
+fn rebuild_case_conversion_shells(
+    shells: Vec<&expr::Expr>,
+    mut value: expr::Expr,
+) -> datafusion_common::Result<expr::Expr> {
+    for shell in shells.into_iter().rev() {
+        // Each shell is unary; cloning retains its UDF and exact cast FieldRef Arc.
+        value = (*shell)
+            .clone()
+            .map_children(|_| Ok(Transformed::yes(value.clone())))?
+            .data;
+    }
+    Ok(value)
+}
 
 impl ScalarUDFImpl for NullPropagatingStringFunction {
     fn name(&self) -> &str {
-        self.0.name()
+        self.function.name()
     }
 
     fn aliases(&self) -> &[String] {
-        self.0.aliases()
+        self.function.aliases()
     }
 
     fn signature(&self) -> &Signature {
-        self.0.signature()
+        self.function.signature()
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
-        self.0.return_type(arg_types)
+        self.function.return_type(arg_types)
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> datafusion_common::Result<FieldRef> {
@@ -335,30 +397,201 @@ impl ScalarUDFImpl for NullPropagatingStringFunction {
             return datafusion_common::plan_err!("{} requires at least one argument", self.name());
         }
         let nullable = args.arg_fields.iter().any(|field| field.is_nullable());
-        let field = self.0.return_field_from_args(args)?;
+        let field = self.function.return_field_from_args(args)?;
         Ok(Arc::new(field.as_ref().clone().with_nullable(nullable)))
+    }
+
+    fn simplify(
+        &self,
+        args: Vec<expr::Expr>,
+        info: &SimplifyContext,
+    ) -> datafusion_common::Result<ExprSimplifyResult> {
+        if !self.preserve_intermediate_case
+            && self.is_case_conversion()
+            && let [argument] = args.as_slice()
+        {
+            // Constant evaluation precedes this hook, preserving literal case expansions.
+            // Spark removes STRING casts first. Keep Arrow representation conversions
+            // and their fields when bypassing the nested case conversion.
+            let (argument, shells) = case_conversion_shells(argument, info.schema())?;
+            if let expr::Expr::ScalarFunction(nested) = argument
+                && nested
+                    .func
+                    .inner()
+                    .downcast_ref::<Self>()
+                    .is_some_and(|adapter| {
+                        adapter.is_case_conversion() && !adapter.preserve_intermediate_case
+                    })
+                && nested.args.len() == 1
+            {
+                let argument = rebuild_case_conversion_shells(shells, nested.args[0].clone())?;
+                return Ok(ExprSimplifyResult::Simplified(
+                    call_null_propagating_string(Arc::clone(&self.function), vec![argument]),
+                ));
+            }
+        }
+        self.function.simplify(args, info)
     }
 
     fn invoke_with_args(
         &self,
         args: ScalarFunctionArgs,
     ) -> datafusion_common::Result<ColumnarValue> {
-        self.0.invoke_with_args(args)
+        self.function.invoke_with_args(args)
     }
+}
+
+pub(crate) fn preserve_local_case_conversion(
+    expression: expr::Expr,
+) -> datafusion_common::Result<Transformed<expr::Expr>> {
+    expression.transform_up(|mut expression| {
+        if let expr::Expr::ScalarFunction(function) = &mut expression
+            && let Some(adapter) = function
+                .func
+                .inner()
+                .downcast_ref::<NullPropagatingStringFunction>()
+            && adapter.is_case_conversion()
+            && !adapter.preserve_intermediate_case
+        {
+            function.func = Arc::new(ScalarUDF::from(NullPropagatingStringFunction {
+                function: Arc::clone(&adapter.function),
+                preserve_intermediate_case: true,
+            }));
+            return Ok(Transformed::yes(expression));
+        }
+        Ok(Transformed::no(expression))
+    })
+}
+
+// Native projection merging stops at subquery aliases. Rebind only a private
+// case producer with one direct case consumer; repeating the outer conversion
+// is idempotent and keeps the existing projections, aliases and fields intact.
+pub(crate) fn simplify_projected_case_conversions(
+    mut plan: LogicalPlan,
+    column_uses: &std::collections::HashMap<String, usize>,
+) -> datafusion_common::Result<Transformed<LogicalPlan>> {
+    fn unalias(expression: &expr::Expr) -> &expr::Expr {
+        // Inspect output annotations without removing or rebuilding any wrapper.
+        match without_metadata_annotations(expression) {
+            expr::Expr::Alias(alias) => unalias(&alias.expr),
+            expression => expression,
+        }
+    }
+    fn producer(plan: &LogicalPlan) -> Option<&datafusion_expr::logical_plan::Projection> {
+        match plan {
+            LogicalPlan::SubqueryAlias(alias) => producer(&alias.input),
+            LogicalPlan::Projection(project) => Some(project),
+            _ => None,
+        }
+    }
+    fn replace_producer(input: &mut Arc<LogicalPlan>, replacements: &[(usize, expr::Expr)]) {
+        match Arc::make_mut(input) {
+            LogicalPlan::SubqueryAlias(alias) => replace_producer(&mut alias.input, replacements),
+            LogicalPlan::Projection(project) => {
+                for (index, expression) in replacements {
+                    project.expr[*index] = expression.clone();
+                }
+            }
+            _ => {}
+        }
+    }
+    let LogicalPlan::Projection(project) = &mut plan else {
+        return Ok(Transformed::no(plan));
+    };
+    let Some(input) = producer(&project.input) else {
+        return Ok(Transformed::no(plan));
+    };
+    // Spark permits reused foldable siblings such as 1+1. Only a reused
+    // nontrivial, nonfoldable sibling retains the whole producer boundary.
+    for (field, expression) in input.schema.fields().iter().zip(&input.expr) {
+        if column_uses.get(field.name()).copied().unwrap_or(0) > 1
+            && !expression.placement().should_push_to_leaves()
+            && !crate::expression_errors::row_expression(expression, false)?
+        {
+            return Ok(Transformed::no(plan));
+        }
+    }
+    let mut replacements = Vec::new();
+    for expression in &project.expr {
+        let expr::Expr::ScalarFunction(consumer) = unalias(expression) else {
+            continue;
+        };
+        let Some(outer) = consumer
+            .func
+            .inner()
+            .downcast_ref::<NullPropagatingStringFunction>()
+        else {
+            continue;
+        };
+        if !outer.is_case_conversion()
+            || outer.preserve_intermediate_case
+            || consumer.args.len() != 1
+        {
+            continue;
+        }
+        let (argument, _) = case_conversion_shells(&consumer.args[0], project.input.schema())?;
+        let expr::Expr::Column(column) = argument else {
+            continue;
+        };
+        if column_uses.get(&column.name) != Some(&1) {
+            continue;
+        }
+        let index = project.input.schema().index_of_column(column)?;
+        // A single use still retains Spark's nondeterministic producer boundary.
+        if input.expr[index].is_volatile() {
+            continue;
+        }
+        let (function, shells) = case_conversion_shells(&input.expr[index], input.input.schema())?;
+        let expr::Expr::ScalarFunction(function) = function else {
+            continue;
+        };
+        let Some(inner) = function
+            .func
+            .inner()
+            .downcast_ref::<NullPropagatingStringFunction>()
+        else {
+            continue;
+        };
+        if inner.is_case_conversion()
+            && !inner.preserve_intermediate_case
+            && function.args.len() == 1
+            && inner.function.inner().is::<LowerFunc>() != outer.function.inner().is::<LowerFunc>()
+        {
+            let mut replacement = function.clone();
+            replacement.func = Arc::new(ScalarUDF::from(NullPropagatingStringFunction {
+                function: Arc::clone(&outer.function),
+                preserve_intermediate_case: false,
+            }));
+            replacements.push((
+                index,
+                rebuild_case_conversion_shells(shells, expr::Expr::ScalarFunction(replacement))?,
+            ));
+        }
+    }
+    if replacements.is_empty() {
+        return Ok(Transformed::no(plan));
+    }
+    replace_producer(&mut project.input, &replacements);
+    Ok(Transformed::yes(plan))
 }
 
 fn call_null_propagating_string(
     function: Arc<ScalarUDF>,
     arguments: Vec<expr::Expr>,
 ) -> expr::Expr {
-    ScalarUDF::from(NullPropagatingStringFunction(function)).call(arguments)
+    ScalarUDF::from(NullPropagatingStringFunction {
+        function,
+        preserve_intermediate_case: false,
+    })
+    .call(arguments)
 }
 
 fn lower(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-    Ok(call_null_propagating_string(
-        native_string::lower(),
-        vec![validate_utf8(input)?],
-    ))
+    Ok(lower_expr(validate_utf8(input)?))
+}
+
+pub(super) fn lower_expr(argument: expr::Expr) -> expr::Expr {
+    call_null_propagating_string(native_string::lower(), vec![argument])
 }
 
 fn upper(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -790,5 +1023,402 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
         ordinary.simplify(args, &info)?,
         ExprSimplifyResult::Original(_)
     ));
+    Ok(())
+}
+
+#[test]
+fn nested_case_simplification_preserves_cast_fields_and_arrow_types()
+-> datafusion_common::Result<()> {
+    use std::collections::HashMap;
+
+    use arrow::array::{ArrayRef, StringArray};
+    use arrow::compute::cast as cast_array;
+    use arrow::datatypes::{Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::physical_expr::create_physical_expr;
+    use datafusion_common::DataFusionError;
+    use datafusion_expr::{Expr, col, execution_props::ExecutionProps};
+
+    for data_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+        let schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+            "s",
+            data_type.clone(),
+            true,
+        )]))?);
+        let info = SimplifyContext::builder()
+            .with_schema(Arc::clone(&schema))
+            .build();
+        let values = Arc::new(StringArray::from(vec![Some("Straße"), None])) as ArrayRef;
+        let batch = RecordBatch::try_new(
+            Arc::clone(schema.inner()),
+            vec![cast_array(&values, &data_type)?],
+        )?;
+        for inner_type in [DataType::LargeUtf8, DataType::Utf8View] {
+            for inner_try in [false, true] {
+                for outer_try in [false, true] {
+                    for metadata in [false, true] {
+                        let field = |name: &str, data_type: DataType, nullable, role: &str| {
+                            let field = Field::new(name, data_type, nullable);
+                            Arc::new(if metadata {
+                                field.with_metadata(HashMap::from([("cast".into(), role.into())]))
+                            } else {
+                                field
+                            })
+                        };
+                        let inner_field =
+                            field("representation_cast", inner_type.clone(), true, "inner");
+                        let outer_field = field("utf8_cast", DataType::Utf8, false, "outer");
+                        let wrap = |argument, field: &FieldRef, is_try| {
+                            if is_try {
+                                Expr::TryCast(expr::TryCast::new_from_field(
+                                    Box::new(argument),
+                                    Arc::clone(field),
+                                ))
+                            } else {
+                                Expr::Cast(expr::Cast::new_from_field(
+                                    Box::new(argument),
+                                    Arc::clone(field),
+                                ))
+                            }
+                        };
+                        let upper =
+                            call_null_propagating_string(native_string::upper(), vec![col("s")]);
+                        let argument = wrap(
+                            wrap(upper, &inner_field, inner_try),
+                            &outer_field,
+                            outer_try,
+                        );
+                        let original = call_null_propagating_string(
+                            native_string::lower(),
+                            vec![argument.clone()],
+                        );
+                        let adapter = NullPropagatingStringFunction {
+                            function: native_string::lower(),
+                            preserve_intermediate_case: false,
+                        };
+                        let ExprSimplifyResult::Simplified(simplified) =
+                            adapter.simplify(vec![argument], &info)?
+                        else {
+                            panic!("nested case conversion was not simplified");
+                        };
+                        let Expr::ScalarFunction(function) = &simplified else {
+                            panic!("outer LOWER was not retained");
+                        };
+                        let (inner, field) = match &function.args[0] {
+                            Expr::Cast(cast) if !outer_try => (&cast.expr, &cast.field),
+                            Expr::TryCast(cast) if outer_try => (&cast.expr, &cast.field),
+                            other => panic!("outer cast variant changed: {other:?}"),
+                        };
+                        assert!(Arc::ptr_eq(field, &outer_field));
+                        assert_eq!(field, &outer_field);
+                        let (source, field) = match inner.as_ref() {
+                            Expr::Cast(cast) if !inner_try => (&cast.expr, &cast.field),
+                            Expr::TryCast(cast) if inner_try => (&cast.expr, &cast.field),
+                            other => panic!("inner cast variant changed: {other:?}"),
+                        };
+                        assert!(Arc::ptr_eq(field, &inner_field));
+                        assert_eq!(field, &inner_field);
+                        assert_eq!(source.as_ref(), &col("s"));
+                        assert_eq!(original.get_type(&schema)?, DataType::Utf8);
+                        assert_eq!(simplified.get_type(&schema)?, DataType::Utf8);
+                        let before =
+                            create_physical_expr(&original, &schema, &ExecutionProps::new());
+                        let after =
+                            create_physical_expr(&simplified, &schema, &ExecutionProps::new());
+                        if metadata && (inner_try || outer_try) {
+                            // Native TRY_CAST rejects target metadata before evaluating either form.
+                            let expected = if outer_try {
+                                format!(
+                                    "TryCast from {inner_type} to Utf8<{{\"cast\": \"outer\"}}> is not supported"
+                                )
+                            } else {
+                                format!(
+                                    "TryCast from {data_type} to {inner_type}<{{\"cast\": \"inner\"}}> is not supported"
+                                )
+                            };
+                            for actual in [before, after] {
+                                let Err(DataFusionError::Plan(message)) = actual else {
+                                    panic!("native target-metadata rejection changed: {actual:?}");
+                                };
+                                assert_eq!(message, expected);
+                            }
+                        } else {
+                            for (physical, expected) in [(before, "strasse"), (after, "straße")] {
+                                let physical = physical?;
+                                assert_eq!(physical.data_type(schema.inner())?, DataType::Utf8);
+                                let actual = physical.evaluate(&batch)?.into_array(2)?;
+                                assert_eq!(actual.data_type(), &DataType::Utf8);
+                                assert_eq!(
+                                    actual.as_ref(),
+                                    &StringArray::from(vec![Some(expected), None])
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let frozen = preserve_local_case_conversion(call_null_propagating_string(
+            native_string::upper(),
+            vec![col("s")],
+        ))?
+        .data;
+        let adapter = NullPropagatingStringFunction {
+            function: native_string::lower(),
+            preserve_intermediate_case: false,
+        };
+        let ExprSimplifyResult::Original(args) = adapter.simplify(vec![frozen.clone()], &info)?
+        else {
+            panic!("case conversion crossed the early local-relation boundary");
+        };
+        assert_eq!(args, vec![frozen]);
+    }
+    Ok(())
+}
+
+#[test]
+fn nested_case_simplification_preserves_cast_metadata_shells() -> datafusion_common::Result<()> {
+    use std::collections::HashMap;
+
+    use arrow::datatypes::{Field, Schema};
+    use datafusion_expr::{Expr, col};
+
+    use crate::function::common::{
+        drop_inherited_column_metadata, drop_inherited_column_metadata_for_analysis,
+        drop_scalar_subquery_metadata, preserve_hidden_sort_output_declaration,
+        set_result_metadata, without_inherited_column_metadata,
+    };
+
+    for source_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+        let schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+            "s",
+            source_type,
+            true,
+        )]))?);
+        let info = SimplifyContext::builder().with_schema(schema).build();
+        for target_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+            let field = Arc::new(
+                Field::new("cast_target", target_type, false)
+                    .with_metadata(HashMap::from([("cast".into(), "kept".into())])),
+            );
+            for is_try in [false, true] {
+                let wrap = |value| {
+                    drop_inherited_column_metadata(if is_try {
+                        Expr::TryCast(expr::TryCast::new_from_field(
+                            Box::new(value),
+                            Arc::clone(&field),
+                        ))
+                    } else {
+                        Expr::Cast(expr::Cast::new_from_field(
+                            Box::new(value),
+                            Arc::clone(&field),
+                        ))
+                    })
+                };
+                let argument = wrap(drop_inherited_column_metadata(
+                    call_null_propagating_string(native_string::upper(), vec![col("s")]),
+                ));
+                let adapter = NullPropagatingStringFunction {
+                    function: native_string::lower(),
+                    preserve_intermediate_case: false,
+                };
+                let ExprSimplifyResult::Simplified(actual) =
+                    adapter.simplify(vec![argument.clone()], &info)?
+                else {
+                    panic!("CAST metadata hid the nested case conversion");
+                };
+                assert_eq!(
+                    actual,
+                    call_null_propagating_string(
+                        native_string::lower(),
+                        vec![wrap(drop_inherited_column_metadata(col("s")))],
+                    )
+                );
+                let Expr::ScalarFunction(function) = &actual else {
+                    panic!("outer LOWER was not retained");
+                };
+                let target = match without_inherited_column_metadata(&function.args[0]) {
+                    Expr::Cast(cast) if !is_try => &cast.field,
+                    Expr::TryCast(cast) if is_try => &cast.field,
+                    other => panic!("CAST variant changed: {other:?}"),
+                };
+                assert!(Arc::ptr_eq(target, &field));
+
+                for boundary in [
+                    set_result_metadata(argument.clone(), vec![("owner".into(), "kept".into())]),
+                    drop_inherited_column_metadata_for_analysis(argument.clone()),
+                    drop_scalar_subquery_metadata(argument.clone(), &field),
+                    preserve_hidden_sort_output_declaration(argument.clone(), &field),
+                ] {
+                    let ExprSimplifyResult::Original(args) =
+                        adapter.simplify(vec![boundary.clone()], &info)?
+                    else {
+                        panic!("case conversion crossed a separate metadata boundary");
+                    };
+                    assert_eq!(args, vec![boundary]);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn projected_case_simplification_preserves_cast_shells_and_schemas() -> datafusion_common::Result<()>
+{
+    use std::collections::HashMap;
+
+    use arrow::datatypes::{Field, Schema};
+    use datafusion_expr::logical_plan::{EmptyRelation, Projection, SubqueryAlias};
+    use datafusion_expr::{Volatility, col, create_udf};
+
+    use crate::function::common::{drop_inherited_column_metadata, set_result_metadata};
+
+    let source = Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
+        produce_one_row: false,
+        schema: Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+            "s",
+            DataType::Utf8,
+            false,
+        )]))?),
+    }));
+    let volatile_identity = create_udf(
+        "case_volatile_identity",
+        vec![DataType::Utf8],
+        DataType::Utf8,
+        Volatility::Volatile,
+        Arc::new(|_| {
+            datafusion_common::internal_err!("case preparation must not execute operands")
+        }),
+    );
+    for is_try in [false, true] {
+        let field = Arc::new(
+            Field::new("cast_target", DataType::LargeUtf8, true)
+                .with_metadata(HashMap::from([("cast".into(), "kept".into())])),
+        );
+        let wrap = |value| {
+            drop_inherited_column_metadata(if is_try {
+                expr::Expr::TryCast(expr::TryCast::new_from_field(
+                    Box::new(value),
+                    Arc::clone(&field),
+                ))
+            } else {
+                expr::Expr::Cast(expr::Cast::new_from_field(
+                    Box::new(value),
+                    Arc::clone(&field),
+                ))
+            })
+        };
+        for (inner, outer) in [
+            (native_string::upper(), native_string::lower()),
+            (native_string::lower(), native_string::upper()),
+        ] {
+            for (wrap_producer, volatile_argument, uses) in [
+                (false, false, 1),
+                (true, false, 1),
+                (true, true, 1),
+                (true, false, 2),
+            ] {
+                for wrap_consumer in 0..4 {
+                    let argument = if volatile_argument {
+                        volatile_identity.call(vec![col("s")])
+                    } else {
+                        col("s")
+                    };
+                    let producer_expr =
+                        call_null_propagating_string(Arc::clone(&inner), vec![argument]);
+                    let producer_expr = if wrap_producer {
+                        wrap(producer_expr)
+                    } else {
+                        producer_expr
+                    }
+                    .alias("u");
+                    let producer =
+                        Projection::try_new(vec![producer_expr.clone()], Arc::clone(&source))?;
+                    let producer_schema = Arc::clone(&producer.schema);
+                    let alias =
+                        SubqueryAlias::try_new(Arc::new(LogicalPlan::Projection(producer)), "q")?;
+                    let alias_schema = Arc::clone(&alias.schema);
+                    let argument = if wrap_consumer != 0 {
+                        wrap(col("u"))
+                    } else {
+                        col("u")
+                    };
+                    let consumer_expr =
+                        call_null_propagating_string(Arc::clone(&outer), vec![argument]);
+                    let metadata = vec![
+                        ("__autoGeneratedAlias".into(), "true".into()),
+                        ("owner".into(), "kept".into()),
+                    ];
+                    let consumer_expr = match wrap_consumer {
+                        2 => set_result_metadata(consumer_expr, metadata).alias("r"),
+                        3 => set_result_metadata(consumer_expr.alias("r"), metadata),
+                        _ => consumer_expr.alias("r"),
+                    };
+                    let consumer = Projection::try_new(
+                        vec![consumer_expr.clone()],
+                        Arc::new(LogicalPlan::SubqueryAlias(alias)),
+                    )?;
+                    let consumer_schema = Arc::clone(&consumer.schema);
+                    let original = LogicalPlan::Projection(consumer);
+                    let actual = simplify_projected_case_conversions(
+                        original.clone(),
+                        &HashMap::from([("u".into(), uses)]),
+                    )?;
+                    let should_rebind = !volatile_argument && uses == 1;
+                    assert_eq!(actual.transformed, should_rebind);
+                    if !should_rebind {
+                        assert_eq!(actual.data, original);
+                        continue;
+                    }
+                    let LogicalPlan::Projection(consumer) = actual.data else {
+                        panic!("consumer projection changed")
+                    };
+                    assert!(Arc::ptr_eq(&consumer.schema, &consumer_schema));
+                    assert_eq!(consumer.expr, vec![consumer_expr]);
+                    let LogicalPlan::SubqueryAlias(alias) = consumer.input.as_ref() else {
+                        panic!("subquery alias changed")
+                    };
+                    assert!(Arc::ptr_eq(&alias.schema, &alias_schema));
+                    let LogicalPlan::Projection(producer) = alias.input.as_ref() else {
+                        panic!("producer projection changed")
+                    };
+                    assert!(Arc::ptr_eq(&producer.schema, &producer_schema));
+                    assert!(Arc::ptr_eq(&producer.input, &source));
+                    let expected = call_null_propagating_string(Arc::clone(&outer), vec![col("s")]);
+                    let expected = if wrap_producer {
+                        wrap(expected)
+                    } else {
+                        expected
+                    }
+                    .alias("u");
+                    assert_eq!(producer.expr, vec![expected]);
+                    let (_, original_shells) =
+                        case_conversion_shells(&producer_expr, source.schema())?;
+                    let (_, actual_shells) =
+                        case_conversion_shells(&producer.expr[0], source.schema())?;
+                    assert_eq!(actual_shells.len(), original_shells.len());
+                    for (actual, original) in actual_shells.iter().zip(original_shells) {
+                        match (actual, original) {
+                            (expr::Expr::Cast(a), expr::Expr::Cast(b)) => {
+                                assert!(Arc::ptr_eq(&a.field, &b.field))
+                            }
+                            (expr::Expr::TryCast(a), expr::Expr::TryCast(b)) => {
+                                assert!(Arc::ptr_eq(&a.field, &b.field))
+                            }
+                            (expr::Expr::ScalarFunction(a), expr::Expr::ScalarFunction(b)) => {
+                                assert!(Arc::ptr_eq(&a.func, &b.func))
+                            }
+                            (expr::Expr::Alias(a), expr::Expr::Alias(b)) => {
+                                assert_eq!(a.name, b.name);
+                                assert_eq!(a.metadata, b.metadata);
+                            }
+                            _ => panic!("producer shell variant changed"),
+                        }
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }

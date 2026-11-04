@@ -3161,13 +3161,15 @@ preserved `selection` object describes the earlier connected seed's 38 cases
 and 76 observations; `replay.observations` records this capture's 66 observations.
 
 Every successful record compares complete analyzed and physical schemas and
-ordered rows. The regression gate also retains 48 bounded native negative
-profiles in `trim-case-native-dependency-profiles.jsonl`: 24 nested-case value
-differences under #792 and 24 analyzed numeric CAST differences under #796.
-These profiles copy actual native schemas and rows from the recorded candidate
-capture, with its source and evidence hashes. Matching a profile keeps
-`strict_match=false` and `full_compatibility_pass=false`; it only confirms that
-the recorded incompatibility has not changed. Other success differences fail.
+ordered rows. `trim-case-native-dependency-profiles.jsonl` keeps all 48 original
+native negative records as historical evidence. Only the 24 analyzed numeric
+CAST differences under #796 remain active fallbacks. The 24 nested trim/case
+contexts repaired by #792 now require complete strict Spark fields and rows;
+the matcher rejects their retired profiles even when their old bytes match.
+The active profiles copy actual native schemas and rows from the recorded
+capture, with source and evidence hashes. An active negative match keeps
+`strict_match=false` and `full_compatibility_pass=false`. Other success
+differences fail.
 
 The 36 zero-argument trim contexts under #795 require the exact observed native
 formatter fingerprint and also keep both compatibility flags false. The other
@@ -3181,6 +3183,65 @@ plans compare actual Arrow storage and values with native LOWER/UPPER and trim
 kernels for all case aliases, required/nullable/empty providers and sliced
 batches. Volatile counters check that planning does not evaluate arguments and
 execution evaluates each once.
+
+The ten case-conversion result fixtures retain 226 independent references:
+the original 206 references, four genuine volatile-producer references and
+16 aliased/unaliased references. The original eight files remain unchanged.
+`case_conversion.rs` runs all 1,356 configurations and compares complete
+successful fields and ordered rows. All 24 genuine-volatile and 96 new
+aliased/unaliased contexts are strict positive controls.
+
+The case regression gate also retains 126 complete current native negative
+receipts: 96 preexisting TRY_CAST field differences under #802, 24 preexisting
+RAND-range row differences under #838, and six unordered inner LIMIT/OFFSET
+selection contexts. The last six are exactly both ANSI modes, three storage
+representations and batch size 1; batch size 32 remains strict. Outer ORDER BY
+does not constrain the inner unordered selection. This is a retained support
+boundary, with no relational defect asserted.
+
+Every negative requires its complete fixture/SQL/ANSI/storage/batch identity and
+actual analyzed fields, physical fields and rows. It keeps `strict_spark_match`
+and `full_compatibility_pass` false. Changed results, unexpected errors and any
+other case fail. The #802 fields are unchanged from the baseline while some
+case values improved; these profiles retain actual R2 values. All 24 #838 public
+receipts match the baseline exactly. The active #775 numeric profiles remain
+separate and unchanged. Together they retain 150 success differences.
+
+A passing regression gate does not complete #792's first acceptance criterion
+or close #802/#838. All original references remain in the output. No new genuine
+or unaliased positive is eligible for a negative fallback.
+
+`case-conversion-producer-genuine-volatile-spark.jsonl` and its `plan-trace`
+companion preserve the independent capture and all four Spark traces byte for
+byte. The traces retain two Projects and nondeterministic producers for the
+`rand(42)>0.5` controls. `case-conversion-unaliased-spark.jsonl` preserves the
+fresh 16-record Spark replay, including its registered inputs, build/settings
+header and input lineage. Capture paths in frozen headers describe provenance;
+the tests use included files and need no external evidence directory.
+
+The four required CAST errors retain their actual available native analyzed
+and physical declarations, exact error stage and Int32 conversion cause through
+`case-conversion-required-native-errors.jsonl`. These positive native controls
+come from all 24 baseline and R1 contexts. Spark `collect` is checked separately
+from native `execute`; Spark `optimized_schema` is checked separately from
+native `physical`. Spark recorded no physical schema for these failures.
+Native provider failures retain their actual physical schema; literal failures
+retain explicit unavailable physical fields. No Spark physical field is
+invented and no complete diagnostic identifier parity is claimed. Mutation
+controls reject changed stages, causes, fields and rows.
+
+Nested case controls include expanding Unicode, aliases, trim/ILIKE, explicit
+CAST/TRY_CAST, local VALUES, provider inputs, literal LIMIT/OFFSET boundaries,
+correlated consumers, reused dynamic producers and reused foldable siblings.
+`case-conversion-projected-cast-spark.jsonl` preserves all 16 newly replayed
+producer/consumer CAST and TRY_CAST references. Its inherited `selection.purpose`
+text describes the input-only seed; the replay's records contain independently
+captured expected fields and rows. The header and records remain byte-identical
+to that replay. Four original unwrapped controls remain in the order fixture.
+
+The always-true RAND controls and genuine nondeterministic producers have
+separate assertions. Same-type TRY_CAST declaration differences remain strict
+negatives under #802.
 
 All captures record Spark 4.2.0 revision
 `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1+0, Python 3.12.14,

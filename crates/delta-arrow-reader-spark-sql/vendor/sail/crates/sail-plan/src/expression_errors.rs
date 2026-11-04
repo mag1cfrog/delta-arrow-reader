@@ -36,6 +36,9 @@ use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
 };
+use crate::function::scalar::{
+    preserve_local_case_conversion, simplify_projected_case_conversions,
+};
 use datafusion::functions::math::round::RoundFunc;
 use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::math::spark_abs::SparkAbs;
@@ -276,7 +279,7 @@ impl PrepareSparkExpressions {
             .get::<SparkSqlExpressionSemantics>()
             .is_some();
         let plan = if is_spark_query {
-            preserve_local_substrings(plan)?
+            preserve_local_case_conversions(preserve_local_substrings(plan)?)?
         } else {
             plan
         };
@@ -1108,6 +1111,245 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
         .evaluate(&batch)?
         .into_array(1)?;
     assert_eq!(value.null_count(), 1);
+    Ok(())
+}
+
+// Track foldability per output instead of substituting producer expression trees.
+// Repeated column references reuse one Boolean, including nonfoldable siblings.
+fn case_one_row_foldability(
+    plan: &LogicalPlan,
+    input: Option<Vec<bool>>,
+) -> Result<Option<Vec<bool>>> {
+    match plan {
+        LogicalPlan::EmptyRelation(empty)
+            if empty.produce_one_row && empty.schema.fields().is_empty() =>
+        {
+            Ok(Some(vec![]))
+        }
+        LogicalPlan::SubqueryAlias(_) => Ok(input),
+        LogicalPlan::Projection(project) => {
+            let Some(input) = input else { return Ok(None) };
+            project
+                .expr
+                .iter()
+                .map(|expression| {
+                    let mut foldable = row_expression(expression, true)?;
+                    expression.apply(|node| {
+                        if let Expr::Column(column) = node {
+                            foldable &= input[project.input.schema().index_of_column(column)?];
+                        }
+                        Ok(TreeNodeRecursion::Continue)
+                    })?;
+                    Ok(foldable)
+                })
+                .collect::<Result<Vec<_>>>()
+                .map(Some)
+        }
+        _ => Ok(None),
+    }
+}
+
+// Spark 4.2's LocalRelation early batch evaluates these VALUES consumers before
+// ConstantFolding/SimplifyCasts/SimplifyCaseConversionExpressions in operator
+// optimization (Optimizer.scala at 32f7299601108917fb01920a54e084595b7b3bf8).
+// Mark case calls without evaluating rows, including volatile expressions.
+fn preserve_local_case_conversions(plan: LogicalPlan) -> Result<LogicalPlan> {
+    fn local_relation(plan: &LogicalPlan) -> Result<bool> {
+        let expressions = |expressions: &[Expr], columns| {
+            expressions.iter().try_fold(true, |local, expr| {
+                Ok::<_, datafusion_common::DataFusionError>(
+                    local && row_expression_with_volatile(expr, columns, true)?,
+                )
+            })
+        };
+        match plan {
+            LogicalPlan::Values(values) => values
+                .values
+                .iter()
+                .try_fold(true, |local, row| Ok(local && expressions(row, false)?)),
+            LogicalPlan::Projection(project) => {
+                Ok(local_relation(&project.input)? && expressions(&project.expr, true)?)
+            }
+            LogicalPlan::SubqueryAlias(alias) => local_relation(&alias.input),
+            LogicalPlan::Filter(filter) => Ok(local_relation(&filter.input)?
+                && row_expression_with_volatile(&filter.predicate, true, true)?),
+            LogicalPlan::Limit(limit) => {
+                let literal_count = |expr: &Expr| match expr {
+                    Expr::Literal(ScalarValue::Int32(Some(n)), _) => *n >= 0,
+                    Expr::Literal(ScalarValue::Int64(Some(n)), _) => *n >= 0,
+                    // The preceding TypeCoercion analyzer widens SQL Int32 literals.
+                    Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
+                        matches!(cast.expr.as_ref(), Expr::Literal(ScalarValue::Int32(Some(n)), _) if *n >= 0)
+                    }
+                    _ => false,
+                };
+                // Spark's early local batch stops at every explicit OFFSET, even zero.
+                Ok(limit.skip.is_none()
+                    && limit.fetch.as_deref().is_some_and(literal_count)
+                    && local_relation(&limit.input)?)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    // Count ordinary and outer-reference consumers, including other CTE uses.
+    // Names shared by distinct qualifiers conservatively keep the producer.
+    let mut column_uses = std::collections::HashMap::new();
+    plan.apply_with_subqueries(|node| {
+        for expression in node.expressions() {
+            expression.apply(|expression| {
+                if let Expr::Column(column) | Expr::OuterReferenceColumn(_, column) = expression {
+                    *column_uses.entry(column.name.clone()).or_insert(0usize) += 1;
+                }
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    // Each frame holds only the last child's output flags. Subqueries are visited
+    // before inputs; only single-input Projection/Alias nodes consume these flags.
+    let one_row_outputs = std::cell::RefCell::new(Vec::<Option<Vec<bool>>>::new());
+    Ok(plan
+        .transform_down_up_with_subqueries(
+            |node| {
+                one_row_outputs.borrow_mut().push(None);
+                Ok(Transformed::no(node))
+            },
+            |node| {
+                let input = one_row_outputs.borrow_mut().pop().flatten();
+                let outputs = case_one_row_foldability(&node, input)?;
+                let foldable_one_row = outputs
+                    .as_ref()
+                    .is_some_and(|outputs| outputs.iter().all(|v| *v));
+                if let Some(parent) = one_row_outputs.borrow_mut().last_mut() {
+                    *parent = outputs;
+                }
+                if local_relation(&node)? || foldable_one_row {
+                    node.map_expressions(preserve_local_case_conversion)
+                } else {
+                    simplify_projected_case_conversions(node, &column_uses)
+                }
+            },
+        )?
+        .data)
+}
+
+#[test]
+fn case_foldability_does_not_expand_projection_chains()
+-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::sync::{
+        LazyLock,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use datafusion::prelude::SessionContext;
+    use datafusion_expr::logical_plan::{EmptyRelation, Projection, SubqueryAlias};
+    use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
+    use datafusion_expr::{
+        ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility, col,
+    };
+
+    use crate::config::PlanConfig;
+    use crate::function::{
+        common::{FunctionContextInput, ScalarFunctionInput},
+        get_built_in_function,
+    };
+
+    static CHECKS: AtomicUsize = AtomicUsize::new(0);
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    struct FoldabilityProbe(bool);
+    impl ScalarUDFImpl for FoldabilityProbe {
+        fn name(&self) -> &str {
+            "case_foldability_probe"
+        }
+        fn signature(&self) -> &Signature {
+            static IMMUTABLE: LazyLock<Signature> =
+                LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+            static VOLATILE: LazyLock<Signature> =
+                LazyLock::new(|| Signature::any(1, Volatility::Volatile));
+            CHECKS.fetch_add(1, Ordering::SeqCst);
+            if self.0 { &VOLATILE } else { &IMMUTABLE }
+        }
+        fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+            Ok(DataType::Utf8)
+        }
+        fn invoke_with_args(&self, _: ScalarFunctionArgs) -> Result<ColumnarValue> {
+            datafusion_common::internal_err!("foldability classification must not execute values")
+        }
+    }
+
+    let session = SessionContext::new();
+    let config = Arc::new(PlanConfig::default());
+    let depth = 8;
+    for volatile in [false, true] {
+        for case_consumer in [false, true] {
+            let source = LogicalPlan::EmptyRelation(EmptyRelation {
+                produce_one_row: true,
+                schema: Arc::new(DFSchema::empty()),
+            });
+            let mut plan = LogicalPlan::Projection(Projection::try_new(
+                vec![
+                    ScalarUDF::from(FoldabilityProbe(volatile))
+                        .call(vec![lit("Straße")])
+                        .alias("x"),
+                ],
+                Arc::new(source),
+            )?);
+            for _ in 0..depth {
+                let input =
+                    LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(Arc::new(plan), "q")?);
+                plan = LogicalPlan::Projection(Projection::try_new(
+                    vec![expr_fn::coalesce(vec![col("x"), col("x")]).alias("x")],
+                    Arc::new(input),
+                )?);
+            }
+            if case_consumer {
+                let make_case = |name, argument| {
+                    get_built_in_function(name)?(ScalarFunctionInput {
+                        arguments: vec![argument],
+                        function_context: FunctionContextInput {
+                            argument_display_names: &[],
+                            plan_config: &config,
+                            session_context: &session,
+                            schema: plan.schema(),
+                        },
+                    })
+                };
+                let expression = make_case("lower", make_case("upper", col("x"))?)?;
+                plan = LogicalPlan::Projection(Projection::try_new(
+                    vec![expression.alias("r")],
+                    Arc::new(plan),
+                )?);
+            }
+            CHECKS.store(0, Ordering::SeqCst);
+            let prepared = preserve_local_case_conversions(plan)?;
+            assert!(
+                CHECKS.load(Ordering::SeqCst) <= depth + 1,
+                "classification expanded producer expressions"
+            );
+            let LogicalPlan::Projection(project) = &prepared else {
+                panic!("projection changed")
+            };
+            let info = SimplifyContext::builder()
+                .with_schema(Arc::clone(project.input.schema()))
+                .build();
+            let mut consumers = 0;
+            project.expr[0].apply(|expression| {
+                if let Expr::ScalarFunction(function) = expression
+                    && function.func.name() == "lower"
+                {
+                    consumers += 1;
+                    let preserved = matches!(
+                        function.func.simplify(function.args.clone(), &info)?,
+                        ExprSimplifyResult::Original(_)
+                    );
+                    assert_eq!(preserved, !volatile, "one-row case foldability changed");
+                }
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            assert_eq!(consumers, usize::from(case_consumer));
+        }
+    }
     Ok(())
 }
 
