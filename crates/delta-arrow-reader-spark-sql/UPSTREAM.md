@@ -857,9 +857,12 @@ children use the dependency's logical NULL validation without rewriting their
 dictionary pools or changing storage types. The
 [result references](tests/fixtures/README.md#array_compact-result-fields) preserve
 complete Spark fields and values for direct and connected consumers.
-The constant bad-cast IS NULL gap remains under #890, and the invalid-input error
-category remains under #891. Their exact inherited observations stay visible in
-the references; they do not count as strict Spark matches.
+The Spark function builder rejects non-array arguments during resolution with
+`DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, preserving untyped NULL and the
+existing array coercion path. Internal ARRAYS_OVERLAP compaction keeps the direct
+expression builder. The constant bad-cast IS NULL gap remains under #890; only
+its exact inherited observation permits a difference from Spark. The historical
+#891 controls stay frozen, while their non-array errors require strict matches.
 
 ### Projection metadata
 
