@@ -760,7 +760,10 @@ elements.
 The shared List/LargeList kernel retains visible-range filtering for sliced
 inputs, discards children under NULL parents and keeps the parent validity.
 It rebuilds the result through checked list construction with the refined
-element field. Scalar values and zero-row calls use the same kernel. Encoded
+element field. Scalar values and zero-row calls use the same kernel. The nested
+scalar adapter retains the first typed List/LargeList row directly, preserving
+element fields, NULL parents and child buffers. An empty scalar list result
+returns an error. Encoded
 children use the dependency's logical NULL validation without rewriting their
 dictionary pools or changing storage types. The
 [result references](tests/fixtures/README.md#array_compact-result-fields) preserve

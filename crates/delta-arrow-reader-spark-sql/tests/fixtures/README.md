@@ -2834,7 +2834,10 @@ and unconfigured sessions before and after Spark execution.
 The SparkArrayCompact unit tests check both list widths, immediate versus deeper
 fields, custom element metadata, sliced child storage, scalar adaptation and
 actual zero-row kernel calls. Dictionary children remove logical NULLs while
-retaining their value pools. Separate encoded-provider controls require public
+retaining their pool values, types and buffers. Shared nested-adapter tests check
+List/LargeList scalar fields and storage, NULL parents and elements, first-row
+extraction, empty scalar results, primitive conversion and array controls.
+Separate encoded-provider controls require public
 Union, sliced run-end encoded and dictionary inputs to keep their values and
 pass safe construction with required elements.
 
@@ -2843,6 +2846,7 @@ From this crate, replay the references and focused kernel checks with:
 ```sh
 cargo test --locked --workspace --test compact_result_fields -- --nocapture
 cargo test --locked --workspace -p sail-function --lib spark_array_compact -- --nocapture
+cargo test --locked --workspace -p sail-function --lib scalar_adapter -- --nocapture
 ```
 
 ## Unordered CONCAT metadata

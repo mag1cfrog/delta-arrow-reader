@@ -405,7 +405,6 @@ mod tests {
             expected_values,
             None,
         )?;
-        let mut failures = Vec::new();
         for (input_type, expected_type) in [
             (
                 DataType::List(element.clone()),
@@ -413,7 +412,6 @@ mod tests {
             ),
             (DataType::LargeList(element), DataType::LargeList(required)),
         ] {
-            let before_cast_type = input.data_type().clone();
             let input = compute::cast(&input, &input_type)?;
             let expected = compute::cast(&expected, &expected_type)?;
             assert_eq!(input.data_type(), &input_type);
@@ -424,39 +422,22 @@ mod tests {
                 _ => unreachable!(),
             };
             assert_eq!(scalar.data_type(), input_type);
-            let converted = ScalarValue::try_from_array(&input, 0)?;
-            eprintln!("ARRAY_COMPACT_SCALAR_SETUP {}", serde_json::json!({
-                "before_cast_type":format!("{before_cast_type:?}"),
-                "array_type":format!("{:?}", input.data_type()),
-                "converted_type":format!("{:?}", converted.data_type()),
-                "explicit_scalar_type":format!("{:?}", scalar.data_type()),
-            }));
             for (argument, rows) in [
                 (ColumnarValue::Array(input.clone()), 2),
                 (ColumnarValue::Array(input.slice(1, 0)), 0),
                 (ColumnarValue::Scalar(scalar), 1),
             ] {
                 let scalar = matches!(&argument, ColumnarValue::Scalar(_));
-                let argument_type = argument.data_type();
                 let (actual, field) = invoke_compact(argument, false, rows)?;
                 assert_eq!(matches!(&actual, ColumnarValue::Scalar(_)), scalar);
                 let actual = actual.into_array(rows)?;
                 actual.to_data().validate_full()?;
                 assert!(!field.is_nullable());
-                eprintln!("ARRAY_COMPACT_SCALAR_BOUNDARY {}", serde_json::json!({
-                    "scalar":scalar,"rows":rows,"input_type":format!("{argument_type:?}"),
-                    "declared_type":format!("{:?}", field.data_type()),
-                    "actual_type":format!("{:?}", actual.data_type()),
-                    "expected_type":format!("{expected_type:?}"),
-                }));
-                if actual.data_type() != field.data_type() || actual.data_type() != &expected_type {
-                    failures.push(format!("scalar={scalar} rows={rows}: input={argument_type:?}, declared={:?}, actual={:?}, expected={expected_type:?}", field.data_type(), actual.data_type()));
-                    continue;
-                }
+                assert_eq!(actual.data_type(), field.data_type());
+                assert_eq!(actual.data_type(), &expected_type);
                 assert_eq!(actual.as_ref(), expected.slice(0, rows).as_ref());
             }
         }
-        assert!(failures.is_empty(), "{}", failures.join("\n"));
         Ok(())
     }
 
@@ -532,7 +513,6 @@ mod tests {
             ),
             (DataType::LargeList(element), DataType::LargeList(required)),
         ] {
-            let before_cast_type = input.data_type().clone();
             let input = compute::cast(&input, &input_type)?;
             let expected = compute::cast(&expected, &return_type)?;
             assert_eq!(input.data_type(), &input_type);
@@ -546,13 +526,6 @@ mod tests {
             let input_pool_data = input_pool.to_data();
             assert!(input_pool_data.ptr_eq(&pool.to_data()));
             assert_eq!(input_pool.as_primitive::<Int32Type>(), &Int32Array::from(vec![None, Some(3), Some(4), None]));
-            eprintln!("ARRAY_COMPACT_DICTIONARY_INPUT {}", serde_json::json!({
-                "before_cast_type":format!("{before_cast_type:?}"),
-                "input_type":format!("{:?}", input.data_type()),
-                "pool_type":format!("{:?}", input_pool.data_type()),
-                "cast_pool_arc_same":Arc::ptr_eq(&input_pool, &pool),
-                "cast_pool_storage_same":input_pool_data.ptr_eq(&pool.to_data()),
-            }));
             let (actual, field) = invoke_compact(ColumnarValue::Array(input), true, 3)?;
             let actual = actual.into_array(3)?;
             actual.to_data().validate_full()?;
@@ -565,12 +538,6 @@ mod tests {
             };
             let dictionary = values.as_dictionary::<Int8Type>();
             assert_eq!(dictionary.logical_null_count(), 0);
-            eprintln!("ARRAY_COMPACT_DICTIONARY_OUTPUT {}", serde_json::json!({
-                "actual_type":format!("{:?}", actual.data_type()),
-                "pool_type":format!("{:?}", dictionary.values().data_type()),
-                "output_pool_arc_same":Arc::ptr_eq(dictionary.values(), &input_pool),
-                "output_pool_storage_same":dictionary.values().to_data().ptr_eq(&input_pool_data),
-            }));
             assert_eq!(dictionary.values().data_type(), input_pool.data_type());
             assert_eq!(dictionary.values().as_primitive::<Int32Type>(), &Int32Array::from(vec![None, Some(3), Some(4), None]));
             assert!(dictionary.values().to_data().ptr_eq(&input_pool_data));
