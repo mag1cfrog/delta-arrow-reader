@@ -38,33 +38,58 @@ fn session(batch_size: usize) -> SessionContext {
 
 #[tokio::test]
 async fn case_conversion_prepares_slice_constants_before_nested_rewrite() -> TestResult {
-    let manifest: Value = serde_json::from_str(include_str!(
-        "fixtures/case-conversion-slice-manifest.json"
-    ))?;
+    let manifest: Value =
+        serde_json::from_str(include_str!("fixtures/case-conversion-slice-manifest.json"))?;
     let mut records = include_str!("fixtures/case-conversion-slice-spark.jsonl")
-        .lines().map(serde_json::from_str::<Value>).collect::<Result<Vec<_>, _>>()?;
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records.len(), 7);
     let header = records.remove(0);
     for (key, value) in manifest.as_object().ok_or("missing manifest")? {
         assert_eq!(&header[key], value, "{key}");
     }
     assert_eq!(header["spark_version"], "4.2.0");
-    assert_eq!(header["spark_revision"], "32f7299601108917fb01920a54e084595b7b3bf8");
+    assert_eq!(
+        header["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
     assert_eq!(header["group"], "slice-894-case-conversion-interaction-v1");
     assert_eq!(header["process_timezone"], "UTC");
     assert_eq!(header["provider_input_roundtrip_checked"], true);
-    assert_eq!(header["capture_sha256"], "984817a165f0a2d5abde13f1220e97727e0059eb64ebc9c592571c23bcba3107");
-    assert_eq!(header["manifest_sha256"], "509184b116cbe8bfbf107de420ea2ca4ca34a774fc7f9262b6b8c241ee13a8ec");
-    let identities = records.iter().map(|case| json!({"id":case["id"],"ansi":case["ansi"]})).collect::<Vec<_>>();
-    let expected = [true, false].into_iter().flat_map(|ansi| {
-        ["slice_provider_context", "array_provider_context", "slice_scalar_context"]
-            .into_iter().map(move |id| json!({"id":id,"ansi":ansi}))
-    }).collect::<Vec<_>>();
+    assert_eq!(
+        header["capture_sha256"],
+        "984817a165f0a2d5abde13f1220e97727e0059eb64ebc9c592571c23bcba3107"
+    );
+    assert_eq!(
+        header["manifest_sha256"],
+        "509184b116cbe8bfbf107de420ea2ca4ca34a774fc7f9262b6b8c241ee13a8ec"
+    );
+    let identities = records
+        .iter()
+        .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
+        .collect::<Vec<_>>();
+    let expected = [true, false]
+        .into_iter()
+        .flat_map(|ansi| {
+            [
+                "slice_provider_context",
+                "array_provider_context",
+                "slice_scalar_context",
+            ]
+            .into_iter()
+            .map(move |id| json!({"id":id,"ansi":ansi}))
+        })
+        .collect::<Vec<_>>();
     assert_eq!(identities, expected);
     assert_eq!(json!(identities), manifest["identities"]);
     for case in &records {
-        let definition = manifest["scenarios"].as_array().ok_or("missing scenarios")?
-            .iter().find(|definition| definition["id"] == case["id"]).ok_or("missing scenario")?;
+        let definition = manifest["scenarios"]
+            .as_array()
+            .ok_or("missing scenarios")?
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("missing scenario")?;
         for (key, value) in definition.as_object().ok_or("missing definition")? {
             assert_eq!(&case[key], value);
         }
@@ -72,7 +97,10 @@ async fn case_conversion_prepares_slice_constants_before_nested_rewrite() -> Tes
         assert_eq!(case["timezone"], "UTC");
         assert_eq!(case["expected"]["rows"], json!([["ss"]]));
         assert_eq!(case["spark_collected_rows"], case["expected"]["rows"]);
-        assert_eq!(case["schema_stages"].as_object().map(|stages| stages.len()), Some(7));
+        assert_eq!(
+            case["schema_stages"].as_object().map(|stages| stages.len()),
+            Some(7)
+        );
     }
     let mut completed = std::collections::BTreeSet::new();
     let mut differences = Vec::new();
@@ -81,15 +109,23 @@ async fn case_conversion_prepares_slice_constants_before_nested_rewrite() -> Tes
         spark_inputs::register_recorded_inputs(&session, &header, batch)?;
         for case in &records {
             let captured = std::panic::AssertUnwindSafe(
-                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
-            ).catch_unwind().await;
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case),
+            )
+            .catch_unwind()
+            .await;
             let mut observation = match captured {
                 Ok(Ok(observation)) => observation,
                 Ok(Err(error)) => json!({"observer_error":error.to_string()}),
                 Err(payload) => {
-                    let panic = payload.downcast_ref::<String>().cloned().or_else(|| {
-                        payload.downcast_ref::<&str>().map(|message| (*message).to_owned())
-                    }).unwrap_or_else(|| "non-string panic payload".into());
+                    let panic = payload
+                        .downcast_ref::<String>()
+                        .cloned()
+                        .or_else(|| {
+                            payload
+                                .downcast_ref::<&str>()
+                                .map(|message| (*message).to_owned())
+                        })
+                        .unwrap_or_else(|| "non-string panic payload".into());
                     json!({"panic":panic})
                 }
             };
@@ -98,8 +134,11 @@ async fn case_conversion_prepares_slice_constants_before_nested_rewrite() -> Tes
             observation["sql"] = case["sql"].clone();
             observation["ansi"] = case["ansi"].clone();
             observation["batch"] = json!(batch);
-            let stage_matches = case["schema_stages"].as_object().ok_or("missing stages")?
-                .iter().map(|(stage, expected)| {
+            let stage_matches = case["schema_stages"]
+                .as_object()
+                .ok_or("missing stages")?
+                .iter()
+                .map(|(stage, expected)| {
                     let actual = match stage.as_str() {
                         "public" | "resolved" | "analyzed" => observation.get("public_schema"),
                         "optimized" => observation.get("optimized_schema"),
@@ -108,17 +147,36 @@ async fn case_conversion_prepares_slice_constants_before_nested_rewrite() -> Tes
                         _ => None,
                     };
                     (stage.clone(), json!(actual == Some(expected)))
-                }).collect::<serde_json::Map<String, Value>>();
-            observation["schema_stages_match"] = json!(stage_matches.values().all(|matched| matched.as_bool() == Some(true)));
+                })
+                .collect::<serde_json::Map<String, Value>>();
+            observation["schema_stages_match"] = json!(
+                stage_matches
+                    .values()
+                    .all(|matched| matched.as_bool() == Some(true))
+            );
             observation["schema_stage_matches"] = json!(stage_matches);
             eprintln!("SLICE_CASE_CONVERSION_INTERACTION_OBSERVATION {observation}");
-            if ["matches", "optimized_matches", "public_matches", "before_matches",
-                "physical_matches", "rows_match", "ordered_rows_match", "error_matches", "schema_stages_match"]
-                .iter().any(|flag| observation[flag] != true) {
+            if [
+                "matches",
+                "optimized_matches",
+                "public_matches",
+                "before_matches",
+                "physical_matches",
+                "rows_match",
+                "ordered_rows_match",
+                "error_matches",
+                "schema_stages_match",
+            ]
+            .iter()
+            .any(|flag| observation[flag] != true)
+            {
                 differences.push(observation.to_string());
             }
-            assert!(completed.insert((case["id"].as_str().ok_or("missing ID")?,
-                case["ansi"].as_bool().ok_or("missing ANSI")?, batch)));
+            assert!(completed.insert((
+                case["id"].as_str().ok_or("missing ID")?,
+                case["ansi"].as_bool().ok_or("missing ANSI")?,
+                batch
+            )));
         }
     }
     assert_eq!(completed.len(), 12);
