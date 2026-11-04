@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -22,18 +23,15 @@ use std::sync::Arc;
 
 use crate::{
     ScalarFunctionExpr,
-    expressions::{Column, LambdaVariable},
     physical_expr::PhysicalExpr,
+    utils::plan_expression_input_projection,
 };
 use arrow::{
     datatypes::{DataType, Schema},
     record_batch::RecordBatch,
 };
-use datafusion_common::{
-    HashMap, plan_err,
-    tree_node::{Transformed, TreeNode, TreeNodeRecursion},
-};
-use datafusion_common::{HashSet, Result, internal_err};
+use datafusion_common::tree_node::TreeNode;
+use datafusion_common::{HashSet, Result, internal_err, plan_err};
 use datafusion_expr::ColumnarValue;
 
 /// Represents a lambda with the given parameters names and body
@@ -75,54 +73,8 @@ impl LambdaExpr {
     }
 
     fn new(params: Vec<String>, body: Arc<dyn PhysicalExpr>) -> Self {
-        let mut used_column_indices = HashSet::new();
-
-        body.apply(|node| {
-            if let Some(col) = node.downcast_ref::<Column>() {
-                used_column_indices.insert(col.index());
-            } else if let Some(var) = node.downcast_ref::<LambdaVariable>() {
-                used_column_indices.insert(var.index());
-            }
-
-            Ok(TreeNodeRecursion::Continue)
-        })
-        .expect("closure should be infallible");
-
-        let mut projection = used_column_indices.into_iter().collect::<Vec<_>>();
-
-        projection.sort();
-
-        let column_index_map = projection
-            .iter()
-            .enumerate()
-            .map(|(projected, original)| (*original, projected))
-            .collect::<HashMap<_, _>>();
-
-        let projected_body = Arc::clone(&body)
-            .transform_down(|e| {
-                if let Some(column) = e.downcast_ref::<Column>() {
-                    let original = column.index();
-                    let projected = *column_index_map.get(&original).unwrap();
-                    if projected != original {
-                        return Ok(Transformed::yes(Arc::new(Column::new(
-                            column.name(),
-                            projected,
-                        ))));
-                    }
-                } else if let Some(lambda_variable) = e.downcast_ref::<LambdaVariable>() {
-                    let original = lambda_variable.index();
-                    let projected = *column_index_map.get(&original).unwrap();
-                    if projected != original {
-                        return Ok(Transformed::yes(Arc::new(LambdaVariable::new(
-                            projected,
-                            Arc::clone(lambda_variable.field()),
-                        ))));
-                    }
-                }
-                Ok(Transformed::no(e))
-            })
-            .expect("closure should be infallible")
-            .data;
+        let (projection, projected_body) = plan_expression_input_projection(&body)
+            .expect("closure should be infallible");
 
         Self {
             params,

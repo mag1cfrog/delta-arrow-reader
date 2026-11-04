@@ -1571,7 +1571,7 @@ mod tests {
 
     #[tokio::test]
     async fn slice_alias_and_cse_keep_null_frontiers() -> PlanResult<()> {
-        use arrow::array::{ArrayRef, AsArray, StringArray};
+        use arrow::array::{ArrayRef, AsArray, Int64Array, StringArray};
 
         let session = SessionContext::new();
         let array: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
@@ -1636,6 +1636,30 @@ mod tests {
                 }
             }
             assert_eq!(rows, vec![None, Some(vec![10])]);
+            let no_columns = datafusion_expr::create_udf(
+                "slice_selected_length",
+                vec![],
+                DataType::Int64,
+                Volatility::Volatile,
+                Arc::new(|_| {
+                    // Exactly one source row reaches this zero-column callback.
+                    Ok(ColumnarValue::Array(Arc::new(Int64Array::from(vec![1]))))
+                }),
+            );
+            let batches = session.table("slice_cse").await?.select(vec![slice.call(vec![
+                col("a"), lit(1_i64), no_columns.call(vec![]),
+            ]).alias("r")])?.collect().await?;
+            assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 2);
+            assert_eq!(batches.iter().map(|batch| batch.column(0).null_count()).sum::<usize>(), 1);
+            for batch in batches {
+                batch.column(0).to_data().validate_full()?;
+                let result = batch.column(0).as_list::<i32>();
+                for row in 0..result.len() {
+                    if !result.is_null(row) {
+                        assert_eq!(result.value(row).as_primitive::<Int32Type>().values(), &[10]);
+                    }
+                }
+            }
             let batches = session
                 .table("slice_cse")
                 .await?
@@ -1658,6 +1682,50 @@ mod tests {
             }
             assert_eq!(null_rows, 2);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn slice_selected_coordinates_keep_duplicate_column_indices() -> PlanResult<()> {
+        use arrow::array::{ArrayRef, AsArray, Int64Array};
+        use arrow::datatypes::Schema;
+        use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr, expressions::Column};
+        use datafusion_common::config::ConfigOptions;
+
+        let array: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
+            None,
+            Some(vec![Some(10), Some(11), Some(12)]),
+            Some(vec![Some(20), Some(21), Some(22)]),
+        ]));
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("a", array.data_type().clone(), true),
+            Field::new("unrelated", DataType::Int64, false),
+            Field::new("coordinate", DataType::Int64, true)
+                .with_metadata([("kind".into(), "start".into())].into()),
+            Field::new("coordinate", DataType::Int64, false)
+                .with_metadata([("kind".into(), "length".into())].into()),
+        ]));
+        let batch = RecordBatch::try_new(schema.clone(), vec![
+            array,
+            Arc::new(Int64Array::from(vec![999, 999, 999])),
+            Arc::new(Int64Array::from(vec![Some(1), None, Some(2)])),
+            Arc::new(Int64Array::from(vec![99, 99, 1])),
+        ])?;
+        let args = [("a", 0), ("coordinate", 2), ("coordinate", 3)]
+            .into_iter().map(|(name, index)| Arc::new(Column::new(name, index)) as Arc<dyn PhysicalExpr>)
+            .collect();
+        let physical = ScalarFunctionExpr::try_new(
+            Arc::new(ScalarUDF::from(SparkArraySlice {
+                native: array_slice_udf(), required_elements: false,
+            })),
+            args, schema.as_ref(), Arc::new(ConfigOptions::default()),
+        )?;
+        let result = physical.evaluate(&batch)?.into_array(3)?;
+        result.to_data().validate_full()?;
+        let result = result.as_list::<i32>();
+        assert!(result.is_null(0));
+        assert!(result.is_null(1));
+        assert_eq!(result.value(2).as_primitive::<Int32Type>().values(), &[21]);
         Ok(())
     }
 

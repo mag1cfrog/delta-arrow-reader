@@ -761,7 +761,10 @@ calls fold, including empty inputs. Folding-disabled and volatile extension
 contexts retain their existing preparation path. A known literal NULL discards
 ordinary scalar children before folding. Runtime NULL array and start rows skip
 later arguments through the shared scalar selection path, while reached
-constant argument failures retain their optimization stage. The native delegate
+constant argument failures retain their optimization stage. Selected arguments
+reuse lambda input projection before filtering, so unrelated sibling columns
+stay shared. Index rewrites preserve column and lambda-variable fields, and
+empty projections retain the selected row count. The native delegate
 still determines valid coordinates. Signed-coordinate gaps (#894) and two
 non-NULL batch error-priority observations (#902) retain exact inherited
 [result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).

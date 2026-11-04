@@ -2702,6 +2702,9 @@ Local tests also check custom element fields and metadata, required-element
 NULL storage, nonzero input slices, repeated and empty evaluation, alias
 forwarding and CSE. Opaque and volatile callbacks record the exact reached row
 identities, including failures, so extra evaluation or replay fails the test.
+Duplicate-name coordinates and captured lambda coordinates check index-based
+input projection. A volatile callback with no column references checks that
+empty projections preserve the selected row count.
 
 The Sail floating storage unit adds 240 evaluations across both widths/modes,
 both operand orders, five list-layout pairs and full/nonzero/empty slices. Those

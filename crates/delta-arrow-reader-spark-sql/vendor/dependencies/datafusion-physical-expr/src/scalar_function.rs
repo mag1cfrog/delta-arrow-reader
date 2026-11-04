@@ -36,6 +36,7 @@ use std::sync::Arc;
 
 use crate::PhysicalExpr;
 use crate::expressions::{Column, Literal};
+use crate::utils::plan_expression_input_projection;
 
 use arrow::array::{Array, RecordBatch};
 use arrow::datatypes::{DataType, FieldRef, Schema};
@@ -88,7 +89,18 @@ impl ScalarFunctionExpr {
                         // Reuse the stored scalar instead of filtering the whole input batch.
                         ColumnarValue::Scalar(literal.value().clone())
                     } else {
-                        expr.evaluate_selection(batch, mask)?
+                        let (projection, projected) = plan_expression_input_projection(expr)?;
+                        // Nested lambda variables are appended after the current input columns.
+                        let projection = projection
+                            .into_iter()
+                            .filter(|index| *index < batch.num_columns())
+                            .collect::<Vec<_>>();
+                        if projection.len() < batch.num_columns() {
+                            let input = batch.project(&projection)?;
+                            projected.evaluate_selection(&input, mask)?
+                        } else {
+                            expr.evaluate_selection(batch, mask)?
+                        }
                     }
                 }
                 None => expr.evaluate(batch)?,
