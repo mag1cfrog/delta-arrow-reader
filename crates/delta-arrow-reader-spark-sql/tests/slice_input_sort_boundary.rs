@@ -205,25 +205,42 @@ async fn configured_native_input_sort_keeps_the_plain_datafusion_path() -> TestR
         FROM (SELECT k, CAST(v AS BIGINT) AS shared_value FROM sort_values \
         ORDER BY k DESC NULLS LAST) AS native_input";
     for batch_size in [1, 32] {
-        let mut observations = Vec::new();
-        for spark in [false, true] {
-            let session = session(batch_size, spark);
-            register(&session, batch_size, &[0, 1, 2, 3])?;
-            let physical = session.sql(sql).await?.create_physical_plan().await?;
-            assert_eq!(count_nodes(&physical, "InputSortBoundaryExec"), 0);
-            let schema = spark_results::capture_schema(physical.schema().fields(), None)?;
-            observations.push((schema, rows(physical, &session).await?));
+        for outer_order in ["", " ORDER BY k DESC NULLS LAST"] {
+            let sql = format!("{sql}{outer_order}");
+            let mut observations = Vec::new();
+            for spark in [false, true] {
+                let session = session(batch_size, spark);
+                register(&session, batch_size, &[0, 1, 2, 3])?;
+                let physical = session.sql(&sql).await?.create_physical_plan().await?;
+                assert_eq!(count_nodes(&physical, "InputSortBoundaryExec"), 0);
+                let schema = spark_results::capture_schema(physical.schema().fields(), None)?;
+                observations.push((schema, rows(physical, &session).await?));
+            }
+            assert_eq!(observations[0], observations[1]);
+            let mut actual_rows = observations[0]
+                .1
+                .as_array()
+                .ok_or("expected native rows")?
+                .clone();
+            let expected_rows = if outer_order.is_empty() {
+                // The subquery's ORDER BY does not request final output order.
+                actual_rows.sort_by_key(Value::to_string);
+                json!([
+                    ["10", "10", "0"],
+                    ["11", "11", "1"],
+                    ["12", "12", "2"],
+                    ["13", "13", "3"],
+                ])
+            } else {
+                json!([
+                    ["13", "13", "3"],
+                    ["12", "12", "2"],
+                    ["11", "11", "1"],
+                    ["10", "10", "0"],
+                ])
+            };
+            assert_eq!(Value::Array(actual_rows), expected_rows);
         }
-        assert_eq!(observations[0], observations[1]);
-        assert_eq!(
-            observations[0].1,
-            json!([
-                ["13", "13", "3"],
-                ["12", "12", "2"],
-                ["11", "11", "1"],
-                ["10", "10", "0"],
-            ])
-        );
     }
     Ok(())
 }
