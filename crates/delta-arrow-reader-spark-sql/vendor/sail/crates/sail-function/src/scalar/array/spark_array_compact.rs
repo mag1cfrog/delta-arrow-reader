@@ -175,11 +175,11 @@ mod tests {
 
     fn invoke_compact(
         value: ColumnarValue,
-        nullable: bool,
+        parent_nullable: bool,
         rows: usize,
     ) -> Result<(ColumnarValue, FieldRef)> {
         let field = Arc::new(
-            Field::new("input", value.data_type(), nullable)
+            Field::new("input", value.data_type(), parent_nullable)
                 .with_metadata([("origin".into(), "input".into())].into()),
         );
         let udf = SparkArrayCompact::new();
