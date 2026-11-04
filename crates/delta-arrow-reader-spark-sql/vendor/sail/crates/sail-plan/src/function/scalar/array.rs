@@ -346,8 +346,13 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         || right_element.is_nullable();
 
     let element = Arc::new(Field::new_list_field(element_type, true));
-    let nullable_array_type = if matches!(left_type, DataType::LargeList(_) | DataType::LargeListView(_))
-        || matches!(right_type, DataType::LargeList(_) | DataType::LargeListView(_)) {
+    let nullable_array_type = if matches!(
+        left_type,
+        DataType::LargeList(_) | DataType::LargeListView(_)
+    ) || matches!(
+        right_type,
+        DataType::LargeList(_) | DataType::LargeListView(_)
+    ) {
         DataType::LargeList(element)
     } else {
         DataType::List(element)

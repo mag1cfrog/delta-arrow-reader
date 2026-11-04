@@ -90,7 +90,8 @@ pub(crate) fn common_array_element_type(
         context,
         StructFieldNames::RequireMatching,
         CommonTypePolicy::TightestArrayElement,
-    )? else {
+    )?
+    else {
         return Ok(None);
     };
     // Spark selects a tightest type before the session's implicit array casts admit it.
@@ -110,12 +111,21 @@ fn array_element_cast_allowed(source: &Field, target: &Field, ansi_mode: bool) -
     if structurally_equal(source.data_type(), target.data_type()) {
         return true;
     }
-    if let (Some(source), Some(target)) = (list_field(source.data_type()), list_field(target.data_type())) {
+    if let (Some(source), Some(target)) = (
+        list_field(source.data_type()),
+        list_field(target.data_type()),
+    ) {
         return array_element_cast_allowed(source, target, ansi_mode);
     }
-    if let (DataType::Struct(source), DataType::Struct(target)) = (source.data_type(), target.data_type()) {
-        return ansi_mode && source.len() == target.len()
-            && source.iter().zip(target).all(|(source, target)| array_element_cast_allowed(source, target, ansi_mode));
+    if let (DataType::Struct(source), DataType::Struct(target)) =
+        (source.data_type(), target.data_type())
+    {
+        return ansi_mode
+            && source.len() == target.len()
+            && source
+                .iter()
+                .zip(target)
+                .all(|(source, target)| array_element_cast_allowed(source, target, ansi_mode));
     }
     ansi_mode || target.is_nullable() || !cast_adds_nulls(source.data_type(), target.data_type())
 }
@@ -136,7 +146,12 @@ fn tightest_array_leaf_type(
             (integral, DataType::Decimal128(..)) if integral.is_signed_integer() => {
                 (target == *right).then_some(target)
             }
-            _ if types.iter().any(|data_type| matches!(data_type, DataType::Decimal128(..))) => None,
+            _ if types
+                .iter()
+                .any(|data_type| matches!(data_type, DataType::Decimal128(..))) =>
+            {
+                None
+            }
             _ => Some(target),
         };
     }
@@ -153,7 +168,10 @@ fn tightest_array_leaf_type(
 }
 
 fn is_binary_type(data_type: &DataType) -> bool {
-    matches!(data_type, DataType::Binary | DataType::LargeBinary | DataType::BinaryView)
+    matches!(
+        data_type,
+        DataType::Binary | DataType::LargeBinary | DataType::BinaryView
+    )
 }
 
 fn has_string_type(data_type: &DataType) -> bool {
@@ -344,17 +362,23 @@ pub(super) fn coerce_nested_result_values(
     }
     let mut target = DataType::Null;
     for source in types {
-        target = common_type(&target, source, context, struct_field_names, CommonTypePolicy::WiderResult)
-            .map_err(|cause| {
-                PlanError::invalid(format!(
-                    "[{error_condition}] Incompatible nested result types: {data_types:?}: {cause}"
-                ))
-            })?
-            .ok_or_else(|| {
-                PlanError::invalid(format!(
-                    "[{error_condition}] Incompatible nested result types: {data_types:?}"
-                ))
-            })?;
+        target = common_type(
+            &target,
+            source,
+            context,
+            struct_field_names,
+            CommonTypePolicy::WiderResult,
+        )
+        .map_err(|cause| {
+            PlanError::invalid(format!(
+                "[{error_condition}] Incompatible nested result types: {data_types:?}: {cause}"
+            ))
+        })?
+        .ok_or_else(|| {
+            PlanError::invalid(format!(
+                "[{error_condition}] Incompatible nested result types: {data_types:?}"
+            ))
+        })?;
     }
     arguments
         .into_iter()
