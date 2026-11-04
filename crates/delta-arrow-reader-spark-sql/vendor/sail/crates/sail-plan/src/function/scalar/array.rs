@@ -37,7 +37,8 @@ use crate::function::common::{
 use crate::function::float_keys::normalize_spark_float_array_comparison;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::function::result_coercion::{
-    cast_nested_value, common_array_element_type, nested_result_cast_input, same_positional_logical_type,
+    cast_nested_value, common_array_element_type, nested_result_cast_input,
+    same_positional_logical_type,
 };
 use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
@@ -347,8 +348,10 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         left.nullable(schema)? || left_element.is_nullable(),
         right.nullable(schema)? || right_element.is_nullable(),
     ];
-    let left_needs_value_cast = !same_positional_logical_type(left_element.data_type(), &element_type);
-    let right_needs_value_cast = !same_positional_logical_type(right_element.data_type(), &element_type);
+    let left_needs_value_cast =
+        !same_positional_logical_type(left_element.data_type(), &element_type);
+    let right_needs_value_cast =
+        !same_positional_logical_type(right_element.data_type(), &element_type);
 
     let element = Arc::new(Field::new_list_field(element_type, true));
     let nullable_array_type = if matches!(

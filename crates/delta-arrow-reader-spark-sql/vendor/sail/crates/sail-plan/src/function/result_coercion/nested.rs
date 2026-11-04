@@ -324,10 +324,9 @@ pub(crate) fn same_positional_logical_type(left: &DataType, right: &DataType) ->
     }
     if let (DataType::Struct(left), DataType::Struct(right)) = (left, right) {
         return left.len() == right.len()
-            && left
-                .iter()
-                .zip(right)
-                .all(|(left, right)| same_positional_logical_type(left.data_type(), right.data_type()));
+            && left.iter().zip(right).all(|(left, right)| {
+                same_positional_logical_type(left.data_type(), right.data_type())
+            });
     }
     left == right
         || (is_string_type(left) && is_string_type(right))

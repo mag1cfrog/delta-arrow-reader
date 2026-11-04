@@ -133,11 +133,9 @@ fn immutable_folding_opt_out_and_aliases_preserve_simplifiable_children() -> Res
 fn spark_whole_nested_folding_retains_declarations_and_values() -> Result<()> {
     for spark in [false, true] {
         // Spark's cast declares nullable even when its literal input is valid.
-        let child = SparkCastStringToInteger::try_new(
-            DataType::Int32,
-            StringIntegerCastMode::Ansi,
-        )?
-        .into_expr(lit("3"));
+        let child =
+            SparkCastStringToInteger::try_new(DataType::Int32, StringIntegerCastMode::Ansi)?
+                .into_expr(lit("3"));
         assert!(child.nullable(&DFSchema::empty())?);
         let expected_array = lit(ScalarValue::List(ScalarValue::new_list(
             &[ScalarValue::Int32(Some(3))],
@@ -159,7 +157,10 @@ fn spark_whole_nested_folding_retains_declarations_and_values() -> Result<()> {
                 expected.get_type(&DFSchema::empty())?,
                 "Spark marker={spark}, original={parent:?}"
             );
-            assert_eq!(folded, expected, "Spark marker={spark}, original={parent:?}");
+            assert_eq!(
+                folded, expected,
+                "Spark marker={spark}, original={parent:?}"
+            );
         }
     }
     Ok(())

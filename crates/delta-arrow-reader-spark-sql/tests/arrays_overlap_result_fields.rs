@@ -601,7 +601,10 @@ fn overlap_slice_scope_accepts_only_exact_inherited_fields() -> TestResult {
     ] {
         let mut wrong_comparison = comparison.clone();
         wrong_comparison[key] = wrong;
-        assert!(!overlap_matches_owned_contract(&case, &wrong_comparison), "{key}");
+        assert!(
+            !overlap_matches_owned_contract(&case, &wrong_comparison),
+            "{key}"
+        );
     }
     for stage in ["public_schema", "before_collect", "physical_schema"] {
         for (pointer, wrong) in [
@@ -615,8 +618,13 @@ fn overlap_slice_scope_accepts_only_exact_inherited_fields() -> TestResult {
             ("/fields/4/type/fields/0/type", json!("integer")),
         ] {
             let mut wrong_comparison = comparison.clone();
-            *wrong_comparison[stage].pointer_mut(pointer).ok_or("missing field")? = wrong;
-            assert!(!overlap_matches_owned_contract(&case, &wrong_comparison), "{stage} {pointer}");
+            *wrong_comparison[stage]
+                .pointer_mut(pointer)
+                .ok_or("missing field")? = wrong;
+            assert!(
+                !overlap_matches_owned_contract(&case, &wrong_comparison),
+                "{stage} {pointer}"
+            );
         }
     }
     Ok(())
