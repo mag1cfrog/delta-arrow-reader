@@ -81,19 +81,29 @@ fn extraction_index_cause_keeps_the_exact_value_type_and_function() {
 
 #[tokio::test]
 async fn regexp_extract_index_retains_all_complete_references() -> TestResult {
-    let stages: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-native-stages.json"))?;
-    let contracts = stages["contracts"].as_array().ok_or("missing native contracts")?;
-    let fixtures = [
+    capture_references(&[
         ("original_bigint", "regexp-extract-index-original-spark.jsonl", include_str!("fixtures/regexp-extract-index-original-spark.jsonl"), 10),
         ("expanded", "regexp-extract-index-expanded-spark.jsonl", include_str!("fixtures/regexp-extract-index-expanded-spark.jsonl"), 106),
         ("direct_cast", "regexp-extract-index-cast-controls-spark.jsonl", include_str!("fixtures/regexp-extract-index-cast-controls-spark.jsonl"), 10),
-    ];
+    ], 126, 756).await
+}
+
+#[tokio::test]
+async fn regexp_extract_index_retains_distinct_shared_cast_references() -> TestResult {
+    capture_references(&[("shared_cast", "regexp-extract-index-cse-spark.jsonl",
+        include_str!("fixtures/regexp-extract-index-cse-spark.jsonl"), 8)], 8, 48).await
+}
+
+async fn capture_references(fixtures: &[(&str, &str, &str, usize)], expected_references: usize,
+    expected_observations: usize) -> TestResult {
+    let stages: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-native-stages.json"))?;
+    let contracts = stages["contracts"].as_array().ok_or("missing native contracts")?;
     let mut references = 0;
     let mut observations = 0;
     let mut capture_failures = 0;
     let mut strict_matches = 0;
     let mut differences = Vec::new();
-    for (family, fixture, source, expected_count) in fixtures {
+    for &(family, fixture, source, expected_count) in fixtures {
         let records = source.lines().map(serde_json::from_str::<Value>).collect::<Result<Vec<_>, _>>()?;
         let (header, cases) = records.split_first().ok_or("empty reference fixture")?;
         assert_eq!(header["spark_version"], "4.2.0");
@@ -152,8 +162,8 @@ async fn regexp_extract_index_retains_all_complete_references() -> TestResult {
             }
         }
     }
-    assert_eq!(references, 126);
-    assert_eq!(observations, 756);
+    assert_eq!(references, expected_references);
+    assert_eq!(observations, expected_observations);
     eprintln!("c06 index regression summary: {}", json!({"references":references,"observations":observations,
         "capture_failures":capture_failures,"strict_matches":strict_matches,"strict_differences":differences.len(),
         "full_compatibility_pass":false,"complete_raw_diagnostic_parity":"unverified"}));

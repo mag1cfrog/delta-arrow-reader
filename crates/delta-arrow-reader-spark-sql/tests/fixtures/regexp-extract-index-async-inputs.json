@@ -1,0 +1,94 @@
+{
+  "meaning": "Native-only measured preservation controls for the async-source extraction branch. No expected output/counter or Apache Spark credit.",
+  "references": 6,
+  "observations": 6,
+  "fixtures": [],
+  "capture_helper": {
+    "crate_relative_path": "tests/support/string_binary.rs",
+    "sha256": "609461db92671f8044bf710a960e99728af566616d341635b62e970bba6abba0"
+  },
+  "cases": [
+    {
+      "kind": "int_one",
+      "ansi": true,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,1) AS r FROM rp788_async ORDER BY id"
+    },
+    {
+      "kind": "bigint_one",
+      "ansi": true,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,CAST(1 AS BIGINT)) AS r FROM rp788_async ORDER BY id"
+    },
+    {
+      "kind": "bigint_wrap_zero",
+      "ansi": true,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,4294967296L) AS r FROM rp788_async ORDER BY id"
+    },
+    {
+      "kind": "int_one",
+      "ansi": false,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,1) AS r FROM rp788_async ORDER BY id"
+    },
+    {
+      "kind": "bigint_one",
+      "ansi": false,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,CAST(1 AS BIGINT)) AS r FROM rp788_async ORDER BY id"
+    },
+    {
+      "kind": "bigint_wrap_zero",
+      "ansi": false,
+      "sql": "SELECT id,regexp_extract(index_async_identity(s),p,4294967296L) AS r FROM rp788_async ORDER BY id"
+    }
+  ],
+  "existing_pattern": "tests/concat_runtime_order.rs::concat_and_substring_preserve_existing_async_operand_planning",
+  "sha256": {
+    "collect_async.py": "817b177054f9bdd8fe4499918ab821523498674a9c6be5a7e26b5820e705f02c",
+    "audit_async.py": "3145d2d4d7447ba81e6aaa5e7193c8a280faef0d3f6522126fd9b8ff59649879",
+    "c06_regexp_index_async_probe.rs": "f14dfcd4ad0e513a4719cf35a0b24c89c9426f1f274c42d6362128ccbfc22043"
+  },
+  "registered_inputs": [
+    {
+      "name": "rp788_async",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "a",
+          "(a)"
+        ],
+        [
+          "2",
+          null,
+          "(a)"
+        ]
+      ]
+    }
+  ],
+  "native_config": {
+    "batch_size": 32,
+    "target_partitions": 1,
+    "input_partitions": 1,
+    "representation": "Utf8"
+  }
+}

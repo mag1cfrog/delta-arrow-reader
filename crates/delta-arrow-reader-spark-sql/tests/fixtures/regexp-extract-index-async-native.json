@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "meaning": "Only reviewed complete repaired native observations may populate these native-extension controls. Unknown controls remain false. No Apache Spark oracle credit.",
+  "controls": [],
+  "spark_oracle_credit": false,
+  "full_compatibility_pass": false
+}
