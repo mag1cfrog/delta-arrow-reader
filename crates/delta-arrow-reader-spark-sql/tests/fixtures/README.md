@@ -2716,13 +2716,21 @@ element fields, nested literal folding and opaque runtime Scalar operands.
 Runtime layout checks retain immediate element metadata. The constant fixture
 constructs List/LargeList scalars directly for three input declarations:
 required Int32 elements, nullable Int32 elements, and nullable Struct elements
-with named required/nullable child fields carrying metadata. All six cases check
-the complete input and output types, valid Arrow data and the interpreted empty
-result. The pre-existing scalar list-cast loss of immediate element metadata is
-tracked separately in
+with metadata on the element and named required/nullable child fields. All six
+cases check the complete input and output types, valid Arrow data and the
+interpreted empty result. The common-valid typed literal test separately folds
+nested `SLICE(..., 1, 1)` calls over primitive and nested List values, checking
+immediate and nested fields, empty inputs and results, selected NULL elements
+and NULL arguments for List and LargeList.
+
+The [typed literal field tests](../literal_list_fields.rs) check direct
+scalar construction, row conversion, scalar casts, coercion and cast folding
+against declared input fields. They cover required/nullable elements, empty and
+nonempty lists, NULL parents, nullable Struct elements, target-field changes and
+native rejection of incompatible types or NULLs in required elements. These
+tests cover the scalar metadata boundary tracked in
 [#909](https://github.com/mag1cfrog/delta-arrow-reader/issues/909).
-Restoring required Struct elements across a list cast also fails on unchanged
-product and is tracked in
+Required Struct-element cast admission remains tracked in
 [#910](https://github.com/mag1cfrog/delta-arrow-reader/issues/910).
 
 `slice-conditional-coordinates/` adds twelve independent Spark observations for

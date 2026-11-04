@@ -26,10 +26,11 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Twelve dependencies have local source overrides in this crate's Cargo.toml:
+Thirteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
+| DataFusion common | 54.1.0 | Preserve complete list element Fields during scalar conversion and scalar casts |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
@@ -39,6 +40,16 @@ The JSON inventory lists each package and its original crates.io archive checksu
 Unmodified files came from those archives, rather than mutable Cargo source caches.
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
+
+Typed List and LargeList literals retain their complete element fields when
+converted from Arrow rows or cast to a declared list type. For example, an
+element named `kept_element` with `source=constant-coordinate-test` keeps that
+metadata after a constant `SLICE(..., 1, 1)`, including nested and empty results.
+The shared single-row list builder uses the supplied field and Arrow's existing
+constructors, which still reject mismatched child types and required elements
+containing logical NULLs. The [literal field tests](tests/literal_list_fields.rs)
+cover direct scalar construction, conversion, casts, folding and NULL parents.
+Required Struct-element cast admission remains tracked separately in #910.
 
 Arrow cast also exposes `parse_string_rows_until_error` for callers that need
 successful rows before a strict parse failure. It reuses the primitive parser
@@ -237,8 +248,8 @@ Their inputs retain their own field declarations. Explicit SQL CAST keeps its
 separate declared type.
 The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
 retain independent public and executed fields, the original scalar guards and
-the explicit Arrow type-contract difference from Spark. Native DataFusion
-scalar construction is unchanged.
+the explicit Arrow type-contract difference from Spark. These annotations do
+not change native DataFusion scalar-subquery construction.
 VALUES column declarations use the coerced expressions' nullability. Projected
 IN can reuse its nonnullable match result when both operands are nonnullable;
 nullable operands retain the existing three-valued comparison.

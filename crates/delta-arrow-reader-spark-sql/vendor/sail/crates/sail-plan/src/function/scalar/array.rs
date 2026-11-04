@@ -1626,17 +1626,16 @@ mod tests {
             ],
             None,
         )?);
-        // Prior scalar-cast gaps: immediate element metadata (#909), required Struct elements (#910).
+        // Required Struct-element scalar casts have a separate admission gap (#910).
         for (element_nullable, values) in [
             (false, primitive.clone()),
             (true, primitive),
             (true, struct_values),
         ] {
-            let element = Arc::new(Field::new(
-                "kept_element",
-                values.data_type().clone(),
-                element_nullable,
-            ));
+            let element = Arc::new(
+                Field::new("kept_element", values.data_type().clone(), element_nullable)
+                    .with_metadata([("source".into(), "constant-coordinate-test".into())].into()),
+            );
             let input = ListArray::try_new(
                 element.clone(),
                 OffsetBuffer::from_lengths([4]),
@@ -1675,6 +1674,120 @@ mod tests {
                     _ => result.as_list::<i64>().value(0),
                 };
                 assert!(values.is_empty());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn slice_common_valid_typed_literals_preserve_complete_fields() -> PlanResult<()> {
+        use arrow::array::{ArrayRef, Int32Array, LargeListArray};
+        use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+
+        let schema = Arc::new(DFSchema::empty());
+        let info = SimplifyContext::builder()
+            .with_schema(schema.clone())
+            .build();
+        let simplifier = ExprSimplifier::new(info);
+        for nullable in [false, true] {
+            let primitive: ArrayRef = Arc::new(Int32Array::from(vec![1, 2, 2, 3]));
+            let nested_element = Arc::new(
+                Field::new("nested_value", DataType::Int32, false)
+                    .with_metadata([("source".into(), "nested-coordinate-test".into())].into()),
+            );
+            let nested: ArrayRef = Arc::new(ListArray::try_new(
+                nested_element,
+                OffsetBuffer::from_lengths([2, 0, 1, 1]),
+                primitive.clone(),
+                nullable.then(|| NullBuffer::from(vec![true, false, true, true])),
+            )?);
+            for values in [primitive, nested] {
+                let element = Arc::new(
+                    Field::new("kept_element", values.data_type().clone(), nullable).with_metadata(
+                        [("source".into(), "constant-coordinate-test".into())].into(),
+                    ),
+                );
+                for large in [false, true] {
+                    let storage = if large {
+                        DataType::LargeList(element.clone())
+                    } else {
+                        DataType::List(element.clone())
+                    };
+                    for empty_input in [false, true] {
+                        let values = if empty_input {
+                            values.slice(0, 0)
+                        } else {
+                            values.clone()
+                        };
+                        let literal = if large {
+                            ScalarValue::LargeList(Arc::new(LargeListArray::try_new(
+                                element.clone(),
+                                OffsetBuffer::from_lengths([values.len()]),
+                                values.clone(),
+                                None,
+                            )?))
+                        } else {
+                            ScalarValue::List(Arc::new(ListArray::try_new(
+                                element.clone(),
+                                OffsetBuffer::from_lengths([values.len()]),
+                                values.clone(),
+                                None,
+                            )?))
+                        };
+                        assert_eq!(literal.data_type(), storage);
+                        literal.to_array()?.to_data().validate_full()?;
+                        for (start, length, expected_offset, expected_length) in [
+                            (1_i64, 1_i64, 0, usize::from(!empty_input)),
+                            (2, 1, usize::from(!empty_input), usize::from(!empty_input)),
+                            (1, 0, 0, 0),
+                            (9, 1, 0, 0),
+                        ] {
+                            let inner =
+                                slice_expr(lit(literal.clone()), lit(start), lit(length), &schema)?;
+                            let outer = slice_expr(inner, lit(1_i64), lit(1_i64), &schema)?;
+                            let coerced = simplifier.coerce(outer, schema.as_ref())?;
+                            assert_eq!(coerced.get_type(schema.as_ref())?, storage);
+                            let prepared = simplifier.simplify(coerced)?;
+                            let expr::Expr::Literal(value, _) = prepared else {
+                                return Err(PlanError::internal(
+                                    "typed literal SLICE was not folded",
+                                ));
+                            };
+                            assert_eq!(value.data_type(), storage);
+                            assert!(!value.is_null());
+                            let result = value.to_array()?;
+                            result.to_data().validate_full()?;
+                            assert_eq!(result.len(), 1);
+                            let result = if large {
+                                result.as_list::<i64>().value(0)
+                            } else {
+                                result.as_list::<i32>().value(0)
+                            };
+                            assert_eq!(
+                                result.as_ref(),
+                                values.slice(expected_offset, expected_length).as_ref(),
+                            );
+                        }
+                        for (array, start, length) in [
+                            (ScalarValue::try_new_null(&storage)?, lit(1_i64), lit(1_i64)),
+                            (literal.clone(), lit(ScalarValue::Int64(None)), lit(1_i64)),
+                            (literal.clone(), lit(1_i64), lit(ScalarValue::Int64(None))),
+                        ] {
+                            let expression = slice_expr(lit(array), start, length, &schema)?;
+                            let coerced = simplifier.coerce(expression, schema.as_ref())?;
+                            let prepared = simplifier.simplify(coerced)?;
+                            let expr::Expr::Literal(value, _) = prepared else {
+                                return Err(PlanError::internal(
+                                    "NULL literal SLICE was not folded",
+                                ));
+                            };
+                            assert_eq!(value.data_type(), storage);
+                            assert!(value.is_null());
+                            value.to_array()?.to_data().validate_full()?;
+                        }
+                    }
+                }
             }
         }
         Ok(())
