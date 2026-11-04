@@ -280,9 +280,6 @@ impl ScalarFunctionExpr {
                 );
             }
         }
-        if retain_row_errors {
-            output.validate(batch.num_rows())?;
-        }
         Ok(output)
     }
 
