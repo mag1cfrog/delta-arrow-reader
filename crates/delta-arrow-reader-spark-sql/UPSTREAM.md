@@ -679,6 +679,12 @@ NTZ/DATE-to-LTZ leaves reuse the existing session-timezone conversion, including
 named-zone gaps and overlaps. Existing conditional declaration pruning, field
 name matching and hidden-NULL handling remain in the shared implementation.
 
+Identity conversions retain their promised target type when folding refines a
+child's declarations. They restore compatible nullability and metadata through
+Arrow's existing cast and reject incompatible runtime value types. This keeps
+the physical array type consistent with the planned field without changing
+floating normalization or optimizer folding permissions.
+
 Binary, LargeBinary and BinaryView storage represent one logical BINARY element
 type. A bilateral binary guard restricts reuse of DataFusion's comparison
 coercion so BINARY/STRING pairs remain incompatible. Resolution rejects mixed

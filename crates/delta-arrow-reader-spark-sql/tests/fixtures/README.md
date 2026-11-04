@@ -2509,6 +2509,10 @@ The original #836 five-layout control retains FixedSizeList coverage. These are
 Rust storage checks against logical Spark BINARY evidence; Spark does not
 describe Arrow storage layouts.
 
+The Sail converter unit `nested_identity_cast_restores_planned_fields_after_child_folding`
+checks exact planned metadata/nullability, unchanged values, nonzero and empty
+slices, and rejection of incompatible primitive and nested value types.
+
 The target has 548 canonical reference comparisons and 1,512 storage comparisons,
 plus the six completed native ARRAY_HAS_ANY observations. Run it with the command
 above; the full workspace and connected conditional/set-operation checks remain

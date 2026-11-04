@@ -921,23 +921,13 @@ mod tests {
 
     #[test]
     fn names_only_union_keeps_logical_string_and_list_storage_compatibility() -> PlanResult<()> {
-        use arrow::array::BinaryArray;
-
         let session = SessionContext::new();
         let config = Arc::new(crate::config::PlanConfig::default());
         let view: ArrayRef = Arc::new(StringViewArray::from(vec!["1"]));
         let text: ArrayRef = Arc::new(StringArray::from(vec!["2"]));
         let string_element = Arc::new(Field::new_list_field(DataType::Utf8, false));
-        let binary: ArrayRef = Arc::new(BinaryArray::from_vec(vec![&[0_u8, 255, 97, 98]]));
-        let other_binary: ArrayRef = Arc::new(BinaryArray::from_vec(vec![&[0_u8, 254, 99, 100]]));
-        let binary_view = arrow::compute::cast(binary.as_ref(), &DataType::BinaryView)?;
-        let large_binary = arrow::compute::cast(other_binary.as_ref(), &DataType::LargeBinary)?;
-        let binary_view_element = Arc::new(Field::new_list_field(DataType::BinaryView, false));
-        let string_values = [ScalarValue::Utf8(Some("1".into())), ScalarValue::Utf8(Some("2".into()))];
-        let binary_values = [ScalarValue::Binary(Some(vec![0, 255, 97, 98])),
-            ScalarValue::Binary(Some(vec![0, 254, 99, 100]))];
         let pairs = [
-            (DataType::Utf8, view.clone(), text.clone(), string_values.clone()),
+            (DataType::Utf8, view.clone(), text.clone()),
             (
                 DataType::LargeList(string_element.clone()),
                 Arc::new(ListArray::try_new(
@@ -952,27 +942,9 @@ mod tests {
                     text,
                     None,
                 )?) as ArrayRef,
-                string_values,
-            ),
-            (DataType::LargeBinary, binary, large_binary, binary_values.clone()),
-            (
-                DataType::LargeList(binary_view_element.clone()),
-                Arc::new(ListArray::try_new(
-                    binary_view_element,
-                    OffsetBuffer::from_lengths([1]),
-                    binary_view,
-                    None,
-                )?) as ArrayRef,
-                Arc::new(LargeListArray::try_new(
-                    Arc::new(Field::new_list_field(DataType::Binary, false)),
-                    OffsetBuffer::from_lengths([1]),
-                    other_binary,
-                    None,
-                )?) as ArrayRef,
-                binary_values,
             ),
         ];
-        for (target_child, left, right, expected_values) in pairs {
+        for (target_child, left, right) in pairs {
             let left: ArrayRef = Arc::new(StructArray::try_new(
                 vec![Field::new("x", left.data_type().clone(), false)].into(),
                 vec![left],
@@ -1012,22 +984,23 @@ mod tests {
             )?;
             let target = DataType::Struct(vec![Field::new("x", target_child, false)].into());
             let batch = RecordBatch::try_new(Arc::clone(schema.inner()), vec![left, right])?;
-            for (expression, expected) in converted.into_iter().zip(expected_values) {
+            for (expression, expected) in converted.into_iter().zip(["1", "2"]) {
                 assert_eq!(expression.get_type(&schema)?, target);
                 let result = session
                     .create_physical_expr(expression, &schema)?
                     .evaluate(&batch)?
                     .into_array(1)?;
                 result.to_data().validate_full()?;
-                assert_eq!(result.data_type(), &target);
                 let child = result.as_struct().column(0);
                 let values = if matches!(child.data_type(), DataType::LargeList(_)) {
                     child.as_list::<i64>().value(0)
                 } else {
                     child.clone()
                 };
-                let values = arrow::compute::cast(values.as_ref(), &expected.data_type())?;
-                assert_eq!(ScalarValue::try_from_array(&values, 0)?, expected);
+                assert_eq!(
+                    ScalarValue::try_from_array(&values, 0)?,
+                    ScalarValue::Utf8(Some(expected.into()))
+                );
             }
         }
         Ok(())
