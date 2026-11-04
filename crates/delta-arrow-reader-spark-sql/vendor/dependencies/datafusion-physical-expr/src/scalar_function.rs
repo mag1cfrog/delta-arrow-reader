@@ -83,9 +83,9 @@ impl ScalarFunctionExpr {
         for expr in &self.args {
             let value = match &active {
                 Some(mask) => {
-                    if let Some(literal) = expr.downcast_ref::<Literal>()
-                        && mask.has_true()
-                    {
+                    if !mask.has_true() {
+                        expr.evaluate_selection(batch, mask)?
+                    } else if let Some(literal) = expr.downcast_ref::<Literal>() {
                         // Reuse the stored scalar instead of filtering the whole input batch.
                         ColumnarValue::Scalar(literal.value().clone())
                     } else {

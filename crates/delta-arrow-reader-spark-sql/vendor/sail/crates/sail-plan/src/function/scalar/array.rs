@@ -1702,7 +1702,7 @@ mod tests {
     }
 
     #[test]
-    fn slice_selected_coordinates_keep_duplicate_column_indices() -> PlanResult<()> {
+    fn slice_selected_coordinates_distinguish_duplicate_column_names() -> PlanResult<()> {
         use arrow::array::{ArrayRef, AsArray, Int64Array};
         use arrow::datatypes::Schema;
         use datafusion::physical_expr::{PhysicalExpr, ScalarFunctionExpr, expressions::Column};
