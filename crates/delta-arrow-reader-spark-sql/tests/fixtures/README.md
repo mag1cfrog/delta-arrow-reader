@@ -3191,6 +3191,20 @@ the original 206 references, four genuine volatile-producer references and
 successful fields and ordered rows. All 24 genuine-volatile and 96 new
 aliased/unaliased contexts are strict positive controls.
 
+`case-conversion-slice-spark.jsonl` adds six strict references for nested
+LOWER/UPPER over a constant SLICE and ARRAY_JOIN, with direct ARRAY and no-FROM
+controls. Its raw SHA256 is
+`c799fc6bc0f31f98ccbf3af1eb5fbad14c391e592eb8f5bd79c3743ad4556b46`.
+A focused test in `case_conversion.rs` checks all twelve ANSI/batch
+identities, every comparison flag and all seven schema stages. All queries
+return `ss`; the provider SLICE context must retain the intermediate Unicode
+expansion before nested case rewriting. The portable
+`capture_case_conversion_slice_spark.py` and its input-only manifest reuse the
+pinned coordinate encoding/error helpers through relative paths.
+`verify_case_conversion_slice_spark.py` verified the recapture against all six
+original frozen outcomes, stage maps, SQL and provider inputs. The new header
+records its own source and manifest hashes and the original capture lineage.
+
 The case regression gate also retains 126 complete current native negative
 receipts: 96 preexisting TRY_CAST field differences under #802, 24 preexisting
 RAND-range row differences under #838, and six unordered inner LIMIT/OFFSET

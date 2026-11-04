@@ -885,6 +885,9 @@ value kernels remain in use. Separately registered BTRIM and native DataFusion
 SQL retain their existing declarations.
 
 Nested LOWER/UPPER calls follow Spark's case-conversion simplification order.
+Before removing an intermediate conversion, the existing expression simplifier
+prepares closed constants exposed by child UDF simplification. This retains
+expanding Unicode results when SLICE folds after generic constant evaluation.
 The private adapter preserves intermediate conversions on early local VALUES
 paths. For provider projections, a singly consumed deterministic opposite-case
 producer can use the outer conversion while keeping the existing projection
