@@ -49,6 +49,14 @@ casts still replace invalid values with NULL. The
 [integration tests](tests/string_cast_rows.rs) cover the public API and existing
 cast compatibility. This primitive does not change SQL error ordering.
 
+Binary, LargeBinary and BinaryView casts to Utf8, LargeUtf8 and Utf8View preserve
+valid visible values when retained bytes or NULL payloads contain malformed
+UTF-8. Checked conversions remain the fast path. Their builder fallback copies
+only visible non-NULL values; active malformed values retain the original
+strict error or become NULL in safe casts. The
+[binary slice tests](tests/binary_slice_casts.rs) cover these storage boundaries
+and a guarded CASE cast.
+
 Required List and LargeList elements use an exact logical NULL check when child
 storage reports conservative nullability. Unused dictionary NULL values,
 inactive Union children and NULL runs outside a sliced child's logical range
