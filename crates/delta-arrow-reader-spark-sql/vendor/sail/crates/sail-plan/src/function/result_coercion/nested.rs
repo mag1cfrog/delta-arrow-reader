@@ -48,8 +48,8 @@ use super::{
 };
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
-    without_metadata_annotations,
     FunctionContextInput, drop_inherited_column_metadata, without_inherited_column_metadata,
+    without_metadata_annotations,
 };
 
 fn list_field(data_type: &DataType) -> Option<&FieldRef> {

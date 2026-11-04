@@ -26,9 +26,8 @@ impl ScalarUDFImpl for RetainConstant {
     }
 
     fn signature(&self) -> &Signature {
-        static SIGNATURE: LazyLock<Signature> = LazyLock::new(|| {
-            Signature::exact(vec![DataType::Int32], Volatility::Immutable)
-        });
+        static SIGNATURE: LazyLock<Signature> =
+            LazyLock::new(|| Signature::exact(vec![DataType::Int32], Volatility::Immutable));
         &SIGNATURE
     }
 
@@ -113,8 +112,7 @@ fn immutable_folding_opt_out_and_aliases_preserve_simplifiable_children() -> Res
             {
                 assert_eq!(simplify(parent, spark)?, expected_parent);
             }
-            for parent in nested_parents(function.call(vec![cast(lit("bad"), DataType::Int32)]))
-            {
+            for parent in nested_parents(function.call(vec![cast(lit("bad"), DataType::Int32)])) {
                 assert!(simplify(parent, spark).is_err());
             }
         }
@@ -180,10 +178,9 @@ fn failed_speculative_nested_folding_keeps_required_and_runtime_errors() -> Resu
         for parent in nested_parents(cast(lit("bad"), DataType::Int32)) {
             assert!(simplify(parent, spark).is_err());
         }
-        for (parent, expected) in
-            nested_parents(runtime_error.call(vec![lit(1_i32) + lit(2_i32)]))
-                .into_iter()
-                .zip(nested_parents(runtime_error.call(vec![lit(3_i32)])))
+        for (parent, expected) in nested_parents(runtime_error.call(vec![lit(1_i32) + lit(2_i32)]))
+            .into_iter()
+            .zip(nested_parents(runtime_error.call(vec![lit(3_i32)])))
         {
             assert_eq!(simplify(parent, spark)?, expected);
         }

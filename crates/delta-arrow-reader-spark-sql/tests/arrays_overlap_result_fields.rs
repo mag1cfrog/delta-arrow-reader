@@ -149,7 +149,9 @@ async fn arrays_overlap_independent_float_boundaries_match_spark() -> TestResult
         .into_iter()
         .filter(|record| {
             record.get("id").is_none()
-                || record["id"].as_str().is_some_and(|id| !id.starts_with("dst_"))
+                || record["id"]
+                    .as_str()
+                    .is_some_and(|id| !id.starts_with("dst_"))
         })
         .collect::<Vec<_>>();
     assert_arrays_overlap_result_records(&floating, 16).await

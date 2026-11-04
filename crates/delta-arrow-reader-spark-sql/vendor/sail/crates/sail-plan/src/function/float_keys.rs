@@ -339,11 +339,12 @@ mod tests {
                         Field::new("row", row.data_type().clone(), false)
                             .with_metadata([("origin".into(), "provider".into())].into()),
                     );
-                    let returned =
-                        NormalizeNestedFloatKeys::default().return_field_from_args(ReturnFieldArgs {
+                    let returned = NormalizeNestedFloatKeys::default().return_field_from_args(
+                        ReturnFieldArgs {
                             arg_fields: std::slice::from_ref(&field),
                             scalar_arguments: &[None],
-                        })?;
+                        },
+                    )?;
                     assert_eq!(
                         returned.as_ref(),
                         &field
@@ -372,14 +373,15 @@ mod tests {
                     if len > 0 {
                         let value = ScalarValue::try_from_array(&input, 0)?;
                         let field = Arc::new(Field::new("key", input.data_type().clone(), true));
-                        let scalar =
-                            NormalizeNestedFloatKeys::default().invoke_with_args(ScalarFunctionArgs {
+                        let scalar = NormalizeNestedFloatKeys::default().invoke_with_args(
+                            ScalarFunctionArgs {
                                 args: vec![ColumnarValue::Scalar(value)],
                                 arg_fields: vec![field.clone()],
                                 number_rows: 1,
                                 return_field: field,
                                 config_options: Arc::default(),
-                            })?;
+                            },
+                        )?;
                         assert_eq!(
                             scalar.into_array(1)?.to_data(),
                             expected.slice(0, 1).to_data()

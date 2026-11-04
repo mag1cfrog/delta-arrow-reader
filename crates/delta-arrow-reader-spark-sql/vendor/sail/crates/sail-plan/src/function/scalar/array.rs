@@ -362,16 +362,17 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } else {
         DataType::List(element)
     };
-    let prepare_operand = |value: expr::Expr, source: &DataType, needs_value_cast| -> PlanResult<expr::Expr> {
-        let value = if needs_value_cast {
-            cast_nested_value(value, source, &nullable_array_type, &function_context)?
-        } else {
-            value
+    let prepare_operand =
+        |value: expr::Expr, source: &DataType, needs_value_cast| -> PlanResult<expr::Expr> {
+            let value = if needs_value_cast {
+                cast_nested_value(value, source, &nullable_array_type, &function_context)?
+            } else {
+                value
+            };
+            let value = normalize_spark_float_array_comparison(value, schema)?;
+            let source = value.get_type(schema)?;
+            cast_nested_value(value, &source, &nullable_array_type, &function_context)
         };
-        let value = normalize_spark_float_array_comparison(value, schema)?;
-        let source = value.get_type(schema)?;
-        cast_nested_value(value, &source, &nullable_array_type, &function_context)
-    };
     let left = prepare_operand(left, &left_type, left_needs_value_cast)?;
     let right = prepare_operand(right, &right_type, right_needs_value_cast)?;
     let same_type_null_only_array = cast(
