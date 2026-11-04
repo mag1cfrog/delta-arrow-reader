@@ -396,6 +396,53 @@ async fn slice_null_evaluation_matches_fresh_spark_capture() -> TestResult {
 }
 
 #[tokio::test]
+async fn slice_selected_concat_coordinates_keep_null_frontiers() -> TestResult {
+    let header = json!({"inputs":[{
+        "name":"slice_concat_input",
+        "schema":{"type":"struct","fields":[
+            {"name":"k","type":"integer","nullable":false,"metadata":{}},
+            {"name":"a","type":{"type":"array","elementType":"integer","containsNull":false},"nullable":true,"metadata":{}},
+            {"name":"txt","type":"string","nullable":true,"metadata":{}},
+            {"name":"length_txt","type":"string","nullable":false,"metadata":{}},
+        ]},
+        "rows":[
+            ["0",null,"bad","bad"],
+            ["1",["10","11"],"1","1"],
+            ["2",["20","21"],null,"bad"],
+            ["3",["30","31"],"2","1"],
+        ],
+    }]});
+    let sql = "SELECT k, SLICE(a, \
+        CAST(CONCAT('', CAST(CAST(txt AS INT) AS STRING)) AS INT), \
+        CAST(length_txt AS INT)) AS r FROM slice_concat_input ORDER BY k";
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(configure_spark_sql(
+            SessionStateBuilder::new().with_default_features().with_config(
+                SessionConfig::new().with_batch_size(batch_size),
+            ),
+        ).build());
+        spark_inputs::register_recorded_inputs(&session, &header, batch_size)?;
+        for ansi_mode in [true, false] {
+            let query = delta_arrow_reader_spark_sql::plan_query(
+                &session, sql, &delta_arrow_reader_spark_sql::SparkSqlOptions {
+                    ansi_mode, ..Default::default()
+                },
+            ).await?;
+            let physical = query.create_physical_plan(&session).await?;
+            let plan = datafusion::physical_plan::displayable(physical.as_ref()).indent(true).to_string();
+            assert!(plan.contains("spark_concat_runtime"), "{plan}");
+            let actual = spark_results::capture_spark_query_result(&session, &json!({
+                "sql":sql, "ansi":ansi_mode,
+            })).await?;
+            assert_eq!(actual["rows"], json!([
+                ["0",null], ["1",["10"]], ["2",null], ["3",["31"]],
+            ]), "ANSI={ansi_mode} batch={batch_size}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> TestResult {
     let header = json!({"inputs":[{
         "name":"slice_projection_input",
@@ -421,6 +468,10 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
     let sql = "SELECT k, payload, TRANSFORM(starts, x -> SLICE(a, x + bias, n)) AS r, \
         SLICE(a, ARRAY_MAX(TRANSFORM(starts, y -> y + bias)), n) AS captured_start \
         FROM slice_projection_input ORDER BY k";
+    let concat_sql = "SELECT k, payload, TRANSFORM(starts, x -> SLICE(a, \
+        CAST(CONCAT('', CAST(x + bias AS STRING)) AS INT), n)) AS r, \
+        SLICE(a, CAST(CONCAT('', CAST(ARRAY_MAX(TRANSFORM(starts, y -> y + bias)) \
+        AS STRING)) AS INT), n) AS captured_start FROM slice_projection_input ORDER BY k";
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -432,6 +483,7 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
         );
         spark_inputs::register_recorded_inputs(&session, &header, batch_size)?;
         for ansi_mode in [true, false] {
+          for (sql, runtime_concat) in [(sql, false), (concat_sql, true)] {
             let query = delta_arrow_reader_spark_sql::plan_query(
                 &session,
                 sql,
@@ -442,6 +494,10 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
             )
             .await?;
             let physical = query.create_physical_plan(&session).await?;
+            if runtime_concat {
+                let plan = datafusion::physical_plan::displayable(physical.as_ref()).indent(true).to_string();
+                assert!(plan.matches("spark_concat_runtime").count() >= 2, "{plan}");
+            }
             let schema = physical.schema();
             assert_eq!(
                 schema.field(1).metadata().get("probe").map(String::as_str),
@@ -462,6 +518,7 @@ async fn slice_selected_lambda_coordinates_keep_variables_and_captures() -> Test
                 }
             }
             assert_eq!(json!(rows), expected, "ANSI={ansi_mode} batch={batch_size}");
+          }
         }
     }
     Ok(())
