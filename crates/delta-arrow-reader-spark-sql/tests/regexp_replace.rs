@@ -255,7 +255,6 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
     let mut required_error_fields_compared = 0;
     let mut external_error_fields_compared = 0;
     let mut admission_errors_compared = 0;
-    let mut position_analysis_unavailable = 0;
     let mut error_physical_reference_unavailable = 0;
     let mut differences = Vec::new();
     let mut external = std::collections::BTreeMap::<&str, usize>::new();
@@ -314,17 +313,11 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                             | "position_supplementary_3"
                             | "nonempty_split_dot"
                     );
-                    let position_coercion = matches!(
-                        id,
-                        "position_numeric_type" | "position_decimal_type" | "position_string_type"
-                    );
                     let observed = capture_observation(&session, case).await?;
                     let error = observed["error"].as_str();
                     let analyzed_schema = observed
                         .get("analyzed_schema")
                         .filter(|value| !value.is_null());
-                    let analysis_unavailable =
-                        analyzed_schema.is_none() && observed["error_stage"] == "resolve";
                     let physical_comparison =
                         schema_comparison(&observed, expected, "physical_schema");
                     if expected["status"] == "error" {
@@ -339,9 +332,6 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                     }
                     if external_error {
                         external_error_fields_compared += 1;
-                    }
-                    if position_coercion && analysis_unavailable {
-                        position_analysis_unavailable += 1;
                     }
                     let status = if error.is_none() && complete_result_matches(&observed, expected) {
                         "exact"
@@ -360,11 +350,6 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         "external_java_utf16_region_798"
                     } else if error.is_none() && known_utf16_empty_matches(&observed, expected, id) {
                         "external_java_utf16_empty_match_798"
-                    } else if position_coercion && analysis_unavailable
-                        && expected["rows"] == json!([["a1X"]]) && error.is_some_and(|error| {
-                            error.contains("regexp_replace position coercion to INT is outside the supported position contract")
-                        }) {
-                        "external_position_coercion_799_analysis_unavailable"
                     } else if id == "anchored_last_newline" && expected["rows"] == json!([["a\n"]]) && error.is_none()
                         && observed["analyzed_schema"] == expected["analyzed_schema"] && observed["physical_schema"] == expected["physical_schema"] && observed["rows"] == json!([["abc\n"]]) {
                         "external_java_pattern_779"
@@ -415,12 +400,11 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
             "full_compatibility_pass":reference_mismatches == 0})
     );
     assert_eq!(compared, (94 + 138 + 14 + 20 + 252) * 6);
-    assert_eq!(reference_mismatches, 132);
+    assert_eq!(reference_mismatches, 96);
     assert_eq!(external.get("external_like_name_791"), Some(&12));
     assert_eq!(required_error_fields_compared, (52 + 42) * 6);
     assert_eq!(external_error_fields_compared, 6 * 6);
     assert_eq!(admission_errors_compared, (24 + 4) * 6);
-    assert_eq!(position_analysis_unavailable, 6 * 6);
     assert_eq!(error_physical_reference_unavailable, (76 + 46) * 6);
     assert_eq!(
         external.get("external_sql_variable_substitution_789"),
@@ -431,14 +415,10 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
         external.get("external_java_utf16_empty_match_798"),
         Some(&24)
     );
-    assert_eq!(
-        external.get("external_position_coercion_799_analysis_unavailable"),
-        Some(&36)
-    );
     assert_eq!(external.get("external_java_pattern_779"), Some(&12));
     assert_eq!(exact_case_results, 24);
     eprintln!(
-        "C06 replacement compared {compared}; error analyzed fields required={required_error_fields_compared} external={external_error_fields_compared}; admission errors={admission_errors_compared}; position analysis unavailable={position_analysis_unavailable}; error physical reference unavailable={error_physical_reference_unavailable}; external {external:?}; differences {}",
+        "C06 replacement compared {compared}; error analyzed fields required={required_error_fields_compared} external={external_error_fields_compared}; admission errors={admission_errors_compared}; error physical reference unavailable={error_physical_reference_unavailable}; external {external:?}; differences {}",
         differences.len()
     );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
