@@ -1490,7 +1490,8 @@ impl Prepare {
                     || expr.exists(|expr| {
                         Ok(expr.is_volatile_node()
                             || matches!(expr, Expr::ScalarFunction(f)
-                                if !f.func.inner().supports_constant_folding()))
+                                if !f.func.inner().is::<SparkArraySlice>()
+                                    && !f.func.inner().supports_constant_folding()))
                     })?
                 {
                     return Ok(TreeNodeRecursion::Continue);

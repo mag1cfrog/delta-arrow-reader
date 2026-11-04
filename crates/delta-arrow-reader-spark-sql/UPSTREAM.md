@@ -764,10 +764,16 @@ later arguments through the shared scalar selection path, while reached
 constant argument failures retain their optimization stage. Selected arguments
 reuse lambda input projection before filtering, so unrelated sibling columns
 stay shared. Index rewrites preserve column and lambda-variable fields, and
-empty projections retain the selected row count. The native delegate
-still determines valid coordinates. Signed-coordinate gaps (#894) and two
-non-NULL batch error-priority observations (#902) retain exact inherited
-[result controls](tests/fixtures/README.md#arrays_overlap-floating-operands).
+empty projections retain the selected row count. SLICE normalizes signed starts
+against each array's length and clips runtime lengths before passing bounded
+positive coordinates to the native delegate. Its closed-literal simplifier
+retains Spark's interpreted Int32 endpoint overflow, while runtime values use
+Spark's generated clipping behavior. The private adapter disables generic
+physical constant folding so constant parents cannot bypass that distinction.
+The dedicated [coordinate references](tests/fixtures/README.md#arrays_overlap-floating-operands)
+require full parity. The broad parameter suite retains exact signed-coordinate
+controls (#894), and two non-NULL batch error-priority observations (#902)
+retain their separate inherited controls.
 
 ### ARRAY_COMPACT result fields
 

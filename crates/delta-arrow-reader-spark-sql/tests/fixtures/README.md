@@ -2663,6 +2663,28 @@ NULL masks, required/nullable fields, constant and provider evaluation stages,
 empty providers and CASE reachability. Required unary lengths use the #895
 negation field correction. The owned #880 cases have no inherited allowance.
 
+`slice-coordinates/` adds ten independent Spark observations for five scenarios,
+with raw reference SHA256
+`f27e12f8e9c867dcdb5133417d12e988025b232270797a27570b36a039195017`.
+The capture source SHA256 is
+`7626fac85ff1e8e061dd900e084f5402554737d41e1aff837112c0f3d1f2b79a`;
+the input-only manifest SHA256 is
+`22efa15c8747d026ce97c3e03a2157e9f16c78db113c98c1e2817f28f551e834`.
+The portable package retains its exact capture, manifest, verifier, decoder and
+provider-header sources. It preserves all seven schema stages, raw plans,
+collected row order and complete fields. Mixed literal/provider operands return
+the last element with INT_MAX length, while a fully folded negative-last call
+returns an empty array. Eight ordered nullable rows cover negative tails, NULL
+elements and arguments, empty arrays, and INT_MIN start with zero length.
+
+`slice_coordinate_results.rs` combines these ten records with the ten original
+signed-coordinate records for 40 strict comparisons at batches 1 and 32. It
+requires every comparison flag and every available recorded schema stage, and
+emits all query outcomes before aggregate failure. Its literal/provider result
+assertions retain the independent Spark discriminators without inherited
+allowances. Local tests also cover all four native list layouts, complete
+element fields, nested literal folding and opaque runtime Scalar operands.
+
 `slice-parameters/reachability/` preserves 24 further Spark observations, with
 raw reference SHA256
 `58517d3c2a32f16fa5c1fd96258c8c95c65e12203bb4a59fe26cae1f81ec9bf5`.
