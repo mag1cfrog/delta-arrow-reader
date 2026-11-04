@@ -220,6 +220,85 @@ async fn slice_parent_fields_match_spark() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn slice_parameters_match_spark() -> TestResult {
+    let manifest: Value =
+        serde_json::from_str(include_str!("fixtures/slice-parameters/manifest.json"))?;
+    let records = include_str!("fixtures/slice-parameters/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(manifest["scenario_count"], 154);
+    assert_eq!(manifest["observation_count"], 308);
+    assert_eq!(records.len(), 309);
+    for key in ["spark_version", "spark_revision", "timezone", "group"] {
+        assert_eq!(records[0][key], manifest[key], "{key}");
+    }
+    assert_eq!(
+        records[0]["capture_sha256"],
+        manifest["capture_script_sha256"]
+    );
+    assert_eq!(records[0]["provider_input_roundtrip_checked"], true);
+    let identities = records[1..]
+        .iter()
+        .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
+        .collect::<Vec<_>>();
+    assert_eq!(json!(identities), manifest["identities"]);
+    for case in &records[1..] {
+        let definition = manifest["scenarios"]
+            .as_array()
+            .ok_or("missing scenarios")?
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("missing scenario")?;
+        for (key, value) in definition.as_object().ok_or("missing definition")? {
+            assert_eq!(&case[key], value, "{} {key}", case["id"]);
+        }
+    }
+    let mut differences = Vec::new();
+    let mut completed = std::collections::BTreeSet::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            let mut comparison = capture_slice_observation(
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case),
+            )
+            .await?;
+            comparison["group"] = records[0]["group"].clone();
+            comparison["id"] = case["id"].clone();
+            comparison["ansi"] = case["ansi"].clone();
+            comparison["batch"] = json!(batch_size);
+            assert!(completed.insert((
+                case["id"].as_str().ok_or("missing ID")?,
+                case["ansi"].as_bool().ok_or("missing ANSI")?,
+                batch_size,
+            )));
+            eprintln!("SLICE_PARAMETERS_OBSERVATION {comparison}");
+            if comparison["matches"] != true || comparison["optimized_matches"] != true {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: expected={} stages={}, actual={comparison}",
+                    case["id"], case["ansi"], case["expected"], case["schema_stages"]
+                ));
+            }
+        }
+    }
+    assert_eq!(completed.len(), 616);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
 #[test]
 fn inherited_slice_controls_reject_new_differences() -> TestResult {
     let references = include_str!("fixtures/slice-parent-fields-spark.jsonl")

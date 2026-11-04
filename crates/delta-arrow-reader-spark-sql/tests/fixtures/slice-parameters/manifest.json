@@ -1,0 +1,4274 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "input_encoding": "decimal integer strings; positional arrays/structs; JSON null",
+  "group": "slice-parameters-880-current-v1",
+  "author_base": "staging1502d3cfe43e8f63be88e1eff0943854c34111e5",
+  "scenario_count": 154,
+  "observation_count": 308,
+  "reused_observer": "references/capture_spark_878.py",
+  "reused_observer_sha256": "85d335bbcba11c59e3fbd18dfe9283133de6d4fba2fcd461ffff8e2cac08e1f3",
+  "inherited_reference": "references/spark-reference-878.jsonl",
+  "inherited_reference_sha256": "b65e5418d3fcdf99ba6730bd3079f03f2854c1bfd9a1856ae9caeea42304cbfd",
+  "inputs": [
+    {
+      "name": "slice_input",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "1",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "0",
+          "0",
+          "0",
+          "bad"
+        ],
+        [
+          "2",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "3",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "-2147483648",
+          "0",
+          "-2147483648",
+          "bad"
+        ],
+        [
+          "4",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "2147483647",
+          "0",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "5",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "6",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-1",
+          "-1",
+          "-1",
+          "-1",
+          "bad"
+        ],
+        [
+          "7",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "5",
+          "-1",
+          "5",
+          "-1",
+          "bad"
+        ],
+        [
+          "8",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-5",
+          "-1",
+          "-5",
+          "-1",
+          "bad"
+        ],
+        [
+          "9",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2147483648",
+          "-1",
+          "-2147483648",
+          "-1",
+          "bad"
+        ],
+        [
+          "10",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "2147483647",
+          "-2147483648",
+          "2147483647",
+          "-2147483648",
+          "bad"
+        ],
+        [
+          "11",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "-2147483648",
+          "1",
+          "-2147483648",
+          "bad"
+        ],
+        [
+          "12",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "13",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-1",
+          "0",
+          "-1",
+          "0",
+          "bad"
+        ],
+        [
+          "14",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          "1",
+          "1",
+          "bad"
+        ],
+        [
+          "15",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "4",
+          "1",
+          "4",
+          "1",
+          "bad"
+        ],
+        [
+          "16",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "5",
+          "1",
+          "5",
+          "1",
+          "bad"
+        ],
+        [
+          "17",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "18",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-4",
+          "1",
+          "-4",
+          "1",
+          "bad"
+        ],
+        [
+          "19",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-5",
+          "1",
+          "-5",
+          "1",
+          "bad"
+        ],
+        [
+          "20",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "4",
+          "1",
+          "4",
+          "bad"
+        ],
+        [
+          "21",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "5",
+          "1",
+          "5",
+          "bad"
+        ],
+        [
+          "22",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "2147483647",
+          "1",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "23",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-4",
+          "2147483647",
+          "-4",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "24",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2147483648",
+          "0",
+          "-2147483648",
+          "0",
+          "bad"
+        ],
+        [
+          "25",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2147483648",
+          "1",
+          "-2147483648",
+          "1",
+          "bad"
+        ],
+        [
+          "26",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "2147483647",
+          "0",
+          "2147483647",
+          "0",
+          "bad"
+        ],
+        [
+          "27",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "2147483647",
+          "1",
+          "2147483647",
+          "1",
+          "bad"
+        ],
+        [
+          "28",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "4",
+          "2147483647",
+          "4",
+          "2147483647",
+          "bad"
+        ],
+        [
+          "29",
+          [],
+          [],
+          [],
+          [],
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "30",
+          [],
+          [],
+          [],
+          [],
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "31",
+          [],
+          [],
+          [],
+          [],
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "32",
+          [],
+          [],
+          [],
+          [],
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "33",
+          [],
+          [],
+          [],
+          [],
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "34",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "35",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "36",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "37",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "38",
+          [],
+          [
+            null,
+            null
+          ],
+          [],
+          [
+            null,
+            null
+          ],
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "39",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "0",
+          "1",
+          "0",
+          "1",
+          "bad"
+        ],
+        [
+          "40",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "1",
+          "-1",
+          "1",
+          "-1",
+          "bad"
+        ],
+        [
+          "41",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "0",
+          "-1",
+          "0",
+          "-1",
+          "bad"
+        ],
+        [
+          "42",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "1",
+          "0",
+          "1",
+          "0",
+          "bad"
+        ],
+        [
+          "43",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          null,
+          null,
+          "-1",
+          "1",
+          "-1",
+          "1",
+          "bad"
+        ],
+        [
+          "44",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          null,
+          "1",
+          "bad"
+        ],
+        [
+          "45",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "-1",
+          null,
+          "-1",
+          "bad"
+        ],
+        [
+          "46",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "0",
+          null,
+          "0",
+          "bad"
+        ],
+        [
+          "47",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          "1",
+          null,
+          "bad"
+        ],
+        [
+          "48",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "0",
+          "1",
+          "0",
+          null,
+          "bad"
+        ],
+        [
+          "49",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "1",
+          "1",
+          null,
+          null,
+          "bad"
+        ],
+        [
+          "50",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2",
+          "3",
+          "-2",
+          "3",
+          "bad"
+        ],
+        [
+          "51",
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          [
+            "1",
+            "2",
+            "2",
+            "3"
+          ],
+          "-2",
+          "4",
+          "-2",
+          "4",
+          "bad"
+        ]
+      ]
+    },
+    {
+      "name": "slice_fields",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            "1",
+            null,
+            "3",
+            "4"
+          ],
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            null,
+            "2"
+          ],
+          "1",
+          "2",
+          "1",
+          "2",
+          "bad"
+        ],
+        [
+          "1",
+          [],
+          [],
+          null,
+          null,
+          "2",
+          "0",
+          null,
+          "0",
+          "2"
+        ],
+        [
+          "2",
+          [
+            "3",
+            "4"
+          ],
+          [
+            null,
+            null
+          ],
+          [],
+          [],
+          "-2",
+          "2",
+          "-2",
+          null,
+          "2"
+        ],
+        [
+          "3",
+          [
+            "5",
+            "6",
+            "7"
+          ],
+          [
+            null,
+            "6"
+          ],
+          [
+            "5"
+          ],
+          [
+            null,
+            null
+          ],
+          "8",
+          "5",
+          "8",
+          "5",
+          "2"
+        ]
+      ]
+    },
+    {
+      "name": "slice_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "literal_zero_start",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 0, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "provider_zero_start",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 0",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "literal_zero_start_zero_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 0, 0) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "0"
+    },
+    {
+      "id": "provider_zero_start_zero_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 1",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "0"
+    },
+    {
+      "id": "literal_both_invalid",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 0, -1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "provider_both_invalid",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 2",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "literal_both_invalid_min_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 0, -2147483648) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "-2147483648"
+    },
+    {
+      "id": "provider_both_invalid_min_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 3",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "-2147483648"
+    },
+    {
+      "id": "literal_zero_start_max_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 0, 2147483647) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "2147483647"
+    },
+    {
+      "id": "provider_zero_start_max_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 4",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "0",
+      "length": "2147483647"
+    },
+    {
+      "id": "literal_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, -1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "provider_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 5",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "literal_negative_start_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -1, -1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-1",
+      "length": "-1"
+    },
+    {
+      "id": "provider_negative_start_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 6",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "-1",
+      "length": "-1"
+    },
+    {
+      "id": "literal_after_end_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 5, -1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "5",
+      "length": "-1"
+    },
+    {
+      "id": "provider_after_end_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 7",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "5",
+      "length": "-1"
+    },
+    {
+      "id": "literal_before_begin_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -5, -1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-5",
+      "length": "-1"
+    },
+    {
+      "id": "provider_before_begin_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 8",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "-5",
+      "length": "-1"
+    },
+    {
+      "id": "literal_min_start_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -2147483648, -1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-2147483648",
+      "length": "-1"
+    },
+    {
+      "id": "provider_min_start_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 9",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "-2147483648",
+      "length": "-1"
+    },
+    {
+      "id": "literal_max_start_min_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 2147483647, -2147483648) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "2147483647",
+      "length": "-2147483648"
+    },
+    {
+      "id": "provider_max_start_min_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 10",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "2147483647",
+      "length": "-2147483648"
+    },
+    {
+      "id": "literal_min_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, -2147483648) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "-2147483648"
+    },
+    {
+      "id": "provider_min_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 11",
+      "family": "provider_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "-2147483648"
+    },
+    {
+      "id": "literal_zero_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, 0) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "literal_negative_start_zero_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -1, 0) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-1",
+      "length": "0"
+    },
+    {
+      "id": "literal_first",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "1"
+    },
+    {
+      "id": "literal_last",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 4, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "4",
+      "length": "1"
+    },
+    {
+      "id": "literal_after_end",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 5, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "5",
+      "length": "1"
+    },
+    {
+      "id": "literal_last_from_end",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -1, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "literal_first_from_end",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -4, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-4",
+      "length": "1"
+    },
+    {
+      "id": "literal_before_begin",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -5, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-5",
+      "length": "1"
+    },
+    {
+      "id": "literal_whole",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, 4) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "4"
+    },
+    {
+      "id": "literal_past_end_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, 5) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "5"
+    },
+    {
+      "id": "literal_max_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, 2147483647) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "1",
+      "length": "2147483647"
+    },
+    {
+      "id": "literal_negative_start_max_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -4, 2147483647) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-4",
+      "length": "2147483647"
+    },
+    {
+      "id": "literal_min_start_zero_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -2147483648, 0) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-2147483648",
+      "length": "0"
+    },
+    {
+      "id": "literal_min_start",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -2147483648, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-2147483648",
+      "length": "1"
+    },
+    {
+      "id": "literal_max_start_zero_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 2147483647, 0) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "2147483647",
+      "length": "0"
+    },
+    {
+      "id": "literal_max_start",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 2147483647, 1) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "2147483647",
+      "length": "1"
+    },
+    {
+      "id": "literal_last_max_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 4, 2147483647) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "4",
+      "length": "2147483647"
+    },
+    {
+      "id": "provider_valid_boundaries",
+      "sql": "SELECT k, SLICE(a_nn, start, length) AS sliced, ISNULL(SLICE(a_nn, start, length)) AS is_null, STRUCT(SLICE(a_nn, start, length) AS kept_name) AS nested_result FROM slice_input WHERE k IN (12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 50, 51) ORDER BY k",
+      "family": "provider_boundaries",
+      "consumer": "combined",
+      "ordered": true
+    },
+    {
+      "id": "literal_empty_zero_start",
+      "sql": "SELECT SLICE(CAST(ARRAY() AS ARRAY<INT>), 0, 1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "provider_empty_zero_start",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 29",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "literal_empty_negative_length",
+      "sql": "SELECT SLICE(CAST(ARRAY() AS ARRAY<INT>), 1, -1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "provider_empty_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 30",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "literal_empty_both_invalid",
+      "sql": "SELECT SLICE(CAST(ARRAY() AS ARRAY<INT>), 0, -1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "provider_empty_both_invalid",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 31",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "literal_empty_zero_length",
+      "sql": "SELECT SLICE(CAST(ARRAY() AS ARRAY<INT>), 1, 0) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "provider_empty_zero_length",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 32",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "literal_empty_negative_start",
+      "sql": "SELECT SLICE(CAST(ARRAY() AS ARRAY<INT>), -1, 1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "provider_empty_negative_start",
+      "sql": "SELECT SLICE(a_nn, start, length) AS r FROM slice_input WHERE k = 33",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "empty",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "literal_all_null_zero_start",
+      "sql": "SELECT SLICE(CAST(ARRAY(NULL, NULL) AS ARRAY<INT>), 0, 1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "provider_all_null_zero_start",
+      "sql": "SELECT SLICE(a_ne, start, length) AS r FROM slice_input WHERE k = 34",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "literal_all_null_negative_length",
+      "sql": "SELECT SLICE(CAST(ARRAY(NULL, NULL) AS ARRAY<INT>), 1, -1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "provider_all_null_negative_length",
+      "sql": "SELECT SLICE(a_ne, start, length) AS r FROM slice_input WHERE k = 35",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "literal_all_null_both_invalid",
+      "sql": "SELECT SLICE(CAST(ARRAY(NULL, NULL) AS ARRAY<INT>), 0, -1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "provider_all_null_both_invalid",
+      "sql": "SELECT SLICE(a_ne, start, length) AS r FROM slice_input WHERE k = 36",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "literal_all_null_zero_length",
+      "sql": "SELECT SLICE(CAST(ARRAY(NULL, NULL) AS ARRAY<INT>), 1, 0) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "provider_all_null_zero_length",
+      "sql": "SELECT SLICE(a_ne, start, length) AS r FROM slice_input WHERE k = 37",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "literal_all_null_negative_start",
+      "sql": "SELECT SLICE(CAST(ARRAY(NULL, NULL) AS ARRAY<INT>), -1, 1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "provider_all_null_negative_start",
+      "sql": "SELECT SLICE(a_ne, start, length) AS r FROM slice_input WHERE k = 38",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "all_null",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "literal_null_zero_start",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), 0, 1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "provider_null_zero_start",
+      "sql": "SELECT SLICE(a_pn, start, length) AS r FROM slice_input WHERE k = 39",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "0",
+      "length": "1"
+    },
+    {
+      "id": "literal_null_negative_length",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), 1, -1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "provider_null_negative_length",
+      "sql": "SELECT SLICE(a_pn, start, length) AS r FROM slice_input WHERE k = 40",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "1",
+      "length": "-1"
+    },
+    {
+      "id": "literal_null_both_invalid",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), 0, -1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "provider_null_both_invalid",
+      "sql": "SELECT SLICE(a_pn, start, length) AS r FROM slice_input WHERE k = 41",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "0",
+      "length": "-1"
+    },
+    {
+      "id": "literal_null_zero_length",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), 1, 0) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "provider_null_zero_length",
+      "sql": "SELECT SLICE(a_pn, start, length) AS r FROM slice_input WHERE k = 42",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "1",
+      "length": "0"
+    },
+    {
+      "id": "literal_null_negative_start",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), -1, 1) AS r",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "provider_null_negative_start",
+      "sql": "SELECT SLICE(a_pn, start, length) AS r FROM slice_input WHERE k = 43",
+      "family": "shape_parameters",
+      "consumer": "direct",
+      "shape": "null",
+      "start": "-1",
+      "length": "1"
+    },
+    {
+      "id": "literal_null_start",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), CAST(NULL AS INT), 1) AS r",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_start",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 44",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_start_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), CAST(NULL AS INT), -1) AS r",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_start_negative_length",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 45",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_start_zero_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), CAST(NULL AS INT), 0) AS r",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_start_zero_length",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 46",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_null_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 1, CAST(NULL AS INT)) AS r",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_null_length",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 47",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_zero_start_null_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), 0, CAST(NULL AS INT)) AS r",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_zero_start_null_length",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 48",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_both_null",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), CAST(NULL AS INT), CAST(NULL AS INT)) AS r",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_both_null",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 49",
+      "family": "null_parameters",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_required_zero_start_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_nn, start, length)) AS r FROM slice_input WHERE k = 0",
+      "family": "consumer_parameters",
+      "consumer": "is_null",
+      "declaration": "required"
+    },
+    {
+      "id": "provider_required_zero_start_struct",
+      "sql": "SELECT STRUCT(SLICE(a_nn, start, length) AS kept_name) AS r FROM slice_input WHERE k = 0",
+      "family": "consumer_parameters",
+      "consumer": "struct",
+      "declaration": "required"
+    },
+    {
+      "id": "provider_nullable_zero_start_direct",
+      "sql": "SELECT SLICE(a_pe, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 0",
+      "family": "consumer_parameters",
+      "consumer": "direct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_nullable_zero_start_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_pe, nullable_start, nullable_length)) AS r FROM slice_input WHERE k = 0",
+      "family": "consumer_parameters",
+      "consumer": "is_null",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_nullable_zero_start_struct",
+      "sql": "SELECT STRUCT(SLICE(a_pe, nullable_start, nullable_length) AS kept_name) AS r FROM slice_input WHERE k = 0",
+      "family": "consumer_parameters",
+      "consumer": "struct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_required_negative_length_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_nn, start, length)) AS r FROM slice_input WHERE k = 5",
+      "family": "consumer_parameters",
+      "consumer": "is_null",
+      "declaration": "required"
+    },
+    {
+      "id": "provider_required_negative_length_struct",
+      "sql": "SELECT STRUCT(SLICE(a_nn, start, length) AS kept_name) AS r FROM slice_input WHERE k = 5",
+      "family": "consumer_parameters",
+      "consumer": "struct",
+      "declaration": "required"
+    },
+    {
+      "id": "provider_nullable_negative_length_direct",
+      "sql": "SELECT SLICE(a_pe, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 5",
+      "family": "consumer_parameters",
+      "consumer": "direct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_nullable_negative_length_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_pe, nullable_start, nullable_length)) AS r FROM slice_input WHERE k = 5",
+      "family": "consumer_parameters",
+      "consumer": "is_null",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_nullable_negative_length_struct",
+      "sql": "SELECT STRUCT(SLICE(a_pe, nullable_start, nullable_length) AS kept_name) AS r FROM slice_input WHERE k = 5",
+      "family": "consumer_parameters",
+      "consumer": "struct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_required_both_invalid_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_nn, start, length)) AS r FROM slice_input WHERE k = 2",
+      "family": "consumer_parameters",
+      "consumer": "is_null",
+      "declaration": "required"
+    },
+    {
+      "id": "provider_required_both_invalid_struct",
+      "sql": "SELECT STRUCT(SLICE(a_nn, start, length) AS kept_name) AS r FROM slice_input WHERE k = 2",
+      "family": "consumer_parameters",
+      "consumer": "struct",
+      "declaration": "required"
+    },
+    {
+      "id": "provider_nullable_both_invalid_direct",
+      "sql": "SELECT SLICE(a_pe, nullable_start, nullable_length) AS r FROM slice_input WHERE k = 2",
+      "family": "consumer_parameters",
+      "consumer": "direct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_nullable_both_invalid_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_pe, nullable_start, nullable_length)) AS r FROM slice_input WHERE k = 2",
+      "family": "consumer_parameters",
+      "consumer": "is_null",
+      "declaration": "nullable"
+    },
+    {
+      "id": "provider_nullable_both_invalid_struct",
+      "sql": "SELECT STRUCT(SLICE(a_pe, nullable_start, nullable_length) AS kept_name) AS r FROM slice_input WHERE k = 2",
+      "family": "consumer_parameters",
+      "consumer": "struct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "fields_a_nn_required",
+      "sql": "SELECT SLICE(a_nn, start, length) AS sliced, STRUCT(SLICE(a_nn, start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_nn, start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_nn, start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": false,
+      "numeric_nullability": "required"
+    },
+    {
+      "id": "fields_a_nn_nullable_start",
+      "sql": "SELECT SLICE(a_nn, nullable_start, length) AS sliced, STRUCT(SLICE(a_nn, nullable_start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_nn, nullable_start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_nn, nullable_start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": false,
+      "numeric_nullability": "nullable_start"
+    },
+    {
+      "id": "fields_a_nn_nullable_length",
+      "sql": "SELECT SLICE(a_nn, start, nullable_length) AS sliced, STRUCT(SLICE(a_nn, start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_nn, start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_nn, start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": false,
+      "numeric_nullability": "nullable_length"
+    },
+    {
+      "id": "fields_a_nn_nullable_both",
+      "sql": "SELECT SLICE(a_nn, nullable_start, nullable_length) AS sliced, STRUCT(SLICE(a_nn, nullable_start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_nn, nullable_start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_nn, nullable_start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": false,
+      "numeric_nullability": "nullable_both"
+    },
+    {
+      "id": "fields_a_ne_required",
+      "sql": "SELECT SLICE(a_ne, start, length) AS sliced, STRUCT(SLICE(a_ne, start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_ne, start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_ne, start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": true,
+      "numeric_nullability": "required"
+    },
+    {
+      "id": "fields_a_ne_nullable_start",
+      "sql": "SELECT SLICE(a_ne, nullable_start, length) AS sliced, STRUCT(SLICE(a_ne, nullable_start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_ne, nullable_start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_ne, nullable_start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": true,
+      "numeric_nullability": "nullable_start"
+    },
+    {
+      "id": "fields_a_ne_nullable_length",
+      "sql": "SELECT SLICE(a_ne, start, nullable_length) AS sliced, STRUCT(SLICE(a_ne, start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_ne, start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_ne, start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": true,
+      "numeric_nullability": "nullable_length"
+    },
+    {
+      "id": "fields_a_ne_nullable_both",
+      "sql": "SELECT SLICE(a_ne, nullable_start, nullable_length) AS sliced, STRUCT(SLICE(a_ne, nullable_start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_ne, nullable_start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_ne, nullable_start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": false,
+      "array_element_nullable": true,
+      "numeric_nullability": "nullable_both"
+    },
+    {
+      "id": "fields_a_pn_required",
+      "sql": "SELECT SLICE(a_pn, start, length) AS sliced, STRUCT(SLICE(a_pn, start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pn, start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pn, start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": false,
+      "numeric_nullability": "required"
+    },
+    {
+      "id": "fields_a_pn_nullable_start",
+      "sql": "SELECT SLICE(a_pn, nullable_start, length) AS sliced, STRUCT(SLICE(a_pn, nullable_start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pn, nullable_start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pn, nullable_start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": false,
+      "numeric_nullability": "nullable_start"
+    },
+    {
+      "id": "fields_a_pn_nullable_length",
+      "sql": "SELECT SLICE(a_pn, start, nullable_length) AS sliced, STRUCT(SLICE(a_pn, start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pn, start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pn, start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": false,
+      "numeric_nullability": "nullable_length"
+    },
+    {
+      "id": "fields_a_pn_nullable_both",
+      "sql": "SELECT SLICE(a_pn, nullable_start, nullable_length) AS sliced, STRUCT(SLICE(a_pn, nullable_start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pn, nullable_start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pn, nullable_start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": false,
+      "numeric_nullability": "nullable_both"
+    },
+    {
+      "id": "fields_a_pe_required",
+      "sql": "SELECT SLICE(a_pe, start, length) AS sliced, STRUCT(SLICE(a_pe, start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pe, start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pe, start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": true,
+      "numeric_nullability": "required"
+    },
+    {
+      "id": "fields_a_pe_nullable_start",
+      "sql": "SELECT SLICE(a_pe, nullable_start, length) AS sliced, STRUCT(SLICE(a_pe, nullable_start, length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pe, nullable_start, length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pe, nullable_start, length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": true,
+      "numeric_nullability": "nullable_start"
+    },
+    {
+      "id": "fields_a_pe_nullable_length",
+      "sql": "SELECT SLICE(a_pe, start, nullable_length) AS sliced, STRUCT(SLICE(a_pe, start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pe, start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pe, start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": true,
+      "numeric_nullability": "nullable_length"
+    },
+    {
+      "id": "fields_a_pe_nullable_both",
+      "sql": "SELECT SLICE(a_pe, nullable_start, nullable_length) AS sliced, STRUCT(SLICE(a_pe, nullable_start, nullable_length) AS kept_name) AS nested_result, ISNULL(SLICE(a_pe, nullable_start, nullable_length)) AS is_null, ARRAYS_OVERLAP(SLICE(a_pe, nullable_start, nullable_length), ARRAY(2, 3)) AS overlaps FROM slice_fields ORDER BY k",
+      "family": "provider_declarations",
+      "consumer": "combined",
+      "ordered": true,
+      "array_parent_nullable": true,
+      "array_element_nullable": true,
+      "numeric_nullability": "nullable_both"
+    },
+    {
+      "id": "empty_provider_required_columns",
+      "sql": "SELECT SLICE(a_nn, start, length) AS sliced, ISNULL(SLICE(a_nn, start, length)) AS is_null, STRUCT(SLICE(a_nn, start, length) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "required"
+    },
+    {
+      "id": "empty_provider_required_zero_start",
+      "sql": "SELECT SLICE(a_nn, 0, length) AS sliced, ISNULL(SLICE(a_nn, 0, length)) AS is_null, STRUCT(SLICE(a_nn, 0, length) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "required"
+    },
+    {
+      "id": "empty_provider_required_negative_length",
+      "sql": "SELECT SLICE(a_nn, start, -1) AS sliced, ISNULL(SLICE(a_nn, start, -1)) AS is_null, STRUCT(SLICE(a_nn, start, -1) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "required"
+    },
+    {
+      "id": "empty_provider_required_both_invalid",
+      "sql": "SELECT SLICE(a_nn, 0, -1) AS sliced, ISNULL(SLICE(a_nn, 0, -1)) AS is_null, STRUCT(SLICE(a_nn, 0, -1) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "required"
+    },
+    {
+      "id": "empty_provider_nullable_columns",
+      "sql": "SELECT SLICE(a_pe, nullable_start, nullable_length) AS sliced, ISNULL(SLICE(a_pe, nullable_start, nullable_length)) AS is_null, STRUCT(SLICE(a_pe, nullable_start, nullable_length) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "nullable"
+    },
+    {
+      "id": "empty_provider_nullable_zero_start",
+      "sql": "SELECT SLICE(a_pe, 0, nullable_length) AS sliced, ISNULL(SLICE(a_pe, 0, nullable_length)) AS is_null, STRUCT(SLICE(a_pe, 0, nullable_length) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "nullable"
+    },
+    {
+      "id": "empty_provider_nullable_negative_length",
+      "sql": "SELECT SLICE(a_pe, nullable_start, -1) AS sliced, ISNULL(SLICE(a_pe, nullable_start, -1)) AS is_null, STRUCT(SLICE(a_pe, nullable_start, -1) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "nullable"
+    },
+    {
+      "id": "empty_provider_nullable_both_invalid",
+      "sql": "SELECT SLICE(a_pe, 0, -1) AS sliced, ISNULL(SLICE(a_pe, 0, -1)) AS is_null, STRUCT(SLICE(a_pe, 0, -1) AS kept_name) AS nested_result FROM slice_empty",
+      "family": "zero_row_provider",
+      "consumer": "combined",
+      "declaration": "nullable"
+    },
+    {
+      "id": "literal_bad_array_zero_start",
+      "sql": "SELECT SLICE(ARRAY(CAST('bad' AS INT)), 0, 1) AS r",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "foldable"
+    },
+    {
+      "id": "provider_bad_array_zero_start",
+      "sql": "SELECT SLICE(ARRAY(CAST(text AS INT)), 0, 1) AS r FROM slice_input WHERE k = 14",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "live"
+    },
+    {
+      "id": "literal_zero_start_bad_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2), 0, CAST('bad' AS INT)) AS r",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "foldable"
+    },
+    {
+      "id": "provider_zero_start_bad_length",
+      "sql": "SELECT SLICE(a_nn, 0, CAST(text AS INT)) AS r FROM slice_input WHERE k = 14",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "live"
+    },
+    {
+      "id": "literal_bad_start_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2), CAST('bad' AS INT), -1) AS r",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "foldable"
+    },
+    {
+      "id": "provider_bad_start_negative_length",
+      "sql": "SELECT SLICE(a_nn, CAST(text AS INT), -1) AS r FROM slice_input WHERE k = 14",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "live"
+    },
+    {
+      "id": "literal_both_invalid_bad_array",
+      "sql": "SELECT SLICE(ARRAY(CAST('bad' AS INT)), 0, -1) AS r",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "foldable"
+    },
+    {
+      "id": "provider_both_invalid_bad_array",
+      "sql": "SELECT SLICE(ARRAY(CAST(text AS INT)), 0, -1) AS r FROM slice_input WHERE k = 14",
+      "family": "evaluation_priority",
+      "consumer": "direct",
+      "evaluation": "live"
+    },
+    {
+      "id": "inherited_881_null_array_bad_start",
+      "sql": "SELECT SLICE(CAST(NULL AS ARRAY<INT>), CAST(text AS INT), 1) AS r FROM slice_fields WHERE k = 0",
+      "family": "inherited_881_control",
+      "consumer": "direct",
+      "owner_issue": 881
+    },
+    {
+      "id": "inherited_881_bad_array_null_start",
+      "sql": "SELECT SLICE(ARRAY(CAST(text AS INT)), CAST(NULL AS INT), 1) AS r FROM slice_fields WHERE k = 0",
+      "family": "inherited_881_control",
+      "consumer": "direct",
+      "owner_issue": 881
+    },
+    {
+      "id": "inherited_881_bad_array_null_start_is_null",
+      "sql": "SELECT ISNULL(SLICE(ARRAY(CAST(text AS INT)), CAST(NULL AS INT), 1)) AS r FROM slice_fields WHERE k = 0",
+      "family": "inherited_881_control",
+      "consumer": "is_null",
+      "owner_issue": 881
+    },
+    {
+      "id": "inherited_881_constant_bad_array_null_start",
+      "sql": "SELECT SLICE(ARRAY(CAST('bad' AS INT)), CAST(NULL AS INT), 1) AS r",
+      "family": "inherited_881_control",
+      "consumer": "direct",
+      "owner_issue": 881
+    },
+    {
+      "id": "literal_negative_start_cross_end",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -2, 3) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-2",
+      "length": "3"
+    },
+    {
+      "id": "literal_negative_start_past_end",
+      "sql": "SELECT SLICE(ARRAY(1, 2, 2, 3), -2, 4) AS r",
+      "family": "literal_parameters",
+      "consumer": "direct",
+      "start": "-2",
+      "length": "4"
+    },
+    {
+      "id": "unary_required_negative_length_direct",
+      "sql": "SELECT SLICE(a_nn, 1, -length) AS r FROM slice_fields WHERE k = 0",
+      "family": "unary_length",
+      "consumer": "direct",
+      "declaration": "required"
+    },
+    {
+      "id": "unary_required_negative_length_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_nn, 1, -length)) AS r FROM slice_fields WHERE k = 0",
+      "family": "unary_length",
+      "consumer": "is_null",
+      "declaration": "required"
+    },
+    {
+      "id": "unary_required_negative_length_struct",
+      "sql": "SELECT STRUCT(SLICE(a_nn, 1, -length) AS kept_name) AS r FROM slice_fields WHERE k = 0",
+      "family": "unary_length",
+      "consumer": "struct",
+      "declaration": "required"
+    },
+    {
+      "id": "unary_nullable_negative_length_direct",
+      "sql": "SELECT SLICE(a_pe, 1, -nullable_length) AS r FROM slice_fields WHERE k = 0",
+      "family": "unary_length",
+      "consumer": "direct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "unary_nullable_negative_length_is_null",
+      "sql": "SELECT ISNULL(SLICE(a_pe, 1, -nullable_length)) AS r FROM slice_fields WHERE k = 0",
+      "family": "unary_length",
+      "consumer": "is_null",
+      "declaration": "nullable"
+    },
+    {
+      "id": "unary_nullable_negative_length_struct",
+      "sql": "SELECT STRUCT(SLICE(a_pe, 1, -nullable_length) AS kept_name) AS r FROM slice_fields WHERE k = 0",
+      "family": "unary_length",
+      "consumer": "struct",
+      "declaration": "nullable"
+    },
+    {
+      "id": "literal_zero_start_is_null",
+      "sql": "SELECT ISNULL(SLICE(ARRAY(1, 2), 0, 1)) AS r",
+      "family": "constant_consumers",
+      "consumer": "is_null"
+    },
+    {
+      "id": "literal_zero_start_struct",
+      "sql": "SELECT STRUCT(SLICE(ARRAY(1, 2), 0, 1) AS kept_name) AS r",
+      "family": "constant_consumers",
+      "consumer": "struct"
+    },
+    {
+      "id": "empty_provider_constant_zero_start",
+      "sql": "SELECT SLICE(ARRAY(1, 2), 0, 1) AS r FROM slice_empty",
+      "family": "zero_row_constant",
+      "consumer": "direct"
+    },
+    {
+      "id": "literal_negative_length_is_null",
+      "sql": "SELECT ISNULL(SLICE(ARRAY(1, 2), 1, -1)) AS r",
+      "family": "constant_consumers",
+      "consumer": "is_null"
+    },
+    {
+      "id": "literal_negative_length_struct",
+      "sql": "SELECT STRUCT(SLICE(ARRAY(1, 2), 1, -1) AS kept_name) AS r",
+      "family": "constant_consumers",
+      "consumer": "struct"
+    },
+    {
+      "id": "empty_provider_constant_negative_length",
+      "sql": "SELECT SLICE(ARRAY(1, 2), 1, -1) AS r FROM slice_empty",
+      "family": "zero_row_constant",
+      "consumer": "direct"
+    },
+    {
+      "id": "empty_provider_constant_zero_start_is_null",
+      "sql": "SELECT ISNULL(SLICE(ARRAY(1, 2), 0, 1)) AS r FROM slice_empty",
+      "family": "zero_row_constant",
+      "consumer": "is_null"
+    },
+    {
+      "id": "empty_provider_constant_zero_start_struct",
+      "sql": "SELECT STRUCT(SLICE(ARRAY(1, 2), 0, 1) AS kept_name) AS r FROM slice_empty",
+      "family": "zero_row_constant",
+      "consumer": "struct"
+    },
+    {
+      "id": "constant_invalid_dead_case",
+      "sql": "SELECT CASE WHEN FALSE THEN SLICE(ARRAY(1, 2), 0, -1) ELSE ARRAY(9) END AS r",
+      "family": "discarded_branch",
+      "consumer": "direct"
+    },
+    {
+      "id": "provider_condition_constant_invalid_selected",
+      "sql": "SELECT CASE WHEN k = 0 THEN SLICE(ARRAY(1, 2), 0, 1) ELSE ARRAY(9) END AS r FROM slice_fields WHERE k = 0",
+      "family": "conditional_constant",
+      "consumer": "direct",
+      "branch": "selected"
+    },
+    {
+      "id": "provider_condition_constant_invalid_discarded",
+      "sql": "SELECT CASE WHEN k = 0 THEN SLICE(ARRAY(1, 2), 0, 1) ELSE ARRAY(9) END AS r FROM slice_fields WHERE k = 1",
+      "family": "conditional_constant",
+      "consumer": "direct",
+      "branch": "discarded"
+    }
+  ],
+  "identities": [
+    {
+      "id": "literal_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_zero_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "provider_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "literal_both_invalid_min_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_both_invalid_min_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start_max_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_zero_start_max_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_negative_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_after_end_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_after_end_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_before_begin_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_before_begin_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_min_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_min_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_max_start_min_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_max_start_min_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_min_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_min_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_first",
+      "ansi": true
+    },
+    {
+      "id": "literal_last",
+      "ansi": true
+    },
+    {
+      "id": "literal_after_end",
+      "ansi": true
+    },
+    {
+      "id": "literal_last_from_end",
+      "ansi": true
+    },
+    {
+      "id": "literal_first_from_end",
+      "ansi": true
+    },
+    {
+      "id": "literal_before_begin",
+      "ansi": true
+    },
+    {
+      "id": "literal_whole",
+      "ansi": true
+    },
+    {
+      "id": "literal_past_end_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_max_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_start_max_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_min_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_min_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_max_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_max_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_last_max_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_valid_boundaries",
+      "ansi": true
+    },
+    {
+      "id": "literal_empty_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_empty_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_empty_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_empty_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_empty_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "provider_empty_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "literal_empty_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_empty_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_empty_negative_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_empty_negative_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_all_null_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_all_null_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_all_null_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_all_null_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_all_null_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "provider_all_null_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "literal_all_null_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_all_null_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_all_null_negative_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_all_null_negative_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_negative_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_negative_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_start_zero_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_null_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_null_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start_null_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_zero_start_null_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_both_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_both_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_zero_start_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_zero_start_struct",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_zero_start_direct",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_zero_start_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_zero_start_struct",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_negative_length_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_negative_length_struct",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_negative_length_direct",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_negative_length_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_negative_length_struct",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_both_invalid_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_both_invalid_struct",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_both_invalid_direct",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_both_invalid_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_nullable_both_invalid_struct",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_nn_required",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_nn_nullable_start",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_nn_nullable_length",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_nn_nullable_both",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_ne_required",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_ne_nullable_start",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_ne_nullable_length",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_ne_nullable_both",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pn_required",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pn_nullable_start",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pn_nullable_length",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pn_nullable_both",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pe_required",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pe_nullable_start",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pe_nullable_length",
+      "ansi": true
+    },
+    {
+      "id": "fields_a_pe_nullable_both",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_required_columns",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_required_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_required_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_required_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_nullable_columns",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_nullable_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_nullable_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_nullable_both_invalid",
+      "ansi": true
+    },
+    {
+      "id": "literal_bad_array_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "provider_bad_array_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start_bad_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_zero_start_bad_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_bad_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "provider_bad_start_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "literal_both_invalid_bad_array",
+      "ansi": true
+    },
+    {
+      "id": "provider_both_invalid_bad_array",
+      "ansi": true
+    },
+    {
+      "id": "inherited_881_null_array_bad_start",
+      "ansi": true
+    },
+    {
+      "id": "inherited_881_bad_array_null_start",
+      "ansi": true
+    },
+    {
+      "id": "inherited_881_bad_array_null_start_is_null",
+      "ansi": true
+    },
+    {
+      "id": "inherited_881_constant_bad_array_null_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_start_cross_end",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_start_past_end",
+      "ansi": true
+    },
+    {
+      "id": "unary_required_negative_length_direct",
+      "ansi": true
+    },
+    {
+      "id": "unary_required_negative_length_is_null",
+      "ansi": true
+    },
+    {
+      "id": "unary_required_negative_length_struct",
+      "ansi": true
+    },
+    {
+      "id": "unary_nullable_negative_length_direct",
+      "ansi": true
+    },
+    {
+      "id": "unary_nullable_negative_length_is_null",
+      "ansi": true
+    },
+    {
+      "id": "unary_nullable_negative_length_struct",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start_is_null",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start_struct",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_constant_zero_start",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_length_is_null",
+      "ansi": true
+    },
+    {
+      "id": "literal_negative_length_struct",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_constant_negative_length",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_constant_zero_start_is_null",
+      "ansi": true
+    },
+    {
+      "id": "empty_provider_constant_zero_start_struct",
+      "ansi": true
+    },
+    {
+      "id": "constant_invalid_dead_case",
+      "ansi": true
+    },
+    {
+      "id": "provider_condition_constant_invalid_selected",
+      "ansi": true
+    },
+    {
+      "id": "provider_condition_constant_invalid_discarded",
+      "ansi": true
+    },
+    {
+      "id": "literal_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_zero_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "provider_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "literal_both_invalid_min_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_both_invalid_min_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_start_max_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_zero_start_max_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_negative_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_after_end_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_after_end_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_before_begin_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_before_begin_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_min_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_min_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_max_start_min_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_max_start_min_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_min_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_min_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_first",
+      "ansi": false
+    },
+    {
+      "id": "literal_last",
+      "ansi": false
+    },
+    {
+      "id": "literal_after_end",
+      "ansi": false
+    },
+    {
+      "id": "literal_last_from_end",
+      "ansi": false
+    },
+    {
+      "id": "literal_first_from_end",
+      "ansi": false
+    },
+    {
+      "id": "literal_before_begin",
+      "ansi": false
+    },
+    {
+      "id": "literal_whole",
+      "ansi": false
+    },
+    {
+      "id": "literal_past_end_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_max_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_start_max_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_min_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_min_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_max_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_max_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_last_max_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_valid_boundaries",
+      "ansi": false
+    },
+    {
+      "id": "literal_empty_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_empty_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_empty_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_empty_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_empty_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "provider_empty_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "literal_empty_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_empty_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_empty_negative_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_empty_negative_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_all_null_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_all_null_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_all_null_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_all_null_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_all_null_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "provider_all_null_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "literal_all_null_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_all_null_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_all_null_negative_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_all_null_negative_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_negative_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_negative_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_start_zero_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_null_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_null_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_start_null_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_zero_start_null_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_both_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_both_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_zero_start_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_zero_start_struct",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_zero_start_direct",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_zero_start_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_zero_start_struct",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_negative_length_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_negative_length_struct",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_negative_length_direct",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_negative_length_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_negative_length_struct",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_both_invalid_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_both_invalid_struct",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_both_invalid_direct",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_both_invalid_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_nullable_both_invalid_struct",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_nn_required",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_nn_nullable_start",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_nn_nullable_length",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_nn_nullable_both",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_ne_required",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_ne_nullable_start",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_ne_nullable_length",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_ne_nullable_both",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pn_required",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pn_nullable_start",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pn_nullable_length",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pn_nullable_both",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pe_required",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pe_nullable_start",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pe_nullable_length",
+      "ansi": false
+    },
+    {
+      "id": "fields_a_pe_nullable_both",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_required_columns",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_required_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_required_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_required_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_nullable_columns",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_nullable_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_nullable_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_nullable_both_invalid",
+      "ansi": false
+    },
+    {
+      "id": "literal_bad_array_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "provider_bad_array_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_start_bad_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_zero_start_bad_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_bad_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "provider_bad_start_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "literal_both_invalid_bad_array",
+      "ansi": false
+    },
+    {
+      "id": "provider_both_invalid_bad_array",
+      "ansi": false
+    },
+    {
+      "id": "inherited_881_null_array_bad_start",
+      "ansi": false
+    },
+    {
+      "id": "inherited_881_bad_array_null_start",
+      "ansi": false
+    },
+    {
+      "id": "inherited_881_bad_array_null_start_is_null",
+      "ansi": false
+    },
+    {
+      "id": "inherited_881_constant_bad_array_null_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_start_cross_end",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_start_past_end",
+      "ansi": false
+    },
+    {
+      "id": "unary_required_negative_length_direct",
+      "ansi": false
+    },
+    {
+      "id": "unary_required_negative_length_is_null",
+      "ansi": false
+    },
+    {
+      "id": "unary_required_negative_length_struct",
+      "ansi": false
+    },
+    {
+      "id": "unary_nullable_negative_length_direct",
+      "ansi": false
+    },
+    {
+      "id": "unary_nullable_negative_length_is_null",
+      "ansi": false
+    },
+    {
+      "id": "unary_nullable_negative_length_struct",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_start_is_null",
+      "ansi": false
+    },
+    {
+      "id": "literal_zero_start_struct",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_constant_zero_start",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_length_is_null",
+      "ansi": false
+    },
+    {
+      "id": "literal_negative_length_struct",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_constant_negative_length",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_constant_zero_start_is_null",
+      "ansi": false
+    },
+    {
+      "id": "empty_provider_constant_zero_start_struct",
+      "ansi": false
+    },
+    {
+      "id": "constant_invalid_dead_case",
+      "ansi": false
+    },
+    {
+      "id": "provider_condition_constant_invalid_selected",
+      "ansi": false
+    },
+    {
+      "id": "provider_condition_constant_invalid_discarded",
+      "ansi": false
+    }
+  ],
+  "capture_script_sha256": "e6eec5d94ed2755689629296bf13113272133f931f16ce268962c594d789abd2"
+}
