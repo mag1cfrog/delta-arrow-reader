@@ -237,6 +237,76 @@ async fn preserve_accepted_query_outcomes() -> TestResult {
 }
 
 #[test]
+fn unary_negation_corrections_preserve_the_recorded_contract() -> TestResult {
+    let references = include_str!("fixtures/unary-negate-fields/historical/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(references.len(), 6);
+    let corrections: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/reviewed-corrections.json"))?;
+    let parallel_errors: BTreeMap<String, Value> =
+        serde_json::from_str(include_str!("fixtures/parallel-error-outcomes.json"))?;
+    let reader = std::io::BufReader::new(GzDecoder::new(
+        &include_bytes!("fixtures/accepted-runtime.jsonl.gz")[..],
+    ));
+    let schema = json!({"type":"struct","fields":[{
+        "name":"r","type":"long","nullable":false,"metadata":{}
+    }]});
+    let mut checked = std::collections::BTreeSet::new();
+    for line in reader.lines() {
+        let original: RecordedQuery = serde_json::from_str(&line?)?;
+        let Some(reference) = references[1..]
+            .iter()
+            .find(|reference| reference["id"].as_str() == Some(original.id.as_str()))
+        else {
+            continue;
+        };
+        assert!(checked.insert(original.id.clone()));
+        assert_eq!(reference["sql"], original.sql);
+        assert_eq!(reference["ansi"], original.ansi);
+        assert_eq!(original.batch_size, 1);
+        assert!(!parallel_errors.contains_key(&original.id));
+        assert_eq!(reference["expected"]["schema"], schema);
+        for stage in ["public", "analyzed", "optimized", "executed_before_collect", "executed"] {
+            assert_eq!(reference["schema_stages"][stage], schema, "{stage}");
+        }
+        let mut spark_rows = reference["expected"]["rows"]
+            .as_array()
+            .ok_or("missing Spark rows")?
+            .clone();
+        spark_rows.sort_by_cached_key(Value::to_string);
+        assert_eq!(json!(spark_rows), original.expected["rows"]);
+        let corrected = corrections.get(&original.id).ok_or("missing unary correction")?;
+        let mut expected = original.expected.clone();
+        expected["logical_nullable"] = json!([false]);
+        expected["physical_nullable"] = json!([false]);
+        assert_eq!(*corrected, expected);
+        let mut query = original.clone();
+        query.expected = corrected.clone();
+        assert!(matches_recorded_outcome(&query, corrected, &parallel_errors));
+        assert!(!matches_recorded_outcome(&query, &original.expected, &parallel_errors));
+        for (field, value) in [
+            ("logical_nullable", json!([true])),
+            ("physical_nullable", json!([true])),
+            ("rows", json!([["wrong value"]])),
+            ("types", json!(["Int32"])),
+            ("output_names", json!(["wrong_name"])),
+            ("status", json!("execution_error")),
+        ] {
+            let mut wrong = corrected.clone();
+            wrong[field] = value;
+            assert!(!matches_recorded_outcome(&query, &wrong, &parallel_errors), "{field}");
+        }
+    }
+    assert_eq!(checked.len(), 5);
+    assert_eq!(checked, references[1..].iter().map(|reference| {
+        reference["id"].as_str().ok_or("missing reference ID").map(str::to_owned)
+    }).collect::<Result<std::collections::BTreeSet<_>, _>>()?);
+    Ok(())
+}
+
+#[test]
 fn integral_cast_corrections_require_the_condition_and_original_contract() -> TestResult {
     let mut conditions: BTreeMap<String, usize> = serde_json::from_str(include_str!(
         "fixtures/reviewed-integral-cast-conditions.json"

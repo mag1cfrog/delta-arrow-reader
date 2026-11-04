@@ -35,3 +35,24 @@ normalized. Their raw `matches` and `error_matches` flags remain false: live
 overflow errors lack Spark's condition, and constant overflow also fails at the
 wrong stage. Field and value comparisons remain exact. Guard tests reject
 changed fields, metadata, rows, errors, phases, reference content and extra keys.
+
+## Historical replay corrections
+
+`historical/` contains five queries selected from the frozen
+`accepted-runtime.jsonl.gz` archive, SHA256
+`4a6de91a60bd9d6db19e8c373e33e45bb393f9f767316d88c41547edd612a271`.
+Its input-only manifest identifies each original query and ANSI mode. The
+correction test verifies those identities, SQL, unchanged row multisets and full
+replacement outcomes against the original archive.
+
+The historical capture files have these SHA256 values:
+
+- `historical/capture_spark.py`: `58dcd47d10a8689ee7131d2af6acc199051786c8f2941a9082eab55d46761cf1`
+- `historical/manifest.json`: `00aa90aa2bad307dd14cb8065e23497e54d1626725aa39b7b5fbfd099eeb6ff2`
+- `historical/spark-reference.jsonl`: `f4f0fd667aa9f284fef9d068618bb5d6d34ee22ee6ef3eaa3fdbde185a7ff8f5`
+
+For all five queries, every schema stage retains the name `r`, BIGINT type and
+empty metadata, with nullability set to false. The full-stage
+replay requires exact matches at batch sizes 1 and 32. The five reviewed corpus
+corrections change only nullability; the compressed source and every existing
+correction stay unchanged.

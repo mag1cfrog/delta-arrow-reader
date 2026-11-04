@@ -5,6 +5,18 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Unary negation result fields
+
+`unary-negate-fields/historical/spark-reference.jsonl` captures five exact
+historical queries from the pinned Spark 4.2.0 build. Complete schemas at all five
+stages declare a required BIGINT result with empty metadata. The five complete
+`reviewed-corrections.json` entries update logical nullability; four also update
+physical nullability. Status, types, rows and output names retain their original
+expectations. The correction discriminator checks the original corpus contract,
+and the full-stage replay checks these references at batch sizes 1 and 32. The
+[unary fixture notes](unary-negate-fields/README.md#historical-replay-corrections)
+record capture provenance. The compressed historical corpus remains unchanged.
+
 ## Scalar CASE explicit ELSE
 
 `case-explicit-else/case-explicit-else-spark.jsonl` records 58 independent

@@ -127,6 +127,60 @@ async fn unary_negate_fields_match_spark() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn historical_unary_negate_fields_match_spark() -> TestResult {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/unary-negate-fields/historical/manifest.json"
+    ))?;
+    let records = include_str!("fixtures/unary-negate-fields/historical/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(manifest["observation_count"], 5);
+    assert_eq!(records.len(), 6);
+    for key in ["spark_version", "spark_revision", "timezone", "group"] {
+        assert_eq!(records[0][key], manifest[key], "{key}");
+    }
+    assert_eq!(records[0]["capture_sha256"], manifest["capture_script_sha256"]);
+    assert_eq!(json!(records[1..].iter().map(|case| {
+        json!({"id":case["id"],"ansi":case["ansi"]})
+    }).collect::<Vec<_>>()), manifest["identities"]);
+    for (case, definition) in records[1..].iter().zip(
+        manifest["scenarios"].as_array().ok_or("missing scenarios")?,
+    ) {
+        for (key, value) in definition.as_object().ok_or("missing definition")? {
+            assert_eq!(&case[key], value, "{} {key}", case["id"]);
+        }
+    }
+    let mut completed = std::collections::BTreeSet::new();
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2)),
+            )
+            .build(),
+        );
+        for case in &records[1..] {
+            let mut comparison = spark_results::compare_exact_spark_query_stages_with_optimized(&session, case).await?;
+            comparison["group"] = records[0]["group"].clone();
+            comparison["id"] = case["id"].clone();
+            comparison["ansi"] = case["ansi"].clone();
+            comparison["batch"] = json!(batch_size);
+            assert!(completed.insert((case["id"].as_str().ok_or("missing ID")?, batch_size)));
+            eprintln!("UNARY_NEGATE_HISTORICAL_OBSERVATION {comparison}");
+            if comparison["matches"] != true || comparison["optimized_matches"] != true {
+                differences.push(format!("{} batch={batch_size}: {comparison}", case["id"]));
+            }
+        }
+    }
+    assert_eq!(completed.len(), 10);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
 #[test]
 fn inherited_unary_overflow_controls_reject_new_differences() -> TestResult {
     let references = include_str!("fixtures/unary-negate-fields/spark-reference.jsonl")
