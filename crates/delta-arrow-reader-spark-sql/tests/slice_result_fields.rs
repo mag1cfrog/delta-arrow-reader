@@ -526,12 +526,36 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
             session.register_udf(ScalarUDF::from(SliceBoundary { volatile, fail }));
             for ansi in [true, false] {
                 for (id, sql, reached) in [
-                    ("array_argument", "SELECT SLICE(slice_boundary(ARRAY(1, 2)), 1, 1) AS r", true),
-                    ("start_argument", "SELECT SLICE(ARRAY(1, 2), slice_boundary(1), 1) AS r", true),
-                    ("length_argument", "SELECT SLICE(ARRAY(1, 2), 1, slice_boundary(1)) AS r", true),
-                    ("parent", "SELECT slice_boundary(SLICE(ARRAY(1, 2), 1, 1)) AS r", true),
-                    ("discarded_case", "SELECT CASE WHEN false THEN SLICE(ARRAY(1, 2), slice_boundary(0), 1) ELSE ARRAY(9) END AS r", false),
-                    ("unrelated_neighbor", "SELECT CASE WHEN false THEN slice_boundary(1) ELSE 7 END AS r, SLICE(ARRAY(1, 2), 1, 1) AS neighbor", false),
+                    (
+                        "array_argument",
+                        "SELECT SLICE(slice_boundary(ARRAY(1, 2)), 1, 1) AS r",
+                        true,
+                    ),
+                    (
+                        "start_argument",
+                        "SELECT SLICE(ARRAY(1, 2), slice_boundary(1), 1) AS r",
+                        true,
+                    ),
+                    (
+                        "length_argument",
+                        "SELECT SLICE(ARRAY(1, 2), 1, slice_boundary(1)) AS r",
+                        true,
+                    ),
+                    (
+                        "parent",
+                        "SELECT slice_boundary(SLICE(ARRAY(1, 2), 1, 1)) AS r",
+                        true,
+                    ),
+                    (
+                        "discarded_case",
+                        "SELECT CASE WHEN false THEN SLICE(ARRAY(1, 2), slice_boundary(0), 1) ELSE ARRAY(9) END AS r",
+                        false,
+                    ),
+                    (
+                        "unrelated_neighbor",
+                        "SELECT CASE WHEN false THEN slice_boundary(1) ELSE 7 END AS r, SLICE(ARRAY(1, 2), 1, 1) AS neighbor",
+                        false,
+                    ),
                 ] {
                     INVOCATIONS.store(0, Ordering::SeqCst);
                     SIMPLIFICATIONS.store(0, Ordering::SeqCst);
@@ -540,13 +564,20 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                         "volatile":volatile,"fail":fail,"planning":null,"physical":null,
                         "collection":null,"public_schema":null,"physical_schema":null,"rows":null});
                     let result = capture_slice_observation(async {
-                        let query = plan_query(&session, sql, &SparkSqlOptions {
-                            ansi_mode: ansi, ..Default::default()
-                        }).await;
+                        let query = plan_query(
+                            &session,
+                            sql,
+                            &SparkSqlOptions {
+                                ansi_mode: ansi,
+                                ..Default::default()
+                            },
+                        )
+                        .await;
                         observation["planning"] = phase_observation(&query);
                         let query = query?;
                         observation["public_schema"] = spark_results::capture_schema(
-                            query.logical_plan.schema().fields(), Some(&query.column_names),
+                            query.logical_plan.schema().fields(),
+                            Some(&query.column_names),
                         )?;
                         phase = "physical";
                         let physical = query.create_physical_plan(&session).await;
@@ -556,7 +587,8 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                         observation["physical_schema"] =
                             spark_results::capture_schema(schema.fields(), None)?;
                         phase = "collect";
-                        let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await;
+                        let batches =
+                            datafusion::physical_plan::collect(physical, session.task_ctx()).await;
                         observation["collection"] = phase_observation(&batches);
                         let batches = batches?;
                         phase = "encode";
@@ -564,14 +596,21 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                         for batch in batches {
                             spark_results::validate_batch(schema.as_ref(), &batch)?;
                             for row in 0..batch.num_rows() {
-                                rows.push(batch.columns().iter().map(|column| {
-                                    spark_results::encode_value(column.as_ref(), row)
-                                }).collect::<TestResult<Vec<_>>>()?);
+                                rows.push(
+                                    batch
+                                        .columns()
+                                        .iter()
+                                        .map(|column| {
+                                            spark_results::encode_value(column.as_ref(), row)
+                                        })
+                                        .collect::<TestResult<Vec<_>>>()?,
+                                );
                             }
                         }
                         observation["rows"] = json!(rows);
                         Ok(Value::Null)
-                    }).await;
+                    })
+                    .await;
                     observation["phase"] = json!(phase);
                     observation["error"] = json!(result.as_ref().err().map(ToString::to_string));
                     if let Ok(value) = &result
@@ -588,9 +627,10 @@ async fn slice_constant_validation_respects_extension_folding_boundaries() -> Te
                     let runtime_invocations = observation["collection"]["invocations"].as_u64();
                     let expected_error = reached && fail;
                     let outcome_matches = if expected_error {
-                        phase == "collect" && observation["error"].as_str().is_some_and(|error| {
-                            error.contains("SLICE extension boundary was invoked")
-                        })
+                        phase == "collect"
+                            && observation["error"].as_str().is_some_and(|error| {
+                                error.contains("SLICE extension boundary was invoked")
+                            })
                     } else {
                         phase == "encode" && result.is_ok() && observation["rows"] == expected_rows
                     };
