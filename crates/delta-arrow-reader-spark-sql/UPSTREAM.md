@@ -753,3 +753,22 @@ metadata at both stages. The [projection references](tests/fixtures/README.md#pr
 check complete fields, values and returned batches. Correlated scalar fields use
 the metadata lifetime described above. Wider declaration compatibility and
 naming/grammar gaps remain separate work under their existing owners.
+
+
+### REGEXP_REPLACE exact empty pattern
+
+The Spark replacement adapter handles an exact empty pattern with UTF-16 unit
+positions and Java's one-unit empty-match progression. It builds the complete
+result, including the untouched prefix, before encoding unpaired surrogates as
+`?`. Empty replacements and `$0` preserve adjacent surrogate pairs. Existing
+replacement parsing remains lazy, and noninitial positions at or past the end
+leave the source unchanged. NULL admission, declared Arrow string storage and
+native DataFusion regex behavior retain their existing paths.
+
+Nonempty patterns continue through the native regex matcher. Optional patterns,
+nonword boundaries and nonempty regions starting inside a surrogate pair remain
+tracked by #798. Java-only pattern support, SQL literal preprocessing, position
+coercion and malformed-byte STRING representation retain their separate owners.
+The [replacement references](tests/fixtures/regexp-replace-README.md) preserve all
+518 frozen records, complete fields, errors, code-point controls and the strict
+remaining compatibility differences.
