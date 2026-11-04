@@ -459,7 +459,7 @@ pub(crate) fn prune_coalesce_declaration_cast(
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum ResultCast {
-    Identity,
+    Identity(DataType),
     List {
         target: DataType,
         element: Box<Self>,
@@ -478,7 +478,7 @@ impl ResultCast {
         context: &FunctionContextInput<'_>,
     ) -> PlanResult<Self> {
         if source == target {
-            return Ok(Self::Identity);
+            return Ok(Self::Identity(target.clone()));
         }
         if let (Some(source), Some(target_field)) = (list_field(source), list_field(target)) {
             return Ok(Self::List {
@@ -516,7 +516,16 @@ impl ResultCast {
 
     fn cast_array(&self, array: &ArrayRef) -> Result<ArrayRef> {
         match self {
-            Self::Identity => Ok(array.clone()),
+            Self::Identity(target) => {
+                // Folding can refine declarations after conversion planning.
+                if !same_value_type(array.data_type(), target) {
+                    return datafusion_common::internal_err!(
+                        "nested identity cast received incompatible value type {}, expected {target}",
+                        array.data_type()
+                    );
+                }
+                Ok(arrow::compute::cast(array.as_ref(), target)?)
+            }
             Self::Leaf(expression) => {
                 let batch = RecordBatch::try_from_iter([("value", array.clone())])?;
                 expression.evaluate(&batch)?.into_array(array.len())
@@ -846,6 +855,67 @@ mod tests {
             vec![None; 3]
         );
         result.to_data().validate_full()?;
+        Ok(())
+    }
+
+    #[test]
+    fn nested_identity_cast_restores_planned_fields_after_child_folding() -> PlanResult<()> {
+        use arrow::array::Float64Array;
+        use arrow::datatypes::Float64Type;
+
+        let session = SessionContext::new();
+        let config = Arc::new(crate::config::PlanConfig::default());
+        let schema = Arc::new(DFSchema::empty());
+        let context = FunctionContextInput {
+            argument_display_names: &[], plan_config: &config,
+            session_context: &session, schema: &schema,
+        };
+        let values: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Float64, false)),
+            OffsetBuffer::from_lengths([1, 0, 1]),
+            Arc::new(Float64Array::from(vec![1.0, 2.0])),
+            Some(NullBuffer::from(vec![true, false, true])),
+        )?);
+        let target_list = DataType::List(Arc::new(Field::new_list_field(DataType::Float64, true)
+            .with_metadata([("origin".into(), "planned-item".into())].into())));
+        let structure: ArrayRef = Arc::new(StructArray::try_new(
+            vec![Field::new("x", values.data_type().clone(), true)].into(), vec![values.clone()], None,
+        )?);
+        let target_struct = DataType::Struct(vec![Field::new("x", target_list.clone(), true)
+            .with_metadata([("origin".into(), "planned-struct".into())].into())].into());
+        let outer: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(structure.data_type().clone(), false)),
+            OffsetBuffer::from_lengths([1; 3]), structure.clone(), None,
+        )?);
+        let target_outer = DataType::List(Arc::new(Field::new_list_field(target_struct.clone(), true)));
+        for (runtime, target) in [(values, target_list.clone()), (structure, target_struct), (outer, target_outer)] {
+            let conversion = ResultCast::new(&target, &target, &context)?;
+            for (offset, len) in [(0, 3), (1, 2), (1, 0)] {
+                let input = runtime.slice(offset, len);
+                let actual = conversion.cast_array(&input)?;
+                actual.to_data().validate_full()?;
+                assert_eq!(actual.data_type(), &target);
+                assert_eq!(actual.len(), len);
+                assert_eq!(actual.nulls(), input.nulls());
+                let leaf = match actual.data_type() {
+                    DataType::Struct(_) => actual.as_struct().column(0).clone(),
+                    DataType::List(field) if matches!(field.data_type(), DataType::Struct(_)) =>
+                        list_values(actual.as_ref())?.as_struct().column(0).clone(),
+                    _ => actual,
+                };
+                assert_eq!(list_values(leaf.as_ref())?.as_primitive::<Float64Type>().values().as_ref(),
+                    match (offset, len) { (0, 3) => &[1.0, 2.0][..], (1, 2) => &[2.0][..], _ => &[][..] });
+            }
+        }
+        let wrong_leaf: ArrayRef = Arc::new(Int64Array::from(vec![1]));
+        let wrong_list: ArrayRef = Arc::new(ListArray::try_new(
+            Arc::new(Field::new_list_field(DataType::Int64, false)),
+            OffsetBuffer::from_lengths([1]), wrong_leaf.clone(), None,
+        )?);
+        for (input, target) in [(wrong_leaf, DataType::Float64), (wrong_list, target_list)] {
+            let error = ResultCast::new(&target, &target, &context)?.cast_array(&input).unwrap_err();
+            assert!(error.to_string().contains("nested identity cast received incompatible value type"));
+        }
         Ok(())
     }
 
