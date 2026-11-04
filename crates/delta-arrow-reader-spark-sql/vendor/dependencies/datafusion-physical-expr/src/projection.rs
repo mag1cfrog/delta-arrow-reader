@@ -30,7 +30,8 @@ use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion_common::stats::{ColumnStatistics, Precision};
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{
-    Result, ScalarValue, Statistics, assert_or_internal_err, internal_datafusion_err, plan_err,
+    Result, ScalarValue, Statistics, assert_or_internal_err, internal_datafusion_err,
+    plan_err,
 };
 
 use datafusion_physical_expr_common::metrics::ExecutionPlanMetricsSet;
@@ -86,7 +87,10 @@ impl ProjectionExpr {
     }
 
     /// Create a new projection expression from an expression and a schema using the expression's output field name as alias.
-    pub fn new_from_expression(expr: Arc<dyn PhysicalExpr>, schema: &Schema) -> Result<Self> {
+    pub fn new_from_expression(
+        expr: Arc<dyn PhysicalExpr>,
+        schema: &Schema,
+    ) -> Result<Self> {
         let field = expr.return_field(schema)?;
         Ok(Self {
             expr,
@@ -240,7 +244,10 @@ impl ProjectionExprs {
     }
 
     /// Creates a ProjectionMapping from this projection
-    pub fn projection_mapping(&self, input_schema: &SchemaRef) -> Result<ProjectionMapping> {
+    pub fn projection_mapping(
+        &self,
+        input_schema: &SchemaRef,
+    ) -> Result<ProjectionMapping> {
         ProjectionMapping::try_new(
             self.exprs
                 .iter()
@@ -482,7 +489,10 @@ impl ProjectionExprs {
     /// * a projection `c1 + c2 as c1_c2`
     ///
     /// This method would rewrite the expression to `c1 + c2 > 5`
-    pub fn unproject_expr(&self, expr: &Arc<dyn PhysicalExpr>) -> Result<Arc<dyn PhysicalExpr>> {
+    pub fn unproject_expr(
+        &self,
+        expr: &Arc<dyn PhysicalExpr>,
+    ) -> Result<Arc<dyn PhysicalExpr>> {
         update_expr(expr, &self.exprs, true)?.ok_or_else(|| {
             internal_datafusion_err!(
                 "Failed to unproject an expression {} with ProjectionExprs {}",
@@ -499,7 +509,10 @@ impl ProjectionExprs {
     /// * a projection `c1 + c2 as c1_c2`
     ///
     /// * This method would rewrite the expression to `c1_c2 > 5`
-    pub fn project_expr(&self, expr: &Arc<dyn PhysicalExpr>) -> Result<Arc<dyn PhysicalExpr>> {
+    pub fn project_expr(
+        &self,
+        expr: &Arc<dyn PhysicalExpr>,
+    ) -> Result<Arc<dyn PhysicalExpr>> {
         update_expr(expr, &self.exprs, false)?.ok_or_else(|| {
             internal_datafusion_err!(
                 "Failed to project an expression {} with ProjectionExprs {}",
@@ -672,7 +685,8 @@ impl ProjectionExprs {
                     let distinct_count = Precision::Exact(1);
                     let null_count = Precision::Exact(0);
 
-                    let byte_size = if let Some(byte_width) = data_type.primitive_width() {
+                    let byte_size = if let Some(byte_width) = data_type.primitive_width()
+                    {
                         stats.num_rows.multiply(&Precision::Exact(byte_width))
                     } else {
                         // Complex types depend on array encoding, so set to Absent
@@ -700,7 +714,10 @@ impl ProjectionExprs {
                     }
                 }
             } else {
-                project_column_statistics_through_expr(expr.as_ref(), &stats.column_statistics)
+                project_column_statistics_through_expr(
+                    expr.as_ref(),
+                    &stats.column_statistics,
+                )
             };
             column_statistics.push(col_stats);
         }
@@ -724,7 +741,8 @@ fn project_column_statistics_through_expr(
     let Some(cast_expr) = expr.downcast_ref::<CastExpr>() else {
         return ColumnStatistics::new_unknown();
     };
-    let inner_stats = project_column_statistics_through_expr(cast_expr.expr.as_ref(), column_stats);
+    let inner_stats =
+        project_column_statistics_through_expr(cast_expr.expr.as_ref(), column_stats);
     let target_type = cast_expr.cast_type();
     ColumnStatistics {
         min_value: inner_stats
@@ -784,7 +802,11 @@ impl Projector {
     /// be tracked inside `ExecutionPlanMetricsSet`
     ///
     /// See [`ExpressionEvaluatorMetrics`] for details.
-    pub fn with_metrics(&self, metrics: &ExecutionPlanMetricsSet, partition: usize) -> Self {
+    pub fn with_metrics(
+        &self,
+        metrics: &ExecutionPlanMetricsSet,
+        partition: usize,
+    ) -> Self {
         let expr_metrics = self
             .projection
             .create_expression_metrics(metrics, partition);
@@ -809,11 +831,17 @@ impl Projector {
         )?;
 
         if arrays.is_empty() {
-            let options = RecordBatchOptions::new().with_row_count(Some(batch.num_rows()));
-            RecordBatch::try_new_with_options(Arc::clone(&self.output_schema), arrays, &options)
-                .map_err(Into::into)
+            let options =
+                RecordBatchOptions::new().with_row_count(Some(batch.num_rows()));
+            RecordBatch::try_new_with_options(
+                Arc::clone(&self.output_schema),
+                arrays,
+                &options,
+            )
+            .map_err(Into::into)
         } else {
-            RecordBatch::try_new(Arc::clone(&self.output_schema), arrays).map_err(Into::into)
+            RecordBatch::try_new(Arc::clone(&self.output_schema), arrays)
+                .map_err(Into::into)
         }
     }
 
@@ -821,7 +849,10 @@ impl Projector {
     /// failure. Later outputs see only the still-reachable input prefix; ties
     /// keep the earlier output's error. Opaque errors are returned unchanged.
     /// Invalid prefix shapes and output-schema mismatches are returned as errors.
-    pub fn project_batch_until_error(&self, batch: &RecordBatch) -> Result<ProjectedRowPrefix> {
+    pub fn project_batch_until_error(
+        &self,
+        batch: &RecordBatch,
+    ) -> Result<ProjectedRowPrefix> {
         let mut rows = batch.num_rows();
         let mut failure = None;
         let mut values = Vec::with_capacity(self.projection.exprs.len());
@@ -851,11 +882,13 @@ impl Projector {
         let mut arrays = values
             .into_iter()
             .map(|value| match value {
-                datafusion_expr::ColumnarValue::Array(array) => Ok(if array.len() == rows {
-                    array
-                } else {
-                    array.slice(0, rows)
-                }),
+                datafusion_expr::ColumnarValue::Array(array) => {
+                    Ok(if array.len() == rows {
+                        array
+                    } else {
+                        array.slice(0, rows)
+                    })
+                }
                 scalar => scalar.into_array_of_size(rows),
             })
             .collect::<Result<Vec<ArrayRef>>>()?;
@@ -1159,7 +1192,8 @@ impl ProjectionMapping {
                     .map(|arg| arg.downcast_ref::<Literal>().map(|l| l.value().clone()))
                     .collect();
 
-                if let Some(field_mapping) = func_expr.fun().struct_field_mapping(&literal_args)
+                if let Some(field_mapping) =
+                    func_expr.fun().struct_field_mapping(&literal_args)
                     && let DataType::Struct(struct_fields) = func_expr.return_type()
                 {
                     for (accessor_args, source_arg_idx) in &field_mapping.fields {
@@ -1168,11 +1202,9 @@ impl ProjectionMapping {
                         // Build accessor args: [target_col, ...field_name_literals]
                         let mut accessor_fn_args: Vec<Arc<dyn PhysicalExpr>> =
                             vec![Arc::clone(&target_expr)];
-                        accessor_fn_args.extend(
-                            accessor_args.iter().map(|sv| {
-                                Arc::new(Literal::new(sv.clone())) as Arc<dyn PhysicalExpr>
-                            }),
-                        );
+                        accessor_fn_args.extend(accessor_args.iter().map(|sv| {
+                            Arc::new(Literal::new(sv.clone())) as Arc<dyn PhysicalExpr>
+                        }));
 
                         // Look up the field's return type from the struct schema
                         let return_field = accessor_args
@@ -1250,7 +1282,10 @@ impl FromIterator<(Arc<dyn PhysicalExpr>, ProjectionTargets)> for ProjectionMapp
 ///
 /// See [project_ordering] for the semantics of projecting a single
 /// [LexOrdering].
-pub fn project_orderings(orderings: &[LexOrdering], schema: &SchemaRef) -> Vec<LexOrdering> {
+pub fn project_orderings(
+    orderings: &[LexOrdering],
+    schema: &SchemaRef,
+) -> Vec<LexOrdering> {
     let mut projected_orderings = vec![];
 
     for ordering in orderings {
@@ -1289,7 +1324,10 @@ pub fn project_orderings(orderings: &[LexOrdering], schema: &SchemaRef) -> Vec<L
 /// schema only contains b and not a. The result will be `Some([col("a@0")])`. In other
 /// words, the column reference is reindexed to match the projected schema.
 /// If neither a nor b is present, the result will be None.
-pub fn project_ordering(ordering: &LexOrdering, schema: &SchemaRef) -> Option<LexOrdering> {
+pub fn project_ordering(
+    ordering: &LexOrdering,
+    schema: &SchemaRef,
+) -> Option<LexOrdering> {
     let mut projected_exprs = vec![];
     for PhysicalSortExpr { expr, options } in ordering.iter() {
         let transformed = Arc::clone(expr).transform_up(|expr| {
@@ -1819,7 +1857,8 @@ pub(crate) mod tests {
             ),
         ];
 
-        for (idx, (orderings, proj_exprs, expected)) in test_cases.into_iter().enumerate() {
+        for (idx, (orderings, proj_exprs, expected)) in test_cases.into_iter().enumerate()
+        {
             let mut eq_properties = EquivalenceProperties::new(Arc::clone(&schema));
 
             let orderings = convert_to_orderings(&orderings);
@@ -1836,7 +1875,9 @@ pub(crate) mod tests {
                 .map(|ordering| {
                     ordering
                         .into_iter()
-                        .map(|(name, options)| (col(name, &output_schema).unwrap(), options))
+                        .map(|(name, options)| {
+                            (col(name, &output_schema).unwrap(), options)
+                        })
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
@@ -2778,8 +2819,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
@@ -2831,8 +2874,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
@@ -2874,8 +2919,10 @@ pub(crate) mod tests {
             alias: "casted".to_string(),
         }]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         assert_eq!(
             output_stats.column_statistics[0].min_value,
@@ -2906,8 +2953,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
@@ -2929,8 +2978,10 @@ pub(crate) mod tests {
 
         let projection = ProjectionExprs::new(vec![]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
@@ -2962,8 +3013,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
@@ -3028,8 +3081,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         assert_eq!(
             output_stats.column_statistics[0].sum_value,
@@ -3057,8 +3112,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
@@ -3114,7 +3171,9 @@ pub(crate) mod tests {
         // Projection with Utf8 literal (complex type): SELECT 'hello' AS text, col0 AS num
         let projection = ProjectionExprs::new(vec![
             ProjectionExpr {
-                expr: Arc::new(Literal::new(ScalarValue::Utf8(Some("hello".to_string())))),
+                expr: Arc::new(Literal::new(ScalarValue::Utf8(Some(
+                    "hello".to_string(),
+                )))),
                 alias: "text".to_string(),
             },
             ProjectionExpr {
@@ -3123,8 +3182,10 @@ pub(crate) mod tests {
             },
         ]);
 
-        let output_stats = projection
-            .project_statistics(input_stats, &projection.project_schema(&input_schema)?)?;
+        let output_stats = projection.project_statistics(
+            input_stats,
+            &projection.project_schema(&input_schema)?,
+        )?;
 
         // Row count should be preserved
         assert_eq!(output_stats.num_rows, Precision::Exact(5));
