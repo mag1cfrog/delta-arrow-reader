@@ -121,7 +121,8 @@ async fn spark_configuration_preserves_native_unary_negation() -> TestResult {
         ] {
             let expected = spark_results::capture_native_query_observation(&native, sql).await?;
             let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
-            let observation = json!({"sql":sql,"batch":batch_size,"native":expected,"configured":actual});
+            let observation =
+                json!({"sql":sql,"batch":batch_size,"native":expected,"configured":actual});
             eprintln!("UNARY_NEGATE_NATIVE_OBSERVATION {observation}");
             assert!(observation["native"]["error"].is_null(), "{observation}");
             assert_eq!(observation["native"]["phase"], "encode", "{observation}");
@@ -129,7 +130,10 @@ async fn spark_configuration_preserves_native_unary_negation() -> TestResult {
                 assert!(observation["native"][stage].is_object(), "{observation}");
             }
             assert!(observation["native"]["rows"].is_array(), "{observation}");
-            assert_eq!(observation["configured"], observation["native"], "{observation}");
+            assert_eq!(
+                observation["configured"], observation["native"],
+                "{observation}"
+            );
         }
     }
     Ok(())
