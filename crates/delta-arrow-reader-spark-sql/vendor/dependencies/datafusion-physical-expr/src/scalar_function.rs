@@ -81,7 +81,16 @@ impl ScalarFunctionExpr {
         let mut args = Vec::with_capacity(self.args.len());
         for expr in &self.args {
             let value = match &active {
-                Some(mask) => expr.evaluate_selection(batch, mask)?,
+                Some(mask) => {
+                    if let Some(literal) = expr.downcast_ref::<Literal>()
+                        && mask.has_true()
+                    {
+                        // Reuse the stored scalar instead of filtering the whole input batch.
+                        ColumnarValue::Scalar(literal.value().clone())
+                    } else {
+                        expr.evaluate_selection(batch, mask)?
+                    }
+                }
                 None => expr.evaluate(batch)?,
             };
             match &value {
