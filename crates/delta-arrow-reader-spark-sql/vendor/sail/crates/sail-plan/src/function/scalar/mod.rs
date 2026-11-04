@@ -2,7 +2,7 @@ pub(crate) use array::SparkArraySlice;
 pub(crate) use collection::lower_runtime_concat;
 pub(crate) use lambda::{get_lambda_parameters, is_higher_order_function};
 pub(crate) use string::{
-    lower_runtime_substring, preserve_local_case_conversion, simplify_projected_case_conversions,
+    lower_runtime_regexp_extract, lower_runtime_substring, preserve_local_case_conversion, simplify_projected_case_conversions,
 };
 
 use crate::function::common::ScalarFunction;

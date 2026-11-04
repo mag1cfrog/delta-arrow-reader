@@ -331,6 +331,23 @@ pub(crate) fn lower_runtime_substring(
     substring_lambdas(expression)
 }
 
+pub(crate) fn lower_runtime_regexp_extract(expression: expr::Expr) -> PlanResult<Transformed<expr::Expr>> {
+    let expr::Expr::ScalarFunction(function) = &expression else {
+        return Ok(Transformed::no(expression));
+    };
+    let Some(extract) = function.func.inner().downcast_ref::<SparkRegexpExtract>()
+        .filter(|extract| extract.has_null_short_circuit()) else {
+        return Ok(Transformed::no(expression));
+    };
+    if function.args.len() != 3 { return Ok(Transformed::no(expression)); }
+    let arguments = function.args.iter().cloned()
+        .map(|argument| lambda_with_fresh_parameter(argument, "_regexp_extract"))
+        .collect::<PlanResult<Vec<_>>>()?;
+    Ok(Transformed::yes(expr::Expr::HigherOrderFunction(expr::HigherOrderFunction::new(
+        Arc::new(HigherOrderUDF::new_from_impl(extract.clone())), arguments,
+    ))))
+}
+
 fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
     if args.len() == 4
         && matches!(

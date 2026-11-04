@@ -3,23 +3,26 @@ use std::sync::Arc;
 
 use datafusion::arrow::array::{
     Array, ArrayRef, GenericStringArray, Int64Array, ListArray, ListBuilder, OffsetSizeTrait,
-    StringBuilder, StringViewArray,
+    StringBuilder, StringViewArray, new_null_array,
 };
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion_common::tree_node::TreeNode;
 use datafusion_common::utils::take_function_args;
-use datafusion_common::{Result, ScalarValue};
+use datafusion_common::{Result, ScalarValue, exec_err};
 use datafusion_expr::function::Hint;
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
-use datafusion_expr::{Expr, ExprSchemable, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl};
+use datafusion_expr::{Expr, ExprSchemable, HigherOrderFunctionArgs, HigherOrderReturnFieldArgs,
+    HigherOrderSignature, HigherOrderUDFImpl, LambdaParametersProgress, ReturnFieldArgs,
+    ScalarFunctionArgs, ScalarUDFImpl, ValueOrLambda};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::signature::{Signature, Volatility};
 use regex::Regex;
 
 use crate::error::{generic_exec_err, generic_internal_err, unsupported_data_types_exec_err};
-use crate::functions_nested_utils::opt_downcast_arg;
+use crate::functions_nested_utils::{evaluate_lambdas_until_null, opt_downcast_arg, scatter_active_rows};
 use crate::functions_utils::{StrMemo, make_scalar_function};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SparkRegexpExtract {
     signature: Signature,
     null_short_circuit: bool,
@@ -62,6 +65,35 @@ impl SparkRegexpExtract {
 
     pub fn requires_local_index_check(&self) -> bool {
         self.null_short_circuit && self.check_local_index && !self.known_null_argument
+    }
+
+    pub fn closed_argument_bodies(expr: &Expr) -> Result<Option<[&Expr; 3]>> {
+        let Expr::HigherOrderFunction(function) = expr else {
+            return Ok(None);
+        };
+        if !(function.func.inner().as_ref() as &dyn std::any::Any).downcast_ref::<Self>()
+            .is_some_and(Self::has_null_short_circuit) {
+            return Ok(None);
+        }
+        let [
+            Expr::Lambda(source),
+            Expr::Lambda(pattern),
+            Expr::Lambda(index),
+        ] = function.args.as_slice()
+        else {
+            return Ok(None);
+        };
+        for lambda in [source, pattern, index] {
+            let [parameter] = lambda.params.as_slice() else {
+                return Ok(None);
+            };
+            if lambda.body.exists(|node| {
+                Ok(matches!(node, Expr::LambdaVariable(variable) if &variable.name == parameter))
+            })? {
+                return Ok(None);
+            }
+        }
+        Ok(Some([&source.body, &pattern.body, &index.body]))
     }
 }
 
@@ -119,6 +151,109 @@ impl ScalarUDFImpl for SparkRegexpExtract {
             vec![Hint::Pad, Hint::AcceptsSingular, Hint::AcceptsSingular],
         )(&args)
     }
+}
+
+impl HigherOrderUDFImpl for SparkRegexpExtract {
+    fn name(&self) -> &str {
+        "spark_regexp_extract_lazy"
+    }
+
+    fn signature(&self) -> &HigherOrderSignature {
+        static SIGNATURE: std::sync::LazyLock<HigherOrderSignature> =
+            std::sync::LazyLock::new(|| HigherOrderSignature::variadic_any(Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn short_circuits(&self) -> bool {
+        true
+    }
+
+    fn lambda_parameters(
+        &self,
+        _step: usize,
+        fields: &[ValueOrLambda<FieldRef, Option<FieldRef>>],
+    ) -> Result<LambdaParametersProgress> {
+        check_extract_arguments(fields)?;
+        let dummy = Arc::new(Field::new("", DataType::Null, true));
+        Ok(LambdaParametersProgress::Complete(
+            fields.iter().map(|_| vec![Arc::clone(&dummy)]).collect(),
+        ))
+    }
+
+    fn return_field_from_args(&self, args: HigherOrderReturnFieldArgs) -> Result<FieldRef> {
+        check_extract_arguments(args.arg_fields)?;
+        let fields = args
+            .arg_fields
+            .iter()
+            .map(|argument| match argument {
+                ValueOrLambda::Lambda(field) => Arc::clone(field),
+                ValueOrLambda::Value(_) => unreachable!("checked lambda arguments"),
+            })
+            .collect::<Vec<_>>();
+        ScalarUDFImpl::coerce_types(self, &fields.iter().map(|field| field.data_type().clone()).collect::<Vec<_>>())?;
+        ScalarUDFImpl::return_field_from_args(
+            self,
+            ReturnFieldArgs {
+                arg_fields: &fields,
+                scalar_arguments: args.scalar_arguments,
+            },
+        )
+    }
+
+    fn invoke_with_args(&self, args: HigherOrderFunctionArgs) -> Result<ColumnarValue> {
+        check_extract_arguments(&args.args)?;
+        let lambdas = args
+            .args
+            .iter()
+            .map(|argument| match argument {
+                ValueOrLambda::Lambda(lambda) => lambda,
+                ValueOrLambda::Value(_) => unreachable!("checked lambda arguments"),
+            })
+            .collect::<Vec<_>>();
+        let fields = args
+            .arg_fields
+            .iter()
+            .map(|argument| match argument {
+                ValueOrLambda::Lambda(field) => Ok(Arc::clone(field)),
+                ValueOrLambda::Value(_) => exec_err!("regexp_extract expected lambda fields"),
+            })
+            .collect::<Result<Vec<_>>>()?;
+        // Each child runs once, only on rows whose previous children were non-NULL.
+        let (values, active_rows) = evaluate_lambdas_until_null(&lambdas, args.number_rows)?;
+        if active_rows.is_empty() {
+            return Ok(ColumnarValue::Array(new_null_array(
+                args.return_type(),
+                args.number_rows,
+            )));
+        }
+        let result = ScalarUDFImpl::invoke_with_args(
+            self,
+            ScalarFunctionArgs {
+                args: values.into_iter().map(ColumnarValue::Array).collect(),
+                arg_fields: fields,
+                number_rows: active_rows.len(),
+                return_field: Arc::clone(&args.return_field),
+                config_options: Arc::clone(&args.config_options),
+            },
+        )?
+        .into_array(active_rows.len())?;
+        Ok(ColumnarValue::Array(scatter_active_rows(
+            result,
+            &active_rows,
+            args.number_rows,
+        )?))
+    }
+}
+
+fn check_extract_arguments<V, L>(args: &[ValueOrLambda<V, L>]) -> Result<()> {
+    if args.len() != 3
+        || args
+            .iter()
+            .any(|argument| matches!(argument, ValueOrLambda::Value(_)))
+    {
+        return exec_err!("regexp_extract requires three internal lambda arguments");
+    }
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
