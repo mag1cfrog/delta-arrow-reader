@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -33,6 +34,7 @@ use datafusion_common::{Result, not_impl_err};
 use datafusion_expr_common::columnar_value::ColumnarValue;
 use datafusion_expr_common::interval_arithmetic::Interval;
 use datafusion_expr_common::sort_properties::ExprProperties;
+use datafusion_physical_expr_common::physical_expr::EvaluatedRowPrefix;
 
 const DEFAULT_CAST_OPTIONS: CastOptions<'static> = CastOptions {
     safe: false,
@@ -102,11 +104,7 @@ impl CastExpr {
         cast_type: DataType,
         cast_options: Option<CastOptions<'static>>,
     ) -> Self {
-        Self::new_with_target_field(
-            expr,
-            cast_type.into_nullable_field_ref(),
-            cast_options,
-        )
+        Self::new_with_target_field(expr, cast_type.into_nullable_field_ref(), cast_options)
     }
 
     /// Create a new `CastExpr` with an explicit target `FieldRef`.
@@ -248,6 +246,26 @@ impl PhysicalExpr for CastExpr {
         value.cast_to(self.cast_type(), Some(&self.cast_options))
     }
 
+    fn evaluate_rows_until_error(&self, batch: &RecordBatch) -> Result<EvaluatedRowPrefix> {
+        let mut output = self.expr.evaluate_rows_until_error(batch)?;
+        output.validate(batch.num_rows())?;
+        // shortcut: own cast-kernel errors remain opaque, localize them when a consumer needs their row.
+        output.values = output
+            .values
+            .cast_to(self.cast_type(), Some(&self.cast_options))?;
+        Ok(output)
+    }
+
+    fn evaluate_selected_rows_until_error(
+        &self,
+        batch: &RecordBatch,
+        selection: &arrow::array::BooleanArray,
+    ) -> Result<EvaluatedRowPrefix> {
+        datafusion_physical_expr_common::physical_expr::evaluate_selected_rows_until_error(
+            self, batch, selection,
+        )
+    }
+
     fn return_field(&self, input_schema: &Schema) -> Result<FieldRef> {
         self.resolved_target_field(input_schema)
     }
@@ -380,16 +398,15 @@ mod tests {
 
     use arrow::{
         array::{
-            Array, ArrayRef, Decimal128Array, Float32Array, Float64Array, Int8Array,
-            Int16Array, Int32Array, Int64Array, StringArray, StructArray,
-            Time64NanosecondArray, TimestampNanosecondArray, UInt32Array,
+            Array, ArrayRef, Decimal128Array, Float32Array, Float64Array, Int8Array, Int16Array,
+            Int32Array, Int64Array, StringArray, StructArray, Time64NanosecondArray,
+            TimestampNanosecondArray, UInt32Array,
         },
         datatypes::*,
     };
     use datafusion_common::ScalarValue;
     use datafusion_common::cast::{
-        as_boolean_array, as_int64_array, as_string_array, as_struct_array,
-        as_uint8_array,
+        as_boolean_array, as_int64_array, as_string_array, as_struct_array, as_uint8_array,
     };
     use datafusion_physical_expr_common::physical_expr::fmt_sql;
     use insta::assert_snapshot;
@@ -406,10 +423,8 @@ mod tests {
         input_array: StructArray,
     ) -> Result<StructArray> {
         let schema = Arc::new(Schema::new(vec![input_field]));
-        let batch = RecordBatch::try_new(
-            Arc::clone(&schema),
-            vec![Arc::new(input_array) as ArrayRef],
-        )?;
+        let batch =
+            RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(input_array) as ArrayRef])?;
         let expr = CastExpr::new_with_target_field(
             col(column, schema.as_ref())?,
             Arc::new(target_field),
@@ -429,13 +444,10 @@ mod tests {
     macro_rules! generic_decimal_to_other_test_cast {
         ($DECIMAL_ARRAY:ident, $A_TYPE:expr, $TYPEARRAY:ident, $TYPE:expr, $VEC:expr,$CAST_OPTIONS:expr) => {{
             let schema = Schema::new(vec![Field::new("a", $A_TYPE, true)]);
-            let batch = RecordBatch::try_new(
-                Arc::new(schema.clone()),
-                vec![Arc::new($DECIMAL_ARRAY)],
-            )?;
+            let batch =
+                RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new($DECIMAL_ARRAY)])?;
             // verify that we can construct the expression
-            let expression =
-                cast_with_options(col("a", &schema)?, &schema, $TYPE, $CAST_OPTIONS)?;
+            let expression = cast_with_options(col("a", &schema)?, &schema, $TYPE, $CAST_OPTIONS)?;
 
             // verify that its display is correct
             assert_eq!(format!("CAST(a@0 AS {})", $TYPE), format!("{}", expression));
@@ -479,12 +491,10 @@ mod tests {
             let schema = Schema::new(vec![Field::new("a", $A_TYPE, true)]);
             let a_vec_len = $A_VEC.len();
             let a = $A_ARRAY::from($A_VEC);
-            let batch =
-                RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(a)])?;
+            let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(a)])?;
 
             // verify that we can construct the expression
-            let expression =
-                cast_with_options(col("a", &schema)?, &schema, $TYPE, $CAST_OPTIONS)?;
+            let expression = cast_with_options(col("a", &schema)?, &schema, $TYPE, $CAST_OPTIONS)?;
 
             // verify that its display is correct
             assert_eq!(format!("CAST(a@0 AS {})", $TYPE), format!("{}", expression));
@@ -581,12 +591,8 @@ mod tests {
             .with_precision_and_scale(10, 3)?;
 
         let schema = Schema::new(vec![Field::new("a", Decimal128(10, 3), false)]);
-        let batch = RecordBatch::try_new(
-            Arc::new(schema.clone()),
-            vec![Arc::new(decimal_array)],
-        )?;
-        let expression =
-            cast_with_options(col("a", &schema)?, &schema, Decimal128(6, 2), None)?;
+        let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(decimal_array)])?;
+        let expression = cast_with_options(col("a", &schema)?, &schema, Decimal128(6, 2), None)?;
         let e = expression.evaluate(&batch).unwrap_err().strip_backtrace(); // panics on OK
         assert_snapshot!(e, @"Arrow error: Invalid argument error: 123456.79 is too large to store in a Decimal128 of precision 6. Max is 9999.99");
         // safe cast should return null
@@ -1016,9 +1022,7 @@ mod tests {
             "s",
             Field::new(
                 "s",
-                Struct(
-                    vec![Arc::new(source_a.clone()), Arc::new(source_b.clone())].into(),
-                ),
+                Struct(vec![Arc::new(source_a.clone()), Arc::new(source_b.clone())].into()),
                 true,
             ),
             target_field,
@@ -1026,8 +1030,7 @@ mod tests {
                 vec![Arc::new(source_a), Arc::new(source_b)].into(),
                 vec![
                     Arc::new(Int32Array::from(vec![Some(1), None])) as ArrayRef,
-                    Arc::new(StringArray::from(vec![Some("alpha"), Some("beta")]))
-                        as ArrayRef,
+                    Arc::new(StringArray::from(vec![Some("alpha"), Some("beta")])) as ArrayRef,
                 ],
             ),
         )?;
@@ -1059,8 +1062,7 @@ mod tests {
             ),
             true,
         );
-        let target_field =
-            Field::new("root", Struct(vec![Arc::new(inner_target)].into()), true);
+        let target_field = Field::new("root", Struct(vec![Arc::new(inner_target)].into()), true);
 
         let inner_struct = make_struct_array(
             vec![Arc::new(Field::new("x", Int32, true))].into(),
@@ -1076,8 +1078,7 @@ mod tests {
             target_field,
             outer_struct,
         )?;
-        let inner =
-            as_struct_array(struct_array.column_by_name("inner").unwrap().as_ref())?;
+        let inner = as_struct_array(struct_array.column_by_name("inner").unwrap().as_ref())?;
         let x = as_int64_array(inner.column_by_name("x").unwrap().as_ref())?;
         assert_eq!(x.value(0), 7);
         assert!(x.is_null(1));
@@ -1126,8 +1127,7 @@ mod tests {
         let schema = Schema::new(vec![Field::new("a", Int64, false)]);
         let a = Int64Array::from(vec![100]);
         let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(a)])?;
-        let expression =
-            cast_with_options(col("a", &schema)?, &schema, Decimal128(38, 38), None)?;
+        let expression = cast_with_options(col("a", &schema)?, &schema, Decimal128(38, 38), None)?;
         expression.evaluate(&batch)?;
         Ok(())
     }

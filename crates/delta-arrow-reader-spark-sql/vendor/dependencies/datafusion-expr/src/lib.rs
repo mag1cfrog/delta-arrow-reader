@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -92,8 +93,8 @@ pub mod window_frame;
 pub mod window_state;
 
 pub use datafusion_doc::{
-    DocSection, Documentation, DocumentationBuilder, aggregate_doc_sections,
-    scalar_doc_sections, window_doc_sections,
+    DocSection, Documentation, DocumentationBuilder, aggregate_doc_sections, scalar_doc_sections,
+    window_doc_sections,
 };
 pub use datafusion_expr_common::accumulator::Accumulator;
 pub use datafusion_expr_common::columnar_value::ColumnarValue;
@@ -101,13 +102,16 @@ pub use datafusion_expr_common::groups_accumulator::{EmitTo, GroupsAccumulator};
 pub use datafusion_expr_common::operator::Operator;
 pub use datafusion_expr_common::placement::ExpressionPlacement;
 pub use datafusion_expr_common::signature::{
-    ArrayFunctionArgument, ArrayFunctionSignature, Coercion, Signature,
-    TIMEZONE_WILDCARD, TypeSignature, TypeSignatureClass, Volatility,
+    ArrayFunctionArgument, ArrayFunctionSignature, Coercion, Signature, TIMEZONE_WILDCARD,
+    TypeSignature, TypeSignatureClass, Volatility,
 };
 pub use datafusion_expr_common::type_coercion::binary;
+pub use datafusion_physical_expr_common::physical_expr::{
+    EvaluatedRowPrefix, RowEvaluationFailure,
+};
 pub use expr::{
-    Between, BinaryExpr, Case, Cast, Expr, GetFieldAccess, GroupingSet, Like,
-    Sort as SortExpr, TryCast, WindowFunctionDefinition,
+    Between, BinaryExpr, Case, Cast, Expr, GetFieldAccess, GroupingSet, Like, Sort as SortExpr,
+    TryCast, WindowFunctionDefinition,
 };
 pub use expr_fn::*;
 pub use expr_schema::ExprSchemable;
@@ -120,9 +124,7 @@ pub use higher_order_function::{
     HigherOrderTypeSignature, HigherOrderUDF, HigherOrderUDFImpl, LambdaArgument,
     LambdaParametersProgress, ValueOrLambda,
 };
-pub use literal::{
-    Literal, TimestampLiteral, lit, lit_timestamp_nano, lit_with_metadata,
-};
+pub use literal::{Literal, TimestampLiteral, lit, lit_timestamp_nano, lit_with_metadata};
 pub use logical_plan::*;
 pub use partition_evaluator::PartitionEvaluator;
 #[cfg(feature = "sql")]
@@ -134,9 +136,7 @@ pub use udaf::{
     udaf_default_schema_name, udaf_default_window_function_display_name,
     udaf_default_window_function_schema_name,
 };
-pub use udf::{
-    ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, StructFieldMapping,
-};
+pub use udf::{ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, StructFieldMapping};
 pub use udwf::{LimitEffect, ReversedUDWF, WindowUDF, WindowUDFImpl};
 pub use window_frame::{WindowFrame, WindowFrameBound, WindowFrameUnits};
 
