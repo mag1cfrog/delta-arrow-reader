@@ -1,0 +1,220 @@
+{
+  "group": "slice-coordinate-conditional-probe-894-v2",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "slice_fields",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "a_nn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_nn"
+            }
+          },
+          {
+            "name": "a_ne",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": false,
+            "metadata": {
+              "source_tag": "a_ne"
+            }
+          },
+          {
+            "name": "a_pn",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": false
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pn"
+            }
+          },
+          {
+            "name": "a_pe",
+            "type": {
+              "type": "array",
+              "elementType": "integer",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source_tag": "a_pe"
+            }
+          },
+          {
+            "name": "start",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "length",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_start",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "nullable_length",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            "1",
+            null,
+            "3",
+            "4"
+          ],
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            null,
+            "2"
+          ],
+          "1",
+          "2",
+          "1",
+          "2",
+          "bad"
+        ],
+        [
+          "1",
+          [],
+          [],
+          null,
+          null,
+          "2",
+          "0",
+          null,
+          "0",
+          "2"
+        ],
+        [
+          "2",
+          [
+            "3",
+            "4"
+          ],
+          [
+            null,
+            null
+          ],
+          [],
+          [],
+          "-2",
+          "2",
+          "-2",
+          null,
+          "2"
+        ],
+        [
+          "3",
+          [
+            "5",
+            "6",
+            "7"
+          ],
+          [
+            null,
+            "6"
+          ],
+          [
+            "5"
+          ],
+          [
+            null,
+            null
+          ],
+          "8",
+          "5",
+          "8",
+          "5",
+          "2"
+        ]
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "positive_overflow_invalid_start_then",
+      "sql": "SELECT CASE WHEN SIZE(SLICE(ARRAY(1,2,2,3),4,2147483647)) = 0 THEN SLICE(ARRAY(1,2),0,1) ELSE ARRAY(9) END AS r",
+      "ordered": true
+    },
+    {
+      "id": "positive_overflow_invalid_length_then",
+      "sql": "SELECT CASE WHEN SIZE(SLICE(ARRAY(1,2,2,3),4,2147483647)) = 0 THEN SLICE(ARRAY(1,2),1,-1) ELSE ARRAY(9) END AS r",
+      "ordered": true
+    },
+    {
+      "id": "negative_overflow_invalid_start_then",
+      "sql": "SELECT CASE WHEN SIZE(SLICE(ARRAY(1,2,2,3),-1,2147483647)) = 0 THEN SLICE(ARRAY(1,2),0,1) ELSE ARRAY(9) END AS r",
+      "ordered": true
+    },
+    {
+      "id": "positive_overflow_invalid_start_else",
+      "sql": "SELECT CASE WHEN SIZE(SLICE(ARRAY(1,2,2,3),4,2147483647)) = 0 THEN ARRAY(9) ELSE SLICE(ARRAY(1,2),0,1) END AS r",
+      "ordered": true
+    },
+    {
+      "id": "nonoverflow_invalid_start_then",
+      "sql": "SELECT CASE WHEN SIZE(SLICE(ARRAY(1,2,2,3),4,1)) = 0 THEN SLICE(ARRAY(1,2),0,1) ELSE ARRAY(9) END AS r",
+      "ordered": true
+    },
+    {
+      "id": "provider_overflow_invalid_start_then",
+      "sql": "SELECT k, CASE WHEN SIZE(SLICE(a_nn,4,2147483647)) = 0 THEN SLICE(ARRAY(1,2),0,1) ELSE ARRAY(9) END AS r FROM slice_fields ORDER BY k",
+      "ordered": true
+    }
+  ],
+  "capture_sha256": "f9822e526e23554ade6c901fce892b8564329dcd1af20d385fb98a988abaf18f",
+  "helper_sha256": "7626fac85ff1e8e061dd900e084f5402554737d41e1aff837112c0f3d1f2b79a"
+}
