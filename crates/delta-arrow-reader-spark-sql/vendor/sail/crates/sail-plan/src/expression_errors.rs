@@ -52,6 +52,7 @@ use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolea
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::string::spark_regexp_extract_all::SparkRegexpExtract;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -1960,6 +1961,25 @@ impl Prepare {
         let plan = plan
             .transform_up(|node| {
                 if let LogicalPlan::Projection(project) = &node {
+                    // Local empty input consumes extraction before its INT cast folds.
+                    if spark_comparison_errors
+                        && known_empty(&project.input)
+                        && early_local_relation(&project.input)?
+                        && project.expr.iter().try_fold(false, |found, expr| {
+                            Ok::<_, datafusion_common::DataFusionError>(found || expr.exists(|expr| {
+                                Ok(matches!(expr, Expr::ScalarFunction(function)
+                                    if function.func.inner().downcast_ref::<SparkRegexpExtract>()
+                                        .is_some_and(SparkRegexpExtract::has_null_short_circuit)))
+                            })?)
+                        })?
+                    {
+                        return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                            EmptyRelation {
+                                produce_one_row: false,
+                                schema: Arc::clone(&project.schema),
+                            },
+                        )));
+                    }
                     let mut casts = false;
                     let mut evaluable = true;
                     for expr in &project.expr {

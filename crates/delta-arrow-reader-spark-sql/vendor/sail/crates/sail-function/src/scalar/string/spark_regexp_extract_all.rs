@@ -48,6 +48,10 @@ impl SparkRegexpExtract {
         self.known_null_argument = known_null;
         self
     }
+
+    pub fn has_null_short_circuit(&self) -> bool {
+        self.null_short_circuit
+    }
 }
 
 impl ScalarUDFImpl for SparkRegexpExtract {
