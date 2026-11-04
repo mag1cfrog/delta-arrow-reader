@@ -58,6 +58,10 @@ impl SparkRegexpExtract {
         self.null_short_circuit
     }
 
+    pub fn has_known_null_argument(&self) -> bool {
+        self.known_null_argument
+    }
+
     pub fn with_local_index_check(mut self, required: bool) -> Self {
         self.check_local_index = required;
         self

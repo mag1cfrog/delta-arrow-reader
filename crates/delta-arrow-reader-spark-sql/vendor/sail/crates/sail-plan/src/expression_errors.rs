@@ -1976,7 +1976,7 @@ impl Prepare {
                             let empty = known_empty(&project.input);
                             if !empty && !extract.requires_local_index_check() { continue; }
                             let Some([source, pattern, index]) = SparkRegexpExtract::closed_argument_bodies(expression)? else { continue; };
-                            // Keep earlier local input work and NULL selection before the literal cast.
+                            // Keep earlier local input work and NULL selection before index conversion.
                             let index = datafusion_expr::when(
                                 source.clone().is_null().or(pattern.clone().is_null()),
                                 lit(ScalarValue::Int64(None)),
