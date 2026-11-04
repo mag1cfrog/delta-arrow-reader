@@ -161,7 +161,10 @@ impl ScalarUDFImpl for SparkArraySlice {
         match self.native.invoke_with_args(args)? {
             ColumnarValue::Array(array)
                 if self.required_elements
-                    && matches!(array.data_type(), DataType::List(_) | DataType::LargeList(_)) =>
+                    && matches!(
+                        array.data_type(),
+                        DataType::List(_) | DataType::LargeList(_)
+                    ) =>
             {
                 // Native NULL rows hold a NULL child that cannot acquire a required element field.
                 Ok(ColumnarValue::Array(
@@ -1280,8 +1283,9 @@ mod tests {
 
         for element_nullable in [false, true] {
             let element = Arc::new(
-                Field::new("kept_element", DataType::Int32, element_nullable)
-                    .with_metadata(std::collections::HashMap::from([("tag".into(), "kept".into())])),
+                Field::new("kept_element", DataType::Int32, element_nullable).with_metadata(
+                    std::collections::HashMap::from([("tag".into(), "kept".into())]),
+                ),
             );
             let input: ArrayRef = Arc::new(ListArray::try_new(
                 element,
@@ -1296,7 +1300,8 @@ mod tests {
             )?;
             let schema = Arc::new(DFSchema::try_from(batch.schema())?);
             let expression = slice_expr(col("a"), lit(1), lit(1), &schema)?;
-            let physical = SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
+            let physical =
+                SessionContext::new().create_physical_expr(expression, schema.as_ref())?;
             let result = physical.evaluate(&batch)?.into_array(2)?;
             result.to_data().validate_full()?;
             assert_eq!(result.data_type(), &data_type);
@@ -1305,7 +1310,11 @@ mod tests {
             assert!(result.is_null(1));
             assert_eq!(
                 result.value_offsets(),
-                if element_nullable { &[0, 1, 2] } else { &[0, 1, 1] }
+                if element_nullable {
+                    &[0, 1, 2]
+                } else {
+                    &[0, 1, 1]
+                }
             );
         }
         Ok(())

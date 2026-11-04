@@ -100,7 +100,8 @@ async fn capture_slice_optimized_observation(
     extensions.insert(PreserveAggregateStatisticsSchema::default());
     let optimized = state.optimize(&query.logical_plan)?;
     let raw_schema = spark_results::capture_schema(optimized.schema().fields(), None)?;
-    let names_match = optimized.schema().fields().len() == query.logical_plan.schema().fields().len()
+    let names_match = optimized.schema().fields().len()
+        == query.logical_plan.schema().fields().len()
         && optimized
             .schema()
             .fields()
@@ -143,11 +144,21 @@ fn slice_matches_issue_contract(case: &Value, comparison: &Value, controls: &[Va
     // shortcut: #880/#881 retain these exact inherited observations until their fixes.
     let issue = match (case["id"].as_str(), case["ansi"].as_bool()) {
         (
-            Some("zero_start_constant" | "negative_length_constant" | "zero_start_runtime" | "negative_length_runtime"),
+            Some(
+                "zero_start_constant"
+                | "negative_length_constant"
+                | "zero_start_runtime"
+                | "negative_length_runtime",
+            ),
             Some(_),
         ) => 880,
         (
-            Some("null_array_bad_start" | "bad_array_null_start" | "bad_array_null_start_is_null" | "constant_bad_array_null_start"),
+            Some(
+                "null_array_bad_start"
+                | "bad_array_null_start"
+                | "bad_array_null_start_is_null"
+                | "constant_bad_array_null_start",
+            ),
             Some(true),
         ) => 881,
         _ => return false,
@@ -225,8 +236,10 @@ async fn slice_parent_fields_match_spark() -> TestResult {
                     spark_results::compare_exact_spark_query_stages(&session, case).await?;
                 let optimized = capture_slice_optimized_observation(&session, case).await;
                 comparison["optimized_matches"] = json!(match &optimized {
-                    Ok(observation) => observation["names_match"] == true
-                        && Some(&observation["schema"]) == case["schema_stages"].get("optimized"),
+                    Ok(observation) =>
+                        observation["names_match"] == true
+                            && Some(&observation["schema"])
+                                == case["schema_stages"].get("optimized"),
                     Err(_) => case["schema_stages"].get("optimized").is_none(),
                 });
                 comparison["optimized_schema"] = optimized
@@ -244,8 +257,11 @@ async fn slice_parent_fields_match_spark() -> TestResult {
             comparison["id"] = case["id"].clone();
             comparison["ansi"] = case["ansi"].clone();
             comparison["batch"] = json!(batch_size);
-            comparison["owned_matches"] =
-                json!(slice_matches_issue_contract(case, &comparison, &controls[1..]));
+            comparison["owned_matches"] = json!(slice_matches_issue_contract(
+                case,
+                &comparison,
+                &controls[1..]
+            ));
             assert!(completed.insert((
                 case["id"].as_str().ok_or("missing ID")?,
                 case["ansi"].as_bool().ok_or("missing ANSI")?,
@@ -290,17 +306,26 @@ fn inherited_slice_controls_reject_new_differences() -> TestResult {
             for key in comparison.as_object().ok_or("missing observation")?.keys() {
                 let mut wrong = comparison.clone();
                 wrong[key] = json!("new difference");
-                assert!(!slice_matches_issue_contract(case, &wrong, controls), "{key}");
+                assert!(
+                    !slice_matches_issue_contract(case, &wrong, controls),
+                    "{key}"
+                );
             }
             for (key, value) in [
                 ("batch", json!(2)),
-                ("ansi", json!(!case["ansi"].as_bool().ok_or("missing ANSI")?)),
+                (
+                    "ansi",
+                    json!(!case["ansi"].as_bool().ok_or("missing ANSI")?),
+                ),
                 ("panic", Value::Null),
                 ("extra", json!(true)),
             ] {
                 let mut wrong = comparison.clone();
                 wrong[key] = value;
-                assert!(!slice_matches_issue_contract(case, &wrong, controls), "{key}");
+                assert!(
+                    !slice_matches_issue_contract(case, &wrong, controls),
+                    "{key}"
+                );
             }
             for stage in [
                 "/public_schema",
@@ -327,16 +352,38 @@ fn inherited_slice_controls_reject_new_differences() -> TestResult {
                     }
                 }
             }
-            for key in ["sql", "family", "consumer", "expected", "schema_stages", "spark_error_phase"] {
+            for key in [
+                "sql",
+                "family",
+                "consumer",
+                "expected",
+                "schema_stages",
+                "spark_error_phase",
+            ] {
                 let mut wrong = case.clone();
                 wrong[key] = json!("different reference");
-                assert!(!slice_matches_issue_contract(&wrong, &comparison, controls), "{key}");
+                assert!(
+                    !slice_matches_issue_contract(&wrong, &comparison, controls),
+                    "{key}"
+                );
             }
         }
     }
     assert_eq!(identities.len(), 12);
-    assert_eq!(controls.iter().filter(|control| control["issue"] == 880).count(), 8);
-    assert_eq!(controls.iter().filter(|control| control["issue"] == 881).count(), 4);
+    assert_eq!(
+        controls
+            .iter()
+            .filter(|control| control["issue"] == 880)
+            .count(),
+        8
+    );
+    assert_eq!(
+        controls
+            .iter()
+            .filter(|control| control["issue"] == 881)
+            .count(),
+        4
+    );
     Ok(())
 }
 
