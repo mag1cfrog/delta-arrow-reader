@@ -49,6 +49,14 @@ casts still replace invalid values with NULL. The
 [integration tests](tests/string_cast_rows.rs) cover the public API and existing
 cast compatibility. This primitive does not change SQL error ordering.
 
+Binary, LargeBinary and BinaryView casts to Utf8, LargeUtf8 and Utf8View preserve
+valid visible values when retained bytes or NULL payloads contain malformed
+UTF-8. Checked conversions remain the fast path. Their builder fallback copies
+only visible non-NULL values; active malformed values retain the original
+strict error or become NULL in safe casts. The
+[binary slice tests](tests/binary_slice_casts.rs) cover these storage boundaries
+and a guarded CASE cast.
+
 Required List and LargeList elements use an exact logical NULL check when child
 storage reports conservative nullability. Unused dictionary NULL values,
 inactive Union children and NULL runs outside a sliced child's logical range
@@ -795,8 +803,21 @@ bypass that distinction.
 The existing logical simplifier prepares closed SLICE results before constant
 parameter validation, so CASE pruning uses the same interpreted bounds.
 The dedicated [coordinate references](tests/fixtures/README.md#arrays_overlap-floating-operands)
-and broad parameter suite require full parity. Two non-NULL batch error-priority
-observations (#902) retain their separate inherited controls.
+and broad parameter suite require full parity. Spark SLICE also requests
+successful row prefixes from its scalar operands. Strict string-to-integer casts
+retain the first failing row and original Arrow error through eager scalar
+wrappers, ARRAY construction, selection, and declaration casts. SLICE validates
+the completed prefix before forwarding a later operand failure, preserving
+same-row operand order and cumulative NULL selection without replay. Its own
+parameter failures retain earlier output rows for a nested consumer. The
+[row-priority references](tests/fixtures/slice-row-priority-902/README.md)
+require exact error causes at batch sizes 1 and 32. Ordinary/native evaluation
+and TRY casts retain their existing paths; opaque callback failures stay opaque.
+
+Shared producer projections still need separate prefix transport (#920), and
+preserving a user logical sort below SLICE remains separate work (#919). The
+expression-local prefix API does not change projection streams or claim general
+row localization for CASE, arithmetic/cast kernels, or higher-order functions.
 
 ### ARRAY_COMPACT result fields
 
@@ -995,3 +1016,12 @@ The focused position fixture retains 110 independent Spark references and all
 660 native configurations. Shared BIGINT narrowing, nonfinite conversion and
 CAST declarations remain with #813, #897 and #796. No numeric parser, overflow
 policy, replacement kernel or native DataFusion SQL behavior is changed here.
+
+REGEXP_REPLACE constructs that INT coercion before testing position foldability,
+so unsupported types report `UNEXPECTED_INPUT_TYPE` even for provider expressions
+in discarded inputs. Literal evaluation still follows the foldability guard,
+which visits original descendants through the cast wrapper. The
+[type-priority references](tests/fixtures/regexp-replace-position-type-priority-README.md)
+require all 192 contexts from 32 independent Spark references. Native structured
+error parameters remain unavailable; the regression checks the exact native
+cause and result-field boundary without claiming complete raw diagnostic parity.

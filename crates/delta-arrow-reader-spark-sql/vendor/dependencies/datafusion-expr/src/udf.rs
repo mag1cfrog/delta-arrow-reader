@@ -24,7 +24,7 @@ use crate::preimage::PreimageResult;
 use crate::simplify::{ExprSimplifyResult, SimplifyContext};
 use crate::sort_properties::{ExprProperties, SortProperties};
 use crate::udf_eq::UdfEq;
-use crate::{ColumnarValue, Documentation, Expr, Signature};
+use crate::{ColumnarValue, Documentation, EvaluatedRowPrefix, Expr, Signature};
 use arrow::datatypes::{DataType, Field, FieldRef};
 #[cfg(debug_assertions)]
 use datafusion_common::assert_or_internal_err;
@@ -240,11 +240,7 @@ impl ScalarUDF {
     /// Returns this scalar function's simplification result.
     ///
     /// See [`ScalarUDFImpl::simplify`] for more details.
-    pub fn simplify(
-        &self,
-        args: Vec<Expr>,
-        info: &SimplifyContext,
-    ) -> Result<ExprSimplifyResult> {
+    pub fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         self.inner.simplify(args, info)
     }
 
@@ -273,22 +269,38 @@ impl ScalarUDF {
         #[cfg(debug_assertions)]
         let return_field = Arc::clone(&args.return_field);
         let result = self.inner.invoke_with_args(args)?;
-        // Maybe this could be enabled always?
-        // This doesn't use debug_assert!, but it's meant to run anywhere except on production. It's same in spirit, thus conditioning on debug_assertions.
         #[cfg(debug_assertions)]
-        {
-            let result_data_type = result.data_type();
-            let expected_type = return_field.data_type();
-            assert_or_internal_err!(
-                result_data_type == *expected_type,
-                "Function '{}' returned value of type '{}' while the following type was promised at planning time and expected: '{}'",
-                self.name(),
-                result_data_type,
-                expected_type
-            );
-            // TODO verify return data is non-null when it was promised to be?
+        self.validate_return_type(&result, &return_field)?;
+        Ok(result)
+    }
+
+    /// Invoke once, retaining the successful rows before a localized error.
+    /// Opaque failures remain the original owned outer Err.
+    pub fn invoke_rows_until_error(&self, args: ScalarFunctionArgs) -> Result<EvaluatedRowPrefix> {
+        let input_rows = args.number_rows;
+        #[cfg(debug_assertions)]
+        let return_field = Arc::clone(&args.return_field);
+        let result = self.inner.invoke_rows_until_error(args)?;
+        #[cfg(debug_assertions)]
+        self.validate_return_type(&result.values, &return_field)?;
+        if result.failure.is_some() {
+            result.validate(input_rows)?;
         }
         Ok(result)
+    }
+
+    #[cfg(debug_assertions)]
+    fn validate_return_type(&self, result: &ColumnarValue, return_field: &FieldRef) -> Result<()> {
+        let result_data_type = result.data_type();
+        let expected_type = return_field.data_type();
+        assert_or_internal_err!(
+            result_data_type == *expected_type,
+            "Function '{}' returned value of type '{}' while the following type was promised at planning time and expected: '{}'",
+            self.name(),
+            result_data_type,
+            expected_type
+        );
+        Ok(())
     }
 
     /// Determines which of the arguments passed to this function are evaluated eagerly
@@ -715,6 +727,23 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
     /// to arrays, which will likely be simpler code, but be slower.
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue>;
 
+    /// Invoke once and optionally retain a successful prefix and its first row error.
+    ///
+    /// A localized failure excludes its row from values and uses an index relative
+    /// to args.number_rows. Row 0 failures require an empty typed array prefix.
+    /// The default preserves the ordinary invocation and its opaque error exactly.
+    fn invoke_rows_until_error(&self, args: ScalarFunctionArgs) -> Result<EvaluatedRowPrefix> {
+        self.invoke_with_args(args)
+            .map(EvaluatedRowPrefix::complete)
+    }
+
+    /// Whether ordinary physical evaluation must preserve errors in input-row order.
+    /// This requests prefix-aware child evaluation; it does not claim that an
+    /// opaque callback can localize its own failures or can be retried safely.
+    fn requires_row_ordered_errors(&self) -> bool {
+        false
+    }
+
     /// Optionally apply per-UDF simplification / rewrite rules.
     ///
     /// This can be used to apply function specific simplification rules during
@@ -742,11 +771,7 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
     /// if the original expression is nullable, the returned expression must
     /// also be nullable, otherwise it may lead to schema verification errors
     /// later in query planning.
-    fn simplify(
-        &self,
-        args: Vec<Expr>,
-        _info: &SimplifyContext,
-    ) -> Result<ExprSimplifyResult> {
+    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         Ok(ExprSimplifyResult::Original(args))
     }
 
@@ -1151,6 +1176,14 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
         self.inner.invoke_with_args(args)
     }
 
+    fn invoke_rows_until_error(&self, args: ScalarFunctionArgs) -> Result<EvaluatedRowPrefix> {
+        self.inner.invoke_rows_until_error(args)
+    }
+
+    fn requires_row_ordered_errors(&self) -> bool {
+        self.inner.requires_row_ordered_errors()
+    }
+
     fn with_updated_config(&self, _config: &ConfigOptions) -> Option<ScalarUDF> {
         None
     }
@@ -1159,11 +1192,7 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
         &self.aliases
     }
 
-    fn simplify(
-        &self,
-        args: Vec<Expr>,
-        info: &SimplifyContext,
-    ) -> Result<ExprSimplifyResult> {
+    fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {
         self.inner.simplify(args, info)
     }
 

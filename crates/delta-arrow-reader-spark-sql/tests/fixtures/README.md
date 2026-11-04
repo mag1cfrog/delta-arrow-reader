@@ -2763,14 +2763,12 @@ argument failures retain Spark's optimization stage even under nullable
 provider inputs. Cast comparisons check the captured input against the actual
 Arrow cast cause.
 
-`slice_null_evaluation.rs` retains all nine flags for 212 comparisons: 16 from
-the original references and 196 from the fresh capture. It requires 210 strict
-matches. Two existing all-non-NULL error-priority observations remain owned by
-#902, limited to ANSI true at batch 32. Their complete references and complete
-baseline observations must match exactly; batch 1 and ANSI false remain strict.
-Mutation checks reject changes to references, schemas, metadata, phases, errors,
-flags, ANSI mode, batch size and extra fields. These controls do not establish
-full SLICE parity.
+`slice_null_evaluation.rs` requires all nine flags for 212 strict comparisons:
+16 from the original references and 196 from the fresh capture. The
+[row-priority package](slice-row-priority-902/README.md) adds 48 strict comparisons
+for direct SLICE operand failures across input rows, including the exact failing
+CAST input. Shared projection error transport (#920) and logical sort error
+ordering (#919) remain separate work.
 
 Local tests also check custom element fields and metadata, required-element
 NULL storage, nonzero input slices, repeated and empty evaluation, alias
