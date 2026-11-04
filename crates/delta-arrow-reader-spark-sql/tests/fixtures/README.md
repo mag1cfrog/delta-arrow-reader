@@ -2806,6 +2806,45 @@ cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.to
 cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --test conditional_evaluation conditional_arguments_run_once_only_where_needed
 ```
 
+## ARRAY_COMPACT result fields
+
+`array-compact-fields-spark.jsonl` preserves 70 independent observations from
+Spark 4.2.0 revision `32f7299601108917fb01920a54e084595b7b3bf8` in UTC. Its SHA256 is
+`2ad95a5f84e50c8a721d3fee974e0a4594507d6772d63bff0fd3d0230f45fdc8`.
+The header records the exact build, capture and input-manifest hashes, provider
+schemas and rows. The 64 successful queries and six actual query errors retain
+their complete available schema stages, plans, rows and failure phases.
+
+`array-compact-slices-spark.jsonl` retains the complete 12-observation #842 capture
+unchanged, with SHA256
+`fc488a690860c8079e8b440bd97bda4904ecf4c567336a7bb92cb141dad81716`.
+The replay selects its four direct `compact_integer` and `compact_string`
+records across both ANSI modes. These cover NULL/empty/all-null inputs,
+duplicates and prefix/suffix controls around nonzero slices.
+
+`compact_result_fields.rs` compares all 74 selected records at batch sizes 1 and
+32, for 148 comparisons. It requires complete analyzed, optimized and executed
+fields, metadata, rows and error phases. Cases include required/nullable arrays
+and elements, typed/untyped NULLs, nested arrays and STRUCTs, zero-row providers,
+fallible casts, repeated compaction, membership, overlap and flattening. The
+observer verifies internal output names and order before mapping optimized
+fields to public names. Successful native array controls compare configured
+and unconfigured sessions before and after Spark execution.
+
+The SparkArrayCompact unit tests check both list widths, immediate versus deeper
+fields, custom element metadata, sliced child storage, scalar adaptation and
+actual zero-row kernel calls. Dictionary children remove logical NULLs while
+retaining their value pools. Separate encoded-provider controls require public
+Union, sliced run-end encoded and dictionary inputs to keep their values and
+pass safe construction with required elements.
+
+From this crate, replay the references and focused kernel checks with:
+
+```sh
+cargo test --locked --workspace --test compact_result_fields -- --nocapture
+cargo test --locked --workspace -p sail-function --lib spark_array_compact -- --nocapture
+```
+
 ## Unordered CONCAT metadata
 
 `concat-unordered-metadata-spark.jsonl` preserves 16 independent Spark 4.2.0
