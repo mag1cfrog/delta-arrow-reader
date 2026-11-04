@@ -407,7 +407,7 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
             let expr = from_ast_expression(*expr)?;
             let pattern = from_ast_quantified_pattern(quantifier, *pattern)?;
             let mut arguments = vec![expr, pattern];
-            if let Some(escape) = from_ast_pattern_escape_string(escape)? {
+            if let Some(escape) = from_ast_pattern_escape_string(escape, true)? {
                 arguments.push(spec::Expr::Literal(spec::Literal::Utf8 {
                     value: Some(escape.to_string()),
                 }))
@@ -433,7 +433,7 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
             let expr = from_ast_expression(*expr)?;
             let pattern = from_ast_quantified_pattern(quantifier, *pattern)?;
             let mut arguments = vec![expr, pattern];
-            if let Some(escape) = from_ast_pattern_escape_string(escape)? {
+            if let Some(escape) = from_ast_pattern_escape_string(escape, true)? {
                 arguments.push(spec::Expr::Literal(spec::Literal::Utf8 {
                     value: Some(escape.to_string()),
                 }));
@@ -497,7 +497,7 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
         }
         Expr::SimilarTo(expr, not, _, _, pattern, escape) => {
             let expr = from_ast_expression(*expr)?;
-            let escape_char = from_ast_pattern_escape_string(escape)?;
+            let escape_char = from_ast_pattern_escape_string(escape, false)?;
             Ok(spec::Expr::SimilarTo {
                 expr: Box::new(expr),
                 pattern: Box::new(from_ast_expression(*pattern)?),
@@ -1170,7 +1170,10 @@ fn from_ast_quantified_pattern(
     }))
 }
 
-fn from_ast_pattern_escape_string(escape: Option<PatternEscape>) -> SqlResult<Option<char>> {
+fn from_ast_pattern_escape_string(
+    escape: Option<PatternEscape>,
+    like_pattern: bool,
+) -> SqlResult<Option<char>> {
     let Some(escape) = escape else {
         return Ok(None);
     };
@@ -1178,7 +1181,10 @@ fn from_ast_pattern_escape_string(escape: Option<PatternEscape>) -> SqlResult<Op
     let value = from_ast_string(value)?;
     let mut chars = value.chars();
     match (chars.next(), chars.next()) {
-        (Some(x), None) => Ok(Some(x)),
+        (Some(x), None) if !like_pattern || x.len_utf16() == 1 => Ok(Some(x)),
+        _ if like_pattern => Err(SqlError::invalid(format!(
+            "[INVALID_ESC] Found an invalid escape string: '{value}'. The escape string must contain only one UTF-16 code unit."
+        ))),
         _ => Err(SqlError::invalid(format!(
             "invalid escape character: {value}"
         ))),

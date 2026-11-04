@@ -41,6 +41,7 @@ use crate::function::scalar::{
 };
 use datafusion::functions::math::round::RoundFunc;
 use sail_function::scalar::array::array_contains::ArrayContains;
+use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::math::spark_abs::SparkAbs;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
 use sail_function::scalar::math::{
@@ -900,6 +901,108 @@ fn preserve_local_substrings(plan: LogicalPlan) -> Result<LogicalPlan> {
         .data)
 }
 
+// Expression preparation holds these LIMIT-zero consumers for the later
+// query-clock check. Release that retention once mandatory LIKE checks finish.
+pub(crate) fn prune_retained_local_like_limits(
+    plan: LogicalPlan,
+    props: &ExecutionProps,
+) -> Result<LogicalPlan> {
+    let prepare = Prepare {
+        props: props.clone(),
+        has_groups: false,
+        has_null_sensitive_comparison: false,
+    };
+    Ok(plan
+        .transform_down_with_subqueries(|node| {
+            if let LogicalPlan::Limit(limit) = &node
+                && crate::like_errors::contains_early_local_like(&limit.input)?
+            {
+                prepare.prune_limit_zero(node, false)
+            } else {
+                Ok(Transformed::no(node))
+            }
+        })?
+        .data)
+}
+
+// Check errors using discarded local rows. True means local interpretation
+// consumed this expression, including an empty input; false means ineligible.
+// No table scan or volatile expression is executed; no rows enter the real plan.
+pub(crate) fn try_check_local_row_errors(
+    expr: &Expr,
+    input: &LogicalPlan,
+    props: &ExecutionProps,
+) -> Result<bool> {
+    if !input.exists(|node| Ok(matches!(node, LogicalPlan::Values(_))))? {
+        return Ok(false);
+    }
+    // This LIKE-only preview must honor UDF planning permissions before the
+    // local evaluator visits any input projection, even below an empty filter.
+    let forbids_planning = |expr: &Expr| {
+        expr.exists(|expr| {
+            Ok(matches!(expr, Expr::ScalarFunction(function)
+                if !function.func.inner().supports_constant_folding()))
+        })
+    };
+    if forbids_planning(expr)?
+        || input.exists(|node| {
+            let mut forbidden = false;
+            node.apply_expressions(|expr| {
+                forbidden |= forbids_planning(expr)?;
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            Ok(forbidden)
+        })?
+    {
+        return Ok(false);
+    }
+    // Spark resolves its query clock before local interpretation. Lower only
+    // that native primitive; general folding could erase live local errors.
+    let mut context = datafusion_expr::simplify::SimplifyContext::builder()
+        .with_schema(Arc::clone(input.schema()))
+        .with_query_execution_start_time(props.query_execution_start_time);
+    if let Some(options) = &props.config_options {
+        context = context.with_config_options(Arc::clone(options));
+    }
+    let info = context.build();
+    let prepare_clock = |expr: Expr| {
+        expr.transform_down(|expr| {
+            if let Expr::ScalarFunction(function) = &expr
+                && function.func.inner().is::<TimestampNow>()
+                && let datafusion_expr::simplify::ExprSimplifyResult::Simplified(clock) =
+                    function.func.simplify(function.args.clone(), &info)?
+            {
+                Ok(Transformed::yes(clock))
+            } else {
+                Ok(Transformed::no(expr))
+            }
+        })
+    };
+    let input = input
+        .clone()
+        .transform_up_with_subqueries(|node| node.map_expressions(prepare_clock))?
+        .data;
+    let prepare = Prepare {
+        props: props.clone(),
+        has_groups: false,
+        has_null_sensitive_comparison: false,
+    };
+    let Some(batch) = prepare.local_batch(&input)? else {
+        return Ok(false);
+    };
+    // Local projection/filter conversion consumes even an empty input.
+    if batch.num_rows() == 0 {
+        return Ok(true);
+    }
+    if !row_expression(expr, true)? {
+        return Ok(false);
+    }
+    let expr = prepare_clock(expr.clone())?.data;
+    let expr = prepare.precheck_expression(expr, input.schema(), true)?;
+    create_physical_expr(&expr, input.schema(), &prepare.props)?.evaluate(&batch)?;
+    Ok(true)
+}
+
 // Only substring's three closed argument lambdas participate in early local
 // conversion. Other higher-order functions retain their existing preparation.
 fn substring_argument_bodies(expr: &Expr) -> Result<Option<[&Expr; 3]>> {
@@ -1353,6 +1456,44 @@ fn case_foldability_does_not_expand_projection_chains()
     Ok(())
 }
 
+// Structural admission for Spark's early local conversion. This does not
+// execute volatile functions; row_expression still excludes them in evaluators.
+pub(crate) fn early_local_relation(plan: &LogicalPlan) -> Result<bool> {
+    let expressions = |expressions: &[Expr], columns| {
+        expressions.iter().try_fold(true, |local, expr| {
+            Ok::<_, datafusion_common::DataFusionError>(
+                local && row_expression_with_volatile(expr, columns, true)?,
+            )
+        })
+    };
+    match plan {
+        LogicalPlan::Values(values) => values
+            .values
+            .iter()
+            .try_fold(true, |local, row| Ok(local && expressions(row, false)?)),
+        LogicalPlan::Projection(project) => {
+            Ok(early_local_relation(&project.input)? && expressions(&project.expr, true)?)
+        }
+        LogicalPlan::SubqueryAlias(alias) => early_local_relation(&alias.input),
+        LogicalPlan::Filter(filter) => Ok(early_local_relation(&filter.input)?
+            && row_expression_with_volatile(&filter.predicate, true, true)?),
+        LogicalPlan::Limit(limit) => {
+            let literal_count = |expr: &Expr| match expr {
+                Expr::Literal(ScalarValue::Int32(Some(n)), _) => *n >= 0,
+                Expr::Literal(ScalarValue::Int64(Some(n)), _) => *n >= 0,
+                Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
+                    matches!(cast.expr.as_ref(), Expr::Literal(ScalarValue::Int32(Some(n)), _) if *n >= 0)
+                }
+                _ => false,
+            };
+            Ok(limit.skip.is_none()
+                && limit.fetch.as_deref().is_some_and(literal_count)
+                && early_local_relation(&limit.input)?)
+        }
+        _ => Ok(false),
+    }
+}
+
 // Inline projection/alias chains over OneRowRelation without evaluating them.
 // Spark performs this before optimizing the remaining scalar subqueries.
 fn one_row_exprs(plan: &LogicalPlan) -> Result<Option<Vec<Expr>>> {
@@ -1775,6 +1916,34 @@ impl Prepare {
         })
     }
 
+    fn prune_limit_zero(
+        &self,
+        node: LogicalPlan,
+        retain_local_like: bool,
+    ) -> Result<Transformed<LogicalPlan>> {
+        if let LogicalPlan::Limit(limit) = &node
+            && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(0)
+        {
+            // LIKE's local interpretation needs the actual query clock,
+            // copied from the query state for the mandatory LIKE analyzer.
+            // Retain only consumers eligible for early local conversion,
+            // including all siblings.
+            if retain_local_like && crate::like_errors::contains_early_local_like(&limit.input)? {
+                return Ok(Transformed::no(node));
+            }
+            if known_empty(&limit.input) {
+                return Ok(Transformed::yes(Arc::unwrap_or_clone(limit.input.clone())));
+            }
+            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                datafusion_expr::logical_plan::EmptyRelation {
+                    produce_one_row: false,
+                    schema: Arc::clone(limit.input.schema()),
+                },
+            )));
+        }
+        Ok(Transformed::no(node))
+    }
+
     fn cast_reachability(
         &self,
         plan: LogicalPlan,
@@ -1868,24 +2037,27 @@ impl Prepare {
         } else {
             self.prepare_distinct_limits(plan, 0)?.data
         };
+        // Decide LIKE's early local eligibility before column pruning can
+        // remove an unevaluable sibling. Other expressions retain their
+        // existing post-projection LIMIT-zero pruning below.
+        let plan = if spark_comparison_errors {
+            plan.transform_down(|node| {
+                if let LogicalPlan::Limit(limit) = &node
+                    && crate::like_errors::contains_spark_like(&limit.input)?
+                    && !crate::like_errors::contains_early_local_like(&limit.input)?
+                {
+                    self.prune_limit_zero(node, false)
+                } else {
+                    Ok(Transformed::no(node))
+                }
+            })?
+            .data
+        } else {
+            plan
+        };
         let plan = self.prune_projections(plan, &config, exists)?;
         let plan = plan
-            .transform_down(|node| {
-                if let LogicalPlan::Limit(limit) = &node
-                    && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(0)
-                {
-                    if known_empty(&limit.input) {
-                        return Ok(Transformed::yes(Arc::unwrap_or_clone(limit.input.clone())));
-                    }
-                    return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
-                        EmptyRelation {
-                            produce_one_row: false,
-                            schema: Arc::clone(limit.input.schema()),
-                        },
-                    )));
-                }
-                Ok(Transformed::no(node))
-            })?
+            .transform_down(|node| self.prune_limit_zero(node, spark_comparison_errors))?
             .data;
         if !self.has_null_sensitive_comparison {
             return Ok(plan);

@@ -7,32 +7,33 @@ use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::type_coercion::binary::like_coercion;
 use datafusion_expr::{
     ColumnarValue, ExprSchemable, Operator, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
-    ScalarUDFImpl, Signature, Volatility, expr, lit, not,
+    ScalarUDFImpl, Signature, Volatility, expr, not,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::predicate::rewrite_like_pattern::RewriteLikePatternFunc;
+use sail_function::scalar::predicate::spark_like::SparkLike;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{ScalarFunction, ScalarFunctionInput, spark_in_list};
 use crate::function::scalar::string::lower_expr;
 
-fn extract_escape_char(escape_expr: expr::Expr) -> PlanResult<Option<char>> {
-    match escape_expr {
-        expr::Expr::Literal(ScalarValue::Utf8(Some(ref s)), _)
-        | expr::Expr::Literal(ScalarValue::Utf8View(Some(ref s)), _)
-        | expr::Expr::Literal(ScalarValue::LargeUtf8(Some(ref s)), _) => {
-            let mut chars = s.chars();
-            match (chars.next(), chars.next()) {
-                (Some(c), None) => Ok(Some(c)),
-                _ => Err(PlanError::invalid(
-                    "escape character must be a single character",
-                )),
-            }
+fn extract_escape_char(escape_expr: expr::Expr, display_name: &str) -> PlanResult<char> {
+    if let expr::Expr::Literal(
+        ScalarValue::Utf8(Some(ref value))
+        | ScalarValue::Utf8View(Some(ref value))
+        | ScalarValue::LargeUtf8(Some(ref value)),
+        _,
+    ) = escape_expr
+    {
+        let mut chars = value.chars();
+        if let (Some(escape), None) = (chars.next(), chars.next())
+            && escape.len_utf16() == 1
+        {
+            return Ok(escape);
         }
-        _ => Err(PlanError::invalid(
-            "escape character must be a string literal",
-        )),
     }
+    Err(PlanError::invalid(format!(
+        "[INVALID_ESCAPE_CHAR] `EscapeChar` should be a string literal of length one, but got \"{display_name}\"."
+    )))
 }
 
 fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanResult<expr::Expr> {
@@ -59,39 +60,16 @@ fn build_like_expr(input: ScalarFunctionInput, case_insensitive: bool) -> PlanRe
     let result = match n {
         2 => {
             let (value, pattern) = arguments.two()?;
-            Ok(expr::Expr::Like(expr::Like {
-                negated: false,
-                expr: Box::new(value),
-                pattern: Box::new(pattern),
-                case_insensitive: false,
-                escape_char: None,
-            }))
+            Ok(ScalarUDF::from(SparkLike::new('\\')).call(vec![value, pattern]))
         }
         3 => {
             let (value, pattern, escape) = arguments.three()?;
-            let escape_char = extract_escape_char(escape)?;
-            // Arrow's LIKE kernel only supports `\` as the escape character.
-            // For any other escape, wrap the pattern in a UDF that rewrites
-            // it so Arrow sees `\` as the effective escape; then build an
-            // `Expr::Like` with `escape_char: Some('\\')` to be explicit
-            // about the escape that the rewritten pattern actually uses.
-            let (pattern, escape_char) = match escape_char {
-                Some(c) if c != '\\' => {
-                    let rewritten = expr::Expr::ScalarFunction(expr::ScalarFunction {
-                        func: Arc::new(ScalarUDF::from(RewriteLikePatternFunc::new())),
-                        args: vec![pattern, lit(c.to_string())],
-                    });
-                    (rewritten, Some('\\'))
-                }
-                _ => (pattern, escape_char),
-            };
-            Ok(expr::Expr::Like(expr::Like {
-                negated: false,
-                expr: Box::new(value),
-                pattern: Box::new(pattern),
-                case_insensitive: false,
-                escape_char,
-            }))
+            let display_name = function_context
+                .argument_display_names
+                .get(2)
+                .ok_or_else(|| PlanError::invalid("missing LIKE escape display name"))?;
+            let escape_char = extract_escape_char(escape, display_name)?;
+            Ok(ScalarUDF::from(SparkLike::new(escape_char)).call(vec![value, pattern]))
         }
         _ => Err(PlanError::invalid(format!(
             "like/ilike expects 2 or 3 arguments, got {n}"
@@ -173,7 +151,7 @@ fn numeric_in_preserves_nan_zero_and_null_semantics() -> PlanResult<()> {
     use datafusion::physical_expr::create_physical_expr;
     use datafusion::prelude::SessionContext;
     use datafusion_common::DFSchema;
-    use datafusion_expr::{col, execution_props::ExecutionProps};
+    use datafusion_expr::{col, execution_props::ExecutionProps, lit};
 
     let values = Float64Array::from(vec![
         Some(-0.0),

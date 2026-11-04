@@ -33,6 +33,7 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
+use sail_plan::like_errors::{PreserveSparkLikeErrors, set_spark_like_query_clock};
 use sail_plan::physical_plan::SparkQueryPlanner;
 use sail_plan::resolver::PlanResolver;
 
@@ -52,6 +53,7 @@ pub fn configure_spark_sql(builder: SessionStateBuilder) -> SessionStateBuilder 
     builder
         .with_query_planner(Arc::new(SparkQueryPlanner))
         .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
+        .with_analyzer_rule(Arc::new(PreserveSparkLikeErrors))
 }
 
 /// A resolved Spark query with its output names before optimizer renaming.
@@ -75,6 +77,7 @@ impl SparkSqlQuery {
         session: &SessionContext,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let mut state = session.state();
+        set_spark_like_query_clock(&mut state);
         let extensions = &mut state.config_mut().options_mut().extensions;
         extensions.insert(SparkSqlExpressionSemantics::default());
         extensions.insert(PreserveAggregateStatisticsSchema::default());
