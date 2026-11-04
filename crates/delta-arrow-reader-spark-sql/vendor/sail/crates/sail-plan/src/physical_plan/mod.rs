@@ -9,7 +9,7 @@ use datafusion::physical_optimizer::output_requirements::OutputRequirementExec;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner};
-use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{DataFusionError, Result, internal_err};
 use datafusion_expr::{LogicalPlan, UserDefinedLogicalNode};
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
@@ -19,7 +19,7 @@ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 use self::monotonic_id::MonotonicIdExec;
 use self::spark_partition_id::SparkPartitionIdExec;
 use crate::expression_errors::SparkSqlExpressionSemantics;
-use crate::function::scalar::{lower_runtime_concat, lower_runtime_substring};
+use crate::function::scalar::lower_runtime_concat;
 
 mod monotonic_id;
 mod spark_partition_id;
@@ -69,18 +69,8 @@ impl QueryPlanner for SparkQueryPlanner {
                             let name = names.save(&expression);
                             expression
                                 .transform_up(|expression| {
-                                    let substring =
-                                        lower_runtime_substring(expression).map_err(|error| {
-                                            DataFusionError::External(Box::new(error))
-                                        })?;
-                                    let concat =
-                                        lower_runtime_concat(substring.data).map_err(|error| {
-                                            DataFusionError::External(Box::new(error))
-                                        })?;
-                                    Ok(Transformed::new_transformed(
-                                        concat.data,
-                                        substring.transformed || concat.transformed,
-                                    ))
+                                    lower_runtime_concat(expression)
+                                        .map_err(|error| DataFusionError::External(Box::new(error)))
                                 })
                                 .map(|expression| {
                                     expression.update_data(|expression| name.restore(expression))

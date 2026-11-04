@@ -188,15 +188,26 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             Ok(argument)
         })
         .collect::<PlanResult<Vec<_>>>()?;
+    let async_arguments = arguments.iter().try_fold(false, |found, argument| {
+        Ok::<_, datafusion_common::DataFusionError>(
+            found
+                || argument.exists(|expression| {
+                    Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                if function.func.as_async().is_some()))
+                })?,
+        )
+    })?;
     let logical = ScalarUDF::from(
         SparkSubstring::new()
             .with_logical_arguments()
-            .with_known_null_argument(known_null),
+            .with_known_null_argument(known_null)
+            .with_async_arguments(async_arguments),
     )
     .call(arguments);
-    // Constant parents keep their cumulative NULL evaluation. Nonconstant calls
-    // expose ordinary constant descendants until physical runtime lowering.
-    if !known_null && crate::expression_errors::row_expression(&logical, false)? {
+    // Whole constants retain conditional folding; ordinary scalar calls use
+    // native NULL selection. Async calls keep their existing extraction path.
+    if !async_arguments && !known_null && crate::expression_errors::row_expression(&logical, false)?
+    {
         return substring_lambdas(logical).map(|value| value.data);
     }
     Ok(logical)
@@ -660,10 +671,18 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     let args = vec![col("s"), position, lit(2_i64)];
     let function = ScalarUDF::from(SparkSubstring::new().with_logical_arguments());
     let logical = function.call(args.clone());
-    // Spark's logical substring permits common-subexpression extraction before
-    // the runtime HOF supplies cumulative NULL selection.
+    // Logical CSE stays ordinary while physical evaluation selects live rows.
     assert!(!function.short_circuits());
     assert!(function.conditional_arguments(&args).is_none());
+    assert!(function.inner().short_circuits_on_any_null_argument());
+    let asynchronous = SparkSubstring::new()
+        .with_logical_arguments()
+        .with_async_arguments(true);
+    assert!(!ScalarUDFImpl::short_circuits_on_any_null_argument(
+        &asynchronous
+    ));
+    assert!(!ScalarUDFImpl::short_circuits(&asynchronous));
+    assert!(ScalarUDFImpl::conditional_arguments(&asynchronous, &args).is_none());
     assert!(!crate::expression_errors::row_expression(&logical, false)?);
     let info = SimplifyContext::builder()
         .with_schema(Arc::new(DFSchema::try_from(Schema::new(vec![
@@ -681,11 +700,11 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     }
     let malformed = function.call(vec![col("s"), lit(1_i64)]);
     assert!(
-        !lower_runtime_substring(malformed)
+        !substring_lambdas(malformed)
             .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
             .transformed
     );
-    let lowered = lower_runtime_substring(logical)
+    let lowered = substring_lambdas(logical)
         .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
     assert!(lowered.transformed);
     let Expr::HigherOrderFunction(runtime) = &lowered.data else {
@@ -764,6 +783,9 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     }
     let ordinary = SparkSubstring::new();
     assert!(!ScalarUDFImpl::short_circuits(&ordinary));
+    assert!(!ScalarUDFImpl::short_circuits_on_any_null_argument(
+        &ordinary
+    ));
     assert!(matches!(
         ordinary.simplify(args, &info)?,
         ExprSimplifyResult::Original(_)

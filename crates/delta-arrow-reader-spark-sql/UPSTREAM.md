@@ -579,11 +579,11 @@ ranges retain Spark's Java INT arithmetic and zero padding through a small
 native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
 length is INT_MAX for both strings and binary values.
 Position and length use the existing mode-aware STRING and Decimal integer
-casts before widening to the value kernel's Int64 inputs. A private substring
-higher-order adapter evaluates each operand once on rows whose preceding
-operands were non-NULL. It retains batched volatile calls and the existing
-selection/scatter helpers. Only this concrete closed-lambda wrapper enters
-early local preparation; other higher-order functions keep their prior rules.
+casts before widening to the value kernel's Int64 inputs. Row-dependent calls
+use native scalar NULL selection while retaining ordinary logical CSE. Whole
+constant and early local calls retain the private closed-lambda adapter for
+conditional folding and preparation. Its selection/scatter helpers remain in use.
+Async arguments retain their existing extraction and eager scalar evaluation path.
 Legacy BIGINT arguments retain their previous route until shared #813 supplies
 Spark INT narrowing. General numeric CAST declarations and non-finite values
 remain with #796 and #897.

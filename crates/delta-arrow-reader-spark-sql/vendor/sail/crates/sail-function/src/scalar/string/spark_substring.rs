@@ -27,6 +27,7 @@ pub struct SparkSubstring {
     inner: NativeSparkSubstring,
     logical_arguments: bool,
     known_null_argument: bool,
+    async_arguments: bool,
 }
 
 impl SparkSubstring {
@@ -45,6 +46,11 @@ impl SparkSubstring {
 
     pub fn with_known_null_argument(mut self, known_null: bool) -> Self {
         self.known_null_argument = known_null;
+        self
+    }
+
+    pub fn with_async_arguments(mut self, asynchronous: bool) -> Self {
+        self.async_arguments = asynchronous;
         self
     }
 
@@ -92,6 +98,18 @@ impl ScalarUDFImpl for SparkSubstring {
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
         self.inner.return_field_from_args(args)
+    }
+
+    fn short_circuits_on_any_null_argument(&self) -> bool {
+        self.logical_arguments && !self.async_arguments
+    }
+
+    fn conditional_arguments<'a>(
+        &self,
+        _args: &'a [Expr],
+    ) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
+        // Spark extracts shared arguments before runtime NULL selection.
+        None
     }
 
     fn simplify(&self, args: Vec<Expr>, info: &SimplifyContext) -> Result<ExprSimplifyResult> {

@@ -1104,8 +1104,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
         Arc::clone(schema.inner()),
         vec![Arc::new(StringArray::from(vec!["abc"])) as ArrayRef],
     )?;
-    let value = prepare
-        .physical_expression(&local, &schema)?
+    let value = create_physical_expr(&local, &schema, &prepare.props)?
         .evaluate(&batch)?
         .into_array(1)?;
     assert_eq!(value.null_count(), 1);
@@ -1598,7 +1597,7 @@ impl Prepare {
                                 .data;
                             let expr = materialize_metadata_literals(expr)?.data;
                             let expr = simplifier.simplify(expr)?;
-                            self.physical_expression(&expr, project.input.schema())?
+                            create_physical_expr(&expr, project.input.schema(), &self.props)?
                                 .evaluate(&batch)?;
                         }
                     }
@@ -1722,36 +1721,13 @@ impl Prepare {
         })?.data)
     }
 
-    fn physical_expression(
-        &self,
-        expr: &Expr,
-        schema: &DFSchema,
-    ) -> Result<Arc<dyn datafusion::physical_expr::PhysicalExpr>> {
-        if !expr.exists(|expression| {
-            Ok(matches!(expression, Expr::ScalarFunction(function)
-                if function.func.inner().downcast_ref::<SparkSubstring>()
-                    .is_some_and(SparkSubstring::has_logical_arguments)))
-        })? {
-            return create_physical_expr(expr, schema, &self.props);
-        }
-        let expression = expr
-            .clone()
-            .transform_up(|expression| {
-                lower_runtime_substring(expression)
-                    .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))
-            })?
-            .data;
-        create_physical_expr(&expression, schema, &self.props)
-    }
-
     fn eval_constant(&self, expr: &Expr) -> Result<ColumnarValue> {
         let batch = RecordBatch::try_new_with_options(
             Arc::new(Schema::empty()),
             vec![],
             &RecordBatchOptions::new().with_row_count(Some(1)),
         )?;
-        self.physical_expression(expr, &DFSchema::empty())?
-            .evaluate(&batch)
+        create_physical_expr(expr, &DFSchema::empty(), &self.props)?.evaluate(&batch)
     }
 
     fn check_constant_slice_parameters(&self, plan: &LogicalPlan) -> Result<()> {
@@ -1958,7 +1934,8 @@ impl Prepare {
                 match batch {
                     Some(batch) if local && batch.num_rows() > 0 && row_expression(expr, true)? => {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
-                        let error = match self.physical_expression(&expr, &schema)?.evaluate(&batch)
+                        let error = match create_physical_expr(&expr, &schema, &self.props)?
+                            .evaluate(&batch)
                         {
                             Ok(_) => return Ok(TreeNodeRecursion::Continue),
                             Err(error) => error,
@@ -2009,8 +1986,7 @@ impl Prepare {
                         if !expr.transformed {
                             return Err(error);
                         }
-                        self.physical_expression(&expr.data, &schema)?
-                            .evaluate(&batch)?;
+                        create_physical_expr(&expr.data, &schema, &self.props)?.evaluate(&batch)?;
                     }
                     None => {
                         let expr = self.precheck_expression(expr.clone(), &schema, false)?;
@@ -2106,7 +2082,7 @@ impl Prepare {
                     .iter()
                     .map(|row| {
                         row.iter()
-                            .map(|e| self.physical_expression(e, &values.schema))
+                            .map(|e| create_physical_expr(e, &values.schema, &self.props))
                             .collect::<Result<Vec<_>>>()
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -2139,7 +2115,7 @@ impl Prepare {
                     .map(|e| {
                         let e =
                             self.precheck_expression(e.clone(), project.input.schema(), true)?;
-                        self.physical_expression(&e, project.input.schema())?
+                        create_physical_expr(&e, project.input.schema(), &self.props)?
                             .evaluate(input)?
                             .into_array(input.num_rows())
                     })
@@ -2175,8 +2151,7 @@ impl Prepare {
                     return Ok(None);
                 }
                 let predicate = self.precheck_expression(predicate, filter.input.schema(), true)?;
-                let mask = self
-                    .physical_expression(&predicate, filter.input.schema())?
+                let mask = create_physical_expr(&predicate, filter.input.schema(), &self.props)?
                     .evaluate(input)?
                     .into_array(input.num_rows())?;
                 filter_record_batch(input, mask.as_boolean())?
