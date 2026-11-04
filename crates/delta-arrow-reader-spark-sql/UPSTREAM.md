@@ -907,3 +907,67 @@ retain each admitted STRING CAST/TRY_CAST, metadata-clearing shell and exact cas
 field declaration.
 The [trim and case references](tests/fixtures/README.md#trim-and-case-fields)
 cover these paths and compare analyzed fields separately from executed fields.
+
+### LIKE escape validation
+
+Spark LIKE and ILIKE use a private two-argument adapter for default and custom
+escapes. The existing LIKE coercion determines argument types. One scanner
+validates Spark's escape grammar and translates the pattern for Arrow's native
+LIKE kernels, retaining scalar patterns for native dispatch. Dynamic patterns
+use LargeUtf8 input and scratch offsets, and the native call widens the source
+to the same representation. This avoids an i32 payload limit during translation
+and retains Arrow's same-representation dispatch. Rewritten scalar patterns
+also start as LargeUtf8 before their final cast, since native scalar casting
+materializes its input variant first. Scalar-pattern calls keep the source
+representation and scalar dispatch. Matching and result execution stay with
+DataFusion and Arrow.
+
+Dynamic patterns are evaluated only for non-NULL source rows. Known NULL
+operands fold to NULL before pattern validation. Spark also initializes literal
+patterns on empty and all-NULL providers, including an unselected dynamic CASE
+branch. A mandatory analyzer runs after expression preparation and checks those
+patterns on a temporary plan after native constant/CASE and empty-relation
+pruning. A private extension carries the execution clock from the query's own
+state. The temporary optimizer retains the query's expression options and uses
+its own pass count with error propagation, so host settings that skip failed
+rules or disable optimization cannot bypass validation. The original plan
+retains its fields and follows the unchanged host optimizer configuration and
+rule vector. The earlier expression-error analyzer retains only eligible early
+local LIKE consumers
+below LIMIT for this rule, without evaluating them with an analyzer clock.
+It makes this decision before column pruning can remove an unevaluable sibling.
+Once the mandatory check succeeds, those retained LIMIT-zero nodes use the
+existing empty-plan pruning and schema. They do not require a host optimizer
+pass to become executable.
+Pure VALUES projections and
+filters are first checked with the existing discarded local row evaluator,
+before parent LIMIT pruning. Explicit OFFSET, including zero, stops this early
+conversion. After pruning, surviving deterministic projections can be checked
+before their LIMIT/OFFSET slices, while an already local no-OFFSET LIMIT keeps
+its sliced rows. This ordering preserves both local errors under LIMIT 0 and
+the empty result when LIMIT 0 removes a later OFFSET path.
+
+Whole-projection eligibility rejects scalar-subquery and other unevaluable
+siblings. Structural admission permits volatile siblings, while actual local
+checks evaluate only pure LIKE-containing expressions. Providers and no-FROM
+one-row inputs retain their earlier LIMIT-zero pruning and unrelated NULLIF
+comparison checks. The structural classifier uses CASE's existing early local
+boundaries; actual row evaluation still rejects volatile callbacks.
+
+The discarded copy lowers only the native query-clock primitive with the
+actual execution time and options. It performs no general folding and invokes
+no volatile callbacks. Early local consumption is retained as private adapter
+state in the real plan. Late consumption marks stay in the discarded preview.
+Neither state changes runtime pattern validation, matching, fields or output
+names. The shared row evaluator and CASE's separate OFFSET
+policy are unchanged.
+Nonempty Sort and registered table inputs retain their generated-code checks.
+Native DataFusion SQL does not enable this initialization policy.
+
+Both SQL operator and function forms require an escape containing one UTF-16
+code unit. Invalid operator escapes report INVALID_ESC; function arguments
+report INVALID_ESCAPE_CHAR and retain their original expression display name.
+ILIKE retains the original escape while LOWER runs on both operands
+before escape validation. The [LIKE references](tests/fixtures/README.md#like-escapes-and-pattern-evaluation)
+record literal initialization, row-dependent validation, the remaining generated
+name and arity-diagnostic gaps, and shared RAND/STRING-cast declarations.

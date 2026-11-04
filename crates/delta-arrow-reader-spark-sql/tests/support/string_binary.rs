@@ -10,10 +10,13 @@ use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
+use datafusion::dataframe::DataFrame;
 use datafusion::datasource::MemTable;
+use datafusion::execution::SessionState;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use serde_json::{Value, json};
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -215,6 +218,16 @@ pub(crate) async fn capture_observation(
     session: &SessionContext,
     case: &Value,
 ) -> TestResult<Value> {
+    capture_observation_with_state(session, case, None).await
+}
+
+// Fixed-clock controls supply the real query state; ordinary captures retain
+// the public SparkSqlQuery planning path.
+pub(crate) async fn capture_observation_with_state(
+    session: &SessionContext,
+    case: &Value,
+    state: Option<SessionState>,
+) -> TestResult<Value> {
     let query = match plan_query(
         session,
         case["sql"].as_str().ok_or("missing SQL")?,
@@ -248,7 +261,20 @@ pub(crate) async fn capture_observation(
         "physical_schema":null,
         "physical_arrow_schema":null,
     });
-    let physical = match query.create_physical_plan(session).await {
+    if state.is_some() {
+        observation["query_column_names"] = json!(query.column_names);
+    }
+    let physical = match state {
+        Some(mut state) => {
+            sail_plan::like_errors::set_spark_like_query_clock(&mut state);
+            DataFrame::new(state, query.logical_plan.clone())
+                .create_physical_plan()
+                .await
+                .and_then(|physical| rename_physical_plan(physical, &query.column_names))
+        }
+        None => query.create_physical_plan(session).await,
+    };
+    let physical = match physical {
         Ok(physical) => physical,
         Err(error) => {
             observation["error"] = json!(format!("physical: {error}"));

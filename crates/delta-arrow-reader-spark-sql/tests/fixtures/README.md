@@ -3310,3 +3310,207 @@ comparison helpers and have no negative profiles. Together with the original
 110-reference gate, all 190 references and 1,140 contexts remain required. The
 original 12 ARRAY_CONCAT alias comparisons stay false; full family compatibility
 remains incomplete.
+
+## LIKE escapes and pattern evaluation
+
+`like-escapes-spark.jsonl` retains all 196 LIKE/ILIKE observations from the
+independent string/binary capture, with complete case records and expected
+outputs unchanged. The selection header records the original SHA-256. The
+unaliased mixed-function control retains the generated LIKE label gap in #791
+as an explicit incompatible observation. Its generated metadata matches the
+reference at both analyzed and physical stages.
+The argument-count controls require their exact native resolution cause and
+remain separate from Spark WRONG_NUM_ARGS diagnostic compatibility.
+
+`like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
+all-NULL and empty registered inputs. It distinguishes literal from
+column patterns under WHERE false, LIMIT 0, literal CASE and dynamic CASE.
+Invalid literal patterns initialize even on empty/all-NULL providers and in an
+unselected dynamic CASE branch. Known NULL source expressions and dead literal
+branches suppress validation; column patterns validate only for evaluated,
+non-NULL input pairs. Custom percent/underscore escapes, a supplementary escape,
+and ILIKE's lowercase-before-validation order have dedicated controls.
+
+`like-function-spark.jsonl` adds 60 independent observations through LIKE and
+ILIKE function syntax. Both forms share literal initialization and dynamic NULL
+behavior. Function escape admission reports INVALID_ESCAPE_CHAR for empty,
+long, supplementary, NULL and typed NULL escapes, preserving the offending SQL
+expression. Operator escape strings instead report INVALID_ESC.
+
+`like-clock-spark.jsonl` retains 16 fresh WHERE true/false controls over
+all-NULL and empty registered inputs. A separate regression substitutes
+CURRENT_TIMESTAMP comparisons around January 1, 2000, then pins the actual
+SessionState query clock to 1999 or 2026. Both predicate directions must agree
+with the corresponding captured Boolean control. This catches missed literal
+initialization and spurious validation caused by a different preview clock.
+
+`like-local-values-spark.jsonl` adds 24 independent observations in both ANSI
+modes. Direct NULL-column VALUES inputs skip an invalid literal pattern in all
+four operator/function forms, as do dynamic patterns on NULL local sources.
+Non-NULL local values report the escape error even below a parent LIMIT 0;
+WHERE false removes the input first. A nonempty Sort remains a generated-code
+boundary. NULL local inputs under LIMIT 1, with and without explicit OFFSET 0,
+still return NULL. The registered all-NULL contrast retains literal initialization
+failure. These references protect the distinction between interpreted local
+rows and generated-code pattern initialization; no CASE offset policy is inferred.
+
+`like-positive-offset-spark.jsonl` adds 48 independent observations: six shapes,
+four operator/function forms and both ANSI settings. Mixed NULL/non-NULL rows
+report the escape error with LIMIT 1 OFFSET 1 in either row order, and with
+LIMIT 1 OFFSET 0 when NULL comes first. All-NULL OFFSET-zero input still returns
+NULL. Omitting OFFSET lets the early LIMIT select the first NULL row before
+LIKE interpretation. An outer LIMIT 0 instead removes the OFFSET path and
+returns no rows. Spark's early local conversion stops at every explicit OFFSET;
+a surviving deterministic projection can move below its LIMIT/OFFSET slices
+before later local conversion. Expression preparation retains LIKE-bearing
+LIMIT inputs until the mandatory LIKE analyzer uses the actual query-state clock.
+The existing shared row evaluator and the CASE offset classifier are unchanged.
+The no-OFFSET first-NULL control also protects repeated outer optimizer passes:
+its early local-consumption state stays on the private adapter after host rules
+move LIMIT below aliases and projections. Runtime pattern validation remains
+unconditional, with a direct marked-adapter kernel control.
+
+`like-unevaluable-sibling-spark.jsonl` retains 64 independent observations
+with scalar-subquery siblings, unused scalar outputs and volatile siblings.
+A scalar sibling blocks conversion of the whole Project: NULL and non-NULL
+sources retain literal initialization without LIMIT, while LIMIT 0 discards the
+query. An unused scalar output can be pruned before later local conversion.
+Volatile siblings use CAST(rand() AS STRING) and only LIMIT-zero queries;
+structural eligibility permits them, while the discarded native check executes
+only the pure LIKE expression. Counter controls separately require zero
+volatile-sibling callbacks during planning and below LIMIT 0.
+
+`like-limit-guard-nullif-spark.jsonl` retains 40 controls over a registered
+all-NULL provider and a no-FROM one-row input, with valid LIKE/ILIKE siblings or
+no LIKE. LIMIT 0 suppresses the unrelated NULLIF comparison in both forms.
+The ten ANSI no-limit errors retain the existing native malformed-string-to-Int64
+cause and the CAST_INVALID_INPUT tag supplied by the native cast diagnostic
+adapter. Their analyzed and physical fields
+are compared independently, including legitimate physical nullability refinement.
+The LIKE analyzer retention check excludes these nonlocal consumers and leaves
+the shared numeric-cast and NULLIF policies unchanged.
+
+Metadata erratum: the frozen headers of `like-unevaluable-sibling-spark.jsonl`
+and `like-limit-guard-nullif-spark.jsonl` copied the selection kind
+`input-only-positive-offset-like-boundary`, 24 queries and 48 observations from
+an earlier input seed. These fields do not describe either file's capture.
+The frozen bytes remain unchanged. The actual domains and runtime identities are:
+
+- `like-unevaluable-sibling-spark.jsonl`: 32 queries in both ANSI modes, producing
+  64 observations, as recorded by `replay.observations`. Its runtime header has
+  `spark_context_settings.spark.app.id=local-1793660283072`. Its replay source is
+  `771-unevaluable-sibling-input.jsonl`, SHA-256
+  `2a42fa182d35daaaf6bd5f59c9f334b5659fc61edd88b593de1d0cc78c950368`.
+- `like-limit-guard-nullif-spark.jsonl`: 20 queries in both ANSI modes, producing
+  40 observations, as recorded by `replay.observations`. Its runtime header has
+  `spark_context_settings.spark.app.id=local-1793659945685`. Its replay source is
+  `771-limit-guard-nullif-input.jsonl`, SHA-256
+  `ee0a09291831e3845f80754587d5507dd0bfa679d5f73d97f6a318e180ceebd6`.
+
+Any future recapture should correct its input selection metadata and preserve
+the existing references as a separately documented capture.
+
+`like-local-clock-spark.jsonl` adds 24 Boolean controls over NULL/non-NULL VALUES
+and non-NULL local inputs below LIMIT 0. Fixed 1999/2026 query-clock substitutions
+check that each predicate selects the same rows and early errors as its captured
+true/false control. This adds 288 contextual checks while retaining the original
+192 provider clock checks. Both sets log the captured control separately from
+the transformed DAR SQL and actual context. Only the native query-clock simplify
+hook runs before local evaluation; other expressions keep physical CASE/NULL
+short circuits.
+
+`like-host-limit-boundary-spark.jsonl` adds eight independent references for
+the exact host-option regression SQL in both ANSI modes and both operator
+forms. Non-NULL local input reports INVALID_FORMAT.ESC_IN_THE_MIDDLE even with
+LIMIT 0 OFFSET 1 on that projection. NULL local input with LIMIT 0 returns no
+rows. These queries differ from the earlier outer-LIMIT-zero OFFSET fixture,
+whose projection reads an already sliced subquery. The header records fresh
+application `local-1793755310012` and replay-input SHA-256
+`7b853e98705c05b85c8088abba10e8f4345347b8cb1b727f26eb3c23919cb7b0`.
+The host-options regression replays all eight references under default settings,
+skipped optimizer failures, zero optimizer passes and both settings together,
+comparing complete fields, rows and precise physical-stage causes. These 32
+observations supplement the original 760-reference matrix and 480 clock contexts.
+
+The fixtures record Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1+0, Python 3.12.14,
+loaded JAR hashes, UTC settings, exact inputs and separate analyzed, optimized
+and physical result schemas. The replayer ignores expected results and collects
+fresh Spark observations from recorded inputs and SQL.
+
+`like_escapes.rs` replays all 760 references across Utf8, LargeUtf8 and Utf8View
+at batch sizes 1 and 32, producing 4,560 observations. It compares every actual
+result with the unchanged Spark reference. The current bounded replay has
+532 strict success references and 198 precise error references, producing
+3,192 successful-result and 1,188 error comparisons, or 4,380 strict matches.
+
+`like-retained-native-observations.jsonl` separately freezes all 180 incompatible
+native observations from the unmodified R3 receipts. Twelve retain the #791
+name difference, 96 retain the #875 RAND/STRING-cast declarations, and 72 retain
+the #915 LIKE/ILIKE arity condition and function/parameter differences. The
+180 observations include 60 successful results with field differences and
+120 errors with field or diagnostic differences. Every strict/full compatibility
+flag remains false. No field, nullable declaration or expected Spark output is
+adjusted. The earlier generated-name allowance has been removed.
+
+The preservation gate requires each profiled actual object to equal its complete
+frozen native observation, including raw analyzed/physical fields, rows, exact
+error text/stage and availability. All other observations must match Spark's
+applicable fields, values and meaningful error cause. The profile header records
+actual source identities and receipt hashes; it is native regression evidence,
+with no Spark oracle or acceptance-waiver credit. Mutation controls reject
+schema, metadata, row, raw-field, error-cause/stage and availability changes.
+The test is named `like_escapes_preserve_complete_observations` to describe this
+bounded contract. #771 remains open.
+
+Including the 480 clock controls and 32 independent host references, the current
+5,072 reference comparisons retain 4,892 strict matches: 3,496 successful results
+and 1,396 precise errors. The same 180 incompatible observations stay false.
+The complete 5,216-record raw collector also retains 144 diagnostics without
+Spark oracle credit, including its 24 native clock-value witnesses. These counts
+describe the recorded contexts and do not establish family-wide compatibility.
+
+Errors require the precise
+escape condition, pattern, offending character and DAR failure stage. Spark
+optimizer and collect failures both occur during DAR physical planning for
+literal patterns; dynamic pattern failures occur during execution. The test
+also preserves actual analyzed fields for failed queries and actual physical
+fields when collection fails. The 144 dynamic-error observations require those
+available physical fields. Spark did not capture physical schemas after failed
+collection, so the logs label physical equivalence unavailable; optimized fields
+are never substituted. Admission failures remain distinct with unavailable
+native fields. Native SQL and volatile counters check isolation and evaluation. Counters cover
+both registered input and VALUES input, requiring zero planning evaluations,
+one source evaluation per row and pattern evaluation only on non-NULL sources.
+Another 480 comparisons exercise the fixed query clocks. Each emits a uniquely
+identified metamorphic observation with the original Spark Boolean control,
+complete reference header, transformed DAR SQL, actual pinned clock and session
+configuration, input representation/batch, actual fields/error/rows and result.
+These records identify the context substitution explicitly; Spark did not
+capture the transformed CURRENT_TIMESTAMP query. Clock mismatches accumulate
+until all contexts have been recorded, then fail together. Representation variants apply
+to registered providers; SQL VALUES retain the planner's native storage. Kernel regressions cover sliced
+view patterns and direct NULL/empty invocations. Small width regressions also
+assert that actual dynamic-pattern native operands use LargeUtf8 for all three
+input representations, including scalar-source broadcasts, NULL-pair skipping,
+backslash expansion and precise invalid live patterns. Scalar-pattern operands
+retain their native representation and scalar dispatch. A separate test inspects
+the rewritten scalar before any native cast, requiring LargeUtf8 for expanded
+text and NULLs from each input representation; final operand types alone would
+miss intermediate Utf8 materialization. These checks expose accidental i32
+narrowing without allocating multi-gigabyte arrays; the actual
+i32::MAX payload and expansion boundaries remain unexecuted.
+
+The private C06 helper's capture_observation function retains fields from each
+completed stage beside a later error. Its existing capture_result interface
+keeps the same success object and Result-based errors for other tests. The
+optional-state entry point lets fixed-clock checks use that same capture loop
+with the actual SessionState and native output renamer.
+
+```sh
+python tests/fixtures/recapture_string_binary_spark.py \
+  --input tests/fixtures/like-evaluation-spark.jsonl \
+  --output /tmp/like-evaluation-spark-fresh.jsonl
+cargo test --locked --workspace --test like_escapes -- --nocapture
+
+```
