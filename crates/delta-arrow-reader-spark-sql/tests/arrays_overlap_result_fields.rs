@@ -302,7 +302,18 @@ async fn spark_configuration_preserves_native_array_overlap() -> TestResult {
     ] {
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
         let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
-        assert_eq!(actual, expected, "{sql}");
+        let observation = json!({"sql":sql,"native":expected,"configured":actual});
+        eprintln!("ARRAYS_OVERLAP_NATIVE_OBSERVATION {observation}");
+        assert!(observation["native"]["error"].is_null(), "{observation}");
+        assert_eq!(observation["native"]["phase"], "encode", "{observation}");
+        for stage in ["public_schema", "before_collect", "physical_schema"] {
+            assert!(observation["native"][stage].is_object(), "{observation}");
+        }
+        assert!(observation["native"]["rows"].is_array(), "{observation}");
+        assert_eq!(
+            observation["configured"], observation["native"],
+            "{observation}"
+        );
     }
     Ok(())
 }
