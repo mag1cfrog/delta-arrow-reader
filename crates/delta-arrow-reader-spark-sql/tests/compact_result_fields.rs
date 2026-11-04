@@ -1,11 +1,9 @@
 //! ARRAY_COMPACT fields and consumers match independently captured Spark results.
 
 use datafusion::execution::SessionStateBuilder;
-use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::prelude::{SessionConfig, SessionContext};
-use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+use delta_arrow_reader_spark_sql::configure_spark_sql;
 use futures_util::FutureExt;
-use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
@@ -53,52 +51,20 @@ const SCENARIO_IDS: &[&str] = &[
     "invalid_non_array",
 ];
 
-async fn capture_compact_optimized_observation(
-    session: &SessionContext,
-    case: &Value,
-) -> TestResult<Value> {
-    let query = plan_query(
-        session,
-        case["sql"].as_str().ok_or("missing SQL")?,
-        &SparkSqlOptions {
-            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
-            session_timezone: "UTC".into(),
-            ..SparkSqlOptions::default()
-        },
-    )
-    .await?;
-    let mut state = session.state();
-    let extensions = &mut state.config_mut().options_mut().extensions;
-    extensions.insert(SparkSqlExpressionSemantics::default());
-    extensions.insert(PreserveAggregateStatisticsSchema::default());
-    let optimized = state.optimize(&query.logical_plan)?;
-    let raw_schema = spark_results::capture_schema(optimized.schema().fields(), None)?;
-    let names_match = query.column_names.len() == query.logical_plan.schema().fields().len()
-        && optimized.schema().fields().len() == query.logical_plan.schema().fields().len()
-        && optimized
-            .schema()
-            .fields()
-            .iter()
-            .zip(query.logical_plan.schema().fields())
-            .all(|(actual, resolved)| actual.name() == resolved.name());
-    let schema = names_match
-        .then(|| {
-            spark_results::capture_schema(optimized.schema().fields(), Some(&query.column_names))
-        })
-        .transpose()?;
-    Ok(json!({"raw_schema":raw_schema,"schema":schema,"names_match":names_match}))
-}
-
 async fn capture_compact_comparison(session: &SessionContext, case: &Value) -> Value {
     let observation = async {
         let mut comparison =
             spark_results::compare_exact_spark_query_stages(session, case).await?;
-        let optimized = capture_compact_optimized_observation(session, case).await;
+        let optimized = spark_results::capture_spark_optimized_observation(session, case).await;
         comparison["optimized_matches"] = json!(match &optimized {
             Ok(observation) =>
                 observation["names_match"] == true
                     && Some(&observation["schema"]) == case["schema_stages"].get("optimized"),
-            Err(_) => case["schema_stages"].get("optimized").is_none(),
+            Err(error) =>
+                case["schema_stages"].get("optimized").is_none()
+                    && comparison["error_matches"] == true
+                    && matches!(comparison["native_phase"].as_str(), Some("resolve" | "create_physical_plan"))
+                    && comparison["error"].as_str() == Some(error.to_string().as_str()),
         });
         comparison["optimized_observation"] = optimized.as_ref().ok().cloned().unwrap_or(Value::Null);
         comparison["optimized_error"] = json!(optimized.as_ref().err().map(ToString::to_string));

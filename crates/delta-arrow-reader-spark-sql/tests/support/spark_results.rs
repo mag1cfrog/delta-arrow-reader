@@ -9,9 +9,11 @@ use arrow::datatypes::{
 };
 use arrow::record_batch::RecordBatch;
 use arrow::util::display::array_value_to_string;
+use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::collect;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -122,6 +124,47 @@ pub(crate) async fn capture_spark_query_observation(
     rows.sort_by_key(|row| json!(row).to_string());
     Ok(json!({"result":{"schema":public_schema,"rows":rows},
         "physical_schema":physical_schema}))
+}
+
+/// Observe the production optimizer with verified public output names.
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared observers."
+)]
+pub(crate) async fn capture_spark_optimized_observation(
+    session: &SessionContext,
+    case: &Value,
+) -> TestResult<Value> {
+    let query = plan_query(
+        session,
+        case["sql"].as_str().ok_or("missing SQL")?,
+        &SparkSqlOptions {
+            ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+            session_timezone: "UTC".into(),
+            ..SparkSqlOptions::default()
+        },
+    )
+    .await?;
+    let mut state = session.state();
+    let extensions = &mut state.config_mut().options_mut().extensions;
+    extensions.insert(SparkSqlExpressionSemantics::default());
+    extensions.insert(PreserveAggregateStatisticsSchema::default());
+    let optimized = state.optimize(&query.logical_plan)?;
+    let raw_schema = capture_schema(optimized.schema().fields(), None)?;
+    let names_match = query.column_names.len() == query.logical_plan.schema().fields().len()
+        && optimized.schema().fields().len() == query.logical_plan.schema().fields().len()
+        && optimized
+            .schema()
+            .fields()
+            .iter()
+            .zip(query.logical_plan.schema().fields())
+            .all(|(actual, resolved)| actual.name() == resolved.name());
+    let schema = names_match
+        .then(|| {
+            capture_schema(optimized.schema().fields(), Some(&query.column_names))
+        })
+        .transpose()?;
+    Ok(json!({"raw_schema":raw_schema,"schema":schema,"names_match":names_match}))
 }
 
 /// Compare exact recorded stages, complete rows, and the required engine error phase.
