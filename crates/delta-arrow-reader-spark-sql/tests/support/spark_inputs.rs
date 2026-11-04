@@ -75,7 +75,9 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
         DataType::Binary => {
             let hex = value.as_str().ok_or("missing binary hex")?;
             if hex.len() % 2 != 0
-                || !hex.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || !hex
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
             {
                 return Err("invalid lowercase binary hex".into());
             }
@@ -184,7 +186,10 @@ pub(crate) fn register_recorded_inputs(
 fn recorded_binary_values_check_hex_and_preserve_bytes() -> TestResult {
     use serde_json::json;
 
-    assert_eq!(decode_recorded_data_type(&json!("binary"))?, DataType::Binary);
+    assert_eq!(
+        decode_recorded_data_type(&json!("binary"))?,
+        DataType::Binary
+    );
     for (encoded, bytes) in [("00ff6162", vec![0, 255, 97, 98]), ("", vec![])] {
         assert_eq!(
             decode_recorded_value(&json!(encoded), &DataType::Binary)?,
@@ -195,7 +200,13 @@ fn recorded_binary_values_check_hex_and_preserve_bytes() -> TestResult {
         decode_recorded_value(&Value::Null, &DataType::Binary)?,
         ScalarValue::Binary(None)
     );
-    for encoded in [json!("0"), json!("gg"), json!("0G"), json!("\u{00e9}"), json!(1)] {
+    for encoded in [
+        json!("0"),
+        json!("gg"),
+        json!("0G"),
+        json!("\u{00e9}"),
+        json!(1),
+    ] {
         assert!(decode_recorded_value(&encoded, &DataType::Binary).is_err());
     }
     Ok(())

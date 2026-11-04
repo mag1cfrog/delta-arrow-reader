@@ -62,9 +62,18 @@ async fn arrays_overlap_incompatible_element_types_match_spark() -> TestResult {
 #[tokio::test]
 async fn arrays_overlap_common_element_types_match_spark() -> TestResult {
     for (source, count) in [
-        (include_str!("fixtures/arrays-overlap-narrowing-spark.jsonl"), 32),
-        (include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl"), 40),
-        (include_str!("fixtures/arrays-overlap-positive-coercion-result-fields-spark.jsonl"), 16),
+        (
+            include_str!("fixtures/arrays-overlap-narrowing-spark.jsonl"),
+            32,
+        ),
+        (
+            include_str!("fixtures/arrays-overlap-coercion-result-fields-spark.jsonl"),
+            40,
+        ),
+        (
+            include_str!("fixtures/arrays-overlap-positive-coercion-result-fields-spark.jsonl"),
+            16,
+        ),
     ] {
         assert_arrays_overlap_result_fields(source, count).await?;
     }
@@ -80,10 +89,15 @@ async fn arrays_overlap_common_temporal_conversion_matches_spark() -> TestResult
     assert_eq!(records.len(), 33);
     assert_eq!(records[0]["timezone"], "America/New_York");
     // The unchanged reference also contains independent #843 floating-equality cases.
-    let temporal = records.into_iter().filter(|record| {
-        record.get("id").is_none()
-            || record["id"].as_str().is_some_and(|id| id.starts_with("dst_"))
-    }).collect::<Vec<_>>();
+    let temporal = records
+        .into_iter()
+        .filter(|record| {
+            record.get("id").is_none()
+                || record["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("dst_"))
+        })
+        .collect::<Vec<_>>();
     assert_arrays_overlap_result_records(&temporal, 16).await
 }
 
@@ -92,7 +106,8 @@ async fn arrays_overlap_binary_admission_matches_spark() -> TestResult {
     assert_arrays_overlap_result_fields(
         include_str!("fixtures/arrays-overlap-binary-admission-spark.jsonl"),
         136,
-    ).await
+    )
+    .await
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -106,76 +121,137 @@ fn binary_storage_type(
     data_type: &arrow::datatypes::DataType,
     storage: &arrow::datatypes::DataType,
 ) -> arrow::datatypes::DataType {
-    use std::sync::Arc;
     use arrow::datatypes::DataType;
+    use std::sync::Arc;
 
     match data_type {
         DataType::Binary => storage.clone(),
-        DataType::List(field) => DataType::List(Arc::new(field.as_ref().clone()
-            .with_data_type(binary_storage_type(field.data_type(), storage)))),
-        DataType::Struct(fields) => DataType::Struct(fields.iter().map(|field| {
-            field.as_ref().clone().with_data_type(binary_storage_type(field.data_type(), storage))
-        }).collect()),
+        DataType::List(field) => DataType::List(Arc::new(
+            field
+                .as_ref()
+                .clone()
+                .with_data_type(binary_storage_type(field.data_type(), storage)),
+        )),
+        DataType::Struct(fields) => DataType::Struct(
+            fields
+                .iter()
+                .map(|field| {
+                    field
+                        .as_ref()
+                        .clone()
+                        .with_data_type(binary_storage_type(field.data_type(), storage))
+                })
+                .collect(),
+        ),
         _ => data_type.clone(),
     }
 }
 
 #[tokio::test]
 async fn arrays_overlap_binary_storage_matches_recorded_logical_types() -> TestResult {
-    use std::sync::Arc;
     use arrow::datatypes::{DataType, Schema};
     use arrow::record_batch::RecordBatch;
     use datafusion::datasource::MemTable;
+    use std::sync::Arc;
 
     let records = include_str!("fixtures/arrays-overlap-binary-admission-spark.jsonl")
-        .lines().map(serde_json::from_str::<Value>).collect::<Result<Vec<_>, _>>()?;
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records.len(), 137);
-    let binary_types = [DataType::Binary, DataType::LargeBinary, DataType::BinaryView];
+    let binary_types = [
+        DataType::Binary,
+        DataType::LargeBinary,
+        DataType::BinaryView,
+    ];
     let mut comparisons = 0;
     let mut differences = Vec::new();
     for left_storage in &binary_types {
         for right_storage in &binary_types {
-            for layout in [ArrayLayout::Lists, ArrayLayout::MixedOffsets, ArrayLayout::MixedViews] {
+            for layout in [
+                ArrayLayout::Lists,
+                ArrayLayout::MixedOffsets,
+                ArrayLayout::MixedViews,
+            ] {
                 for batch_size in [1, 32] {
-                    let session = SessionContext::new_with_state(configure_spark_sql(
-                        SessionStateBuilder::new().with_default_features().with_config(
-                            SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2)),
-                    ).build());
+                    let session = SessionContext::new_with_state(
+                        configure_spark_sql(
+                            SessionStateBuilder::new()
+                                .with_default_features()
+                                .with_config(
+                                    SessionConfig::new()
+                                        .with_batch_size(batch_size)
+                                        .with_target_partitions(2),
+                                ),
+                        )
+                        .build(),
+                    );
                     for input in records[0]["inputs"].as_array().ok_or("missing inputs")? {
                         let source = spark_inputs::decode_recorded_batch(input)?;
-                        let fields = source.schema().fields().iter().enumerate().map(|(index, field)| {
-                            let storage = if index == 1 { left_storage } else { right_storage };
-                            let target = binary_storage_type(field.data_type(), storage);
-                            let target = if let DataType::List(child) = target {
-                                match (layout, index) {
-                                    (ArrayLayout::MixedOffsets, 2) => DataType::LargeList(child),
-                                    (ArrayLayout::MixedViews, 1) => DataType::ListView(child),
-                                    (ArrayLayout::MixedViews, 2) => DataType::LargeListView(child),
-                                    _ => DataType::List(child),
-                                }
-                            } else { target };
-                            field.as_ref().clone().with_data_type(target)
-                        }).collect::<Vec<_>>();
+                        let fields = source
+                            .schema()
+                            .fields()
+                            .iter()
+                            .enumerate()
+                            .map(|(index, field)| {
+                                let storage = if index == 1 {
+                                    left_storage
+                                } else {
+                                    right_storage
+                                };
+                                let target = binary_storage_type(field.data_type(), storage);
+                                let target = if let DataType::List(child) = target {
+                                    match (layout, index) {
+                                        (ArrayLayout::MixedOffsets, 2) => {
+                                            DataType::LargeList(child)
+                                        }
+                                        (ArrayLayout::MixedViews, 1) => DataType::ListView(child),
+                                        (ArrayLayout::MixedViews, 2) => {
+                                            DataType::LargeListView(child)
+                                        }
+                                        _ => DataType::List(child),
+                                    }
+                                } else {
+                                    target
+                                };
+                                field.as_ref().clone().with_data_type(target)
+                            })
+                            .collect::<Vec<_>>();
                         let schema = Arc::new(Schema::new(fields));
-                        let columns = source.columns().iter().zip(schema.fields()).map(|(column, field)| {
-                            let value = arrow::compute::cast(column.as_ref(), field.data_type())?;
-                            value.to_data().validate_full()?;
-                            Ok(value)
-                        }).collect::<TestResult<Vec<_>>>()?;
+                        let columns = source
+                            .columns()
+                            .iter()
+                            .zip(schema.fields())
+                            .map(|(column, field)| {
+                                let value =
+                                    arrow::compute::cast(column.as_ref(), field.data_type())?;
+                                value.to_data().validate_full()?;
+                                Ok(value)
+                            })
+                            .collect::<TestResult<Vec<_>>>()?;
                         let batch = RecordBatch::try_new(schema.clone(), columns)?;
                         let mut partitions = vec![vec![batch.slice(1, 0)], Vec::new()];
-                        for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
-                            partitions[chunk % 2].push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
+                        for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate()
+                        {
+                            partitions[chunk % 2].push(
+                                batch.slice(offset, batch_size.min(batch.num_rows() - offset)),
+                            );
                         }
-                        session.register_table(input["name"].as_str().ok_or("missing table name")?,
-                            Arc::new(MemTable::try_new(schema, partitions)?))?;
+                        session.register_table(
+                            input["name"].as_str().ok_or("missing table name")?,
+                            Arc::new(MemTable::try_new(schema, partitions)?),
+                        )?;
                     }
                     for case in records[1..].iter().filter(|case| {
                         case["order"] == "both"
-                            || (left_storage == right_storage && case["source"] == "provider"
-                                && case["family"].as_str().is_some_and(|family| family.contains("binary_string")))
+                            || (left_storage == right_storage
+                                && case["source"] == "provider"
+                                && case["family"]
+                                    .as_str()
+                                    .is_some_and(|family| family.contains("binary_string")))
                     }) {
-                        let mut comparison = spark_results::compare_exact_spark_query_stages(&session, case).await?;
+                        let mut comparison =
+                            spark_results::compare_exact_spark_query_stages(&session, case).await?;
                         comparison["id"] = case["id"].clone();
                         comparison["ansi"] = case["ansi"].clone();
                         comparison["batch"] = json!(batch_size);
