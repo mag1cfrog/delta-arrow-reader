@@ -993,3 +993,18 @@ ILIKE retains the original escape while LOWER runs on both operands
 before escape validation. The [LIKE references](tests/fixtures/README.md#like-escapes-and-pattern-evaluation)
 record literal initialization, row-dependent validation, the remaining generated
 name and arity-diagnostic gaps, and shared RAND/STRING-cast declarations.
+
+
+### REGEXP_REPLACE position INT coercion
+
+Foldable positions reuse the substring adapter's native STRING, Decimal and
+numeric INT cast builders in the query's ANSI mode. Conversion and positive-range
+validation precede replacement evaluation. The logical cast remains visible for
+analyzed nullability; ordinary optimization can later refine its field.
+New coercion paths reject custom operands that disable constant folding before
+literal evaluation. The existing INT position path is unchanged.
+
+The focused position fixture retains 110 independent Spark references and all
+660 native configurations. Shared BIGINT narrowing, nonfinite conversion and
+CAST declarations remain with #813, #897 and #796. No numeric parser, overflow
+policy, replacement kernel or native DataFusion SQL behavior is changed here.
