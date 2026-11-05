@@ -27,9 +27,9 @@ mod table;
 pub(crate) mod temporal_coercion;
 mod window;
 
-pub(crate) use aggregate::get_built_in_aggregate_function;
-pub(crate) use aggregate::expression_is_nondeterministic;
 pub(crate) use aggregate::aggregate_argument_needs_validation;
+pub(crate) use aggregate::expression_is_nondeterministic;
+pub(crate) use aggregate::get_built_in_aggregate_function;
 pub(crate) use aggregate::require_deterministic_scalar_expression;
 pub(crate) use comparison::SparkStringTemporalComparisonCast;
 pub(crate) use scalar::{get_lambda_parameters, is_higher_order_function};
