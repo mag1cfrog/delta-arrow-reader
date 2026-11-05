@@ -99,7 +99,13 @@ impl LambdaExpr {
 
         body.apply(|node| {
             if let Some(lambda) = node.downcast_ref::<LambdaExpr>() {
-                used_column_indices.extend(lambda.projection().iter().copied().filter(|index| *index < input_size));
+                used_column_indices.extend(
+                    lambda
+                        .projection()
+                        .iter()
+                        .copied()
+                        .filter(|index| *index < input_size),
+                );
                 return Ok(TreeNodeRecursion::Jump);
             }
             if let Some(col) = node.downcast_ref::<Column>() {
@@ -125,12 +131,24 @@ impl LambdaExpr {
             .map(|(projected, original)| (*original, projected))
             .collect::<HashMap<_, _>>();
 
-        let projected_body = rewrite_lambda_body(Arc::clone(&body), input_size, projection.len(), |column| {
-            let index = column_index_map.get(&column.index()).copied().ok_or_else(|| {
-                internal_datafusion_err!("lambda projection lost captured index {}", column.index())
-            })?;
-            Ok(Arc::new(Column::new(column.name(), index)))
-        })?;
+        let projected_body = rewrite_lambda_body(
+            Arc::clone(&body),
+            input_size,
+            projection.len(),
+            |column| {
+                let index =
+                    column_index_map
+                        .get(&column.index())
+                        .copied()
+                        .ok_or_else(|| {
+                            internal_datafusion_err!(
+                                "lambda projection lost captured index {}",
+                                column.index()
+                            )
+                        })?;
+                Ok(Arc::new(Column::new(column.name(), index)))
+            },
+        )?;
 
         Ok(Self {
             params,
@@ -168,7 +186,9 @@ impl LambdaExpr {
     }
 
     pub(crate) fn with_new_body_and_input_schema_size(
-        &self, body: Arc<dyn PhysicalExpr>, size: usize,
+        &self,
+        body: Arc<dyn PhysicalExpr>,
+        size: usize,
     ) -> Result<Self> {
         check_async_udf(&body)?;
         Self::new(self.params.clone(), body, Some(size))
@@ -211,7 +231,11 @@ impl PhysicalExpr for LambdaExpr {
 
         check_async_udf(body)?;
 
-        Ok(Arc::new(Self::new(self.params.clone(), Arc::clone(body), self.input_schema_size)?))
+        Ok(Arc::new(Self::new(
+            self.params.clone(),
+            Arc::clone(body),
+            self.input_schema_size,
+        )?))
     }
 
     fn fmt_sql(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

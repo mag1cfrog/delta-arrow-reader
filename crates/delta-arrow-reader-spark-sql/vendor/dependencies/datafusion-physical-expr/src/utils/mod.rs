@@ -309,9 +309,15 @@ pub(crate) fn plan_expression_input_projection(
         .map(|(projected, original)| (*original, projected))
         .collect::<HashMap<_, _>>();
     let projected = rewrite_expr_columns(Arc::clone(expr), projection.len(), |column| {
-        let index = column_index_map.get(&column.index()).copied().ok_or_else(|| {
-            internal_datafusion_err!("input projection lost captured index {}", column.index())
-        })?;
+        let index = column_index_map
+            .get(&column.index())
+            .copied()
+            .ok_or_else(|| {
+                internal_datafusion_err!(
+                    "input projection lost captured index {}",
+                    column.index()
+                )
+            })?;
         Ok(Arc::new(Column::new(column.name(), index)))
     })?;
     Ok((projection, projected))
@@ -345,7 +351,10 @@ pub fn reassign_expr_columns(
     schema: &Schema,
 ) -> Result<Arc<dyn PhysicalExpr>> {
     rewrite_expr_columns(expr, schema.fields().len(), |column| {
-        Ok(Arc::new(Column::new(column.name(), schema.index_of(column.name())?)))
+        Ok(Arc::new(Column::new(
+            column.name(),
+            schema.index_of(column.name())?,
+        )))
     })
 }
 
@@ -370,7 +379,12 @@ pub(crate) fn rewrite_lambda_body<F>(
 where
     F: FnMut(&Column) -> Result<Arc<dyn PhysicalExpr>>,
 {
-    rewrite_scoped_columns(body, new_input_size, Some((old_input_size, new_input_size)), &mut rewrite)
+    rewrite_scoped_columns(
+        body,
+        new_input_size,
+        Some((old_input_size, new_input_size)),
+        &mut rewrite,
+    )
 }
 
 fn rewrite_scoped_columns<F>(
@@ -383,7 +397,9 @@ where
     F: FnMut(&Column) -> Result<Arc<dyn PhysicalExpr>>,
 {
     let shift_parameter = |index: usize, old: usize, new: usize| {
-        index.checked_sub(old).and_then(|offset| new.checked_add(offset))
+        index
+            .checked_sub(old)
+            .and_then(|offset| new.checked_add(offset))
             .ok_or_else(|| internal_datafusion_err!("invalid lambda parameter boundary"))
     };
     if let Some(lambda) = expr.downcast_ref::<LambdaExpr>() {
@@ -394,19 +410,30 @@ where
             Some((old, new)) => shift_parameter(old_size, old, new)?,
             None => new_input_size,
         };
-        let body = rewrite_scoped_columns(Arc::clone(lambda.body()), new_size,
-            parameter_scope.or(Some((old_size, new_size))), rewrite)?;
+        let body = rewrite_scoped_columns(
+            Arc::clone(lambda.body()),
+            new_size,
+            parameter_scope.or(Some((old_size, new_size))),
+            rewrite,
+        )?;
         if old_size == new_size && Arc::ptr_eq(&body, lambda.body()) {
             return Ok(expr);
         }
-        return Ok(Arc::new(lambda.with_new_body_and_input_schema_size(body, new_size)?));
+        return Ok(Arc::new(
+            lambda.with_new_body_and_input_schema_size(body, new_size)?,
+        ));
     }
     if let Some(variable) = expr.downcast_ref::<LambdaVariable>() {
         if let Some((old, new)) = parameter_scope {
             if variable.index() >= old {
                 let index = shift_parameter(variable.index(), old, new)?;
-                return if index == variable.index() { Ok(expr) } else {
-                    Ok(Arc::new(LambdaVariable::new(index, Arc::clone(variable.field()))))
+                return if index == variable.index() {
+                    Ok(expr)
+                } else {
+                    Ok(Arc::new(LambdaVariable::new(
+                        index,
+                        Arc::clone(variable.field()),
+                    )))
                 };
             }
         }
@@ -415,21 +442,33 @@ where
             if column.index() == variable.index() && column.name() == variable.name() {
                 return Ok(expr);
             }
-            Ok(Arc::new(LambdaVariable::new(column.index(),
-                Arc::new(variable.field().as_ref().clone().with_name(column.name())))))
+            Ok(Arc::new(LambdaVariable::new(
+                column.index(),
+                Arc::new(variable.field().as_ref().clone().with_name(column.name())),
+            )))
         } else {
             Ok(rewritten)
         };
     }
     if let Some(column) = expr.downcast_ref::<Column>() {
         let rewritten = rewrite(column)?;
-        return if rewritten.eq(&expr) { Ok(expr) } else { Ok(rewritten) };
+        return if rewritten.eq(&expr) {
+            Ok(expr)
+        } else {
+            Ok(rewritten)
+        };
     }
     expr.map_children(|child| {
-        let rewritten = rewrite_scoped_columns(Arc::clone(&child), new_input_size, parameter_scope, rewrite)?;
+        let rewritten = rewrite_scoped_columns(
+            Arc::clone(&child),
+            new_input_size,
+            parameter_scope,
+            rewrite,
+        )?;
         let changed = !Arc::ptr_eq(&child, &rewritten);
         Ok(Transformed::new_transformed(rewritten, changed))
-    }).data()
+    })
+    .data()
 }
 
 #[cfg(test)]

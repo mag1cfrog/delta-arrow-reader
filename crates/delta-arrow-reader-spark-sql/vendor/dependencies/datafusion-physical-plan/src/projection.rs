@@ -340,7 +340,9 @@ impl ExecutionPlan for ProjectionExec {
         let projector = if input.schema() == self.input.schema() {
             self.projector.clone()
         } else {
-            self.projector.projection().make_projector(&input.schema())?
+            self.projector
+                .projection()
+                .make_projector(&input.schema())?
         };
         ProjectionExec::try_from_projector(projector, input)
             .map(|p| Arc::new(p.with_row_error_prefix(self.row_error_prefix)) as _)
@@ -689,8 +691,12 @@ pub fn try_embed_projection<Exec: EmbeddedProjection + 'static>(
 
     for proj_expr in projection.expr() {
         // update column index for projection expression since the input schema has been changed.
-        let Some(expr) =
-            update_expr_with_input_schema_size(&proj_expr.expr, embed_project_exprs.as_slice(), false, new_execution_plan.schema().fields().len())?
+        let Some(expr) = update_expr_with_input_schema_size(
+            &proj_expr.expr,
+            embed_project_exprs.as_slice(),
+            false,
+            new_execution_plan.schema().fields().len(),
+        )?
         else {
             return Ok(None);
         };
@@ -893,7 +899,12 @@ pub fn update_ordering(
 ) -> Result<Option<LexOrdering>> {
     let mut updated_exprs = vec![];
     for mut sort_expr in ordering.into_iter() {
-        let Some(updated_expr) = update_expr_with_input_schema_size(&sort_expr.expr, projected_exprs, false, projected_exprs.len())?
+        let Some(updated_expr) = update_expr_with_input_schema_size(
+            &sort_expr.expr,
+            projected_exprs,
+            false,
+            projected_exprs.len(),
+        )?
         else {
             return Ok(None);
         };
@@ -911,7 +922,12 @@ pub fn update_ordering_requirement(
 ) -> Result<Option<LexRequirement>> {
     let mut updated_exprs = vec![];
     for mut sort_expr in reqs.into_iter() {
-        let Some(updated_expr) = update_expr_with_input_schema_size(&sort_expr.expr, projected_exprs, false, projected_exprs.len())?
+        let Some(updated_expr) = update_expr_with_input_schema_size(
+            &sort_expr.expr,
+            projected_exprs,
+            false,
+            projected_exprs.len(),
+        )?
         else {
             return Ok(None);
         };
@@ -1143,7 +1159,13 @@ fn try_unifying_projections(
         // If there is no match in the input projection, we cannot unify these
         // projections. This case will arise if the projection expression contains
         // a `PhysicalExpr` variant `update_expr_with_input_schema_size` doesn't support.
-        let Some(expr) = update_expr_with_input_schema_size(&proj_expr.expr, child.expr(), true, child.input().schema().fields().len())? else {
+        let Some(expr) = update_expr_with_input_schema_size(
+            &proj_expr.expr,
+            child.expr(),
+            true,
+            child.input().schema().fields().len(),
+        )?
+        else {
             return Ok(None);
         };
         projected_exprs.push(ProjectionExpr {

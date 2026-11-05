@@ -36,7 +36,9 @@ use crate::coalesce::LimitedBatchCoalescer;
 use crate::execution_plan::{CardinalityEffect, EvaluationType, SchedulingType};
 use crate::hash_utils::create_hashes;
 use crate::metrics::{BaselineMetrics, SpillMetrics};
-use crate::projection::{ProjectionExec, all_columns, make_with_child, update_expr_with_input_schema_size};
+use crate::projection::{
+    ProjectionExec, all_columns, make_with_child, update_expr_with_input_schema_size,
+};
 use crate::sorts::streaming_merge::StreamingMergeBuilder;
 use crate::spill::spill_manager::SpillManager;
 use crate::spill::spill_pool::{self, SpillPoolWriter};
@@ -1422,8 +1424,12 @@ impl ExecutionPlan for RepartitionExec {
             Partitioning::Hash(partitions, size) => {
                 let mut new_partitions = vec![];
                 for partition in partitions {
-                    let Some(new_partition) =
-                        update_expr_with_input_schema_size(partition, projection.expr(), false, projection.expr().len())?
+                    let Some(new_partition) = update_expr_with_input_schema_size(
+                        partition,
+                        projection.expr(),
+                        false,
+                        projection.expr().len(),
+                    )?
                     else {
                         return Ok(None);
                     };

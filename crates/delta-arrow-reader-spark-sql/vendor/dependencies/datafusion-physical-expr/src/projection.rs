@@ -136,7 +136,9 @@ pub struct ProjectionExprs {
 
 impl std::fmt::Debug for ProjectionExprs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ProjectionExprs").field("exprs", &self.exprs).finish()
+        f.debug_struct("ProjectionExprs")
+            .field("exprs", &self.exprs)
+            .finish()
     }
 }
 
@@ -534,13 +536,17 @@ impl ProjectionExprs {
         &self,
         expr: &Arc<dyn PhysicalExpr>,
     ) -> Result<Arc<dyn PhysicalExpr>> {
-        if self.input_schema_size.is_none() && expr.exists(|node| Ok(node.is::<LambdaExpr>()))? {
+        if self.input_schema_size.is_none()
+            && expr.exists(|node| Ok(node.is::<LambdaExpr>()))?
+        {
             return Err(internal_datafusion_err!(
                 "Lambda unprojection requires the complete source schema width; use ProjectionExprs::unproject_expr_with_input_schema_size(expr, input_schema.fields().len())"
             ));
         }
         let rewritten = match self.input_schema_size {
-            Some(size) => update_expr_with_input_schema_size(expr, &self.exprs, true, size)?,
+            Some(size) => {
+                update_expr_with_input_schema_size(expr, &self.exprs, true, size)?
+            }
             None => update_expr(expr, &self.exprs, true)?,
         };
         rewritten.ok_or_else(|| {
@@ -555,7 +561,9 @@ impl ProjectionExprs {
     /// Unprojects an expression using the complete original source schema width,
     /// including unused columns. This context is required for lambda parameters.
     pub fn unproject_expr_with_input_schema_size(
-        &self, expr: &Arc<dyn PhysicalExpr>, input_schema_size: usize,
+        &self,
+        expr: &Arc<dyn PhysicalExpr>,
+        input_schema_size: usize,
     ) -> Result<Arc<dyn PhysicalExpr>> {
         let mut source = self.clone();
         source.input_schema_size = Some(input_schema_size);
@@ -1101,8 +1109,12 @@ pub fn update_expr(
     if unproject && expr.exists(|node| Ok(node.is::<LambdaExpr>()))? {
         return Ok(None);
     }
-    update_expr_with_input_schema_size(expr, projected_exprs, unproject,
-        if unproject { 0 } else { projected_exprs.len() })
+    update_expr_with_input_schema_size(
+        expr,
+        projected_exprs,
+        unproject,
+        if unproject { 0 } else { projected_exprs.len() },
+    )
 }
 
 /// Rewrites expressions using the complete receiving schema width, including unused columns.
@@ -1144,14 +1156,21 @@ pub fn update_expr_with_input_schema_size(
             Ok(Arc::clone(&projected_expr.expr))
         } else {
             state = RewriteState::RewrittenInvalid;
-            Ok(projected_exprs.iter().enumerate().find_map(|(index, projected)| {
-                projected.expr.downcast_ref::<Column>().and_then(|source| {
-                    (column.name() == source.name() && column.index() == source.index()).then(|| {
-                        state = RewriteState::RewrittenValid;
-                        Arc::new(Column::new(&projected.alias, index)) as Arc<dyn PhysicalExpr>
+            Ok(projected_exprs
+                .iter()
+                .enumerate()
+                .find_map(|(index, projected)| {
+                    projected.expr.downcast_ref::<Column>().and_then(|source| {
+                        (column.name() == source.name()
+                            && column.index() == source.index())
+                        .then(|| {
+                            state = RewriteState::RewrittenValid;
+                            Arc::new(Column::new(&projected.alias, index))
+                                as Arc<dyn PhysicalExpr>
+                        })
                     })
                 })
-            }).unwrap_or_else(|| Arc::new(column.clone())))
+                .unwrap_or_else(|| Arc::new(column.clone())))
         }
     });
 

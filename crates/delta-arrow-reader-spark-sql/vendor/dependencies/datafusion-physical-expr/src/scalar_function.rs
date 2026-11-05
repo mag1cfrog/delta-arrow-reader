@@ -46,8 +46,8 @@ use datafusion_expr::interval_arithmetic::Interval;
 use datafusion_expr::sort_properties::ExprProperties;
 use datafusion_expr::type_coercion::functions::fields_with_udf;
 use datafusion_expr::{
-    ColumnarValue, EvaluatedRowPrefix, ExpressionPlacement, ReturnFieldArgs, ScalarFunctionArgs,
-    ScalarUDF, ScalarUDFImpl, Volatility, expr_vec_fmt,
+    ColumnarValue, EvaluatedRowPrefix, ExpressionPlacement, ReturnFieldArgs,
+    ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Volatility, expr_vec_fmt,
 };
 
 /// Physical expression of a scalar function
@@ -110,9 +110,12 @@ impl ScalarFunctionExpr {
                         evaluate_selected(expr.as_ref(), input, mask)?
                     } else if let Some(literal) = expr.downcast_ref::<Literal>() {
                         // Reuse the stored scalar instead of filtering the whole input batch.
-                        EvaluatedRowPrefix::complete(ColumnarValue::Scalar(literal.value().clone()))
+                        EvaluatedRowPrefix::complete(ColumnarValue::Scalar(
+                            literal.value().clone(),
+                        ))
                     } else {
-                        let (projection, projected) = plan_expression_input_projection(expr)?;
+                        let (projection, projected) =
+                            plan_expression_input_projection(expr)?;
                         if projection.len() < input.num_columns() {
                             let selected_input = input.project(&projection)?;
                             evaluate_selected(projected.as_ref(), &selected_input, mask)?
@@ -191,7 +194,9 @@ impl ScalarFunctionExpr {
         let mut result = first.evaluate(batch)?;
         for expr in rest {
             result = match result {
-                ColumnarValue::Scalar(value) if value.is_null() => expr.evaluate(batch)?,
+                ColumnarValue::Scalar(value) if value.is_null() => {
+                    expr.evaluate(batch)?
+                }
                 ColumnarValue::Scalar(_) => break,
                 ColumnarValue::Array(array) => {
                     let pending = is_null(&array)?;
@@ -265,7 +270,8 @@ impl ScalarFunctionExpr {
             // returning a one-element array is equivalent to returning a scalar.
             let preserve_scalar = array.len() == 1 && !input_empty && input_all_scalar;
             if preserve_scalar && output.failure.is_none() {
-                output.values = ColumnarValue::Scalar(ScalarValue::try_from_array(array, 0)?);
+                output.values =
+                    ColumnarValue::Scalar(ScalarValue::try_from_array(array, 0)?);
             } else {
                 return internal_err!(
                     "UDF {} returned a different number of rows than expected. Expected: {}, Got: {}",
@@ -337,7 +343,10 @@ impl ScalarFunctionExpr {
                         let result = self
                             .invoke_evaluated(&selected, args)?
                             .into_array(selected.num_rows())?;
-                        return Ok(ColumnarValue::Array(scatter(&mask, result.as_ref())?));
+                        return Ok(ColumnarValue::Array(scatter(
+                            &mask,
+                            result.as_ref(),
+                        )?));
                     }
                 }
                 _ => {}
@@ -503,11 +512,11 @@ impl Hash for ScalarFunctionExpr {
             name,
             args,
             return_field,
-            config_options: _,               // expensive to hash, and often equal
+            config_options: _, // expensive to hash, and often equal
             short_circuit_first_arg_null: _, // derived from fun
-            short_circuit_any_arg_null: _,   // derived from fun
-            returns_first_non_null: _,       // derived from fun
-            requires_row_ordered_errors: _,  // derived from fun
+            short_circuit_any_arg_null: _, // derived from fun
+            returns_first_non_null: _, // derived from fun
+            requires_row_ordered_errors: _, // derived from fun
         } = self;
         fun.hash(state);
         name.hash(state);
@@ -539,7 +548,10 @@ impl PhysicalExpr for ScalarFunctionExpr {
         }
     }
 
-    fn evaluate_rows_until_error(&self, batch: &RecordBatch) -> Result<EvaluatedRowPrefix> {
+    fn evaluate_rows_until_error(
+        &self,
+        batch: &RecordBatch,
+    ) -> Result<EvaluatedRowPrefix> {
         if self.returns_first_non_null || self.short_circuit_first_arg_null {
             // shortcut: these conditional owners return opaque errors, add branch-prefix assembly when needed.
             return self
@@ -629,7 +641,8 @@ impl PhysicalExpr for ScalarFunctionExpr {
     }
 
     fn placement(&self) -> ExpressionPlacement {
-        let arg_placements: Vec<_> = self.args.iter().map(|arg| arg.placement()).collect();
+        let arg_placements: Vec<_> =
+            self.args.iter().map(|arg| arg.placement()).collect();
         self.fun.placement(&arg_placements)
     }
 }
@@ -670,7 +683,11 @@ mod tests {
     fn test_scalar_function_volatile_node() {
         // Create a volatile UDF
         let volatile_udf = Arc::new(ScalarUDF::from(MockScalarUDF {
-            signature: Signature::uniform(1, vec![DataType::Float32], Volatility::Volatile),
+            signature: Signature::uniform(
+                1,
+                vec![DataType::Float32],
+                Volatility::Volatile,
+            ),
         }));
 
         // Create a non-volatile UDF
@@ -697,7 +714,8 @@ mod tests {
 
         // Test non-volatile function
         let stable_expr =
-            ScalarFunctionExpr::try_new(stable_udf, args, &schema, config_options).unwrap();
+            ScalarFunctionExpr::try_new(stable_udf, args, &schema, config_options)
+                .unwrap();
 
         assert!(!stable_expr.is_volatile_node());
         let stable_arc: Arc<dyn PhysicalExpr> = Arc::new(stable_expr);

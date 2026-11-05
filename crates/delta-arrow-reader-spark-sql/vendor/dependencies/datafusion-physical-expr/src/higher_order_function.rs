@@ -41,8 +41,8 @@ use arrow::array::{Array, RecordBatch};
 use arrow::datatypes::{DataType, FieldRef, Schema};
 use datafusion_common::config::{ConfigEntry, ConfigOptions};
 use datafusion_common::datatype::FieldExt;
-use datafusion_common::utils::remove_list_null_values;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+use datafusion_common::utils::remove_list_null_values;
 use datafusion_common::{
     Result, ScalarValue, exec_err, internal_datafusion_err, internal_err,
     plan_datafusion_err, plan_err,
@@ -449,20 +449,24 @@ impl PhysicalExpr for HigherOrderFunctionExpr {
                     })?;
                     if lambda.input_schema_size().is_none() {
                         let size = original.input_schema_size().ok_or_else(|| {
-                            internal_datafusion_err!("higher-order lambda has no input schema")
+                            internal_datafusion_err!(
+                                "higher-order lambda has no input schema"
+                            )
                         })?;
                         lambda = lambda.with_input_schema_size(size)?;
-                        *child = Arc::clone(child).transform_down(|expr| {
-                            if expr.is::<LambdaExpr>() {
-                                Ok(Transformed::new(
-                                    Arc::new(lambda.clone()) as Arc<dyn PhysicalExpr>,
-                                    true,
-                                    TreeNodeRecursion::Jump,
-                                ))
-                            } else {
-                                Ok(Transformed::no(expr))
-                            }
-                        })?.data;
+                        *child = Arc::clone(child)
+                            .transform_down(|expr| {
+                                if expr.is::<LambdaExpr>() {
+                                    Ok(Transformed::new(
+                                        Arc::new(lambda.clone()) as Arc<dyn PhysicalExpr>,
+                                        true,
+                                        TreeNodeRecursion::Jump,
+                                    ))
+                                } else {
+                                    Ok(Transformed::no(expr))
+                                }
+                            })?
+                            .data;
                     }
                     new_slots.push(ArgSlot::Lambda(Arc::new(lambda)));
                 }

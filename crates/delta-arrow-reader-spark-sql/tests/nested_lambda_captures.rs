@@ -20,16 +20,19 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
+#[path = "support/spark_inputs.rs"]
+mod spark_inputs;
 #[path = "support/spark_results.rs"]
 #[expect(
     dead_code,
     reason = "This regression compares complete observations directly."
 )]
 mod spark_results;
-#[path = "support/spark_inputs.rs"]
-mod spark_inputs;
 #[path = "support/string_binary.rs"]
-#[expect(dead_code, reason = "The connected consumer uses the existing raw schema observer.")]
+#[expect(
+    dead_code,
+    reason = "The connected consumer uses the existing raw schema observer."
+)]
 mod string_binary;
 use spark_results::{
     TestResult, capture_schema, compare_exact_spark_query_stages_with_optimized, encode_value,
@@ -226,11 +229,11 @@ async fn verify_nested_lambda_query_contracts(
                         if observed["error"].is_null()
                             && observed["public_schema"] == case["schema_stages"]["analyzed"]
                             && observed["public_schema"] == case["expected"]["schema"]
-                            && observed["optimized_schema"] == case["schema_stages"]["optimized"]
+                            && observed["optimized_schema"]
+                                == case["schema_stages"]["optimized"]
                             && observed["before_collect"] == case["schema_stages"]["executed"]
                             && observed["physical_schema"] == case["schema_stages"]["executed"]
-                            && observed["rows_match"] == true => {
-                    }
+                            && observed["rows_match"] == true => {}
                     Ok(mut observed) => {
                         observed["batch"] = json!(batch_size);
                         let inherited = inherited_controls[1..].iter().find(|control| {
@@ -242,10 +245,13 @@ async fn verify_nested_lambda_query_contracts(
                         });
                         match inherited {
                             Some(control)
-                                if matches!(control["tracking_issue"].as_u64(), Some(822) | Some(823))
-                                    && spark_results::matches_inherited_query_observation(
-                                        case, &observed, control,
-                                    ) => {
+                                if matches!(
+                                    control["tracking_issue"].as_u64(),
+                                    Some(822) | Some(823)
+                                ) && spark_results::matches_inherited_query_observation(
+                                    case, &observed, control,
+                                ) =>
+                            {
                                 eprintln!(
                                     "Unresolved #{} declaration control {label}: {observed}",
                                     control["tracking_issue"]
@@ -546,12 +552,7 @@ async fn legacy_projection_apis_retain_full_source_width() -> TestResult {
         ProjectionExprs::new(source.iter().cloned()).make_projector(frame.schema().as_arrow())?;
     let batches = frame.collect().await?;
     assert_eq!(batches.len(), 1);
-    for selection in [
-        &source,
-        &merged,
-        &unchanged,
-        projector.projection(),
-    ] {
+    for selection in [&source, &merged, &unchanged, projector.projection()] {
         let projected =
             update_expr_with_input_schema_size(&physical, selection.as_ref(), false, 2)?
                 .ok_or("projection rejected")?;
@@ -867,7 +868,10 @@ fn malformed_lambda_bindings_stay_rejected() -> TestResult {
         Arc::new(datafusion::physical_expr::expressions::NoOp::new()),
     )
     .unwrap_err();
-    assert!(error.to_string().contains("lambda params must be unique"), "{error}");
+    assert!(
+        error.to_string().contains("lambda params must be unique"),
+        "{error}"
+    );
     let qualifier = TableReference::bare("scope");
     let field = Arc::new(
         Field::new("x", DataType::Int32, true)
@@ -991,10 +995,10 @@ fn map_observations_preserve_values_empty_maps_and_null_containers() -> TestResu
 
 #[tokio::test]
 async fn runtime_concat_nested_lambda_preserves_selected_rows_without_captures() -> TestResult {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use datafusion::logical_expr::{
         ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
     };
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     static OBSERVED_ROWS: AtomicUsize = AtomicUsize::new(0);
 
@@ -1031,19 +1035,30 @@ async fn runtime_concat_nested_lambda_preserves_selected_rows_without_captures()
                 signature: Signature::exact(vec![], Volatility::Volatile),
             }));
             let schema = Arc::new(Schema::new(vec![Field::new("mask", DataType::Utf8, true)]));
-            let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(
-                arrow::array::StringArray::from(masks.clone()),
-            )])?;
-            let batches = (0..batch.num_rows()).step_by(batch_size)
+            let batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![Arc::new(arrow::array::StringArray::from(masks.clone()))],
+            )?;
+            let batches = (0..batch.num_rows())
+                .step_by(batch_size)
                 .map(|offset| batch.slice(offset, batch_size.min(batch.num_rows() - offset)))
                 .collect();
-            session.register_table("lambda_masks", Arc::new(MemTable::try_new(schema, vec![batches])?))?;
+            session.register_table(
+                "lambda_masks",
+                Arc::new(MemTable::try_new(schema, vec![batches])?),
+            )?;
             for ansi in [false, true] {
                 OBSERVED_ROWS.store(0, Ordering::SeqCst);
-                let query = plan_query(&session,
+                let query = plan_query(
+                    &session,
                     "SELECT CONCAT(mask, CAST(ARRAY_MAX(TRANSFORM(ARRAY(1,2), \
                      y -> y + lambda_count_rows())) AS STRING)) AS r FROM lambda_masks",
-                    &SparkSqlOptions { ansi_mode:ansi, ..Default::default() }).await?;
+                    &SparkSqlOptions {
+                        ansi_mode: ansi,
+                        ..Default::default()
+                    },
+                )
+                .await?;
                 let physical = query.create_physical_plan(&session).await?;
                 let schema = physical.schema();
                 let mut actual = Vec::new();
@@ -1053,14 +1068,19 @@ async fn runtime_concat_nested_lambda_preserves_selected_rows_without_captures()
                         actual.push(encode_value(batch.column(0).as_ref(), row)?);
                     }
                 }
-                let expected = masks.iter().map(|mask| match mask {
-                    Some(mask) => json!(format!("{mask}12")),
-                    None => Value::Null,
-                }).collect::<Vec<_>>();
+                let expected = masks
+                    .iter()
+                    .map(|mask| match mask {
+                        Some(mask) => json!(format!("{mask}12")),
+                        None => Value::Null,
+                    })
+                    .collect::<Vec<_>>();
                 assert_eq!(actual, expected, "ANSI={ansi} batch={batch_size}");
-                assert_eq!(OBSERVED_ROWS.load(Ordering::SeqCst),
+                assert_eq!(
+                    OBSERVED_ROWS.load(Ordering::SeqCst),
                     2 * masks.iter().filter(|mask| mask.is_some()).count(),
-                    "ANSI={ansi} batch={batch_size}");
+                    "ANSI={ansi} batch={batch_size}"
+                );
             }
         }
     }
@@ -1081,7 +1101,12 @@ async fn original_concat_nested_lambda_consumer_keeps_both_parameter_scopes() ->
             spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
             let input = session.table("slice_projection_input").await?;
             let mut fields = input.schema().fields().iter().cloned().collect::<Vec<_>>();
-            fields[1] = Arc::new(fields[1].as_ref().clone().with_data_type(payload_type.clone()));
+            fields[1] = Arc::new(
+                fields[1]
+                    .as_ref()
+                    .clone()
+                    .with_data_type(payload_type.clone()),
+            );
             let schema = Arc::new(Schema::new(fields));
             let mut encoded_batches = Vec::new();
             for batch in input.collect().await? {
@@ -1091,20 +1116,32 @@ async fn original_concat_nested_lambda_consumer_keeps_both_parameter_scopes() ->
             }
             assert_eq!(schema.field(1).data_type(), &payload_type);
             session.deregister_table("slice_projection_input")?;
-            session.register_table("slice_projection_input",
-                Arc::new(MemTable::try_new(schema, vec![encoded_batches])?))?;
+            session.register_table(
+                "slice_projection_input",
+                Arc::new(MemTable::try_new(schema, vec![encoded_batches])?),
+            )?;
             for case in &records[1..] {
-                let label = format!("{} {payload_type:?} batch={batch_size} ANSI={}", case["id"], case["ansi"]);
+                let label = format!(
+                    "{} {payload_type:?} batch={batch_size} ANSI={}",
+                    case["id"], case["ansi"]
+                );
                 let observed = string_binary::capture_observation(&session, case).await;
                 match observed {
-                    Ok(actual) if actual["error"].is_null()
-                        && actual["analyzed_schema"] == case["schema_stages"]["analyzed"]
-                        && actual["physical_schema"] == case["schema_stages"]["executed"]
-                        && actual["rows"] == case["expected"]["rows"]
-                        && actual["analyzed_arrow_schema"].as_str()
-                            .is_some_and(|raw| raw.contains(&format!("name: \"payload\", data_type: {payload_type:?},")))
-                        && actual["physical_arrow_schema"].as_str()
-                            .is_some_and(|raw| raw.contains(&format!("name: \"payload\", data_type: {payload_type:?},"))) => {}
+                    Ok(actual)
+                        if actual["error"].is_null()
+                            && actual["analyzed_schema"] == case["schema_stages"]["analyzed"]
+                            && actual["physical_schema"] == case["schema_stages"]["executed"]
+                            && actual["rows"] == case["expected"]["rows"]
+                            && actual["analyzed_arrow_schema"].as_str().is_some_and(|raw| {
+                                raw.contains(&format!(
+                                    "name: \"payload\", data_type: {payload_type:?},"
+                                ))
+                            })
+                            && actual["physical_arrow_schema"].as_str().is_some_and(|raw| {
+                                raw.contains(&format!(
+                                    "name: \"payload\", data_type: {payload_type:?},"
+                                ))
+                            }) => {}
                     Ok(actual) => differences.push(format!("{label}: {actual}")),
                     Err(error) => differences.push(format!("{label}: {error}")),
                 }

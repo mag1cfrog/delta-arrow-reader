@@ -599,9 +599,12 @@ impl ExecutionPlan for FilterExec {
             && all_columns(projection.expr())
         {
             // Each column in the predicate expression must exist after the projection.
-            if let Some(new_predicate) =
-                update_expr_with_input_schema_size(self.predicate(), projection.expr(), false, projection.expr().len())?
-            {
+            if let Some(new_predicate) = update_expr_with_input_schema_size(
+                self.predicate(),
+                projection.expr(),
+                false,
+                projection.expr().len(),
+            )? {
                 return FilterExecBuilder::from(self)
                     .with_input(make_with_child(projection, self.input())?)
                     .with_predicate(new_predicate)

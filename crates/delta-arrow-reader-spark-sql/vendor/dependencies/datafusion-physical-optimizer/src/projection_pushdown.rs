@@ -267,11 +267,18 @@ fn minimize_join_filter(
         .collect::<Fields>();
 
     let final_expr = rewrite_expr_columns(expr, new_column_indices.len(), |column| {
-        let index = used_columns.iter().filter(|index| **index < column.index()).count();
+        let index = used_columns
+            .iter()
+            .filter(|index| **index < column.index())
+            .count();
         Ok(Arc::new(Column::new(column.name(), index)))
     })?;
 
-    Ok(JoinFilter::new(final_expr, new_column_indices, Arc::new(Schema::new(fields))))
+    Ok(JoinFilter::new(
+        final_expr,
+        new_column_indices,
+        Arc::new(Schema::new(fields)),
+    ))
 }
 
 /// Implements the push-down machinery.
@@ -364,12 +371,17 @@ impl<'a> JoinFilterRewriter<'a> {
         // First, add a new projection. The expression must be rewritten, as it is no longer
         // executed against the filter schema.
         let new_idx = self.join_side_projections.len();
-        let rewritten_expr = rewrite_expr_columns(expr, self.join_side_schema.fields().len(), |column| {
-            let intermediate_column = &self.intermediate_column_indices[column.index()];
-            assert_eq!(intermediate_column.side, self.join_side);
-            let index = intermediate_column.index;
-            Ok(Arc::new(Column::new(self.join_side_schema.field(index).name(), index)))
-        })?;
+        let rewritten_expr =
+            rewrite_expr_columns(expr, self.join_side_schema.fields().len(), |column| {
+                let intermediate_column =
+                    &self.intermediate_column_indices[column.index()];
+                assert_eq!(intermediate_column.side, self.join_side);
+                let index = intermediate_column.index;
+                Ok(Arc::new(Column::new(
+                    self.join_side_schema.field(index).name(),
+                    index,
+                )))
+            })?;
         self.join_side_projections.push((rewritten_expr, name));
 
         // Then, update the column indices

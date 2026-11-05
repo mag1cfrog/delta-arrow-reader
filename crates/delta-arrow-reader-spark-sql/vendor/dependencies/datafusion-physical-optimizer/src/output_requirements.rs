@@ -35,7 +35,8 @@ use datafusion_physical_expr::Distribution;
 use datafusion_physical_expr_common::sort_expr::OrderingRequirements;
 use datafusion_physical_plan::execution_plan::Boundedness;
 use datafusion_physical_plan::projection::{
-    ProjectionExec, make_with_child, update_expr_with_input_schema_size, update_ordering_requirement,
+    ProjectionExec, make_with_child, update_expr_with_input_schema_size,
+    update_ordering_requirement,
 };
 use datafusion_physical_plan::scalar_subquery::ScalarSubqueryExec;
 use datafusion_physical_plan::sorts::sort::SortExec;
@@ -274,7 +275,12 @@ impl ExecutionPlan for OutputRequirementExec {
             Distribution::HashPartitioned(exprs) => {
                 let mut updated_exprs = vec![];
                 for expr in exprs {
-                    let Some(new_expr) = update_expr_with_input_schema_size(expr, projection.expr(), false, projection.expr().len())?
+                    let Some(new_expr) = update_expr_with_input_schema_size(
+                        expr,
+                        projection.expr(),
+                        false,
+                        projection.expr().len(),
+                    )?
                     else {
                         return Ok(None);
                     };

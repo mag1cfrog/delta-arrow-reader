@@ -941,9 +941,12 @@ impl DataSource for FileScanConfig {
         let filters_to_remap = if let Some(projection) = self.file_source.projection() {
             filters
                 .into_iter()
-                .map(|filter| projection.unproject_expr_with_input_schema_size(
-                    &filter, table_schema.fields().len(),
-                ))
+                .map(|filter| {
+                    projection.unproject_expr_with_input_schema_size(
+                        &filter,
+                        table_schema.fields().len(),
+                    )
+                })
                 .collect::<Result<Vec<_>>>()?
         } else {
             filters

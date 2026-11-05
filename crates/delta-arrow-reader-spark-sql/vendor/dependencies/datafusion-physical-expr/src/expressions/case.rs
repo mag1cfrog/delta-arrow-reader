@@ -174,7 +174,10 @@ impl CaseBody {
         let project = |expr: &Arc<dyn PhysicalExpr>| -> Result<Arc<dyn PhysicalExpr>> {
             rewrite_expr_columns(Arc::clone(expr), used_column_indices.len(), |column| {
                 let index = *column_index_map.get(&column.index()).ok_or_else(|| {
-                    datafusion_common::internal_datafusion_err!("CASE projection lost input index {}", column.index())
+                    datafusion_common::internal_datafusion_err!(
+                        "CASE projection lost input index {}",
+                        column.index()
+                    )
                 })?;
                 Ok(Arc::new(Column::new(column.name(), index)))
             })
