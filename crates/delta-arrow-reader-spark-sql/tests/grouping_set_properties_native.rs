@@ -345,6 +345,61 @@ async fn masked_leading_sort_key_does_not_leave_a_dependent_sorted_suffix() -> T
 }
 
 #[tokio::test]
+async fn single_masked_set_keeps_original_sorted_group_index() -> TestResult {
+    for batch_size in [1, 2] {
+        let input = memory_input(
+            &[
+                (1, 10),
+                (2, 10),
+                (1, 10),
+                (2, 10),
+                (1, 20),
+                (2, 20),
+                (1, 20),
+                (2, 20),
+            ],
+            batch_size,
+            &[1],
+        )?;
+        let groups = grouping(
+            vec![
+                (lit(7_i32), "masked".into()),
+                (column("a", 0), "a".into()),
+                (column("b", 1), "b".into()),
+            ],
+            vec![vec![true, false, false]],
+        );
+        let grouped = aggregate(AggregateMode::Single, groups, input)?;
+        log_aggregate_properties(
+            &format!("single_mask_sorted_group_index_batch_{batch_size}"),
+            &grouped,
+        );
+        let actual = collect_encoded_rows(grouped.clone()).await?;
+        eprintln!(
+            "GROUPING_SET_NATIVE_ROWS {}",
+            json!({
+                "id":"single_mask_sorted_group_index","batch_size":batch_size,
+                "actual":actual,
+            })
+        );
+        assert_eq!(
+            grouped.input_order_mode(),
+            &InputOrderMode::PartiallySorted(vec![2])
+        );
+        assert_eq!(
+            actual,
+            json!([
+                [null, "1", "10", "4", "2"],
+                [null, "1", "20", "4", "2"],
+                [null, "2", "10", "4", "2"],
+                [null, "2", "20", "4", "2"],
+            ])
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn ordinary_single_set_and_final_ordering_remain_valid() -> TestResult {
     for grouping_set in [false, true] {
         let input = memory_input(&[(1, 10), (2, 10), (2, 10), (3, 10)], 2, &[0, 1])?;
