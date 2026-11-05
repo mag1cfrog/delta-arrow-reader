@@ -20,10 +20,6 @@ use sail_function::scalar::array::spark_array::SparkArray;
 use serde_json::{Value, json};
 
 #[path = "support/spark_results.rs"]
-#[expect(
-    dead_code,
-    reason = "Only shared schema/batch validation and STRUCT encoding are used."
-)]
 mod spark_results;
 use spark_results::TestResult;
 

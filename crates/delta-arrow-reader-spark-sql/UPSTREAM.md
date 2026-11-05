@@ -192,6 +192,30 @@ is planned as timestamp arithmetic. Execution keeps the existing Arrow interval
 storage. The [interval references](tests/fixtures/interval-qualifiers/README.md)
 record the checks and the separately owned differences.
 
+### Year-month interval scaling
+
+A local Sail function follows Spark's `MultiplyYMInterval` and
+`DivideYMInterval` in both ANSI modes. It multiplies a year-month interval by a
+BYTE, SHORT, INT, BIGINT, FLOAT, DOUBLE, DECIMAL or NULL number in either operand
+order, and divides it by one. Integral numbers use Java `int` or `long`
+arithmetic, FLOAT numbers widen to DOUBLE, and DECIMAL numbers scale exactly.
+Every result rounds HALF_UP to whole months. Overflow, zero divisors and NaN or
+infinite results fail with Spark's error condition or, where Spark raises a
+plain `java.lang.ArithmeticException`, with its message. A NULL interval skips
+the number for its row, and a NULL operand discards errors in the other operand
+before constants fold. Unlike CASE branches, both operands fold as constants, so
+a failing constant operand fails while optimizing even beside a column operand
+or under a false filter.
+
+Spark names a different condition for the minimum interval divided by -1 when
+its optimizer interprets the expression than when generated code evaluates it
+at run time. The expression-error analyzer marks its own evaluation of constants
+and local rows with the `SparkInterpretedEvaluation` configuration extension, so
+the function reports the optimizer's condition there and the run-time condition
+elsewhere. Day-time interval arithmetic and native DataFusion SQL are unchanged.
+The [interval references](tests/fixtures/interval-qualifiers/README.md) record
+the checks.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no
@@ -629,15 +653,14 @@ SUBSTR and SUBSTRING reuse DataFusion Spark's Unicode substring kernel. Binary
 ranges retain Spark's Java INT arithmetic and zero padding through a small
 native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
 length is INT_MAX for both strings and binary values.
-Position and length use the existing mode-aware STRING and Decimal integer
-casts before widening to the value kernel's Int64 inputs. Row-dependent calls
-use native scalar NULL selection while retaining ordinary logical CSE. Whole
-constant and early local calls retain the private closed-lambda adapter for
-conditional folding and preparation. Its selection/scatter helpers remain in use.
+Position and length use the mode-aware STRING and Decimal integer casts and the
+shared BIGINT-to-INT conversion before widening to the value kernel's Int64 inputs.
+Row-dependent calls use native scalar NULL selection while retaining ordinary
+logical CSE. Whole constant and early local calls retain the private closed-lambda
+adapter for conditional folding and preparation. Its selection/scatter helpers
+remain in use.
 Async arguments retain their existing extraction and eager scalar evaluation path.
-Legacy BIGINT arguments retain their previous route until shared #813 supplies
-Spark INT narrowing. General numeric CAST declarations and non-finite values
-remain with #796 and #897.
+General numeric CAST declarations and non-finite values remain with #796 and #897.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
 retain all 656 references and 3,936 native observations, plus the separate
 84-observation competing-error supplement, native SQL and fixed-binary controls.
@@ -1078,9 +1101,10 @@ New coercion paths reject custom operands that disable constant folding before
 literal evaluation. The existing INT position path is unchanged.
 
 The focused position fixture retains 110 independent Spark references and all
-660 native configurations. Shared BIGINT narrowing, nonfinite conversion and
-CAST declarations remain with #813, #897 and #796. No numeric parser, overflow
-policy, replacement kernel or native DataFusion SQL behavior is changed here.
+660 native configurations. BIGINT narrowing uses the shared INT conversion;
+nonfinite conversion and CAST declarations remain with #897 and #796. No numeric
+parser, overflow policy, replacement kernel or native DataFusion SQL behavior is
+changed here.
 
 REGEXP_REPLACE constructs that INT coercion before testing position foldability,
 so unsupported types report `UNEXPECTED_INPUT_TYPE` even for provider expressions

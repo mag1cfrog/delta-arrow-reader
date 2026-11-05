@@ -23,10 +23,6 @@ use serde_json::{Value, json};
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
-#[expect(
-    dead_code,
-    reason = "This regression compares complete observations directly."
-)]
 mod spark_results;
 #[path = "support/string_binary.rs"]
 #[expect(

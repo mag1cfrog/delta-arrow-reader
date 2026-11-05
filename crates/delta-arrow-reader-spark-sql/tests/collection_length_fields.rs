@@ -22,10 +22,6 @@ use serde_json::{Value, json};
 )]
 mod spark_inputs;
 #[path = "support/spark_results.rs"]
-#[expect(
-    dead_code,
-    reason = "This replay observes its explicit legacy NULL-size setting."
-)]
 mod spark_results;
 use spark_results::{TestResult, capture_schema, encode_value};
 

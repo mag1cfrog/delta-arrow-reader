@@ -780,12 +780,30 @@ impl AggregateExec {
         let input_eq_properties = input.equivalence_properties();
         // Get GROUP BY expressions:
         let groupby_exprs = group_by.input_exprs();
-        // If existing ordering satisfies a prefix of the GROUP BY expressions,
-        // prefix requirements with this section. In this case, aggregation will
-        // work more efficiently.
-        // Copy the `PhysicalSortExpr`s to retain the sort options.
-        let (new_sort_exprs, indices) =
-            input_eq_properties.find_longest_permutation(&groupby_exprs)?;
+        // Expanding one batch per set can revisit a sorted prefix before the next batch.
+        let (new_sort_exprs, indices) = if mode.input_mode() == AggregateInputMode::Raw
+            && group_by.groups.len() > 1
+        {
+            (vec![], vec![])
+        } else {
+            let unmasked_indices = group_by
+                .exprs_nullable()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, masked)| (!masked).then_some(index))
+                .collect::<Vec<_>>();
+            let unmasked_exprs = unmasked_indices
+                .iter()
+                .map(|&index| Arc::clone(&groupby_exprs[index]))
+                .collect::<Vec<_>>();
+            let (sort_exprs, indices) =
+                input_eq_properties.find_longest_permutation(&unmasked_exprs)?;
+            let indices = indices
+                .into_iter()
+                .map(|index| unmasked_indices[index])
+                .collect();
+            (sort_exprs, indices)
+        };
 
         let mut new_requirements = new_sort_exprs
             .into_iter()
@@ -803,16 +821,6 @@ impl AggregateExec {
         let required_input_ordering =
             LexRequirement::new(new_requirements).map(OrderingRequirements::new_soft);
 
-        // If our aggregation has grouping sets then our base grouping exprs will
-        // be expanded based on the flags in `group_by.groups` where for each
-        // group we swap the grouping expr for `null` if the flag is `true`
-        // That means that each index in `indices` is valid if and only if
-        // it is not null in every group
-        let indices: Vec<usize> = indices
-            .into_iter()
-            .filter(|idx| group_by.groups.iter().all(|group| !group[*idx]))
-            .collect();
-
         let input_order_mode = if indices.len() == groupby_exprs.len()
             && !indices.is_empty()
             && group_by.groups.len() == 1
@@ -824,14 +832,10 @@ impl AggregateExec {
             InputOrderMode::Linear
         };
 
-        // construct a map from the input expression to the output expression of the Aggregation group by
-        let group_expr_mapping =
-            ProjectionMapping::try_new(group_by.expr.clone(), &input.schema())?;
-
         let cache = Self::compute_properties(
             &input,
             Arc::clone(&schema),
-            &group_expr_mapping,
+            &group_by,
             &mode,
             &input_order_mode,
             aggr_expr.as_ref(),
@@ -1017,23 +1021,40 @@ impl AggregateExec {
         true
     }
 
-    /// This function creates the cache object that stores the plan properties such as schema, equivalence properties, ordering, partitioning, etc.
+    /// Builds cached properties using the grouping masks and aggregate emission mode.
     pub fn compute_properties(
         input: &Arc<dyn ExecutionPlan>,
         schema: SchemaRef,
-        group_expr_mapping: &ProjectionMapping,
+        group_by: &PhysicalGroupBy,
         mode: &AggregateMode,
         input_order_mode: &InputOrderMode,
         aggr_exprs: &[Arc<AggregateFunctionExpr>],
     ) -> Result<PlanProperties> {
-        // Construct equivalence properties:
+        let group_mapping =
+            ProjectionMapping::try_new(group_by.expr.clone(), &input.schema())?;
+        let masked_exprs = group_by.exprs_nullable();
+        // A masked output no longer has its input expression's value or properties.
+        let property_mapping = group_mapping
+            .iter()
+            .filter_map(|(source, targets)| {
+                let targets = targets
+                    .iter()
+                    .filter(|(_, index)| !masked_exprs[*index])
+                    .cloned()
+                    .collect::<Vec<_>>();
+                (!targets.is_empty()).then(|| (Arc::clone(source), targets.into()))
+            })
+            .collect::<ProjectionMapping>();
         let mut eq_properties = input
             .equivalence_properties()
-            .project(group_expr_mapping, schema);
+            .project(&property_mapping, schema);
+        if *input_order_mode == InputOrderMode::Linear {
+            eq_properties.clear_orderings();
+        }
 
         // If the group by is empty, then we ensure that the operator will produce
         // only one row, and mark the generated result as a constant value.
-        if group_expr_mapping.is_empty() {
+        if group_by.is_true_no_grouping() {
             let new_constants = aggr_exprs.iter().enumerate().map(|(idx, func)| {
                 let column = Arc::new(Column::new(func.name(), idx));
                 ConstExpr::from(column as Arc<dyn PhysicalExpr>)
@@ -1041,22 +1062,21 @@ impl AggregateExec {
             eq_properties.add_constants(new_constants)?;
         }
 
-        // Group by expression will be a distinct value after the aggregation.
-        // Add it into the constraint set.
-        let mut constraints = eq_properties.constraints().to_vec();
-        let new_constraint = Constraint::Unique(
-            group_expr_mapping
-                .iter()
-                .flat_map(|(_, target_cols)| {
-                    target_cols.iter().flat_map(|(expr, _)| {
-                        expr.downcast_ref::<Column>().map(|c| c.index())
-                    })
-                })
-                .collect(),
-        );
-        constraints.push(new_constraint);
-        eq_properties =
-            eq_properties.with_constraints(Constraints::new_unverified(constraints));
+        // Masking can compact constraint indexes; expansion and partials can repeat keys.
+        let mut constraints = if mode.output_mode() == AggregateOutputMode::Final
+            && group_by.groups.len() <= 1
+            && !masked_exprs.contains(&true)
+        {
+            eq_properties.constraints().to_vec()
+        } else {
+            vec![]
+        };
+        if mode.output_mode() == AggregateOutputMode::Final {
+            constraints.push(Constraint::Unique(
+                (0..group_by.num_group_exprs()).collect(),
+            ));
+        }
+        eq_properties.set_constraints(Constraints::new_unverified(constraints));
 
         // Get output partitioning:
         let input_partitioning = input.output_partitioning().clone();
@@ -1066,7 +1086,7 @@ impl AggregateExec {
                 // but needs to respect aliases (e.g. mapping in the GROUP BY
                 // expression).
                 let input_eq_properties = input.equivalence_properties();
-                input_partitioning.project(group_expr_mapping, input_eq_properties)
+                input_partitioning.project(&property_mapping, input_eq_properties)
             }
             AggregateInputMode::Partial => input_partitioning.clone(),
         };

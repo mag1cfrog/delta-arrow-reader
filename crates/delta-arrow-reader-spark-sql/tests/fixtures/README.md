@@ -695,10 +695,10 @@ encoding and capture command.
 
 ## Interval qualifiers and generated names
 
-`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 614 Spark 4.2.0
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1096 Spark 4.2.0
 observations of interval literal names, signed and unit-syntax literals, storage
-limits, arithmetic and timestamp operand order, interval CASTs and RANGE
-offsets. The query corpus preserves the original #749 capture.
+limits, arithmetic and timestamp operand order, year-month interval scaling,
+interval CASTs and RANGE offsets. The query corpus preserves the original #749 capture.
 `interval_qualifiers.rs` compares names, fields, typed values and errors at
 batch sizes 1 and 32. See the
 [interval fixture notes](interval-qualifiers/README.md) for the encoding, the
@@ -1972,9 +1972,8 @@ loaded JAR hashes, available schemas, values and structured errors.
 
 `substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
 and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
-retained regression result has 3,774 strict receipt matches and 162 retained failures:
-12 invalid UTF8 sibling casts (#780), 30 legacy BIGINT outcomes (#813 and the
-unfinished legacy #778 adapter), 72 analyzed numeric CAST declarations (#796),
+current regression result has 3,804 strict receipt matches and 132 retained failures:
+12 invalid UTF8 sibling casts (#780), 72 analyzed numeric CAST declarations (#796),
 24 legacy non-finite conversions (#897), and 24 overflow-notation comparisons.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
@@ -1984,7 +1983,7 @@ no Decimal defect or strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
-false. The separate meaningful-condition comparison has 3,798 matches and 138
+false. The separate meaningful-condition comparison has 3,828 matches and 108
 differences, so compatibility remains incomplete by either measure. No fixture
 field is rewritten and no missing Spark physical field is invented.
 
@@ -2191,11 +2190,12 @@ source projections must retain their original metadata. Derived result fields
 are compared separately, including names, types, nullability and metadata.
 
 The older cross-family profiles retain their named metadata and invalid-byte
-observations. The substring profiles now use the retained outcomes at
-`92de8d551c000b16cf9e0746fcbf7f5ffa15db93`: repaired admission and ANSI errors
-must match their concrete causes, while the two remaining original legacy length
-differences retain the precise #813 values. The invalid-byte substring observer
-now requires exact analyzed fields. All original fixture bytes remain unchanged.
+observations. The substring baseline at
+`92de8d551c000b16cf9e0746fcbf7f5ffa15db93` is historical. Current checks require
+repaired admission and ANSI errors to match their concrete causes and legacy
+BIGINT length conversions to match Spark through the shared INT conversion.
+The invalid-byte substring observer requires exact analyzed fields. All original
+fixture bytes remain unchanged.
 No reference fields are rewritten or used to construct actual schemas.
 Unavailable physical stages remain unavailable. New fields, values, stages or
 causes fail the tests, and negative controls retain the reviewed synthetic
@@ -2230,9 +2230,7 @@ control, together with pure BINARY, valid Unicode/NUL, empty providers, NULL-fir
 CONCAT, NULL-separator CONCAT_WS and skipped casts. The explicit evaluated CAST
 before a trailing NULL has its own bounded profile; it does not exempt other
 NULL cases. Malformed STRING conversion errors and TRY_CAST NULL results keep
-strict compatibility false. Profiles and the capability decision remain
-provisional until final current-source replay and independent complete-diff
-review. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
+strict compatibility false. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
 and [#928 visible-slice repair](https://github.com/mag1cfrog/delta-arrow-reader/issues/928)
 retain their separate contracts.
 

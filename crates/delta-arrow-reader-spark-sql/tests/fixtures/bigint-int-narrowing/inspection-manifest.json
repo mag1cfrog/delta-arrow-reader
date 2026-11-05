@@ -1,0 +1,93 @@
+{
+  "format_version": 1,
+  "issue": 813,
+  "scope": "Nested numeric CAST Fields and changed numeric/math inspections only",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "settings": {
+    "spark.ui.enabled": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1"
+  },
+  "observations": 8,
+  "base_manifest": "manifest.json",
+  "preserved_sources": [
+    {
+      "path": "../recapture_string_binary_spark.py",
+      "sha256": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8"
+    },
+    {
+      "path": "capture_bigint_int_narrowing.py",
+      "sha256": "793a798e9a3e6e5fe2b59b1c3630db61782fbcbeac27342c7af0be998c96420f"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "a28ccf21743a2f95d487a7708c0cd71fed395c9059e5c7c8154c9733867c96c6"
+    },
+    {
+      "path": "original-cast-controls-spark.jsonl",
+      "sha256": "b625d0f2c384cacc353cea0e1a5a3fddfe4ccc0ec00ee3262a65c6a1fa732738"
+    }
+  ],
+  "row_encoding": "Recursive Spark Row/tuple values are JSON arrays; scalar integer/string leaves use the frozen encoder; DOUBLE leaves use IEEE-754 big-endian hex, with nan normalized.",
+  "cases": [
+    {
+      "id": "inspection_required_struct",
+      "sql": "SELECT named_struct('source',v,'cast',CAST(v AS INT),'try',TRY_CAST(v AS INT)) AS r FROM narrow_required WHERE id=6",
+      "input_tables": [
+        "narrow_required"
+      ],
+      "ordered": false,
+      "purpose": "Nested required source, CAST and TRY child Fields with source metadata",
+      "domain": "inspection",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "inspection_nullable_struct",
+      "sql": "SELECT named_struct('cast',CAST(v AS INT),'try',TRY_CAST(v AS INT)) AS r FROM narrow_nullable WHERE id=14",
+      "input_tables": [
+        "narrow_nullable"
+      ],
+      "ordered": false,
+      "purpose": "Nested nullable CAST and TRY Fields and NULL values",
+      "domain": "inspection",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "inspection_literal_membership",
+      "sql": "SELECT id FROM narrow_required WHERE v IN (CAST(4294967297L AS INT)) ORDER BY id",
+      "input_tables": [
+        "narrow_required"
+      ],
+      "ordered": true,
+      "purpose": "Numeric-literal conversion and membership inspection path",
+      "domain": "inspection",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "inspection_division_inputs",
+      "sql": "SELECT CAST(v AS INT) / CAST(4294967296L AS INT) AS r FROM narrow_required WHERE id=12",
+      "input_tables": [
+        "narrow_required"
+      ],
+      "ordered": false,
+      "purpose": "Mode-sensitive cast and arithmetic inspection/error priority",
+      "domain": "inspection",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    }
+  ]
+}

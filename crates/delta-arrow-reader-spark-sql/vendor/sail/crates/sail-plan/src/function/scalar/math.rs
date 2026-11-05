@@ -44,7 +44,9 @@ use sail_function::scalar::math::spark_try_mult::SparkTryMult;
 use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
+use sail_function::scalar::math::spark_year_month_interval_scale::SparkYearMonthIntervalScale;
 use sail_function::scalar::misc::raise_error::RaiseError;
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
@@ -435,6 +437,19 @@ fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
         right.get_type(function_context.schema),
     );
     Ok(match (left_type, right_type) {
+        (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(number))
+            if SparkYearMonthIntervalScale::accepts_number(&number) =>
+        {
+            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Multiply))
+                .call(vec![left, right])
+        }
+        // Spark evaluates the interval first whatever the operand order.
+        (Ok(number), Ok(DataType::Interval(IntervalUnit::YearMonth)))
+            if SparkYearMonthIntervalScale::accepts_number(&number) =>
+        {
+            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Multiply))
+                .call(vec![right, left])
+        }
         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
         //  Seems to be a bug in DataFusion.
         (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(_)) => {
@@ -517,7 +532,10 @@ fn is_zero_literal(expr: &Expr) -> bool {
                 false
             }
         }
-        Expr::ScalarFunction(f) if f.func.inner().is::<SparkDecimalCast>() => {
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastBigintToInt>() =>
+        {
             matches!(f.args.as_slice(), [Expr::Literal(scalar, _)] if is_scalar_zero(scalar))
         }
         _ => false,
@@ -1326,6 +1344,17 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let dividend_type = dividend.get_type(function_context.schema);
     let divisor_type = divisor.get_type(function_context.schema);
 
+    // Spark rejects a zero divisor of a year-month interval in both ANSI modes.
+    if let (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(number)) =
+        (&dividend_type, &divisor_type)
+        && SparkYearMonthIntervalScale::accepts_number(number)
+    {
+        return Ok(
+            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Divide))
+                .call(vec![dividend, divisor]),
+        );
+    }
+
     if let (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) =
         (&dividend_type, &divisor_type)
         && *s1 >= 0
@@ -1499,7 +1528,9 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
             if f.func.inner().downcast_ref::<SparkDecimalCast>()
                 .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi)
                 || f.func.inner().downcast_ref::<SparkCastStringToInteger>()
-                    .is_some_and(|cast| cast.mode() == StringIntegerCastMode::Ansi) =>
+                    .is_some_and(|cast| cast.mode() == StringIntegerCastMode::Ansi)
+                || f.func.inner().downcast_ref::<SparkCastBigintToInt>()
+                    .is_some_and(|cast| !cast.is_try()) =>
         {
             matches!(f.args.as_slice(), [expr] if matches!(without_metadata_annotations(expr), Expr::Column(_)) || column_cast(expr, schema))
         }
@@ -1528,7 +1559,10 @@ pub(crate) fn guard_cast_arithmetic(
             Expr::Cast(cast) => simple(&cast.expr),
             Expr::TryCast(cast) => simple(&cast.expr),
             Expr::Alias(alias) => simple(&alias.expr),
-            Expr::ScalarFunction(f) if f.func.inner().is::<SparkDecimalCast>() => {
+            Expr::ScalarFunction(f)
+                if f.func.inner().is::<SparkDecimalCast>()
+                    || f.func.inner().is::<SparkCastBigintToInt>() =>
+            {
                 matches!(f.args.as_slice(), [expr] if simple(expr))
             }
             _ => false,

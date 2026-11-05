@@ -1,0 +1,1405 @@
+{
+  "format_version": 1,
+  "issue": 813,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "input_encoding": "Typed decimal strings decoded with int/parse::<i64>; no float conversion",
+  "settings": {
+    "spark.ui.enabled": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1"
+  },
+  "native": {
+    "batch_sizes": [
+      1,
+      32
+    ],
+    "target_partitions": 2,
+    "input_partitions": 2,
+    "string_representations": [
+      "Utf8"
+    ],
+    "sliced_hidden_rows": [
+      [
+        "-1",
+        "9223372036854775807"
+      ],
+      [
+        "2147483647",
+        "-9223372036854775808"
+      ]
+    ]
+  },
+  "original_reference": {
+    "path": "original-cast-controls-spark.jsonl",
+    "sha256": "b625d0f2c384cacc353cea0e1a5a3fddfe4ccc0ec00ee3262a65c6a1fa732738",
+    "records": 10,
+    "source_ref": "c6460a8ad078da936184745b6135c625ba4c9714",
+    "source_path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/regexp-extract-index-cast-controls-spark.jsonl"
+  },
+  "observations": 182,
+  "counts": {
+    "direct": 162,
+    "adapter": 20
+  },
+  "inputs": [
+    {
+      "name": "narrow_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": false,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-9223372036854775808"
+        ],
+        [
+          "1",
+          "-4294967297"
+        ],
+        [
+          "2",
+          "-4294967296"
+        ],
+        [
+          "3",
+          "-2147483649"
+        ],
+        [
+          "4",
+          "-2147483648"
+        ],
+        [
+          "5",
+          "-1"
+        ],
+        [
+          "6",
+          "0"
+        ],
+        [
+          "7",
+          "1"
+        ],
+        [
+          "8",
+          "2147483647"
+        ],
+        [
+          "9",
+          "2147483648"
+        ],
+        [
+          "10",
+          "4294967295"
+        ],
+        [
+          "11",
+          "4294967296"
+        ],
+        [
+          "12",
+          "4294967297"
+        ],
+        [
+          "13",
+          "9223372036854775807"
+        ]
+      ],
+      "native_slice": false
+    },
+    {
+      "name": "narrow_required_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": false,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-9223372036854775808"
+        ],
+        [
+          "1",
+          "-4294967297"
+        ],
+        [
+          "2",
+          "-4294967296"
+        ],
+        [
+          "3",
+          "-2147483649"
+        ],
+        [
+          "4",
+          "-2147483648"
+        ],
+        [
+          "5",
+          "-1"
+        ],
+        [
+          "6",
+          "0"
+        ],
+        [
+          "7",
+          "1"
+        ],
+        [
+          "8",
+          "2147483647"
+        ],
+        [
+          "9",
+          "2147483648"
+        ],
+        [
+          "10",
+          "4294967295"
+        ],
+        [
+          "11",
+          "4294967296"
+        ],
+        [
+          "12",
+          "4294967297"
+        ],
+        [
+          "13",
+          "9223372036854775807"
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "narrow_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": true,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-9223372036854775808"
+        ],
+        [
+          "1",
+          "-4294967297"
+        ],
+        [
+          "2",
+          "-4294967296"
+        ],
+        [
+          "3",
+          "-2147483649"
+        ],
+        [
+          "4",
+          "-2147483648"
+        ],
+        [
+          "5",
+          "-1"
+        ],
+        [
+          "6",
+          "0"
+        ],
+        [
+          "7",
+          "1"
+        ],
+        [
+          "8",
+          "2147483647"
+        ],
+        [
+          "9",
+          "2147483648"
+        ],
+        [
+          "10",
+          "4294967295"
+        ],
+        [
+          "11",
+          "4294967296"
+        ],
+        [
+          "12",
+          "4294967297"
+        ],
+        [
+          "13",
+          "9223372036854775807"
+        ],
+        [
+          "14",
+          null
+        ]
+      ],
+      "native_slice": false
+    },
+    {
+      "name": "narrow_nullable_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": true,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "-9223372036854775808"
+        ],
+        [
+          "1",
+          "-4294967297"
+        ],
+        [
+          "2",
+          "-4294967296"
+        ],
+        [
+          "3",
+          "-2147483649"
+        ],
+        [
+          "4",
+          "-2147483648"
+        ],
+        [
+          "5",
+          "-1"
+        ],
+        [
+          "6",
+          "0"
+        ],
+        [
+          "7",
+          "1"
+        ],
+        [
+          "8",
+          "2147483647"
+        ],
+        [
+          "9",
+          "2147483648"
+        ],
+        [
+          "10",
+          "4294967295"
+        ],
+        [
+          "11",
+          "4294967296"
+        ],
+        [
+          "12",
+          "4294967297"
+        ],
+        [
+          "13",
+          "9223372036854775807"
+        ],
+        [
+          "14",
+          null
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "narrow_empty_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": false,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [],
+      "native_slice": false
+    },
+    {
+      "name": "narrow_empty_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": true,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [],
+      "native_slice": false
+    },
+    {
+      "name": "narrow_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "v",
+            "type": "long",
+            "nullable": true,
+            "metadata": {
+              "source": "bigint-int-input",
+              "unit": "signed-i64"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          null
+        ]
+      ],
+      "native_slice": false
+    }
+  ],
+  "cases": [
+    {
+      "id": "literal_cast_0",
+      "sql": "SELECT CAST(-9223372036854775808L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_0",
+      "sql": "SELECT TRY_CAST(-9223372036854775808L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_1",
+      "sql": "SELECT CAST(-4294967297L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_1",
+      "sql": "SELECT TRY_CAST(-4294967297L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_2",
+      "sql": "SELECT CAST(-4294967296L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_2",
+      "sql": "SELECT TRY_CAST(-4294967296L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_3",
+      "sql": "SELECT CAST(-2147483649L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_3",
+      "sql": "SELECT TRY_CAST(-2147483649L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_4",
+      "sql": "SELECT CAST(-2147483648L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_4",
+      "sql": "SELECT TRY_CAST(-2147483648L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_5",
+      "sql": "SELECT CAST(-1L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_5",
+      "sql": "SELECT TRY_CAST(-1L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_6",
+      "sql": "SELECT CAST(0L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_6",
+      "sql": "SELECT TRY_CAST(0L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_7",
+      "sql": "SELECT CAST(1L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_7",
+      "sql": "SELECT TRY_CAST(1L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_8",
+      "sql": "SELECT CAST(2147483647L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_8",
+      "sql": "SELECT TRY_CAST(2147483647L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_9",
+      "sql": "SELECT CAST(2147483648L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_9",
+      "sql": "SELECT TRY_CAST(2147483648L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_10",
+      "sql": "SELECT CAST(4294967295L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_10",
+      "sql": "SELECT TRY_CAST(4294967295L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_11",
+      "sql": "SELECT CAST(4294967296L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_11",
+      "sql": "SELECT TRY_CAST(4294967296L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_12",
+      "sql": "SELECT CAST(4294967297L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_12",
+      "sql": "SELECT TRY_CAST(4294967297L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_13",
+      "sql": "SELECT CAST(9223372036854775807L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_13",
+      "sql": "SELECT TRY_CAST(9223372036854775807L AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_cast_null",
+      "sql": "SELECT CAST(CAST(NULL AS BIGINT) AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "literal_try_cast_null",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS BIGINT) AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_required_cast_valid",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_required WHERE id BETWEEN 4 AND 8 ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_try_all",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_required ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_legacy_all",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_required ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_cast_overflow_3",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required WHERE id=3",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_required_cast_overflow_9",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required WHERE id=9",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_required_cast_overflow_11",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required WHERE id=11",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_required_sliced_cast_valid",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_required_sliced WHERE id BETWEEN 4 AND 8 ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_sliced_try_all",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_required_sliced ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_sliced_legacy_all",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_required_sliced ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_sliced_cast_overflow_3",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required_sliced WHERE id=3",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_required_sliced_cast_overflow_9",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required_sliced WHERE id=9",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_required_sliced_cast_overflow_11",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required_sliced WHERE id=11",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_cast_valid",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_nullable WHERE id BETWEEN 4 AND 8 ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nullable_try_all",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_nullable ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nullable_legacy_all",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_nullable ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nullable_cast_overflow_3",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_nullable WHERE id=3",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_cast_overflow_9",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_nullable WHERE id=9",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_cast_overflow_11",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_nullable WHERE id=11",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_sliced_cast_valid",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_nullable_sliced WHERE id BETWEEN 4 AND 8 ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nullable_sliced_try_all",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_nullable_sliced ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nullable_sliced_legacy_all",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_nullable_sliced ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nullable_sliced_cast_overflow_3",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_nullable_sliced WHERE id=3",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_sliced_cast_overflow_9",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_nullable_sliced WHERE id=9",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_sliced_cast_overflow_11",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_nullable_sliced WHERE id=11",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "provider_cast_extreme_0",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required WHERE id=0",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "provider_cast_extreme_13",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required WHERE id=13",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_empty_required_cast",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_empty_required ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_empty_required_try_cast",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_empty_required ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_empty_nullable_cast",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_empty_nullable ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_empty_nullable_try_cast",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_empty_nullable ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nulls_cast",
+      "sql": "SELECT id,CAST(v AS INT) AS r FROM narrow_nulls ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_nulls_try_cast",
+      "sql": "SELECT id,TRY_CAST(v AS INT) AS r FROM narrow_nulls ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "narrow_required_fields",
+      "sql": "SELECT v,CAST(v AS INT),CAST(v AS INT) AS renamed FROM narrow_required WHERE id=6",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "narrow_nullable_fields",
+      "sql": "SELECT v,CAST(v AS INT),CAST(v AS INT) AS renamed FROM narrow_nullable WHERE id=14",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "factory_wrap",
+      "sql": "SELECT int(4294967296L) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "factory_extreme",
+      "sql": "SELECT int(9223372036854775807L) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "factory_column_valid",
+      "sql": "SELECT int(v) AS r FROM narrow_required WHERE id=6",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "factory_column_overflow",
+      "sql": "SELECT int(v) AS r FROM narrow_nullable_sliced WHERE id=11",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "dead_literal_case",
+      "sql": "SELECT CASE WHEN false THEN CAST(4294967296L AS INT) ELSE 7 END AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "required_literal_case",
+      "sql": "SELECT CASE WHEN true THEN CAST(4294967296L AS INT) ELSE 7 END AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "dead_column_case",
+      "sql": "SELECT id,CASE WHEN id<0 THEN CAST(v AS INT) ELSE 7 END AS r FROM narrow_required ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "required_inner_invalid",
+      "sql": "SELECT CAST(CAST('bad' AS BIGINT) AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "dead_inner_invalid",
+      "sql": "SELECT CASE WHEN false THEN CAST(CAST('bad' AS BIGINT) AS INT) ELSE 7 END AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "null_discards_literal",
+      "sql": "SELECT CAST(4294967296L AS INT)+CAST(NULL AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "null_discards_column",
+      "sql": "SELECT CAST(v AS INT)+CAST(NULL AS INT) AS r FROM narrow_required WHERE id=11",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "empty_literal_filter",
+      "sql": "SELECT CAST(4294967296L AS INT) AS r WHERE false",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "empty_provider_literal",
+      "sql": "SELECT CAST(4294967296L AS INT) AS r FROM narrow_empty_required",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "provider_limit_zero",
+      "sql": "SELECT CAST(v AS INT) AS r FROM narrow_required LIMIT 0",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "first_overflow",
+      "sql": "SELECT CAST(4294967296L AS INT) AS n,CAST('bad' AS INT) AS s",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "first_invalid",
+      "sql": "SELECT CAST('bad' AS INT) AS s,CAST(4294967296L AS INT) AS n",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "try_text_invalid",
+      "sql": "SELECT TRY_CAST('bad' AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "try_text_fraction",
+      "sql": "SELECT TRY_CAST('1.9' AS INT) AS r",
+      "domain": "direct",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "wrapped_predicate",
+      "sql": "SELECT id FROM narrow_required WHERE CAST(v AS INT)=0 ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "wrapped_inlist",
+      "sql": "SELECT id FROM narrow_required WHERE CAST(v AS INT) IN (-1,0,1) ORDER BY id",
+      "domain": "direct",
+      "ansi_modes": [
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "c06_substring_implicit",
+      "sql": "SELECT substring('abcd',4294967297L,1) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c06_substring_explicit",
+      "sql": "SELECT substring('abcd',CAST(4294967297L AS INT),1) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c06_replace_implicit",
+      "sql": "SELECT regexp_replace('a1a','a','X',4294967298L) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c06_replace_explicit",
+      "sql": "SELECT regexp_replace('a1a','a','X',CAST(4294967298L AS INT)) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c06_extract_implicit",
+      "sql": "SELECT regexp_extract('ab','(a)',4294967296L) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c06_extract_explicit",
+      "sql": "SELECT regexp_extract('ab','(a)',CAST(4294967296L AS INT)) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c07_timestampadd_implicit",
+      "sql": "SELECT CAST(timestampadd(MONTH,4294967296L,TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c07_timestampadd_explicit",
+      "sql": "SELECT CAST(timestampadd(MONTH,CAST(4294967296L AS INT),TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c07_yearmonth_implicit",
+      "sql": "SELECT CAST(make_ym_interval(4294967296L,1) AS STRING) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    },
+    {
+      "id": "c07_yearmonth_explicit",
+      "sql": "SELECT CAST(make_ym_interval(CAST(4294967296L AS INT),1) AS STRING) AS r",
+      "domain": "adapter",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false
+    }
+  ]
+}

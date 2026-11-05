@@ -41,16 +41,50 @@ use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
 use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
 use super::lambda::lambda_with_fresh_parameter;
 use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::without_metadata_annotations;
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
+use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
+
+fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let mut arguments = input.arguments;
+    let function = ScalarUDF::from(SparkMakeYmInterval::new());
+    let argument_types = arguments
+        .iter()
+        .map(|argument| argument.get_type(input.function_context.schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    if function.coerce_types(&argument_types).is_err() {
+        // Preserve the original argument types in native admission diagnostics.
+        return Ok(function.call(arguments));
+    }
+    let known_null = arguments.iter().any(|argument| {
+        literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
+    });
+    let mut bigint_argument = false;
+    for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
+        if data_type == DataType::Int64 {
+            bigint_argument = true;
+            *argument = ScalarUDF::from(SparkCastBigintToInt::new(
+                input.function_context.plan_config.ansi_mode,
+                false,
+            ))
+            .call(vec![argument.clone()]);
+        }
+    }
+    let interval = function.call(arguments);
+    if bigint_argument && known_null {
+        // Keep the original call available for type admission before NULL pruning.
+        return Ok(when(lit(true), lit(ScalarValue::IntervalYearMonth(None))).otherwise(interval)?);
+    }
+    Ok(interval)
+}
 
 fn integer_part(expr: Expr, part: &str) -> Expr {
     cast(
@@ -1412,7 +1446,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             "make_timestamp_ntz",
             F::custom(|input| make_timestamp_ntz(input.arguments, false)),
         ),
-        ("make_ym_interval", F::udf(SparkMakeYmInterval::new())),
+        ("make_ym_interval", F::custom(make_ym_interval)),
         ("minute", F::unary(|arg| integer_part(arg, "MINUTE"))),
         ("month", F::unary(|arg| integer_part(arg, "MONTH"))),
         (

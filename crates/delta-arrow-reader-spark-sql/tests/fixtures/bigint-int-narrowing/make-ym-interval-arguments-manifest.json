@@ -1,0 +1,176 @@
+{
+  "format_version": 1,
+  "issue": 813,
+  "scope": "make_ym_interval_arguments",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "input_encoding": "Inherit the frozen manifest inputs and native slice layout; typed decimal strings are decoded without float conversion",
+  "settings": {
+    "spark.ui.enabled": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1"
+  },
+  "preserved_sources": [
+    {
+      "path": "manifest.json",
+      "sha256": "a28ccf21743a2f95d487a7708c0cd71fed395c9059e5c7c8154c9733867c96c6"
+    },
+    {
+      "path": "bigint-int-narrowing-spark.jsonl",
+      "sha256": "87155b99408b25d6e7c7bcb40951ace31365de09fac3f1d642b79157e87c4b65"
+    },
+    {
+      "path": "original-cast-controls-spark.jsonl",
+      "sha256": "b625d0f2c384cacc353cea0e1a5a3fddfe4ccc0ec00ee3262a65c6a1fa732738"
+    }
+  ],
+  "observations": 32,
+  "cases": [
+    {
+      "id": "ym_arguments_defaults_zero",
+      "sql": "SELECT CAST(make_ym_interval() AS STRING) AS r",
+      "purpose": "Observe the zero-argument defaults without an argument conversion.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": [],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_required_year_default",
+      "sql": "SELECT id,CAST(make_ym_interval(v) AS STRING) AS years_r,CAST(make_ym_interval(0L,v) AS STRING) AS months_r FROM narrow_required WHERE id BETWEEN 5 AND 7 ORDER BY id",
+      "purpose": "Observe required BIGINT values -1, 0 and 1 as years with an omitted month, and as months with both arguments supplied.",
+      "domain": "adapter",
+      "ordered": true,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_nullable_month_valid",
+      "sql": "SELECT id,CAST(make_ym_interval(0L,v) AS STRING) AS r FROM narrow_nullable WHERE id BETWEEN 4 AND 8 OR id=14 ORDER BY id",
+      "purpose": "Observe nullable BIGINT months at both INT limits, ordinary values and NULL with supplied BIGINT years.",
+      "domain": "adapter",
+      "ordered": true,
+      "input_tables": ["narrow_nullable"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_required_year_low_bits",
+      "sql": "SELECT CAST(make_ym_interval(v,1L) AS STRING) AS r FROM narrow_required WHERE id=12",
+      "purpose": "Isolate required years 4294967297 so argument narrowing is visible before interval arithmetic.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_required_month_low_bits",
+      "sql": "SELECT CAST(make_ym_interval(1L,v) AS STRING) AS r FROM narrow_required WHERE id=1",
+      "purpose": "Isolate negative required months -4294967297 to distinguish signed low-bit conversion from clipping or NULL substitution.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_nullable_year_sliced",
+      "sql": "SELECT id,CAST(make_ym_interval(v,1L) AS STRING) AS years_r,CAST(make_ym_interval(1L,v) AS STRING) AS months_r FROM narrow_nullable_sliced WHERE id IN (5,6,7,14) ORDER BY id",
+      "purpose": "Observe valid and NULL nullable years and months through the existing sliced native provider with hidden BIGINT extrema.",
+      "domain": "adapter",
+      "ordered": true,
+      "input_tables": ["narrow_nullable_sliced"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_required_month_sliced_low_bits",
+      "sql": "SELECT CAST(make_ym_interval(0L,v) AS STRING) AS r FROM narrow_required_sliced WHERE id=11",
+      "purpose": "Isolate months 4294967296 through the existing required sliced native provider.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_required_sliced"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_nullable_year_low_bits",
+      "sql": "SELECT CAST(make_ym_interval(v,0L) AS STRING) AS r FROM narrow_nullable WHERE id=11",
+      "purpose": "Isolate years 4294967296 in a nullable source without relying on a literal-only adapter path.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_nullable"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_null_provider",
+      "sql": "SELECT id,CAST(make_ym_interval(v,v) AS STRING) AS r FROM narrow_nulls ORDER BY id",
+      "purpose": "Observe both nullable BIGINT parameters on the registered all-NULL provider.",
+      "domain": "adapter",
+      "ordered": true,
+      "input_tables": ["narrow_nulls"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_empty_provider",
+      "sql": "SELECT id,CAST(make_ym_interval(v,v) AS STRING) AS r FROM narrow_empty_nullable ORDER BY id",
+      "purpose": "Observe public and execution fields for two nullable BIGINT parameters without input rows.",
+      "domain": "adapter",
+      "ordered": true,
+      "input_tables": ["narrow_empty_nullable"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_dead_and_null_case",
+      "sql": "SELECT id,CASE WHEN false THEN CAST(make_ym_interval(v,0L) AS STRING) ELSE 'kept' END AS dead_r,CASE WHEN CAST(NULL AS BOOLEAN) THEN CAST(make_ym_interval(v,0L) AS STRING) ELSE CAST(NULL AS STRING) END AS null_r FROM narrow_required ORDER BY id",
+      "purpose": "Observe statically false and NULL CASE conditions over required years that include narrowing and arithmetic boundaries.",
+      "domain": "adapter",
+      "ordered": true,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_null_month_with_year_overflow",
+      "sql": "SELECT CAST(make_ym_interval(v,CAST(NULL AS BIGINT)) AS STRING) AS r FROM narrow_required WHERE id=11",
+      "purpose": "Observe a statically NULL month beside required years 4294967296 and retain the actual conversion versus NULL-folding priority.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_wrong_arity_with_overflow",
+      "sql": "SELECT CAST(make_ym_interval(4294967296L,0L,0L) AS STRING) AS r",
+      "purpose": "Record actual wrong-arity priority with an overflowing BIGINT argument.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": [],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_incompatible_type_with_overflow",
+      "sql": "SELECT CAST(make_ym_interval(4294967296L,array(1)) AS STRING) AS r",
+      "purpose": "Record actual incompatible-month-type priority with an overflowing BIGINT year argument.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": [],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_interval_multiply_after_valid_int",
+      "sql": "SELECT CAST(make_ym_interval(v,0L) AS STRING) AS r FROM narrow_required WHERE id=8",
+      "purpose": "Observe existing interval multiplication for years 2147483647, which fits the INT argument conversion.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    },
+    {
+      "id": "ym_arguments_interval_add_after_valid_int",
+      "sql": "SELECT CAST(make_ym_interval(1L,v) AS STRING) AS r FROM narrow_required WHERE id=8",
+      "purpose": "Observe existing interval addition for months 2147483647 after both BIGINT arguments fit INT.",
+      "domain": "adapter",
+      "ordered": false,
+      "input_tables": ["narrow_required"],
+      "ansi_modes": [true, false]
+    }
+  ]
+}
