@@ -47,11 +47,13 @@ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmeti
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
+    spark_year_month_interval_scale::SparkYearMonthIntervalScale,
 };
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -153,6 +155,7 @@ fn null_discarded(expr: &Expr) -> bool {
                 || inner.is::<SparkCheckedDivide>()
                 || inner.is::<SparkCheckedModulo>()
                 || inner.is::<SparkCheckedArithmetic>()
+                || inner.is::<SparkYearMonthIntervalScale>()
                 || inner.is::<SparkIntegerDivide>())
                 && f.args.iter().any(null_literal))
                 || null_round(expr)
@@ -174,6 +177,7 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
         || matches!(expr, Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkAbs>()
                 || f.func.inner().is::<SparkCheckedArithmetic>()
+                || f.func.inner().is::<SparkYearMonthIntervalScale>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkDecimalCast>()
@@ -346,8 +350,13 @@ impl PrepareSparkExpressions {
         {
             return Ok(plan);
         }
+        // These checks reproduce Spark's interpreted evaluation of constants and local rows.
+        let mut evaluation_options = options.clone();
+        evaluation_options
+            .extensions
+            .insert(SparkInterpretedEvaluation::default());
         let mut props = ExecutionProps::new();
-        props.config_options = Some(Arc::new(options.clone()));
+        props.config_options = Some(Arc::new(evaluation_options));
         let prepare = Prepare {
             props,
             has_groups,

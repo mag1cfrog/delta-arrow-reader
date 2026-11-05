@@ -192,6 +192,30 @@ is planned as timestamp arithmetic. Execution keeps the existing Arrow interval
 storage. The [interval references](tests/fixtures/interval-qualifiers/README.md)
 record the checks and the separately owned differences.
 
+### Year-month interval scaling
+
+A local Sail function follows Spark's `MultiplyYMInterval` and
+`DivideYMInterval` in both ANSI modes. It multiplies a year-month interval by a
+BYTE, SHORT, INT, BIGINT, FLOAT, DOUBLE, DECIMAL or NULL number in either operand
+order, and divides it by one. Integral numbers use Java `int` or `long`
+arithmetic, FLOAT numbers widen to DOUBLE, and DECIMAL numbers scale exactly.
+Every result rounds HALF_UP to whole months. Overflow, zero divisors and NaN or
+infinite results fail with Spark's error condition or, where Spark raises a
+plain `java.lang.ArithmeticException`, with its message. A NULL interval skips
+the number for its row, and a NULL operand discards errors in the other operand
+before constants fold. Unlike CASE branches, both operands fold as constants, so
+a failing constant operand fails while optimizing even beside a column operand
+or under a false filter.
+
+Spark names a different condition for the minimum interval divided by -1 when
+its optimizer interprets the expression than when generated code evaluates it
+at run time. The expression-error analyzer marks its own evaluation of constants
+and local rows with the `SparkInterpretedEvaluation` configuration extension, so
+the function reports the optimizer's condition there and the run-time condition
+elsewhere. Day-time interval arithmetic and native DataFusion SQL are unchanged.
+The [interval references](tests/fixtures/interval-qualifiers/README.md) record
+the checks.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no
