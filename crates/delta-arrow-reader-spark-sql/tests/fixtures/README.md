@@ -671,10 +671,19 @@ dates, NULLs and empty results in both ANSI modes. Timestamp literals provide
 controls for the shared date-component grammar.
 
 `date_boundaries.rs` checks exact values, result types and expected errors at
-batch sizes 1 and 32. It strictly matches 514 observations. The other two retain
-an existing lowercase timestamp-separator difference tracked in #632; their
-Spark error expectations stay unchanged, and the test explicitly checks the
-current staged result. They are not counted as supported Spark behavior.
+batch sizes 1 and 32, and strictly matches all 516 observations, including the
+lowercase timestamp-separator controls fixed by #632.
+
+## Timestamp date/time separators
+
+`timestamp-separators/timestamp-separators-spark.jsonl` contains 3,348 Spark
+4.2.0 observations of the date/time separator in timestamp strings and typed
+literals. CAST, TRY_CAST, TO_TIMESTAMP, TO_TIMESTAMP_NTZ, DATE_FORMAT, STRING
+comparison and DATE casts read constant and registered-column inputs in both
+ANSI modes, UTC and New York. `timestamp_separators.rs` compares typed values,
+schemas at each stage and failing stages at batch sizes 1 and 32. See the
+[separator fixture notes](timestamp-separators/README.md) for the inputs,
+encoding and capture command.
 
 ## String-to-BOOLEAN casts
 
