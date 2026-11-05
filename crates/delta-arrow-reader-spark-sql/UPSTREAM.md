@@ -172,6 +172,21 @@ inline state and allocations owned by a generic element; the Spark element
 stores only inline values. The [extrema references](tests/fixtures/README.md#floating-minmax)
 cover returned bits, schemas, filters, DISTINCT and native controls.
 
+### Interval expression names
+
+The SQL analyzer keeps interval start and end fields with month or microsecond
+literal values. Unit presence decides the family even when a unit-syntax
+literal is zero or cancels, and SQL literals that mix year-month and day-time
+units are rejected as in Spark. Calendar interval string casts keep the shared
+parser's calendar representation.
+
+The existing Spark formatter uses those fields for literal and CAST names.
+Resolved operand types choose Spark's display order for interval
+multiplication and timestamp addition or subtraction, and `TIMESTAMP + NULL`
+is planned as timestamp arithmetic. Execution keeps the existing Arrow interval
+storage. The [interval references](tests/fixtures/interval-qualifiers/README.md)
+record the checks and the separately owned differences.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no
