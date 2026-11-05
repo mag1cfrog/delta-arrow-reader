@@ -130,13 +130,14 @@ pub(super) fn recorded_limit(
 
 // A recorded diagnostic must not fall through to a looser legacy error matcher.
 pub(super) fn has_recorded_case(fixture: &str, case: &Value) -> Result<bool, &'static str> {
-    Ok(profiles()?.iter().any(|profile| {
-        profile["key"]["fixture"] == fixture && profile["key"]["id"] == case["id"]
-    }))
+    Ok(profiles()?
+        .iter()
+        .any(|profile| profile["key"]["fixture"] == fixture && profile["key"]["id"] == case["id"]))
 }
 
 #[test]
-fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::string_binary::TestResult {
+fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::string_binary::TestResult
+{
     use std::collections::BTreeMap;
 
     let mut counts = BTreeMap::new();
@@ -149,7 +150,13 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
     duplicated[1] = duplicated[0].clone();
     assert!(validate_profiles(duplicated).is_err());
     for profile in profiles {
-        *counts.entry(profile["category"].as_str().ok_or("missing profile category")?).or_insert(0) += 1;
+        *counts
+            .entry(
+                profile["category"]
+                    .as_str()
+                    .ok_or("missing profile category")?,
+            )
+            .or_insert(0) += 1;
     }
     assert_eq!(
         counts,
@@ -167,9 +174,15 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
             .iter()
             .find(|profile| profile["category"] == *category)
             .ok_or("missing profile category example")?;
-        let fixture = profile["key"]["fixture"].as_str().ok_or("missing profile fixture")?;
-        let representation = profile["key"]["representation"].as_u64().ok_or("missing profile representation")? as usize;
-        let batch_size = profile["key"]["batch_size"].as_u64().ok_or("missing profile batch size")? as usize;
+        let fixture = profile["key"]["fixture"]
+            .as_str()
+            .ok_or("missing profile fixture")?;
+        let representation = profile["key"]["representation"]
+            .as_u64()
+            .ok_or("missing profile representation")? as usize;
+        let batch_size = profile["key"]["batch_size"]
+            .as_u64()
+            .ok_or("missing profile batch size")? as usize;
         let case = json!({"id":profile["key"]["id"],"ansi":profile["key"]["ansi"],
             "sql":profile["sql"],"expected":profile["spark_expected"]});
         let actual = &profile["native_actual"];
@@ -178,27 +191,73 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
         };
         assert!(matches(&case, Some(actual)));
         assert!(!matches(&case, None));
-        assert!(!profile_matches(profile, "wrong.jsonl", &case, representation, batch_size, Some(actual)));
-        assert!(!profile_matches(profile, fixture, &case, 3, batch_size, Some(actual)));
-        assert!(!profile_matches(profile, fixture, &case, representation, 7, Some(actual)));
-        for (key, value) in [("id", json!("wrong")), ("sql", json!("SELECT 1")), ("ansi", json!(!case["ansi"].as_bool().ok_or("missing case ANSI mode")?))] {
+        assert!(!profile_matches(
+            profile,
+            "wrong.jsonl",
+            &case,
+            representation,
+            batch_size,
+            Some(actual)
+        ));
+        assert!(!profile_matches(
+            profile,
+            fixture,
+            &case,
+            3,
+            batch_size,
+            Some(actual)
+        ));
+        assert!(!profile_matches(
+            profile,
+            fixture,
+            &case,
+            representation,
+            7,
+            Some(actual)
+        ));
+        for (key, value) in [
+            ("id", json!("wrong")),
+            ("sql", json!("SELECT 1")),
+            (
+                "ansi",
+                json!(!case["ansi"].as_bool().ok_or("missing case ANSI mode")?),
+            ),
+        ] {
             let mut changed = case.clone();
             changed[key] = value;
             assert!(!matches(&changed, Some(actual)));
         }
         for stage in ["analyzed_schema", "physical_schema"] {
-            for (field, value) in [("name", json!("wrong")), ("type", json!("binary")), ("nullable", json!(!actual[stage]["fields"][0]["nullable"].as_bool().ok_or("missing field nullability")?)), ("metadata", json!({"wrong":"metadata"}))] {
+            for (field, value) in [
+                ("name", json!("wrong")),
+                ("type", json!("binary")),
+                (
+                    "nullable",
+                    json!(
+                        !actual[stage]["fields"][0]["nullable"]
+                            .as_bool()
+                            .ok_or("missing field nullability")?
+                    ),
+                ),
+                ("metadata", json!({"wrong":"metadata"})),
+            ] {
                 let mut changed = actual.clone();
                 changed[stage]["fields"][0][field] = value;
                 assert!(!matches(&case, Some(&changed)));
             }
             let mut changed = actual.clone();
-            changed.as_object_mut().ok_or("native actual is not an object")?.remove(stage);
+            changed
+                .as_object_mut()
+                .ok_or("native actual is not an object")?
+                .remove(stage);
             assert!(!matches(&case, Some(&changed)));
         }
         for key in ["analyzed_arrow_schema", "physical_arrow_schema"] {
             let mut changed = actual.clone();
-            changed.as_object_mut().ok_or("native actual is not an object")?.remove(key);
+            changed
+                .as_object_mut()
+                .ok_or("native actual is not an object")?
+                .remove(key);
             assert!(!matches(&case, Some(&changed)));
         }
         let mut changed_case = case.clone();
@@ -212,12 +271,18 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
         changed["native_optimized_schema"] = actual["analyzed_schema"].clone();
         assert!(!matches(&case, Some(&changed)));
         if actual.get("error").is_some() {
-            for (key, value) in [("error_stage", json!("resolve")), ("error", json!("execute: unrelated cause")), ("rows", json!([]))] {
+            for (key, value) in [
+                ("error_stage", json!("resolve")),
+                ("error", json!("execute: unrelated cause")),
+                ("rows", json!([])),
+            ] {
                 let mut changed = actual.clone();
                 changed[key] = value;
                 assert!(!matches(&case, Some(&changed)));
             }
-            let error = actual["error"].as_str().ok_or("native error is not a string")?;
+            let error = actual["error"]
+                .as_str()
+                .ok_or("native error is not a string")?;
             let wrong_cause = if let Some((prefix, _)) = error.rsplit_once('\n') {
                 format!("{prefix}\nerror: wrong cause")
             } else {
@@ -236,7 +301,7 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
                 assert!(!matches(&case, Some(&changed)));
             }
         } else {
-            for rows in [json!([]), json!([["wrong"]]), json!([["extra"],["extra"]])] {
+            for rows in [json!([]), json!([["wrong"]]), json!([["extra"], ["extra"]])] {
                 let mut changed = actual.clone();
                 changed["rows"] = rows;
                 assert!(!matches(&case, Some(&changed)));
@@ -256,19 +321,49 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::strin
     }
     let profile = profiles
         .iter()
-        .find(|profile| profile["native_actual"]["rows"].as_array().is_some_and(|rows| rows.len() > 1))
+        .find(|profile| {
+            profile["native_actual"]["rows"]
+                .as_array()
+                .is_some_and(|rows| rows.len() > 1)
+        })
         .ok_or("missing multi-row profile")?;
-    let fixture = profile["key"]["fixture"].as_str().ok_or("missing profile fixture")?;
-    let representation = profile["key"]["representation"].as_u64().ok_or("missing profile representation")? as usize;
-    let batch_size = profile["key"]["batch_size"].as_u64().ok_or("missing profile batch size")? as usize;
+    let fixture = profile["key"]["fixture"]
+        .as_str()
+        .ok_or("missing profile fixture")?;
+    let representation = profile["key"]["representation"]
+        .as_u64()
+        .ok_or("missing profile representation")? as usize;
+    let batch_size = profile["key"]["batch_size"]
+        .as_u64()
+        .ok_or("missing profile batch size")? as usize;
     let case = json!({"id":profile["key"]["id"],"ansi":profile["key"]["ansi"],
         "sql":profile["sql"],"expected":profile["spark_expected"]});
     let mut reversed = profile["native_actual"].clone();
-    reversed["rows"].as_array_mut().ok_or("native rows are not an array")?.reverse();
-    assert!(!profile_matches(profile, fixture, &case, representation, batch_size, Some(&reversed)));
+    reversed["rows"]
+        .as_array_mut()
+        .ok_or("native rows are not an array")?
+        .reverse();
+    assert!(!profile_matches(
+        profile,
+        fixture,
+        &case,
+        representation,
+        batch_size,
+        Some(&reversed)
+    ));
     let mut duplicate = profile["native_actual"].clone();
     let row = duplicate["rows"][0].clone();
-    duplicate["rows"].as_array_mut().ok_or("native rows are not an array")?.push(row);
-    assert!(!profile_matches(profile, fixture, &case, representation, batch_size, Some(&duplicate)));
+    duplicate["rows"]
+        .as_array_mut()
+        .ok_or("native rows are not an array")?
+        .push(row);
+    assert!(!profile_matches(
+        profile,
+        fixture,
+        &case,
+        representation,
+        batch_size,
+        Some(&duplicate)
+    ));
     Ok(())
 }

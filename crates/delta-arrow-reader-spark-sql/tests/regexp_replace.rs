@@ -435,8 +435,12 @@ fn known_nonboundary_mixed_optional(actual: &Value, case: &Value) -> bool {
         return false;
     };
     let sql = match id {
-        "nonboundary_probe_column_mixed" => "SELECT k,regexp_replace(s,re,replacement) AS r FROM rr_nonboundary ORDER BY k",
-        "nonboundary_probe_column_position_2" => "SELECT k,regexp_replace(s,re,replacement,2) AS r FROM rr_nonboundary ORDER BY k",
+        "nonboundary_probe_column_mixed" => {
+            "SELECT k,regexp_replace(s,re,replacement) AS r FROM rr_nonboundary ORDER BY k"
+        }
+        "nonboundary_probe_column_position_2" => {
+            "SELECT k,regexp_replace(s,re,replacement,2) AS r FROM rr_nonboundary ORDER BY k"
+        }
         _ => return false,
     };
     if case["sql"] != sql || !regexp_capability::completed_stages_are_retained(actual) {
@@ -643,14 +647,20 @@ async fn regexp_native_capability_limits_retain_strict_spark_differences() -> Te
                     )?;
                     if matches_reference {
                         exact += 1;
-                        assert!(limit.is_none(), "a positive control cannot use a gap profile");
+                        assert!(
+                            limit.is_none(),
+                            "a positive control cannot use a gap profile"
+                        );
                     } else if let Some(limit) = limit {
                         *limits.entry(limit).or_insert(0) += 1;
                     }
                     if !regexp_capability::completed_stages_are_retained(&actual)
                         || (!matches_reference && limit.is_none())
                     {
-                        differences.push(format!("{key}: expected {}, observed {actual}", case["expected"]));
+                        differences.push(format!(
+                            "{key}: expected {}, observed {actual}",
+                            case["expected"]
+                        ));
                     }
                     if fixture == "regex-word-categories-spark.jsonl"
                         && case["id"] == "regexp_replace_nonboundary_literal"
