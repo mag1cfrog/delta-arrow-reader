@@ -1,7 +1,8 @@
 """Capture Spark interval qualifiers, generated names and typed interval values.
 
 The query corpus is the original #749 capture (candidate commit c54d99c3,
-script SHA256 12cc8fd6...) plus its eight NULL-coercion review probes. Values
+script SHA256 12cc8fd6...) plus review probes for NULL coercion and for signs
+and boundaries written inside interval literals. Values
 are recorded from Spark's internal rows instead of string casts. Run from the
 crate root in the reference environment described in README.md; the output
 path must not exist.
@@ -123,6 +124,21 @@ NULL_COERCION_PROBES = [
     ("timestamp_null_subtract", "SELECT TIMESTAMP '2020-01-01 00:00:00' - NULL"),
     ("timestamp_typed_interval_null_add",
      "SELECT TIMESTAMP '2020-01-01 00:00:00' + CAST(NULL AS INTERVAL DAY)"),
+    ("timestamp_ntz_null_add", "SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00' + NULL"),
+    ("interval_null_add", "SELECT INTERVAL '1' DAY + NULL"),
+    ("null_timestamp_subtract", "SELECT NULL - TIMESTAMP '2020-01-01 00:00:00'"),
+]
+
+SIGNED_LITERAL_PROBES = [
+    ("year_signed_value", "SELECT INTERVAL '-2' YEAR"),
+    ("year_signed_string", "SELECT INTERVAL -'2' YEAR"),
+    ("year_month_negative_months", "SELECT INTERVAL '-0-11' YEAR TO MONTH"),
+    ("year_month_negative_years", "SELECT INTERVAL '-1-0' YEAR TO MONTH"),
+    ("days_negative_unit", "SELECT INTERVAL -2 DAYS"),
+    ("day_hour_mixed_signs", "SELECT INTERVAL -1 DAY 2 HOURS"),
+    ("day_minute_negative", "SELECT INTERVAL '-1 02:03' DAY TO MINUTE"),
+    ("second_negative_fraction", "SELECT INTERVAL '-00.000001' SECOND"),
+    ("second_maximum", "SELECT INTERVAL '9223372036854.775807' SECOND"),
 ]
 
 
@@ -130,6 +146,8 @@ def definitions():
     yield from queries()
     for name, sql in NULL_COERCION_PROBES:
         yield f"null_coercion_{name}", "null_coercion", sql
+    for name, sql in SIGNED_LITERAL_PROBES:
+        yield f"signed_literal_{name}", "signed_literal", sql
 
 
 def encode_value(row, index, data_type, types, get_field):
