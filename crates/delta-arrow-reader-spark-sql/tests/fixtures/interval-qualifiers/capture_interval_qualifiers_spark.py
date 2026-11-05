@@ -3,8 +3,9 @@
 The query corpus is the original #749 capture (candidate commit c54d99c3,
 script SHA256 12cc8fd6...) plus review probes for NULL coercion, signs and
 boundaries written inside interval literals and quoted unit strings, the
-#951 storage limits of every interval qualifier, and the #781 and #985 scaling
-of year-month and day-time intervals by constant and column numbers. Values are recorded from
+#951 storage limits of every interval qualifier, the #781 and #985 scaling of
+year-month and day-time intervals by constant and column numbers, and the #957
+negation of every qualifier's limits. Values are recorded from
 Spark's internal rows instead of string casts. Run from the crate root in the
 reference environment described in README.md; the output path must not exist.
 """
@@ -487,6 +488,13 @@ DT_SCALING_ERRORS = [
 ]
 DT_SCALING_ERROR_CONTEXTS = [(name, sql.replace("INTERVAL '1' MONTH", "INTERVAL '1' DAY"))
                              for name, sql in SCALING_ERROR_CONTEXTS]
+# Spark folds NULL inspection of a required expression before it folds constants, so a
+# failing constant under IS NOT NULL returns true (#957 review).
+NULL_INSPECTION_CONTEXTS = [
+    ("is_null", "SELECT ({e}) IS NULL AS r"),
+    ("is_not_null", "SELECT ({e}) IS NOT NULL AS r"),
+    ("column_is_not_null", "SELECT ({e}) IS NOT NULL AS r FROM inputs WHERE id = 0"),
+]
 
 DT_SCALING_COLUMN_PROBES = [
     (f"{column}_{operation}", sql.format(n=column))
@@ -540,6 +548,70 @@ DT_SCALING_OPERAND_PROBES = [
 ]
 
 
+# Negation of each qualifier's storage limits (#957), as `-x` and `negative(x)`, of NULL, of
+# column intervals including the limit tables, and of a failing minimum where Spark prunes
+# or defers it.
+NEGATION_LIMITS = [(name, interval) for name, interval in LIMIT_PROBES
+                   if name.endswith(("_min", "_max")) and not name.startswith("cast_")
+                   and "_below_" not in name and "_above_" not in name] + [
+    # The signed-literal probes hold the SECOND maximum.
+    ("second_max", "INTERVAL '9223372036854.775807' SECOND"),
+]
+NEGATION_PROBES = [
+    ("null_year_month", "SELECT -(CAST(NULL AS INTERVAL YEAR TO MONTH)) AS r"),
+    ("null_day_time", "SELECT negative(CAST(NULL AS INTERVAL DAY)) AS r"),
+    ("column_year_month", "SELECT -m AS r FROM scale_inputs"),
+    ("column_month", "SELECT negative(mo) AS r FROM scale_inputs"),
+    ("column_day_time", "SELECT -t AS r FROM dt_scale_inputs"),
+    ("column_day_time_function", "SELECT negative(t) AS r FROM dt_scale_inputs"),
+    ("column_unaliased", "SELECT -m, negative(m) FROM scale_inputs"),
+    ("column_year_month_maximum", "SELECT -high AS r FROM scale_limits"),
+    ("column_year_month_minimum", "SELECT -low AS r FROM scale_limits"),
+    ("column_day_time_maximum", "SELECT -high AS r FROM dt_scale_limits"),
+    ("column_day_time_minimum", "SELECT -low AS r FROM dt_scale_limits"),
+    ("column_minimum_filtered", "SELECT -low AS r FROM dt_scale_limits WHERE false"),
+    ("timestamp", "SELECT TIMESTAMP '2020-01-01 00:00:00.123456' - (-t) AS r FROM dt_scale_inputs"),
+    ("range_key_descending",
+     "SELECT id, SUM(v) OVER (ORDER BY TIMESTAMP '2020-01-10 00:00:00' + (-(id * INTERVAL 1 DAY)) "
+     "DESC RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS r FROM inputs"),
+    ("range_key_ascending",
+     "SELECT id, SUM(v) OVER (ORDER BY TIMESTAMP '2020-01-10 00:00:00' + (-(id * INTERVAL 1 DAY)) "
+     "RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS r FROM inputs"),
+]
+NEGATION_MINIMA = [("year_month", "INTERVAL '-2147483648' MONTH", "INTERVAL '1' MONTH"),
+                   ("day_time", "INTERVAL '-9223372036854.775808' SECOND", "INTERVAL '1' DAY")]
+NEGATION_CONTEXTS = [
+    ("filtered", "SELECT -({e}) AS r FROM inputs WHERE false"),
+    ("unused", "SELECT 1 AS r FROM (SELECT -({e}) AS x FROM inputs) t"),
+    ("limit_zero", "SELECT -({e}) AS r FROM inputs LIMIT 0"),
+    ("values", "SELECT x AS r FROM VALUES (-({e})) AS t(x)"),
+    ("constant_case", "SELECT CASE WHEN false THEN -({e}) ELSE {other} END AS r"),
+    ("column_case", "SELECT CASE WHEN id < 0 THEN -({e}) ELSE {other} END AS r FROM inputs"),
+    ("taken_column_case",
+     "SELECT CASE WHEN id = 0 THEN -({e}) ELSE {other} END AS r FROM inputs"),
+]
+
+
+def negation_definitions():
+    for name, interval in NEGATION_LIMITS:
+        yield f"negation_{name}", "negation", f"SELECT -({interval}) AS r"
+        yield f"negation_function_{name}", "negation", f"SELECT negative({interval}) AS r"
+    for name, sql in NEGATION_PROBES:
+        yield f"negation_{name}", "negation", sql
+    for family, minimum, other in NEGATION_MINIMA:
+        for context, sql in NEGATION_CONTEXTS:
+            yield (f"negation_{family}_minimum_{context}", "negation_error",
+                   sql.format(e=minimum, other=other))
+        for context, sql in NULL_INSPECTION_CONTEXTS:
+            yield (f"negation_{family}_minimum_{context}", "negation_error",
+                   sql.format(e=f"-({minimum})"))
+    for prefix, errors in [("scaling", SCALING_ERRORS), ("dt_scaling", DT_SCALING_ERRORS)]:
+        for name, expression in errors:
+            for context, sql in NULL_INSPECTION_CONTEXTS:
+                yield (f"{prefix}_{name}_{context}", f"{prefix}_error",
+                       sql.format(e=expression))
+
+
 def dt_scaling_definitions():
     for name, micros, number in DT_SCALING_PROBES:
         interval = (seconds_literal(micros) if name != "day_qualifier"
@@ -589,6 +661,7 @@ def definitions():
         yield f"limit_{name}", "limit", f"SELECT {interval}"
     yield from scaling_definitions()
     yield from dt_scaling_definitions()
+    yield from negation_definitions()
 
 
 def encode_input(value, spark_type):
@@ -648,6 +721,8 @@ def encode_value(row, index, data_type, types, get_field):
     """Encode one internal-row value by its Spark type, without string casts."""
     if row.isNullAt(index):
         return None
+    if isinstance(data_type, types.BooleanType):
+        return "true" if row.getBoolean(index) else "false"
     if isinstance(data_type, (types.IntegerType, types.YearMonthIntervalType, types.DateType)):
         return str(row.getInt(index))
     if isinstance(data_type, (types.LongType, types.DayTimeIntervalType,
@@ -749,7 +824,8 @@ def main():
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "value_encoding": ("integers, DATE days and YEAR-MONTH months as int; BIGINT, "
                                "DAY-TIME microseconds and TIMESTAMP UTC microseconds as long; "
-                               "CALENDAR intervals as [months, days, microseconds]"),
+                               "CALENDAR intervals as [months, days, microseconds]; "
+                               "BOOLEAN as true or false"),
             "settings": {"spark.sql.optimizer.excludedRules":
                          spark.conf.get("spark.sql.optimizer.excludedRules")},
             # Recorded inputs encode integers as decimal strings.

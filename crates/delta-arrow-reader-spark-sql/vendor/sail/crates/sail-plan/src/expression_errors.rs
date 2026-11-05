@@ -47,7 +47,7 @@ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmeti
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
-    spark_interval_scale::SparkIntervalScale,
+    spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
 use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
@@ -91,6 +91,30 @@ fn null_literal(expr: &Expr) -> bool {
             f.args.first().is_some_and(null_literal)
         }
         _ => false,
+    }
+}
+
+/// Local division and remainder inspect a NULL divisor before their dividend.
+pub(crate) fn prune_null_divisor(expr: Expr, schema: &DFSchemaRef) -> Result<Transformed<Expr>> {
+    let right = match &expr {
+        Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
+            Some(binary.right.as_ref())
+        }
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<SparkCheckedDivide>()
+                || f.func.inner().is::<SparkCheckedModulo>()
+                || f.func.inner().is::<FusedDecimalDivide>() =>
+        {
+            Some(&f.args[1])
+        }
+        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
+    };
+    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
+        Ok(Transformed::yes(lit(ScalarValue::try_new_null(
+            &expr.get_type(schema)?,
+        )?)))
+    } else {
+        Ok(Transformed::no(expr))
     }
 }
 
@@ -181,6 +205,7 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
             if f.func.inner().is::<SparkAbs>()
                 || f.func.inner().is::<SparkCheckedArithmetic>()
                 || f.func.inner().is::<SparkIntervalScale>()
+                || f.func.inner().is::<SparkIntervalNegate>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkDecimalCast>()
@@ -2237,27 +2262,11 @@ impl Prepare {
         Ok(expr
             .transform_down(|expr| {
                 let expr = if local {
-                    let right = match &expr {
-                        Expr::BinaryExpr(binary)
-                            if matches!(binary.op, Operator::Divide | Operator::Modulo) =>
-                        {
-                            Some(binary.right.as_ref())
-                        }
-                        Expr::ScalarFunction(f)
-                            if f.func.inner().is::<SparkCheckedDivide>()
-                                || f.func.inner().is::<SparkCheckedModulo>()
-                                || f.func.inner().is::<FusedDecimalDivide>() =>
-                        {
-                            Some(&f.args[1])
-                        }
-                        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
-                    };
-                    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
-                        return Ok(Transformed::yes(lit(ScalarValue::try_new_null(
-                            &expr.get_type(schema)?,
-                        )?)));
+                    let pruned = prune_null_divisor(expr, schema)?;
+                    if pruned.transformed {
+                        return Ok(pruned);
                     }
-                    expr
+                    pruned.data
                 } else if null_round(&expr) && !expr.contains_scalar_subquery() {
                     lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?)
                 } else {

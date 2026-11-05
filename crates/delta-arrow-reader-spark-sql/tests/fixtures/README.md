@@ -338,17 +338,33 @@ Consumers cover projections, NULL predicates, COALESCE, grouping and projected
 IN/NOT IN, including empty, limited and correlated subqueries.
 
 The raw Spark results remain in the fixture. Exact pre-existing differences are
-recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches:
-an unused invalid inline CAST is pruned before its required error (#722). The
-four `conditional_projection` and `conditional_empty` observations, in both ANSI
-modes, match Spark after the literal-TRUE CASE declaration repair (#721).
+recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches.
+In ANSI mode, an unused invalid inline CAST raises its required
+`INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION` error during analysis
+(#722). The four `conditional_projection` and `conditional_empty` observations, in
+both ANSI modes, match Spark after the literal-TRUE CASE declaration repair (#721).
 Six projected-IN observations retain SQL three-valued results that differ from
 Spark, including
 NULL-left/empty-subquery behavior in legacy mode. These remain unresolved #142
-cases and do not extend its approved four-case historical policy. In total, 115
-observations match Spark and 7 retain exact baseline differences. The retained-gap
+cases and do not extend its approved four-case historical policy. In total, 116
+observations match Spark and 6 retain exact baseline differences. The retained-gap
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
+
+## Inline VALUES validation
+
+`inline-values-evaluation/spark-reference.jsonl` records 72 Spark observations for
+constant inline expressions, including errors preserved under filters, LIMIT 0
+and unused projections, row/column error order, CASE branches and NULL/TRY_CAST.
+`null-boundaries-spark.jsonl` adds eight NULL-operand observations, and
+`literal-null-divisors-spark.jsonl` adds six integral DIV, remainder and Decimal
+division observations with literal NULL divisors, all in the same directory.
+The tests compare complete Fields, rows, error conditions, causes and stages at
+batch sizes 1 and 32. Native session modes and nonfoldable functions have separate
+preservation controls.
+
+Computed NULL divisors remain open in [#990](https://github.com/mag1cfrog/delta-arrow-reader/issues/990),
+and NULLIF inline-table admission remains open in [#991](https://github.com/mag1cfrog/delta-arrow-reader/issues/991).
 
 ## Historical expression-schema corrections
 
@@ -695,15 +711,14 @@ encoding and capture command.
 
 ## Interval qualifiers and generated names
 
-`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1546 Spark 4.2.0
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1756 Spark 4.2.0
 observations of interval literal names, signed and unit-syntax literals, storage
-limits, arithmetic and timestamp operand order, year-month and day-time
-interval scaling, interval CASTs and RANGE offsets. The query corpus preserves
-the original #749 capture.
-`interval_qualifiers.rs` compares names, fields, typed values and errors at
-batch sizes 1 and 32. See the
-[interval fixture notes](interval-qualifiers/README.md) for the encoding, the
-retained differences and their owners, and the capture command.
+limits, arithmetic and timestamp operand order, year-month and day-time interval
+scaling and negation, interval CASTs and RANGE offsets. The query corpus
+preserves the original #749 capture. `interval_qualifiers.rs` compares names,
+fields, typed values and errors at batch sizes 1 and 32. See the [interval
+fixture notes](interval-qualifiers/README.md) for the encoding, the retained
+differences and their owners, and the capture command.
 
 ## String-to-BOOLEAN casts
 
