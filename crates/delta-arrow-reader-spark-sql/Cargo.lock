@@ -1580,6 +1580,7 @@ dependencies = [
  "parquet",
  "sail-common-datafusion",
  "sail-function",
+ "sail-logical-plan",
  "sail-plan",
  "sail-sql-analyzer",
  "serde",

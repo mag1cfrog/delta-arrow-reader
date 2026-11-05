@@ -20,7 +20,9 @@ use sail_function::scalar::explode::{Explode, ExplodeKind};
 use sail_function::scalar::multi_expr::MultiExpr;
 
 use crate::resolver::state::PlanResolverState;
-use crate::resolver::tree::{PlanRewriter, empty_logical_plan, skip_aggregate_arguments};
+use crate::resolver::tree::{
+    PlanRewriter, empty_logical_plan, skip_aggregate_arguments_needing_validation,
+};
 
 enum ExplodeDataType {
     List,
@@ -58,7 +60,7 @@ impl TreeNodeRewriter for ExplodeRewriter<'_> {
     type Node = Expr;
 
     fn f_down(&mut self, node: Expr) -> Result<Transformed<Expr>> {
-        Ok(skip_aggregate_arguments(node))
+        Ok(skip_aggregate_arguments_needing_validation(node))
     }
 
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {

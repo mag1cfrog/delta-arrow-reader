@@ -1,9 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use datafusion::logical_expr::LogicalPlan;
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_expr::Expr;
 use datafusion_expr::expr::AggregateFunction;
 use datafusion_expr::utils::{find_aggregate_exprs, find_window_exprs};
-use datafusion_expr::Expr;
 use sail_common::spec;
 
 use crate::error::{PlanError, PlanResult};
@@ -33,33 +33,24 @@ impl PlanResolver<'_> {
     pub(super) fn validate_aggregate_arguments(plan: &LogicalPlan) -> PlanResult<()> {
         let mut functions: Vec<AggregateFunction> = Vec::new();
         plan.apply_with_subqueries(|plan| {
-            plan.apply_expressions(|expression| expression.apply(|expression| {
-                if let Expr::AggregateFunction(function) = expression {
-                    functions.push(function.clone());
-                }
-                Ok(TreeNodeRecursion::Continue)
-            }))?;
+            plan.apply_expressions(|expression| {
+                expression.apply(|expression| {
+                    if let Expr::AggregateFunction(function) = expression {
+                        functions.push(function.clone());
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })
+            })?;
             Ok(TreeNodeRecursion::Continue)
         })?;
 
-        // All query fields are typed; nesting must precede volatility across siblings.
+        // All fields are typed; Spark checks windows before each aggregate's other errors.
         for function in &functions {
-            let count_if = function.func.aliases().iter().any(|alias| alias == "count_if");
-            if !find_aggregate_exprs(&function.params.args).is_empty() {
-                return Err(PlanError::invalid(if count_if {
-                    "COUNT_IF argument cannot contain an aggregate function"
-                } else {
-                    "[NESTED_AGGREGATE_FUNCTION] An aggregate argument cannot contain an aggregate function"
-                }));
-            }
-            if count_if && let Some(filter) = &function.params.filter
-                && !find_aggregate_exprs([filter.as_ref()]).is_empty()
-            {
-                return Err(PlanError::invalid("COUNT_IF FILTER cannot contain an aggregate function"));
-            }
-        }
-        for function in &functions {
-            let count_if = function.func.aliases().iter().any(|alias| alias == "count_if");
+            let count_if = function
+                .func
+                .aliases()
+                .iter()
+                .any(|alias| alias == "count_if");
             if !find_window_exprs(&function.params.args).is_empty() {
                 return Err(PlanError::invalid(if count_if {
                     "COUNT_IF argument cannot contain a window function"
@@ -67,25 +58,62 @@ impl PlanResolver<'_> {
                     "[_LEGACY_ERROR_TEMP_1031] An aggregate argument cannot contain a window function"
                 }));
             }
-            if count_if && let Some(filter) = &function.params.filter
+            if count_if
+                && let Some(filter) = &function.params.filter
                 && !find_window_exprs([filter.as_ref()]).is_empty()
             {
-                return Err(PlanError::invalid("COUNT_IF FILTER cannot contain a window function"));
+                return Err(PlanError::invalid(
+                    "COUNT_IF FILTER cannot contain a window function",
+                ));
             }
         }
         for function in &functions {
-            let count_if = function.func.aliases().iter().any(|alias| alias == "count_if");
-            if let Some(argument) = function.params.args.iter().find(|arg| expression_is_nondeterministic(arg)) {
+            let count_if = function
+                .func
+                .aliases()
+                .iter()
+                .any(|alias| alias == "count_if");
+            if !find_aggregate_exprs(&function.params.args).is_empty() {
+                return Err(PlanError::invalid(if count_if {
+                    "COUNT_IF argument cannot contain an aggregate function"
+                } else {
+                    "[NESTED_AGGREGATE_FUNCTION] An aggregate argument cannot contain an aggregate function"
+                }));
+            }
+            if count_if
+                && let Some(filter) = &function.params.filter
+                && !find_aggregate_exprs([filter.as_ref()]).is_empty()
+            {
+                return Err(PlanError::invalid(
+                    "COUNT_IF FILTER cannot contain an aggregate function",
+                ));
+            }
+            if let Some(argument) = function
+                .params
+                .args
+                .iter()
+                .find(|arg| expression_is_nondeterministic(arg))
+            {
                 if count_if {
-                    return Err(PlanError::invalid("COUNT_IF argument requires a deterministic expression"));
+                    return Err(PlanError::invalid(
+                        "COUNT_IF argument requires a deterministic expression",
+                    ));
                 }
                 return Err(PlanError::analysis(format!(
                     "[AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION] Non-deterministic expression {argument} should not appear in the arguments of aggregate function {}",
                     function.func.name()
                 )));
             }
-            if count_if && function.params.filter.as_deref().is_some_and(expression_is_nondeterministic) {
-                return Err(PlanError::invalid("COUNT_IF FILTER requires a deterministic expression"));
+            if count_if
+                && function
+                    .params
+                    .filter
+                    .as_deref()
+                    .is_some_and(expression_is_nondeterministic)
+            {
+                return Err(PlanError::invalid(
+                    "COUNT_IF FILTER requires a deterministic expression",
+                ));
             }
         }
         Ok(())

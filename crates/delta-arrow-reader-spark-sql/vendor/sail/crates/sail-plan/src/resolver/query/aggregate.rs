@@ -47,7 +47,7 @@ type GeneratorReplacements = Vec<(Expr, Expr)>;
 const GROUPING_KEY_ORDER_METADATA: &str = "sail:grouping_key_order";
 
 /// Retain the existing grouped-output rule separately from ordinary aggregate arguments.
-fn find_volatile_outside_aggregate_arguments(expr: &Expr) -> Option<String> {
+fn find_volatile_outside_aggregate_functions(expr: &Expr) -> Option<String> {
     let mut found_name: Option<String> = None;
     let _ = expr.apply(|e| {
         if matches!(e, Expr::AggregateFunction(_)) {
@@ -116,8 +116,9 @@ impl PlanResolver<'_> {
             )
             .await?;
 
-        let volatile_output = projections.iter()
-            .find_map(|projection| find_volatile_outside_aggregate_arguments(&projection.expr));
+        let volatile_output = projections
+            .iter()
+            .find_map(|projection| find_volatile_outside_aggregate_functions(&projection.expr));
 
         let having = if let Some(having) = having {
             let mut grouping = Self::named_grouping_expressions(grouping.clone())?;

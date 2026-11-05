@@ -10,8 +10,8 @@ use datafusion::functions_aggregate::{
 };
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
-use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
 use datafusion_common::{DFSchema, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams};
 use datafusion_expr::simplify::SimplifyContext;
@@ -45,6 +45,8 @@ use sail_function::aggregate::theta_sketch::{
 use sail_function::aggregate::try_avg::TryAvgFunction;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::struct_function::StructFunction;
+use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
+use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::collection_result::RequireNonNullCollectionElements;
@@ -664,12 +666,20 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         }
     }
     if aggregate_argument_needs_validation(&predicate)
-        || input.filter.as_deref().is_some_and(aggregate_argument_needs_validation)
+        || input
+            .filter
+            .as_deref()
+            .is_some_and(aggregate_argument_needs_validation)
     {
         // Keep pending COUNT_IF fields distinct from native COUNT while deferring checks.
         let argument_name = format!("count_if({})", predicate.schema_name());
         return Ok(expr::Expr::AggregateFunction(AggregateFunction {
-            func: Arc::new(count::count_udaf().as_ref().clone().with_aliases(["count_if"])),
+            func: Arc::new(
+                count::count_udaf()
+                    .as_ref()
+                    .clone()
+                    .with_aliases(["count_if"]),
+            ),
             params: AggregateFunctionParams {
                 args: vec![predicate.alias(argument_name)],
                 distinct: input.distinct,
@@ -784,23 +794,36 @@ pub(crate) fn aggregate_argument_needs_validation(expression: &expr::Expr) -> bo
 }
 
 pub(crate) fn expression_is_nondeterministic(expression: &expr::Expr) -> bool {
-    expression.exists(|expression| {
-        if expression.is_volatile_node() {
-            return Ok(true);
-        }
-        let expr::Expr::ScalarSubquery(subquery) = expression else {
-            return Ok(false);
-        };
-        let mut volatile = false;
-        subquery.subquery.apply_with_subqueries(|plan| {
-            plan.apply_expressions(|expression| {
-                volatile |= expression.is_volatile();
-                Ok(TreeNodeRecursion::Continue)
+    expression
+        .exists(|expression| {
+            if expression.is_volatile_node() {
+                return Ok(true);
+            }
+            let expr::Expr::ScalarSubquery(subquery) = expression else {
+                return Ok(false);
+            };
+            let mut volatile = false;
+            subquery.subquery.apply_with_subqueries(|plan| {
+                if let datafusion_expr::LogicalPlan::Extension(extension) = plan {
+                    let node = extension.node.as_any();
+                    volatile |= node.is::<SparkPartitionIdNode>()
+                        || node
+                            .downcast_ref::<MonotonicIdNode>()
+                            .is_some_and(|node| node.purpose() == MonotonicIdPurpose::SqlFunction);
+                }
+                plan.apply_expressions(|expression| {
+                    volatile |= expression.is_volatile();
+                    Ok(TreeNodeRecursion::Continue)
+                })?;
+                Ok(if volatile {
+                    TreeNodeRecursion::Stop
+                } else {
+                    TreeNodeRecursion::Continue
+                })
             })?;
-            Ok(if volatile { TreeNodeRecursion::Stop } else { TreeNodeRecursion::Continue })
-        })?;
-        Ok(volatile)
-    }).expect("volatility inspection does not evaluate expressions")
+            Ok(volatile)
+        })
+        .expect("volatility inspection does not evaluate expressions")
 }
 
 fn collect_set(input: AggFunctionInput) -> PlanResult<expr::Expr> {
@@ -901,9 +924,11 @@ pub(super) fn coalesce_to_empty_array(
 fn listagg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     let schema = input.function_context.schema;
     let (agg_col, other_args) = input.arguments.at_least_one()?;
-    if agg_col.get_type(schema)? == DataType::Null {
-        return Ok(lit(ScalarValue::Null));
-    }
+    let agg_col = if agg_col.get_type(schema)? == DataType::Null {
+        cast(agg_col, DataType::Utf8)
+    } else {
+        agg_col
+    };
     let delim = other_args.first().cloned().unwrap_or_else(|| lit(""));
 
     let agg = expr::Expr::AggregateFunction(AggregateFunction {

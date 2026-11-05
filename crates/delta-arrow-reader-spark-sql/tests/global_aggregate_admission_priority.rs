@@ -598,3 +598,116 @@ async fn additional_aggregate_argument_controls_match_independent_spark() -> Tes
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
+
+#[tokio::test]
+async fn deterministic_scalar_subquery_window_matches_spark_and_native() -> TestResult {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/global-aggregate-internal-window-ordering-cases.json"
+    ))?;
+    let fixture = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/global-aggregate-internal-window-ordering-spark.jsonl"
+    ))?;
+    let records = fixture
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 3);
+    assert_eq!(
+        records[0]["manifest_sha256"],
+        "8ed6c69a2ba368fa5427cbcceaee3a4c50717c4e409ad38035ccc3a8cf8658b8"
+    );
+    for key in [
+        "input_version",
+        "capture_kind",
+        "spark_version",
+        "spark_revision",
+        "timezone",
+    ] {
+        assert_eq!(records[0][key], manifest[key]);
+    }
+    assert!(
+        records[0]["spark_build"]
+            .as_str()
+            .ok_or("missing Spark build")?
+            .contains("revision=32f7299601108917fb01920a54e084595b7b3bf8")
+    );
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let config = SessionConfig::new()
+            .with_batch_size(batch_size)
+            .with_target_partitions(2);
+        let native = SessionContext::new_with_config(config.clone());
+        let adapter = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(config),
+            )
+            .build(),
+        );
+        for (case, ansi) in records[1..].iter().zip([true, false]) {
+            for key in ["id", "scope", "sql", "success_assertions"] {
+                assert_eq!(case[key], manifest["cases"][0][key]);
+            }
+            assert_eq!(case["ansi"], ansi);
+            assert_eq!(case["phase"], "success", "{case}");
+            let sql = case["sql"].as_str().ok_or("missing control SQL")?;
+            let query = plan_query(
+                &adapter,
+                sql,
+                &SparkSqlOptions {
+                    ansi_mode: ansi,
+                    session_timezone: "UTC".into(),
+                    ..Default::default()
+                },
+            )
+            .await?;
+            let mut internal_ids = 0;
+            query.logical_plan.apply_with_subqueries(|plan| {
+                if let datafusion::logical_expr::LogicalPlan::Extension(extension) = plan
+                    && extension
+                        .node
+                        .as_any()
+                        .is::<sail_logical_plan::monotonic_id::MonotonicIdNode>()
+                {
+                    internal_ids += 1;
+                }
+                Ok(datafusion::common::tree_node::TreeNodeRecursion::Continue)
+            })?;
+            assert!(
+                internal_ids > 0,
+                "control did not reach internal stable-ordering insertion"
+            );
+            let callbacks = AtomicUsize::new(0);
+            let actual = observe(&adapter, sql, ansi, &callbacks).await?;
+            let adapter_matches = matches_reference(case, case, &actual, "exact_schema_and_rows");
+            eprintln!(
+                "global_aggregate_internal_window_ordering_observation={}",
+                json!({
+                "id":case["id"],"ansi":ansi,"batch":batch_size,"engine":"spark_adapter",
+                "internal_monotonic_ids":internal_ids,"reference":case,"matches":adapter_matches,"observation":actual})
+            );
+            if !adapter_matches {
+                differences.push(format!("adapter ANSI={ansi} batch={batch_size}: {actual}"));
+            }
+            let actual = spark_results::capture_native_query_observation(&native, sql).await?;
+            let native_matches = actual["error"].is_null()
+                && actual["public_schema"] == case["schema_stages"]["public"]
+                && actual["before_collect"] == case["schema_stages"]["executed"]
+                && actual["physical_schema"] == case["schema_stages"]["executed_after_collect"]
+                && actual["rows"] == case["expected"]["rows"];
+            eprintln!(
+                "global_aggregate_internal_window_ordering_observation={}",
+                json!({
+                "id":case["id"],"ansi":ansi,"batch":batch_size,"engine":"native",
+                "reference":case,"matches":native_matches,"observation":actual})
+            );
+            if !native_matches {
+                differences.push(format!("native ANSI={ansi} batch={batch_size}: {actual}"));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}

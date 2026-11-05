@@ -5,21 +5,33 @@ use datafusion_common::DFSchema;
 use datafusion_common::tree_node::{Transformed, TreeNodeRecursion};
 use datafusion_expr::{EmptyRelation, Expr, LogicalPlan};
 
-use crate::resolver::state::PlanResolverState;
 use crate::function::aggregate_argument_needs_validation;
+use crate::resolver::state::PlanResolverState;
 
 pub(crate) mod explode;
 pub(crate) mod monotonic_id;
 pub(crate) mod spark_partition_id;
 pub(crate) mod window;
 
-fn skip_aggregate_arguments(node: Expr) -> Transformed<Expr> {
+fn skip_aggregate_arguments_needing_validation(node: Expr) -> Transformed<Expr> {
     // Hoisting must not erase arguments before typed-query validation inspects them.
     let preserve = match &node {
         Expr::AggregateFunction(function) => {
-            function.params.args.iter().any(aggregate_argument_needs_validation)
-                || (function.func.aliases().iter().any(|alias| alias == "count_if")
-                    && function.params.filter.as_deref().is_some_and(aggregate_argument_needs_validation))
+            function
+                .params
+                .args
+                .iter()
+                .any(aggregate_argument_needs_validation)
+                || (function
+                    .func
+                    .aliases()
+                    .iter()
+                    .any(|alias| alias == "count_if")
+                    && function
+                        .params
+                        .filter
+                        .as_deref()
+                        .is_some_and(aggregate_argument_needs_validation))
         }
         _ => false,
     };
