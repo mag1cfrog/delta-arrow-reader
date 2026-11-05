@@ -9,12 +9,11 @@ use datafusion_common::{Result, ScalarValue, not_impl_err, plan_err};
 use half::f16;
 use sail_common::spec::IntervalFieldType;
 use sail_common_datafusion::formatter::{
-    Date32Formatter, Date64Formatter, DurationMicrosecondFormatter, DurationMillisecondFormatter,
-    DurationNanosecondFormatter, DurationSecondFormatter, IntervalDayTimeFormatter,
-    IntervalMonthDayNanoFormatter, IntervalYearMonthFormatter, Time32MillisecondFormatter,
-    Time32SecondFormatter, Time64MicrosecondFormatter, Time64NanosecondFormatter,
-    TimestampMicrosecondFormatter, TimestampMillisecondFormatter, TimestampNanosecondFormatter,
-    TimestampSecondFormatter,
+    Date32Formatter, Date64Formatter, DurationMillisecondFormatter, DurationNanosecondFormatter,
+    DurationSecondFormatter, IntervalDayTimeFormatter, IntervalMonthDayNanoFormatter,
+    Time32MillisecondFormatter, Time32SecondFormatter, Time64MicrosecondFormatter,
+    Time64NanosecondFormatter, TimestampMicrosecondFormatter, TimestampMillisecondFormatter,
+    TimestampNanosecondFormatter, TimestampSecondFormatter,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
 
@@ -22,6 +21,7 @@ use sail_common_datafusion::utils::items::ItemTaker;
 pub struct SparkPlanFormatter;
 
 impl SparkPlanFormatter {
+    /// Formats an interval qualifier, such as `DAY` or `HOUR TO SECOND`.
     pub fn interval_fields_to_string(
         &self,
         start_field: IntervalFieldType,
@@ -43,6 +43,10 @@ impl SparkPlanFormatter {
         }
     }
 
+    /// Formats a year-month or microsecond day-time interval literal as Spark names it, for
+    /// example `INTERVAL '2 03' DAY TO HOUR`. The first field holds all larger units. A NULL
+    /// value formats as `NULL`. Fields outside the value's family, or a start field after the
+    /// end field, are an error, as is any other literal type.
     pub fn interval_literal_to_string(
         &self,
         literal: &ScalarValue,
@@ -104,7 +108,11 @@ impl SparkPlanFormatter {
         Ok(format!("INTERVAL '{sign}{value}' {interval_type}"))
     }
 
-    pub fn resolved_function_to_string(
+    /// Like [`Self::function_to_string`], but uses the resolved argument types to follow
+    /// Spark's names for interval arithmetic: `number * interval` names the interval first, and
+    /// timestamp-interval sums and differences are not parenthesized. Pass no types to get the
+    /// generic name.
+    pub fn function_to_string_with_types(
         &self,
         name: &str,
         arguments: Vec<&str>,
@@ -420,20 +428,20 @@ impl SparkPlanFormatter {
                 }
                 None => Ok("NULL".to_string()),
             },
-            ScalarValue::DurationMicrosecond(microseconds) => match microseconds {
-                Some(microseconds) => {
-                    Ok(format!("{}", DurationMicrosecondFormatter(*microseconds)))
-                }
-                None => Ok("NULL".to_string()),
-            },
+            ScalarValue::DurationMicrosecond(_) => self.interval_literal_to_string(
+                literal,
+                IntervalFieldType::Day,
+                IntervalFieldType::Second,
+            ),
             ScalarValue::DurationNanosecond(nanoseconds) => match nanoseconds {
                 Some(nanoseconds) => Ok(format!("{}", DurationNanosecondFormatter(*nanoseconds))),
                 None => Ok("NULL".to_string()),
             },
-            ScalarValue::IntervalYearMonth(months) => match months {
-                Some(months) => Ok(format!("{}", IntervalYearMonthFormatter(*months))),
-                None => Ok("NULL".to_string()),
-            },
+            ScalarValue::IntervalYearMonth(_) => self.interval_literal_to_string(
+                literal,
+                IntervalFieldType::Year,
+                IntervalFieldType::Month,
+            ),
             ScalarValue::IntervalDayTime(value) => match value {
                 Some(value) => Ok(format!("{}", IntervalDayTimeFormatter(*value))),
                 None => Ok("NULL".to_string()),
@@ -946,8 +954,45 @@ mod tests {
         ] {
             assert_eq!(
                 SparkPlanFormatter
-                    .resolved_function_to_string(operation, arguments, false, &types)?,
+                    .function_to_string_with_types(operation, arguments, false, &types)?,
                 expected
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn full_range_interval_names_match_the_shared_value_formatters() -> PlanResult<()> {
+        use sail_common_datafusion::formatter::{
+            DurationMicrosecondFormatter, IntervalYearMonthFormatter,
+        };
+        for microseconds in [
+            0,
+            1,
+            -1,
+            500_000,
+            -999_999,
+            86_399_999_999,
+            -86_400_000_001,
+            183_845_123_456,
+            i64::MAX,
+            i64::MIN,
+        ] {
+            assert_eq!(
+                SparkPlanFormatter.literal_to_string(
+                    &ScalarValue::DurationMicrosecond(Some(microseconds)),
+                    "UTC"
+                )?,
+                DurationMicrosecondFormatter(microseconds).to_string(),
+                "{microseconds}"
+            );
+        }
+        for months in [0, 1, -1, 11, -11, 12, -13, i32::MAX, i32::MIN] {
+            assert_eq!(
+                SparkPlanFormatter
+                    .literal_to_string(&ScalarValue::IntervalYearMonth(Some(months)), "UTC")?,
+                IntervalYearMonthFormatter(months).to_string(),
+                "{months}"
             );
         }
         Ok(())

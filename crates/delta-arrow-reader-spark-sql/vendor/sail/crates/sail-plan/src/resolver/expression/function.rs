@@ -220,7 +220,7 @@ impl PlanResolver<'_> {
                 argument_display_names
             };
 
-        let name = SparkPlanFormatter.resolved_function_to_string(
+        let name = SparkPlanFormatter.function_to_string_with_types(
             &canonical_function_name,
             argument_display_names.iter().map(|x| x.as_str()).collect(),
             is_distinct,
