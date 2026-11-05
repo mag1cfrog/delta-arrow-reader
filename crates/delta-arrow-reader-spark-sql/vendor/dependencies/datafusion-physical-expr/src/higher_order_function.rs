@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -40,6 +41,7 @@ use arrow::array::{Array, RecordBatch};
 use arrow::datatypes::{DataType, FieldRef, Schema};
 use datafusion_common::config::{ConfigEntry, ConfigOptions};
 use datafusion_common::datatype::FieldExt;
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::utils::remove_list_null_values;
 use datafusion_common::{
     Result, ScalarValue, exec_err, internal_datafusion_err, internal_err,
@@ -126,11 +128,16 @@ impl HigherOrderFunctionExpr {
     /// and not as a wrapped child of any arg
     pub fn try_new_with_schema(
         fun: Arc<HigherOrderUDF>,
-        args: Vec<Arc<dyn PhysicalExpr>>,
+        mut args: Vec<Arc<dyn PhysicalExpr>>,
         schema: &Schema,
         config_options: Arc<ConfigOptions>,
     ) -> Result<Self> {
         let name = fun.name().to_string();
+        for arg in &mut args {
+            if let Some(lambda) = arg.downcast_ref::<LambdaExpr>() {
+                *arg = Arc::new(lambda.with_input_schema_size(schema.fields().len())?);
+            }
+        }
         let mut slots = Vec::with_capacity(args.len());
         let arg_fields = args
             .iter()
@@ -337,21 +344,15 @@ impl PhysicalExpr for HigherOrderFunctionExpr {
                         .map(|(name, param)| param.renamed(name.as_str()))
                         .collect();
 
-                    // lambda.projection may include indexes of nested lambda variables not present on this batch
-                    let projection = lambda
-                        .projection()
-                        .iter()
-                        .copied()
-                        .filter(|i| *i < batch.num_columns())
-                        .collect::<Vec<_>>();
+                    let capture_indices = lambda.capture_indices();
 
                     Ok(ValueOrLambda::Lambda(LambdaArgument::new(
                         params,
                         Arc::clone(lambda.projected_body()),
-                        if projection.is_empty() {
+                        if capture_indices.is_empty() {
                             None
                         } else {
-                            Some(batch.project(&projection)?)
+                            Some(batch.project(capture_indices)?)
                         },
                     )))
                 }
@@ -423,7 +424,7 @@ impl PhysicalExpr for HigherOrderFunctionExpr {
 
     fn with_new_children(
         self: Arc<Self>,
-        children: Vec<Arc<dyn PhysicalExpr>>,
+        mut children: Vec<Arc<dyn PhysicalExpr>>,
     ) -> Result<Arc<dyn PhysicalExpr>> {
         if children.len() != self.args.len() {
             return internal_err!(
@@ -436,17 +437,38 @@ impl PhysicalExpr for HigherOrderFunctionExpr {
         // Re-derive `slots` for the new children using the original slot kinds
         // as the source of truth for which positions must (still) be lambdas.
         let mut new_slots = Vec::with_capacity(children.len());
-        for (i, child) in children.iter().enumerate() {
+        for (i, child) in children.iter_mut().enumerate() {
             match &self.slots[i] {
-                ArgSlot::Lambda(_) => {
-                    let lambda = wrapped_lambda(child).ok_or_else(|| {
+                ArgSlot::Lambda(original) => {
+                    let mut lambda = wrapped_lambda(child).cloned().ok_or_else(|| {
                         plan_datafusion_err!(
                             "{} unable to unwrap lambda from {} at position {i}",
-                            &children[i],
+                            child,
                             self.name()
                         )
                     })?;
-                    new_slots.push(ArgSlot::Lambda(Arc::new(lambda.clone())));
+                    if lambda.input_schema_size().is_none() {
+                        let size = original.input_schema_size().ok_or_else(|| {
+                            internal_datafusion_err!(
+                                "higher-order lambda has no input schema"
+                            )
+                        })?;
+                        lambda = lambda.with_input_schema_size(size)?;
+                        *child = Arc::clone(child)
+                            .transform_down(|expr| {
+                                if expr.is::<LambdaExpr>() {
+                                    Ok(Transformed::new(
+                                        Arc::new(lambda.clone()) as Arc<dyn PhysicalExpr>,
+                                        true,
+                                        TreeNodeRecursion::Jump,
+                                    ))
+                                } else {
+                                    Ok(Transformed::no(expr))
+                                }
+                            })?
+                            .data;
+                    }
+                    new_slots.push(ArgSlot::Lambda(Arc::new(lambda)));
                 }
                 ArgSlot::Value => {
                     if child.is::<LambdaExpr>() {

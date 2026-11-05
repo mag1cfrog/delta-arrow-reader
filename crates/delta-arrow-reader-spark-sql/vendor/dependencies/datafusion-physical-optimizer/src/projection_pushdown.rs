@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -32,6 +33,7 @@ use datafusion_common::tree_node::{
 };
 use datafusion_common::{JoinSide, JoinType, Result};
 use datafusion_physical_expr::expressions::Column;
+use datafusion_physical_expr::utils::rewrite_expr_columns;
 use datafusion_physical_expr_common::physical_expr::{PhysicalExpr, is_volatile};
 use datafusion_physical_plan::ExecutionPlan;
 use datafusion_physical_plan::joins::NestedLoopJoinExec;
@@ -130,7 +132,7 @@ fn try_push_down_join_filter(
         rhs_rewrite.data.1.column_indices(),
         lhs_rewrite.data.0.schema().as_ref(),
         rhs_rewrite.data.0.schema().as_ref(),
-    );
+    )?;
 
     let new_lhs_length = lhs_rewrite.data.0.schema().fields.len();
     let projections = match projections.as_ref() {
@@ -239,7 +241,7 @@ fn minimize_join_filter(
     old_column_indices: &[ColumnIndex],
     lhs_schema: &Schema,
     rhs_schema: &Schema,
-) -> JoinFilter {
+) -> Result<JoinFilter> {
     let mut used_columns = HashSet::new();
     expr.apply(|expr| {
         if let Some(col) = expr.downcast_ref::<Column>() {
@@ -264,27 +266,19 @@ fn minimize_join_filter(
         })
         .collect::<Fields>();
 
-    let final_expr = expr
-        .transform_up(|expr| match expr.downcast_ref::<Column>() {
-            None => Ok(Transformed::no(expr)),
-            Some(column) => {
-                let new_idx = used_columns
-                    .iter()
-                    .filter(|idx| **idx < column.index())
-                    .count();
-                let new_column = Column::new(column.name(), new_idx);
-                Ok(Transformed::yes(
-                    Arc::new(new_column) as Arc<dyn PhysicalExpr>
-                ))
-            }
-        })
-        .expect("Closure cannot fail");
+    let final_expr = rewrite_expr_columns(expr, new_column_indices.len(), |column| {
+        let index = used_columns
+            .iter()
+            .filter(|index| **index < column.index())
+            .count();
+        Ok(Arc::new(Column::new(column.name(), index)))
+    })?;
 
-    JoinFilter::new(
-        final_expr.data,
+    Ok(JoinFilter::new(
+        final_expr,
         new_column_indices,
         Arc::new(Schema::new(fields)),
-    )
+    ))
 }
 
 /// Implements the push-down machinery.
@@ -377,22 +371,18 @@ impl<'a> JoinFilterRewriter<'a> {
         // First, add a new projection. The expression must be rewritten, as it is no longer
         // executed against the filter schema.
         let new_idx = self.join_side_projections.len();
-        let rewritten_expr = expr.transform_up(|expr| {
-            Ok(match expr.downcast_ref::<Column>() {
-                None => Transformed::no(expr),
-                Some(column) => {
-                    let intermediate_column =
-                        &self.intermediate_column_indices[column.index()];
-                    assert_eq!(intermediate_column.side, self.join_side);
-
-                    let join_side_index = intermediate_column.index;
-                    let field = self.join_side_schema.field(join_side_index);
-                    let new_column = Column::new(field.name(), join_side_index);
-                    Transformed::yes(Arc::new(new_column) as Arc<dyn PhysicalExpr>)
-                }
-            })
-        })?;
-        self.join_side_projections.push((rewritten_expr.data, name));
+        let rewritten_expr =
+            rewrite_expr_columns(expr, self.join_side_schema.fields().len(), |column| {
+                let intermediate_column =
+                    &self.intermediate_column_indices[column.index()];
+                assert_eq!(intermediate_column.side, self.join_side);
+                let index = intermediate_column.index;
+                Ok(Arc::new(Column::new(
+                    self.join_side_schema.field(index).name(),
+                    index,
+                )))
+            })?;
+        self.join_side_projections.push((rewritten_expr, name));
 
         // Then, update the column indices
         let new_intermediate_idx = self.intermediate_column_indices.len();

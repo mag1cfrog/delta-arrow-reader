@@ -123,11 +123,10 @@ pub(super) fn lambda_with_fresh_parameter(body: expr::Expr, base: &str) -> PlanR
 /// Builds a `(array, lambda)` higher-order function expression supporting Spark's
 /// optional 0-based index parameter `(x, i) -> ...`.
 ///
-/// The physical lambda evaluation batch contains all declared parameters, while
-/// the body is projected to the columns it actually uses; the two only line up
-/// when the used parameters form a prefix of the declared ones. An index-only
-/// lambda `(x, i) -> p(i)` is therefore rewritten to `i -> p(i)` over the
-/// `udf_index_first` instance, whose lambda parameters are `[index, element]`.
+/// An index-only lambda `(x, i) -> p(i)` is rewritten to `i -> p(i)` over
+/// `udf_index_first`, whose parameters are `[index, element]`, so evaluating it
+/// does not materialize the unused element parameter. Physical projections
+/// preserve every declared parameter slot, including unused ones.
 fn array_lambda_with_index(
     name: &str,
     input: ScalarFunctionInput,
@@ -305,13 +304,11 @@ fn array_sort_spark(array: expr::Expr, asc: expr::Expr) -> PlanResult<expr::Expr
 /// aliased or otherwise wrapped expression) is passed through to the UDF
 /// unchanged rather than rejected, mirroring `aggregate`/`array_lambda_with_index`.
 ///
-/// The physical lambda evaluation batch contains all declared parameters while
-/// the body is projected to the columns it actually uses; the two only line up
-/// when the used parameters form a prefix of the declared ones. A comparator that
-/// uses only its second parameter (`(l, r) -> f(r)`, `l` unused) is therefore
-/// rewritten to `r -> f(r)` over the `SPARK_ARRAY_SORT_SWAPPED_UDF` instance,
-/// which feeds the lambda the columns in `[right, left]` order. This mirrors the
-/// index-first rewrite in [`array_lambda_with_index`].
+/// A comparator using only its second parameter (`(l, r) -> f(r)`, `l` unused)
+/// is rewritten to `r -> f(r)` over `SPARK_ARRAY_SORT_SWAPPED_UDF`, which feeds
+/// parameters in `[right, left]` order and avoids materializing the unused left
+/// input. Physical projections preserve every declared parameter slot. This
+/// mirrors the index-first rewrite in [`array_lambda_with_index`].
 fn array_sort(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let (array, rest) = input.arguments.at_least_one()?;
 
