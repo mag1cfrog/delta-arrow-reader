@@ -1,0 +1,104 @@
+{
+  "issue": 823,
+  "kind": "independent-reference-and-baseline-observer-not-compatibility-acceptance",
+  "product_base": "a7fa575af36f11f62e61b474dc9627f4f9969ff4",
+  "staging_target": "feat/spark-sql-staging",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "scenario_count": 44,
+  "spark_observation_count": 88,
+  "spark_successes": 68,
+  "spark_errors": 20,
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_observation_count": 176,
+  "original_controls": 4,
+  "files": [
+    {
+      "path": "spark-reference.jsonl",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-spark-v2.jsonl",
+      "bytes": 359219,
+      "sha256": "1645333e24c085f749e09975e4a6a97456eafffda95be63e5da67999d626509c",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "capture.py",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-capture.py",
+      "bytes": 13366,
+      "sha256": "14cfa012e4721377f1526a1b34e821015efb8e67b4fb5c51bfdf7ad1aa7fce72",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "823-preparation-v2-cases.json",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-cases.json",
+      "bytes": 65500,
+      "sha256": "5fa149c53fdcebf8e15f3a5c2a49bb5326c6e6386868c6ae35bf063e91284f01",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "capture-result.json",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-spark-v2-result.json",
+      "bytes": 1735,
+      "sha256": "01cb8109c610ee731fccc7d64456c6ff133dd7cf3fe5d4d34b61910d8324b6f1",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "original_path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "sources/capture_map_owner_interactions.py",
+      "original_path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/correlated-scalar-metadata-stages/map-interactions/capture_map_owner_interactions.py",
+      "bytes": 4727,
+      "sha256": "1eeaf8a8eeae3cdb541a5242981cc935b012b708bf529f48d3853244d979a386",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "sources/821-inherited-declarations-current-v1.jsonl",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/821-inherited-declarations-current-v1.jsonl",
+      "bytes": 30679,
+      "sha256": "70c2a79d714b4fc9d60eba24ae410fd825e016c13857c0d1b952a17d62656082",
+      "copy": "byte-identical"
+    }
+  ],
+  "successful_capture": "Unchanged source/cases run by root with existing JAVA_HOME=/home/hanbo/.cache/hermit/pkg/openjdk-21.0.8_9; immutable successful v2 output. v1 failed before the session because JAVA_HOME was omitted and is preserved in external evidence only.",
+  "reference_policy": "No expected Fields, SQL, row order, guard classifications or exact Spark cause/stage details were changed. Every unknown case remains an independent observation.",
+  "input_map_order": "Declared provider rows and observed_rows_raw are both retained in the captured header. Spark-side mixed-provider Map pair order differs; decoded dictionary semantic contents roundtrip. The encoder uses returned dict.items() order and never sorts output rows or Map pairs. Rust registers the declared input rows, preserving their recorded pair order.",
+  "bare_map_projection_names": "Use exact captured names. Dotted Map projection names are key-only; bracket projections retain brackets. quoted_punctuation fields are id,a.b,m[a.b],sp ace,m[sp ace],a`b,m[a`b]. No global suffix substitution is valid.",
+  "native_api_boundaries": {
+    "resolve": "plan_query parses/analyzes/resolves into SparkSqlQuery before session analyzer/optimizer.",
+    "create_physical_plan": "SparkSqlQuery::create_physical_plan invokes DataFrame::create_physical_plan, which includes session analysis, optimization and physical preparation. This is an observed API boundary, not an inferred internal failure stage.",
+    "collect": "collect executes the prepared physical plan.",
+    "separate_optimizer": "capture_spark_optimized_observation resolves the SQL again before independently attempting session optimization. It records raw schema/name checks or a raw error, but does not expose a separate failure-phase tag. An optimized_error value alone does not establish that the optimizer ran; use the main native API phase and retained error for inspection."
+  },
+  "observer_policy": "Temporary diagnostic target invoked explicitly by root, not an acceptance test. It emits one full JSON record per case and batch plus native before/after guards. Successful exit validates fixture/harness completeness only. Raw observations are authoritative even when diagnostic_mismatch_fields omits a top-level matches=false. Summary counts and generic error booleans never establish compatibility. Matching native JSON containing observer_error or panic is an infrastructure result requiring review, not proved native behavior; no guard acceptance is claimed. All raw reference/native causes/phases, helper errors and panics remain visible.",
+  "limitations": [
+    "Only source/fixture preparation and static integrity checks were performed here; root must compile/run the observer.",
+    "The unchanged archived capture script/cases preserve original absolute source-dependency paths. Frozen copies of those dependencies are included under sources for provenance; no portability rewrite was made. The Rust observer consumes the reference fixture and needs no Spark/JVM.",
+    "Shared native capture helper sorts its native-control row comparison copy and does not capture native optimized schema or raw pre-sort native rows. Spark-case observations retain rows_raw and all public/optimized/pre/post-physical Fields. Native control SQL is explicitly ordered where successful; do not claim native raw row order from that sorted helper.",
+    "Shared Spark helper condition-token error flags are diagnostic. Exact raw error causes, optimized errors and API phases remain visible for root adjudication; the existing exact Int32 cast-input check is emitted separately.",
+    "Grouped queries can fail or reveal duplicate generated-column gaps before later fields execute. They are retained unchanged; any isolating probe must be a separately recorded addition.",
+    "Native before_matches/after_matches compare raw JSON as diagnostics. Identical observer_error/panic JSON does not prove a native guard passed; those records require infrastructure review before any behavior claim. The diagnostic summary may omit a top-level matches=false, so audit every raw object rather than promoting summary counts to acceptance."
+  ],
+  "root_command": "cargo test --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test map_lookup_names_observer record_map_lookup_name_baseline -- --nocapture",
+  "observer_file": {
+    "path": "crates/delta-arrow-reader-spark-sql/tests/map_lookup_names_observer.rs",
+    "bytes": 10404,
+    "sha256": "12b0de199b3da65ee2166952b69a92a77c8e69a7961012f089e043a8c038919d"
+  },
+  "output_records": {
+    "prefix": "MAP_LOOKUP_NAME_BASELINE ",
+    "header": 1,
+    "query_observations": 176,
+    "session_observations": 2,
+    "native_controls": 8,
+    "summary": 1,
+    "total_expected": 188,
+    "error_review": "Always explicit when Spark expects an error or DAR reports one; generic condition checks are not exact cause acceptance."
+  }
+}
