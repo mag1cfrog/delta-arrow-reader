@@ -110,13 +110,15 @@ async fn inline_values_match_spark_stages_rows_and_causes() -> TestResult {
         manifest["identities"]
     );
     let mut differences = Vec::new();
+    let mut observation_count = 0;
     for batch_size in [1, 32] {
         let session = session(batch_size);
         spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
             let actual =
                 spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
-                    .await?;
+                    .await
+                    .unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
             let mut matches = actual["matches"] == true && actual["optimized_matches"] == true;
             if let Some(rows) = case["expected"]["rows"].as_array() {
                 matches &= actual["rows"].as_array().map(Vec::len) == Some(rows.len())
@@ -125,6 +127,7 @@ async fn inline_values_match_spark_stages_rows_and_causes() -> TestResult {
                     && case["schema_stages"]["public"] == case["schema_stages"]["analyzed"];
             }
             let mut cause_matches = None;
+            let mut cause_error = None;
             if case["expected"]["condition"] == INLINE_CONDITION {
                 cause_matches = Some(
                     match plan_query(
@@ -137,18 +140,25 @@ async fn inline_values_match_spark_stages_rows_and_causes() -> TestResult {
                     )
                     .await
                     {
-                        Err(error) => matches_inline_cause(case, &error)?,
+                        Err(error) => match matches_inline_cause(case, &error) {
+                            Ok(matches) => matches,
+                            Err(error) => {
+                                cause_error = Some(error.to_string());
+                                false
+                            }
+                        },
                         Ok(_) => false,
                     },
                 );
                 matches &= cause_matches == Some(true);
             }
             println!(
-                "{}",
+                "inline_values_observation={}",
                 json!({"id":case["id"], "ansi":case["ansi"], "sql":case["sql"],
                 "batch_size":batch_size, "observation":actual, "cause_matches":cause_matches,
-                "matches":matches})
+                "cause_error":cause_error, "matches":matches})
             );
+            observation_count += 1;
             if !matches {
                 differences.push(format!(
                     "{} ANSI={} batch={batch_size}: {actual}; cause_matches={cause_matches:?}",
@@ -157,6 +167,7 @@ async fn inline_values_match_spark_stages_rows_and_causes() -> TestResult {
             }
         }
     }
+    assert_eq!(observation_count, 144);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
@@ -205,6 +216,8 @@ impl ScalarUDFImpl for DeferredInlineValue {
 
 #[tokio::test]
 async fn inline_validation_does_not_invoke_nonfoldable_functions() -> TestResult {
+    let mut differences = Vec::new();
+    let mut observation_count = 0;
     for ansi_mode in [true, false] {
         let session = session(1);
         let calls = Arc::new(AtomicUsize::new(0));
@@ -231,7 +244,8 @@ async fn inline_validation_does_not_invoke_nonfoldable_functions() -> TestResult
                 format!("SELECT x AS r FROM VALUES ({function}(1)) t(x) WHERE false"),
                 format!("SELECT 1 AS r FROM VALUES ({function}(1)) t(x) LIMIT 0"),
             ] {
-                plan_query(
+                calls.store(0, Ordering::SeqCst);
+                let resolved = plan_query(
                     &session,
                     &sql,
                     &SparkSqlOptions {
@@ -239,18 +253,52 @@ async fn inline_validation_does_not_invoke_nonfoldable_functions() -> TestResult
                         ..SparkSqlOptions::default()
                     },
                 )
-                .await?;
-                assert_eq!(calls.load(Ordering::SeqCst), 0, "{sql} ANSI={ansi_mode}");
+                .await;
+                let call_count = calls.load(Ordering::SeqCst);
+                println!(
+                    "inline_values_nonfoldable_observation={}",
+                    json!({
+                    "sql":sql, "ansi":ansi_mode, "function":function,
+                    "phase":"resolve", "calls":call_count,
+                    "error":resolved.as_ref().err().map(ToString::to_string)})
+                );
+                observation_count += 1;
+                if resolved.is_err() || call_count != 0 {
+                    differences.push(format!(
+                        "{sql} ANSI={ansi_mode}: calls={call_count}, result={resolved:?}"
+                    ));
+                }
             }
         }
-        let batches = session
-            .sql("SELECT inline_volatile(1) AS r")
-            .await?
-            .collect()
-            .await?;
-        assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        calls.store(0, Ordering::SeqCst);
+        let result = async {
+            session
+                .sql("SELECT inline_volatile(CAST(1 AS INT)) AS r")
+                .await?
+                .collect()
+                .await
+        }
+        .await;
+        let row_count = result
+            .as_ref()
+            .ok()
+            .map(|batches| batches.iter().map(RecordBatch::num_rows).sum::<usize>());
+        let call_count = calls.load(Ordering::SeqCst);
+        println!(
+            "inline_values_nonfoldable_observation={}",
+            json!({
+            "sql":"SELECT inline_volatile(CAST(1 AS INT)) AS r", "ansi":ansi_mode,
+            "phase":"liveness", "calls":call_count, "row_count":row_count,
+            "error":result.as_ref().err().map(ToString::to_string)})
+        );
+        if row_count != Some(1) || call_count != 1 {
+            differences.push(format!(
+                "volatile liveness ANSI={ansi_mode}: rows={row_count:?}, calls={call_count}, result={result:?}"
+            ));
+        }
     }
+    assert_eq!(observation_count, 18);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
 
@@ -332,24 +380,85 @@ async fn inline_validation_does_not_read_registered_providers() -> TestResult {
 }
 
 #[tokio::test]
-async fn native_values_sql_is_unchanged_by_spark_configuration() -> TestResult {
-    let native = SessionContext::new();
-    let configured = session(1);
-    for sql in [
-        "SELECT x AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x)",
-        "SELECT x AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x) WHERE false",
-        "SELECT 1 AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x) LIMIT 0",
-        "SELECT 1 AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x)",
-        "SELECT x AS r FROM (VALUES (1 / 0)) t(x) WHERE false",
-        "SELECT x AS r FROM (VALUES (1 / 0)) t(x) LIMIT 0",
-    ] {
-        let expected = spark_results::capture_native_query_observation(&native, sql).await?;
-        let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
-        println!(
-            "{}",
-            json!({"native_sql":sql, "unconfigured":expected, "configured":actual})
-        );
-        assert_eq!(actual, expected, "{sql}");
+async fn native_values_sql_preserves_each_context_baseline() -> TestResult {
+    let mut observations = Vec::new();
+    for batch_size in [1, 32] {
+        let contexts = [
+            (
+                "plain",
+                SessionContext::new_with_config(
+                    SessionConfig::new()
+                        .with_batch_size(batch_size)
+                        .with_target_partitions(1),
+                ),
+            ),
+            ("configured", session(batch_size)),
+        ];
+        for (mode, session) in contexts {
+            for (id, sql) in [
+                (
+                    "cast_read",
+                    "SELECT x AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x)",
+                ),
+                (
+                    "cast_false_filter",
+                    "SELECT x AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x) WHERE false",
+                ),
+                (
+                    "cast_unused_limit_zero",
+                    "SELECT 1 AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x) LIMIT 0",
+                ),
+                (
+                    "cast_unused",
+                    "SELECT 1 AS r FROM (VALUES (CAST('bad' AS INT)), (1)) t(x)",
+                ),
+                (
+                    "divide_false_filter",
+                    "SELECT x AS r FROM (VALUES (1 / 0)) t(x) WHERE false",
+                ),
+                (
+                    "divide_limit_zero",
+                    "SELECT x AS r FROM (VALUES (1 / 0)) t(x) LIMIT 0",
+                ),
+            ] {
+                let actual = spark_results::capture_native_query_observation(&session, sql)
+                    .await
+                    .unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
+                let record = json!({"id":id, "sql":sql, "mode":mode,
+                    "batch_size":batch_size, "observation":actual});
+                println!("inline_values_native_observation={record}");
+                observations.push(record);
+            }
+        }
     }
+    assert_eq!(observations.len(), 24);
+    let capture_path = std::env::var_os("DAR_INLINE_VALUES_NATIVE_CAPTURE");
+    if let Some(path) = &capture_path {
+        use std::io::Write;
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        for observation in &observations {
+            writeln!(output, "{observation}")?;
+        }
+    }
+    assert!(
+        observations
+            .iter()
+            .all(|record| record["observation"].get("observer_error").is_none()),
+        "native observer failed: {observations:?}"
+    );
+    if capture_path.is_some() {
+        return Ok(());
+    }
+    let baseline = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/inline-values-evaluation/native-baseline.jsonl"
+    ))?
+    .lines()
+    .map(serde_json::from_str::<Value>)
+    .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(observations, baseline);
     Ok(())
 }
