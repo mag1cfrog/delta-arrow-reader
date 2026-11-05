@@ -125,10 +125,9 @@ fn compact_matches_issue_contract(case: &Value, comparison: &Value, controls: &[
     {
         return true;
     }
-    // shortcut: #890/#891 retain these exact inherited observations until their fixes.
+    // shortcut: #890 retains this exact inherited observation until its fix.
     let issue = match (case["id"].as_str(), case["ansi"].as_bool()) {
         (Some("constant_bad_cast_is_null"), Some(true)) => 890,
-        (Some("invalid_non_array"), Some(_)) => 891,
         _ => return false,
     };
     controls
@@ -249,8 +248,9 @@ async fn compact_result_fields_match_spark() -> TestResult {
     assert_eq!(completed.len(), 148);
     eprintln!(
         "ARRAY_COMPACT_FIELDS_SUMMARY {}",
-        json!({"comparisons":completed.len(),"strict_matches":strict_matches,"owned_matches":completed.len()-differences.len(),"inherited_control_identities":controls.len()-1})
+        json!({"comparisons":completed.len(),"strict_matches":strict_matches,"owned_matches":completed.len()-differences.len(),"inherited_control_identities":1})
     );
+    assert!(strict_matches >= 146);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
@@ -277,7 +277,10 @@ fn inherited_compact_controls_reject_new_differences() -> TestResult {
         for batch in [1, 32] {
             let mut comparison = control["observation"].clone();
             comparison["batch"] = json!(batch);
-            assert!(compact_matches_issue_contract(case, &comparison, controls));
+            assert_eq!(
+                compact_matches_issue_contract(case, &comparison, controls),
+                control["issue"] == 890
+            );
             for key in comparison.as_object().ok_or("missing observation")?.keys() {
                 let mut wrong = comparison.clone();
                 wrong[key] = json!("new difference");
@@ -421,7 +424,113 @@ fn inherited_compact_controls_reject_new_differences() -> TestResult {
 }
 
 #[tokio::test]
-async fn spark_compaction_preserves_successful_native_array_queries() -> TestResult {
+async fn compact_input_types_match_spark() -> TestResult {
+    let records = include_str!("fixtures/array-compact-input-types/spark-reference.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/array-compact-input-types/manifest.json"
+    ))?;
+    assert_eq!(records.len(), 15);
+    assert_eq!(records[0]["group"], "array-compact-input-types-891-v1");
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(
+        records[0]["capture_sha256"],
+        manifest["capture_script_sha256"]
+    );
+    let identities = records[1..]
+        .iter()
+        .map(|case| json!({"id":case["id"],"ansi":case["ansi"]}))
+        .collect::<Vec<_>>();
+    assert_eq!(json!(identities), manifest["identities"]);
+    let mut differences = Vec::new();
+    let mut completed = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(SessionConfig::new().with_batch_size(batch_size)),
+            )
+            .build(),
+        );
+        for case in &records[1..] {
+            let comparison = capture_compact_comparison(&session, case).await;
+            eprintln!(
+                "ARRAY_COMPACT_INPUT_TYPES_OBSERVATION {}",
+                json!({"id":case["id"],"ansi":case["ansi"],"batch":batch_size,"comparison":comparison})
+            );
+            if comparison["matches"] != true || comparison["optimized_matches"] != true {
+                differences.push(format!(
+                    "batch={batch_size}, expected={case}, actual={comparison}"
+                ));
+            }
+            completed += 1;
+        }
+    }
+    assert_eq!(completed, 28);
+    eprintln!(
+        "ARRAY_COMPACT_INPUT_TYPES_SUMMARY {}",
+        json!({"comparisons":completed,"strict_matches":completed-differences.len()})
+    );
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn compact_input_validation_keeps_error_categories() -> TestResult {
+    use datafusion::error::DataFusionError;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_plan::error::PlanError;
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for ansi_mode in [true, false] {
+        let options = SparkSqlOptions {
+            ansi_mode,
+            ..Default::default()
+        };
+        for sql in [
+            "SELECT ARRAY_COMPACT() AS r",
+            "SELECT ARRAY_COMPACT(ARRAY(1), ARRAY(2)) AS r",
+        ] {
+            let error = plan_query(&session, sql, &options)
+                .await
+                .err()
+                .ok_or("wrong ARRAY_COMPACT arity was accepted")?;
+            let DataFusionError::External(error) = error else {
+                return Err(format!("missing resolver error for {sql}: {error}").into());
+            };
+            assert!(
+                matches!(error.downcast_ref::<PlanError>(), Some(PlanError::DataFusionError(DataFusionError::Plan(message)))
+                    if message.starts_with("one value expected: ")),
+                "{sql}: {error}"
+            );
+        }
+        let error = plan_query(&session, "SELECT ARRAY_COMPACT(1) AS r", &options)
+            .await
+            .err()
+            .ok_or("non-array ARRAY_COMPACT input was accepted")?;
+        let DataFusionError::External(error) = error else {
+            return Err(format!("missing resolver error: {error}").into());
+        };
+        assert!(matches!(
+            error.downcast_ref::<PlanError>(),
+            Some(PlanError::InvalidArgument(message))
+                if message.starts_with("[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE]")
+        ));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn spark_compaction_preserves_native_array_queries() -> TestResult {
     let native = SessionContext::new();
     let configured = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
@@ -456,6 +565,15 @@ async fn spark_compaction_preserves_successful_native_array_queries() -> TestRes
                 json!({"sql":sql,"after_spark":after_spark,"native":expected,"configured":actual})
             );
             assert_eq!(&actual, expected, "{sql} after_spark={after_spark}");
+        }
+        for sql in [
+            "SELECT ARRAY_HAS_ANY(1, [2]) AS r",
+            "SELECT ARRAY_COMPACT(1) AS r",
+        ] {
+            let expected = spark_results::capture_native_query_observation(&native, sql).await?;
+            assert!(expected["error"].is_string(), "{sql}: {expected}");
+            let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+            assert_eq!(actual, expected, "{sql} after_spark={after_spark}");
         }
     }
     Ok(())
