@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -81,13 +82,13 @@ impl PlanResolver<'_> {
             Literal::DurationMillisecond { milliseconds } => {
                 Ok(ScalarValue::DurationMillisecond(milliseconds))
             }
-            Literal::DurationMicrosecond { microseconds } => {
+            Literal::DurationMicrosecond { microseconds, .. } => {
                 Ok(ScalarValue::DurationMicrosecond(microseconds))
             }
             Literal::DurationNanosecond { nanoseconds } => {
                 Ok(ScalarValue::DurationNanosecond(nanoseconds))
             }
-            Literal::IntervalYearMonth { months } => Ok(ScalarValue::IntervalYearMonth(months)),
+            Literal::IntervalYearMonth { months, .. } => Ok(ScalarValue::IntervalYearMonth(months)),
             Literal::IntervalDayTime { value } => {
                 if let Some(value) = value {
                     Ok(ScalarValue::IntervalDayTime(Some(

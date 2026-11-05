@@ -685,6 +685,16 @@ schemas at each stage and failing stages at batch sizes 1 and 32. See the
 [separator fixture notes](timestamp-separators/README.md) for the inputs,
 encoding and capture command.
 
+## Interval qualifiers and generated names
+
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 480 Spark 4.2.0
+observations of interval literal names, signed and unit-syntax literals,
+arithmetic and timestamp operand order, interval CASTs and RANGE offsets. The
+query corpus preserves the original #749 capture. `interval_qualifiers.rs`
+compares names, fields, typed values and errors at batch sizes 1 and 32. See the
+[interval fixture notes](interval-qualifiers/README.md) for the encoding, the
+retained differences and their owners, and the capture command.
+
 ## String-to-BOOLEAN casts
 
 `boolean-cast-spark.jsonl` contains 344 independent Spark 4.2.0 observations from
