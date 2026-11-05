@@ -176,7 +176,7 @@
   },
   "final_test_file": {
     "path": "crates/delta-arrow-reader-spark-sql/tests/map_lookup_names.rs",
-    "sha256": "0d39207fd35753ed35b6df13ee2ededb9455f3b2e958d9d9aa96e37b5bf33544"
+    "sha256": "8eb4fcfb90feedd1efb1f5304d9f7d2c6c0b334e98efadc92ccc456c1b69ce9e"
   },
   "final_implementation_file_hashes": [
     {
@@ -196,8 +196,8 @@
     },
     {
       "path": "crates/delta-arrow-reader-spark-sql/tests/map_lookup_names.rs",
-      "bytes": 12492,
-      "sha256": "0d39207fd35753ed35b6df13ee2ededb9455f3b2e958d9d9aa96e37b5bf33544"
+      "bytes": 12792,
+      "sha256": "8eb4fcfb90feedd1efb1f5304d9f7d2c6c0b334e98efadc92ccc456c1b69ce9e"
     },
     {
       "path": "crates/delta-arrow-reader-spark-sql/tests/nested_lambda_captures.rs",
@@ -242,7 +242,7 @@
   "proposed_root_checks": [
     "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test map_lookup_names map_lookup_names_match_recorded_contracts -- --exact --nocapture --test-threads=1",
     "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test nested_lambda_captures",
-    "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace -p sail-plan --lib nested_display_appends",
+    "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --lib nested_display_appends",
     "python crates/delta-arrow-reader-spark-sql/tests/fixtures/map-lookup-names/recapture.py --output <fresh-reference.jsonl>"
   ]
 }
