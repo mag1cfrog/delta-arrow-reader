@@ -220,20 +220,17 @@ fn parse_interval_year_month_string(
     let error = || SqlError::invalid(format!("interval: {s}"));
     let captures = interval_regex.captures(s).ok_or_else(error)?;
     let negated = negated ^ (captures.name("sign").map(|s| s.as_str()) == Some("-"));
-    let years: i32 = extract_match(&captures, "year", error)?.unwrap_or(0);
-    let months: i32 = extract_match(&captures, "month", error)?.unwrap_or(0);
-    let n = years
+    let years: i64 = extract_match(&captures, "year", error)?.unwrap_or(0);
+    let months: i64 = extract_match(&captures, "month", error)?.unwrap_or(0);
+    // Apply the sign before narrowing, so the minimum of -2^31 months fits.
+    let magnitude = years
         .checked_mul(12)
         .ok_or_else(error)?
         .checked_add(months)
         .ok_or_else(error)?;
-    let n = if negated {
-        n.checked_mul(-1).ok_or_else(error)?
-    } else {
-        n
-    };
+    let n = if negated { -magnitude } else { magnitude };
     Ok(IntervalValue::YearMonth {
-        months: n,
+        months: i32::try_from(n).map_err(|_| error())?,
         start_field,
         end_field,
     })
@@ -254,24 +251,16 @@ fn parse_interval_day_time_string(
     let minutes: i64 = extract_match(&captures, "minute", error)?.unwrap_or(0);
     let seconds: i64 = extract_match(&captures, "second", error)?.unwrap_or(0);
     let microseconds: i64 = extract_fraction_match(&captures, "fraction", 6, error)?.unwrap_or(0);
-    let delta = TimeDelta::try_days(days)
-        .ok_or_else(error)?
-        .checked_add(&TimeDelta::try_hours(hours).ok_or_else(error)?)
-        .ok_or_else(error)?
-        .checked_add(&TimeDelta::try_minutes(minutes).ok_or_else(error)?)
-        .ok_or_else(error)?
-        .checked_add(&TimeDelta::try_seconds(seconds).ok_or_else(error)?)
-        .ok_or_else(error)?
-        .checked_add(&TimeDelta::microseconds(microseconds))
-        .ok_or_else(error)?;
-    let microseconds = delta.num_microseconds().ok_or_else(error)?;
-    let n = if negated {
-        microseconds.checked_mul(-1).ok_or_else(error)?
-    } else {
-        microseconds
-    };
+    // Sum in i128, which cannot overflow for i64 fields, and apply the sign before narrowing,
+    // so the minimum of -2^63 microseconds fits.
+    let magnitude = i128::from(days) * 86_400_000_000
+        + i128::from(hours) * 3_600_000_000
+        + i128::from(minutes) * 60_000_000
+        + i128::from(seconds) * 1_000_000
+        + i128::from(microseconds);
+    let n = if negated { -magnitude } else { magnitude };
     Ok(IntervalValue::Microsecond {
-        microseconds: n,
+        microseconds: i64::try_from(n).map_err(|_| error())?,
         start_field,
         end_field,
     })
@@ -724,8 +713,19 @@ mod tests {
         assert!(parse("'178956970-7' year to month", false).is_ok());
         assert!(parse("'178956970-7' year to month", true).is_ok());
         assert!(parse("'178956970-8' year to month", false).is_err());
-        assert!(parse("'178956970-8' year to month", true).is_err());
-        assert!(parse("-'178956970-8' year to month", false).is_err());
+        // A negated magnitude one past the maximum is the minimum, -2^31 months.
+        let minimum_months = |interval| matches!(interval, IntervalValue::YearMonth { months, .. } if months == i32::MIN);
+        assert!(minimum_months(parse("'178956970-8' year to month", true)?));
+        assert!(minimum_months(parse(
+            "-'178956970-8' year to month",
+            false
+        )?));
+        assert!(minimum_months(parse(
+            "'-178956970-8' year to month",
+            false
+        )?));
+        assert!(minimum_months(parse("'-2147483648' month", false)?));
+        assert!(parse("'-2147483649' month", false).is_err());
         assert!(parse("-'178956970-8' year to month", true).is_err());
         assert!(parse("-'178956970-9' year to month", false).is_err());
         assert!(parse("-'178956970-9' year to month", true).is_err());
@@ -755,11 +755,27 @@ mod tests {
         assert!(parse("'106751991 04:00:54.775807' day to second", false).is_ok());
         assert!(parse("'106751991 04:00:54.775807' day to second", true).is_ok());
         assert!(parse("'106751991 04:00:54.775808' day to second", false).is_err());
-        assert!(parse("'106751991 04:00:54.775808' day to second", true).is_err());
-        assert!(parse("-'106751991 04:00:54.775808' day to second", false).is_err());
+        // A negated magnitude one past the maximum is the minimum, -2^63 microseconds.
+        let minimum_microseconds = |interval| matches!(interval, IntervalValue::Microsecond { microseconds, .. } if microseconds == i64::MIN);
+        assert!(minimum_microseconds(parse(
+            "'106751991 04:00:54.775808' day to second",
+            true
+        )?));
+        assert!(minimum_microseconds(parse(
+            "-'106751991 04:00:54.775808' day to second",
+            false
+        )?));
+        assert!(minimum_microseconds(parse(
+            "'-9223372036854.775808' second",
+            false
+        )?));
+        assert!(parse("'-9223372036854.775809' second", false).is_err());
         assert!(parse("-'106751991 04:00:54.775808' day to second", true).is_err());
         assert!(parse("-'106751991 04:00:54.775809' day to second", false).is_err());
         assert!(parse("-'106751991 04:00:54.775809' day to second", true).is_err());
+        // Spark rejects these with a java.lang.ArithmeticException that has no error condition.
+        assert!(parse("'106751991 05' day to hour", false).is_err());
+        assert!(parse("'-106751991 04:00:54.775809' day to second", false).is_err());
 
         assert_eq!(
             parse("'-1 2:3:4.567890' day to second", false)?,
