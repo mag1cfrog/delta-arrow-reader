@@ -321,19 +321,6 @@ const LIMIT_ERRORS: [(&str, &str); 27] = [
     ),
 ];
 
-/// DAR's current error for failing interval negation constants in inline VALUES,
-/// retained under #722. Spark wraps that error in its inline-table condition.
-const INLINE_TABLE_CAUSES: [(&str, &str); 2] = [
-    (
-        "negation_year_month_minimum_values",
-        "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION]",
-    ),
-    (
-        "negation_day_time_minimum_values",
-        "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION]",
-    ),
-];
-
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
@@ -345,9 +332,6 @@ enum RetainedDifference {
     RangeOffsetTyping,
     /// #955: a literal at or past a storage limit fails without Spark's error condition.
     LimitErrorCondition,
-    /// #722: a failing inline VALUES negation reports its own error while optimizing,
-    /// without Spark's inline-table condition from analysis.
-    InlineTableCondition,
     /// #979: ANSI division by a zero constant fails without Spark's `DIVIDE_BY_ZERO`.
     DivideByZeroCondition,
 }
@@ -392,10 +376,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         }
         "limit" if LIMIT_ERRORS.iter().any(|(limit, _)| id == *limit) => {
             Some(RetainedDifference::LimitErrorCondition)
-        }
-        "negation_error" if id.ends_with("_values") || id.ends_with("_values_filtered") =>
-        {
-            Some(RetainedDifference::InlineTableCondition)
         }
         "scaling_operand" | "dt_scaling_operand"
             if id.contains("_operand_number_divide_zero")
@@ -443,19 +423,6 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             current["expected"] = json!({"status": "error",
                 "current_error": format!("External error: invalid argument: {error}")});
         }
-        RetainedDifference::InlineTableCondition => {
-            let (_, cause) = INLINE_TABLE_CAUSES
-                .iter()
-                .find(|(prefix, _)| case["id"].as_str().is_some_and(|id| id.starts_with(prefix)))
-                .ok_or("expected a pinned inline-table cause")?;
-            if case["expected"]["condition"]
-                != "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION"
-            {
-                return Err(format!("expected Spark's inline-table condition: {case}").into());
-            }
-            current["spark_error_phase"] = json!("optimized");
-            current["expected"] = json!({"status": "error", "current_error": cause});
-        }
         RetainedDifference::DivideByZeroCondition => {
             current["expected"] =
                 json!({"status": "error", "current_error": "Arrow error: Divide by zero error"});
@@ -480,7 +447,6 @@ async fn interval_qualifiers_match_spark() -> TestResult {
             (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
             (RetainedDifference::LimitErrorCondition, 54),
-            (RetainedDifference::InlineTableCondition, 4),
             (RetainedDifference::DivideByZeroCondition, 12),
         ]
     );
