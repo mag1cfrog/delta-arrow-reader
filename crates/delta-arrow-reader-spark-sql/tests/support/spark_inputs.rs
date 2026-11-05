@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use arrow::array::{ArrayRef, AsArray, MapArray, StructArray, new_empty_array};
 use arrow::buffer::OffsetBuffer;
-use arrow::datatypes::{DataType, Decimal128Type, Field, IntervalUnit, Schema};
+use arrow::datatypes::{DataType, Decimal128Type, Field, IntervalUnit, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::datasource::MemTable;
@@ -28,6 +28,8 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
         Some("interval year" | "interval year to month" | "interval month") => {
             DataType::Interval(IntervalUnit::YearMonth)
         }
+        // The recorded day-time columns are DAY TO SECOND microsecond counts.
+        Some("interval day to second") => DataType::Duration(TimeUnit::Microsecond),
         Some(decimal) if decimal.starts_with("decimal(") && decimal.ends_with(')') => {
             let (precision, scale) = decimal[8..decimal.len() - 1]
                 .split_once(',')
@@ -123,6 +125,9 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
         DataType::Int64 => ScalarValue::Int64(Some(value.as_str().ok_or("missing long")?.parse()?)),
         DataType::Interval(IntervalUnit::YearMonth) => ScalarValue::IntervalYearMonth(Some(
             value.as_str().ok_or("missing month count")?.parse()?,
+        )),
+        DataType::Duration(TimeUnit::Microsecond) => ScalarValue::DurationMicrosecond(Some(
+            value.as_str().ok_or("missing microsecond count")?.parse()?,
         )),
         DataType::Decimal128(precision, scale) => ScalarValue::Decimal128(
             Some(arrow::compute::kernels::cast_utils::parse_decimal::<
