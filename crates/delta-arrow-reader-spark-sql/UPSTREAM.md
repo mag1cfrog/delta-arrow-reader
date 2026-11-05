@@ -234,6 +234,16 @@ constants, so a failing constant scaling or negation under either check returns
 a value. The expression-error analyzer's NULL-inspection precheck in the
 DataFusion simplifier fork now folds IS NOT NULL as well as IS NULL.
 
+### Interval qualifier casts
+
+A cast from a year-month or day-time interval to a qualifier of the same family
+keeps only the target's units, as in Spark. When the target ends in YEAR, DAY,
+HOUR or MINUTE, a third local function truncates the stored month or microsecond
+count toward zero to whole units of that field; targets ending in MONTH or
+SECOND keep the count. Interval leaves of nested ARRAY, STRUCT and MAP casts
+still keep their count (#995). Numeric and string casts to intervals and native
+DataFusion SQL are unchanged.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no

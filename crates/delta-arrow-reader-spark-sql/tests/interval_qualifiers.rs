@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 1756);
+    assert_eq!(records.len() - 1, 1948);
     Ok(records)
 }
 
@@ -321,11 +321,18 @@ const LIMIT_ERRORS: [(&str, &str); 27] = [
     ),
 ];
 
+/// DAR's current value for each nested interval cast retained under #995: the source count,
+/// which Spark truncates to the target units.
+const NESTED_CAST_SOURCES: [(&str, &str); 4] = [
+    ("interval_cast_nested_array", "183845123456"),
+    ("interval_cast_nested_struct", "27"),
+    ("interval_cast_nested_map", "183840000000"),
+    ("interval_cast_nested_column_array", "9223372036854775807"),
+];
+
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #765: a narrowing interval CAST keeps the source value.
-    CastTruncation,
     /// #727: an unaliased window keeps its function-call name.
     WindowName,
     /// #947: RANGE offsets are not typed against the ORDER BY key.
@@ -334,24 +341,15 @@ enum RetainedDifference {
     LimitErrorCondition,
     /// #979: ANSI division by a zero constant fails without Spark's `DIVIDE_BY_ZERO`.
     DivideByZeroCondition,
+    /// #995: an interval leaf of a nested cast keeps its source count.
+    NestedIntervalCast,
 }
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
     match case["context"].as_str()? {
-        "cast"
-            if [
-                "cast_year",
-                "cast_day",
-                "cast_day_hour",
-                "cast_day_minute",
-                "cast_hour",
-                "cast_hour_minute",
-                "cast_minute",
-            ]
-            .contains(&id) =>
-        {
-            Some(RetainedDifference::CastTruncation)
+        "interval_cast" if NESTED_CAST_SOURCES.iter().any(|(nested, _)| id == *nested) => {
+            Some(RetainedDifference::NestedIntervalCast)
         }
         "window" | "window_alias" if id.starts_with("range_numeric") => {
             Some(RetainedDifference::RangeOffsetTyping)
@@ -391,15 +389,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::CastTruncation => {
-            // The untruncated source: '2-3' YEAR TO MONTH or '2 03:04:05.123456' DAY TO SECOND.
-            let source = if case["id"] == "cast_year" {
-                "27"
-            } else {
-                "183845123456"
-            };
-            current["expected"]["rows"] = json!([[source]]);
-        }
         RetainedDifference::WindowName => {
             for stage in ["analyzed", "optimized", "executed"] {
                 current["schema_stages"][stage]["fields"][1]["name"] = json!("SUM(v)");
@@ -423,6 +412,13 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             current["expected"] = json!({"status": "error",
                 "current_error": format!("External error: invalid argument: {error}")});
         }
+        RetainedDifference::NestedIntervalCast => {
+            let (_, source) = NESTED_CAST_SOURCES
+                .iter()
+                .find(|(nested, _)| case["id"] == *nested)
+                .ok_or("expected a pinned nested cast")?;
+            current["expected"]["rows"] = json!([[source]]);
+        }
         RetainedDifference::DivideByZeroCondition => {
             current["expected"] =
                 json!({"status": "error", "current_error": "Arrow error: Divide by zero error"});
@@ -443,11 +439,11 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::CastTruncation, 14),
             (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
             (RetainedDifference::LimitErrorCondition, 54),
             (RetainedDifference::DivideByZeroCondition, 12),
+            (RetainedDifference::NestedIntervalCast, 8),
         ]
     );
     let mut differences = Vec::new();

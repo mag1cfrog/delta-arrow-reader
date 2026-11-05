@@ -711,7 +711,7 @@ encoding and capture command.
 
 ## Interval qualifiers and generated names
 
-`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1756 Spark 4.2.0
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1948 Spark 4.2.0
 observations of interval literal names, signed and unit-syntax literals, storage
 limits, arithmetic and timestamp operand order, year-month and day-time interval
 scaling and negation, interval CASTs and RANGE offsets. The query corpus

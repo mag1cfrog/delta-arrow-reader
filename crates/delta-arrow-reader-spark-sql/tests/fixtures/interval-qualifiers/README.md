@@ -1,6 +1,6 @@
 # Interval qualifiers and generated names
 
-`interval-qualifiers-spark.jsonl` records 1756 observations from Spark 4.2.0,
+`interval-qualifiers-spark.jsonl` records 1948 observations from Spark 4.2.0,
 revision `32f7299601108917fb01920a54e084595b7b3bf8`, in UTC and both ANSI
 modes. The header stores the build properties, Java and Python versions,
 capture script hash, settings and the registered `inputs`, `scale_inputs`,
@@ -35,20 +35,23 @@ The #957 probes add 105 more, 210 observations: `-x` and `negative(x)` of every
 qualifier's minimum and maximum, NULL, column intervals including the limit
 tables, RANGE windows ordered by a negated interval, the minimum of each family
 in filtered, unused, LIMIT 0, VALUES and CASE contexts, and IS NULL and IS NOT
-NULL of every failing scaling or negation constant. The corpus covers all 13
-field ranges, zero, negated and signed literals, unit-syntax and cancelled
-literals, arithmetic, timestamp operand order, interval CASTs and TIMESTAMP/DATE
-RANGE offsets. Every original record matches the original capture's SQL, public
-schema, error condition and row count. The original capture read values through
-string casts. This capture reads them from Spark's internal rows: YEAR-MONTH
-months, DAY-TIME microseconds, TIMESTAMP UTC microseconds and calendar intervals
-as months, days and microseconds. `ConvertToLocalRelation` is excluded, so
-registered-input expressions run during execution. Each record keeps the
-analyzed, optimized and executed schemas, or the error condition, first message
-line and failing stage. Where Spark raises a plain Java exception without a
-condition, the record keeps its class and message instead, and a job that fails
-with one records its innermost cause, because PySpark leaves that error
-unconverted with a first line naming a py4j object id.
+NULL of every failing scaling or negation constant. The #765 probes add 96 more,
+192 observations: casts from positive, negative, zero, sub-unit and limit values
+to every qualifier of the same family, NULL, TRY_CAST, columns including the
+limit tables, and interval leaves of ARRAY, STRUCT and MAP casts. The corpus
+covers all 13 field ranges, zero, negated and signed literals, unit-syntax and
+cancelled literals, arithmetic, timestamp operand order, interval CASTs and
+TIMESTAMP/DATE RANGE offsets. Every original record matches the original
+capture's SQL, public schema, error condition and row count. The original
+capture read values through string casts. This capture reads them from Spark's
+internal rows: YEAR-MONTH months, DAY-TIME microseconds, TIMESTAMP UTC
+microseconds and calendar intervals as months, days and microseconds.
+`ConvertToLocalRelation` is excluded, so registered-input expressions run during
+execution. Each record keeps the analyzed, optimized and executed schemas, or
+the error condition, first message line and failing stage. Where Spark raises a
+plain Java exception without a condition, the record keeps its class and message
+instead, and a job that fails with one records its innermost cause, because
+PySpark leaves that error unconverted with a first line naming a py4j object id.
 
 `interval_qualifiers.rs` compares names, nullability, metadata, typed rows and
 errors at batch sizes 1 and 32. DAR must fail at Spark's stage and name Spark's
@@ -64,7 +67,6 @@ their underlying arithmetic error.
 Existing differences outside the name contract keep their Spark expectations.
 The test checks the current DAR result for each:
 
-- #765: 14 narrowing interval CASTs keep the source value.
 - #727: 12 unaliased RANGE windows keep the name `SUM(v)`.
 - #947: 10 RANGE frames with DATE interval or TIMESTAMP numeric offsets return a
   running sum.
@@ -73,6 +75,7 @@ The test checks the current DAR result for each:
   `java.lang.ArithmeticException` for the multi-field day-time ones, and rejects
   the minimum `INTERVAL -9223372036854775808 MICROSECONDS` because unit syntax
   reads the magnitude before the sign.
+- #995: 8 interval leaves of ARRAY, STRUCT and MAP casts keep the source count.
 - #979: 12 ANSI scaling queries with a `1 / 0` number fail while optimizing with
   `Arrow error: Divide by zero error` instead of Spark's `DIVIDE_BY_ZERO`.
 
