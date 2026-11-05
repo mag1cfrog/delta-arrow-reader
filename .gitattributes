@@ -1,2 +1,6 @@
 # Keep the cargo-about clarification checksum stable across checkouts.
 /LICENSE text eol=lf
+
+# Keep frozen Spark fixture checksums stable across checkouts.
+/crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-row-priority-902/* text eol=lf
+/crates/delta-arrow-reader-spark-sql/tests/fixtures/slice-shared-projection-errors-920/* text eol=lf
