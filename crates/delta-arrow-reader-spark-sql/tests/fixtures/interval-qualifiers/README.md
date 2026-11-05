@@ -12,19 +12,20 @@ and TIMESTAMP, TIMESTAMP_NTZ and interval addition or subtraction, nine signs
 and boundaries written inside literals, and four quoted unit strings with zero,
 cancelled or mixed units. The #951 probes add 67 more, 134 observations: every
 year-month and day-time qualifier at its minimum and maximum and one unit past
-each, minimum literals with the sign outside the string, in unit syntax and in
-quoted unit strings, and the minimum qualified strings cast to their own type.
-The corpus covers all 13 field ranges, zero, negated and signed literals,
-unit-syntax and cancelled literals, arithmetic, timestamp operand order,
-interval CASTs and TIMESTAMP/DATE RANGE offsets. Every original record matches
-the original capture's SQL, public schema, error condition and row count. The
-original capture read values through string casts. This capture reads them from
-Spark's internal rows: YEAR-MONTH months, DAY-TIME microseconds, TIMESTAMP UTC
-microseconds and calendar intervals as months, days and microseconds.
-`ConvertToLocalRelation` is excluded, so registered-input expressions run during
-execution. Each record keeps the analyzed, optimized and executed schemas, or
-the error condition, first message line and failing stage. Where Spark raises a
-plain Java exception without a condition, the record keeps its class instead.
+each (the SECOND maximum is the earlier signed-literal probe), minimum literals
+with the sign outside the string, in unit syntax and in quoted unit strings, and
+the minimum qualified strings cast to their own type. The corpus covers all 13
+field ranges, zero, negated and signed literals, unit-syntax and cancelled
+literals, arithmetic, timestamp operand order, interval CASTs and TIMESTAMP/DATE
+RANGE offsets. Every original record matches the original capture's SQL, public
+schema, error condition and row count. The original capture read values through
+string casts. This capture reads them from Spark's internal rows: YEAR-MONTH
+months, DAY-TIME microseconds, TIMESTAMP UTC microseconds and calendar intervals
+as months, days and microseconds. `ConvertToLocalRelation` is excluded, so
+registered-input expressions run during execution. Each record keeps the
+analyzed, optimized and executed schemas, or the error condition, first message
+line and failing stage. Where Spark raises a plain Java exception without a
+condition, the record keeps its class instead.
 
 `interval_qualifiers.rs` compares names, nullability, metadata, typed rows and
 errors at batch sizes 1 and 32. Spark's own Arrow conversion maps every
