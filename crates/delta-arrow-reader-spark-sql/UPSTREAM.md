@@ -1091,13 +1091,23 @@ cause and result-field boundary without claiming complete raw diagnostic parity.
 
 ### Nested lambda capture positions
 
-Physical lambdas retain their complete enclosing input width. Capture projection
-rebases parameter offsets after the compact inputs while preserving every
-declared parameter slot, including unused outer parameters. Nested lambdas
-contribute their captures without exposing their own parameter slots. One scoped
-column rewrite carries this boundary through CASE, selected scalar inputs,
+Physical lambdas retain their complete enclosing input width. `capture_indices`
+contains ascending source input indices in compact capture order, excluding the
+lambda's own parameters. `projected_body` consumes those captures followed by
+every declared parameter slot, including unused outer parameters. A lambda from
+`try_new` is unbound until its enclosing higher-order expression supplies the
+width: `None` and its provisional empty captures differ from `Some(0)`, a known
+zero-width input. Nested lambdas contribute captures without exposing their own
+parameter slots.
+
+Sorted capture compaction preserves nested capture order and can reuse normalized
+arithmetic and higher-order bodies while rebasing their original bodies and
+boundaries. Other reconstruction kinds derive normalization again. Arbitrary
+column-rewrite callbacks retain full reconstruction, including equal-width
+capture permutations. Rebuilt bodies still undergo async validation. One scoped
+column rewrite carries the boundary through CASE, selected scalar inputs,
 projection, filter, ordering, repartition and join reconstruction. Physical
-field, index, qualifier, parameter-name and async checks remain active.
+field, index, qualifier and parameter-name checks remain active.
 
 Projection APIs retain their signatures. `from_indices` and `make_projector`
 record authoritative source widths; expression-only constructors cannot infer

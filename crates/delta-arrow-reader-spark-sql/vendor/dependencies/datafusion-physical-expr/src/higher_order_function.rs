@@ -344,15 +344,15 @@ impl PhysicalExpr for HigherOrderFunctionExpr {
                         .map(|(name, param)| param.renamed(name.as_str()))
                         .collect();
 
-                    let projection = lambda.projection();
+                    let capture_indices = lambda.capture_indices();
 
                     Ok(ValueOrLambda::Lambda(LambdaArgument::new(
                         params,
                         Arc::clone(lambda.projected_body()),
-                        if projection.is_empty() {
+                        if capture_indices.is_empty() {
                             None
                         } else {
-                            Some(batch.project(projection)?)
+                            Some(batch.project(capture_indices)?)
                         },
                     )))
                 }

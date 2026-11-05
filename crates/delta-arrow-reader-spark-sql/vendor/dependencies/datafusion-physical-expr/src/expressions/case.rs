@@ -136,7 +136,7 @@ impl CaseBody {
         let mut collect_column_indices = |expr: &Arc<dyn PhysicalExpr>| {
             expr.apply(|expr| {
                 if let Some(lambda) = expr.downcast_ref::<LambdaExpr>() {
-                    used_column_indices.extend(lambda.projection());
+                    used_column_indices.extend(lambda.capture_indices());
                     return Ok(TreeNodeRecursion::Jump);
                 }
                 if let Some(column) = expr.downcast_ref::<Column>() {

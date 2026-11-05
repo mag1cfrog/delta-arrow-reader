@@ -23,19 +23,20 @@ use std::sync::Arc;
 
 use crate::{
     ScalarFunctionExpr,
-    expressions::{Column, LambdaVariable},
+    expressions::{BinaryExpr, Column, LambdaVariable, Literal},
+    higher_order_function::HigherOrderFunctionExpr,
     physical_expr::PhysicalExpr,
-    utils::rewrite_lambda_body,
+    utils::compact_lambda_captures,
 };
 use arrow::{
     datatypes::{DataType, Schema},
     record_batch::RecordBatch,
 };
 use datafusion_common::{
-    HashMap, plan_err,
+    plan_err,
     tree_node::{TreeNode, TreeNodeRecursion},
 };
-use datafusion_common::{HashSet, Result, internal_datafusion_err, internal_err};
+use datafusion_common::{HashSet, Result, internal_err};
 use datafusion_expr::ColumnarValue;
 
 /// Represents a lambda with the given parameters names and body
@@ -43,9 +44,12 @@ use datafusion_expr::ColumnarValue;
 pub struct LambdaExpr {
     params: Vec<String>,
     body: Arc<dyn PhysicalExpr>,
+    /// Body over compact captures followed by every declared parameter slot.
     projected_body: Arc<dyn PhysicalExpr>,
-    projection: Vec<usize>,
-    // The enclosing higher-order expression supplies the parameter boundary.
+    /// Source input indices in compact capture order, excluding this lambda's parameters.
+    /// Empty until the enclosing higher-order expression binds the input width.
+    capture_indices: Vec<usize>,
+    /// None is unbound; Some(0) is a known empty enclosing input schema.
     input_schema_size: Option<usize>,
 }
 
@@ -67,7 +71,11 @@ impl Hash for LambdaExpr {
 }
 
 impl LambdaExpr {
-    /// Create a new lambda expression with the given parameters and body
+    /// Creates a lambda whose enclosing input width is not yet bound.
+    ///
+    /// The enclosing higher-order expression binds that width before evaluation,
+    /// then derives captures followed by all declared parameter slots. An empty
+    /// capture list on this unbound expression is provisional, not capture-free.
     pub fn try_new(params: Vec<String>, body: Arc<dyn PhysicalExpr>) -> Result<Self> {
         if !all_unique(&params) {
             return plan_err!(
@@ -91,7 +99,7 @@ impl LambdaExpr {
                 params,
                 projected_body: Arc::clone(&body),
                 body,
-                projection: vec![],
+                capture_indices: vec![],
                 input_schema_size,
             });
         };
@@ -101,7 +109,7 @@ impl LambdaExpr {
             if let Some(lambda) = node.downcast_ref::<LambdaExpr>() {
                 used_column_indices.extend(
                     lambda
-                        .projection()
+                        .capture_indices()
                         .iter()
                         .copied()
                         .filter(|index| *index < input_size),
@@ -121,40 +129,21 @@ impl LambdaExpr {
             Ok(TreeNodeRecursion::Continue)
         })?;
 
-        let mut projection = used_column_indices.into_iter().collect::<Vec<_>>();
+        let mut capture_indices = used_column_indices.into_iter().collect::<Vec<_>>();
 
-        projection.sort();
+        capture_indices.sort();
 
-        let column_index_map = projection
-            .iter()
-            .enumerate()
-            .map(|(projected, original)| (*original, projected))
-            .collect::<HashMap<_, _>>();
-
-        let projected_body = rewrite_lambda_body(
+        let projected_body = compact_lambda_captures(
             Arc::clone(&body),
             input_size,
-            projection.len(),
-            |column| {
-                let index =
-                    column_index_map
-                        .get(&column.index())
-                        .copied()
-                        .ok_or_else(|| {
-                            internal_datafusion_err!(
-                                "lambda projection lost captured index {}",
-                                column.index()
-                            )
-                        })?;
-                Ok(Arc::new(Column::new(column.name(), index)))
-            },
+            &capture_indices,
         )?;
 
         Ok(Self {
             params,
             body,
             projected_body,
-            projection,
+            capture_indices,
             input_schema_size,
         })
     }
@@ -169,14 +158,18 @@ impl LambdaExpr {
         &self.body
     }
 
-    pub(crate) fn projection(&self) -> &[usize] {
-        &self.projection
+    /// Source input indices in ascending compact column order, excluding own parameter slots.
+    /// This list is provisional while `input_schema_size()` is None.
+    pub(crate) fn capture_indices(&self) -> &[usize] {
+        &self.capture_indices
     }
 
+    /// Body over compact captures followed by all declared parameters.
     pub(crate) fn projected_body(&self) -> &Arc<dyn PhysicalExpr> {
         &self.projected_body
     }
 
+    /// Complete enclosing width, or None until bound; Some(0) is a bound empty input.
     pub(crate) fn input_schema_size(&self) -> Option<usize> {
         self.input_schema_size
     }
@@ -193,6 +186,44 @@ impl LambdaExpr {
         check_async_udf(&body)?;
         Self::new(self.params.clone(), body, Some(size))
     }
+
+    /// Reuses normalization only for an enclosing lambda's sorted capture compaction.
+    /// Arithmetic and higher-order bodies retain their projected body; other
+    /// reconstruction kinds derive it again.
+    pub(crate) fn with_compacted_outer_captures(
+        &self,
+        body: Arc<dyn PhysicalExpr>,
+        input_schema_size: usize,
+        capture_indices: Vec<usize>,
+    ) -> Result<Self> {
+        check_async_udf(&body)?;
+        // Other reconstruction kinds may change more than input indices.
+        let can_reuse_projected_body = !self.body.exists(|node| {
+            Ok(!(node.is::<Column>()
+                || node.is::<LambdaVariable>()
+                || node.is::<Literal>()
+                || node.is::<BinaryExpr>()
+                || node.is::<HigherOrderFunctionExpr>()
+                || node.is::<LambdaExpr>()))
+        })?;
+        if !can_reuse_projected_body {
+            return Self::new(self.params.clone(), body, Some(input_schema_size));
+        }
+        if capture_indices.len() != self.capture_indices.len()
+            || capture_indices.windows(2).any(|pair| pair[0] >= pair[1])
+            || capture_indices.last().is_some_and(|index| *index >= input_schema_size)
+        {
+            return internal_err!("lambda capture compaction changed capture order or bounds");
+        }
+        Ok(Self {
+            params: self.params.clone(),
+            body,
+            projected_body: Arc::clone(&self.projected_body),
+            capture_indices,
+            input_schema_size: Some(input_schema_size),
+        })
+    }
+
 }
 
 impl std::fmt::Display for LambdaExpr {
