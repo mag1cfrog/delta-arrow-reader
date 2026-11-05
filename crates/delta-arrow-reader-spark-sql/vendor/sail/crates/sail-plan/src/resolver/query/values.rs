@@ -2,11 +2,19 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
+use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+use datafusion::physical_expr::create_physical_expr;
+use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchema, DFSchemaRef, plan_datafusion_err};
-use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, Projection, cast};
+use datafusion_expr::simplify::SimplifyContext;
+use datafusion_expr::{
+    Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, Projection, Volatility, cast,
+};
 use sail_common::spec;
+use sail_common_datafusion::literal::LiteralEvaluator;
 
 use crate::error::{PlanError, PlanResult};
+use crate::expression_errors::{prune_null_divisor, row_expression};
 use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::resolver::PlanResolver;
@@ -43,6 +51,51 @@ impl PlanResolver<'_> {
         .await?;
         let mut plan = LogicalPlanBuilder::values(values)?.build()?;
         if let LogicalPlan::Values(values) = &mut plan {
+            let session = self.ctx.state();
+            let simplifier = ExprSimplifier::new(
+                SimplifyContext::builder()
+                    .with_schema(Arc::clone(&schema))
+                    .with_config_options(Arc::clone(session.config_options()))
+                    .build(),
+            );
+            let mut prepared_constants = Vec::new();
+            // Prepare all cells before evaluating any so admission errors keep their precedence.
+            for expr in values.values.iter().flatten() {
+                if !row_expression(expr, false)?
+                    || expr.exists(|node| {
+                        Ok(match node {
+                            Expr::ScalarFunction(function) => {
+                                function.func.signature().volatility != Volatility::Immutable
+                                    || !function.func.inner().supports_constant_folding()
+                            }
+                            Expr::HigherOrderFunction(function) => {
+                                function.func.signature().volatility != Volatility::Immutable
+                            }
+                            _ => false,
+                        })
+                    })?
+                {
+                    continue;
+                }
+                let coerced = simplifier.coerce(expr.clone(), &schema)?;
+                // Validate input types before a NULL divisor can discard a fallible cast.
+                let original = create_physical_expr(&coerced, &schema, session.execution_props())?;
+                let pruned = coerced.transform_down(|expr| prune_null_divisor(expr, &schema))?;
+                prepared_constants.push(if pruned.transformed {
+                    create_physical_expr(&pruned.data, &schema, session.execution_props())?
+                } else {
+                    original
+                });
+            }
+            let evaluator = LiteralEvaluator::new();
+            // Inline constants fail during analysis even when outer operators discard their rows.
+            for expr in prepared_constants {
+                evaluator
+                    .evaluate_physical(expr.as_ref())
+                    .map_err(|error| {
+                        error.context("[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]")
+                    })?;
+            }
             let fields = values
                 .schema
                 .fields()

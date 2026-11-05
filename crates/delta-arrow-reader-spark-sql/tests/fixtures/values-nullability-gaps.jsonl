@@ -1,4 +1,3 @@
-{"id":"cast_unused","ansi":true,"actual":{"schema":{"type":"struct","fields":[{"name":"r","type":"integer","nullable":false,"metadata":{}}]},"rows":[]},"issue":722}
 {"id":"in_nullable_right_False","ansi":true,"issue":142,"actual":{"schema":{"type":"struct","fields":[{"name":"r","type":"boolean","nullable":true,"metadata":{}}]},"rows":[[null]]}}
 {"id":"in_nullable_right_True","ansi":true,"issue":142,"actual":{"schema":{"type":"struct","fields":[{"name":"r","type":"boolean","nullable":true,"metadata":{}}]},"rows":[[null]]}}
 {"id":"in_nullable_right_False","ansi":false,"issue":142,"actual":{"schema":{"type":"struct","fields":[{"name":"r","type":"boolean","nullable":true,"metadata":{}}]},"rows":[[null]]}}

@@ -321,6 +321,16 @@ nullable operands retain the existing three-valued comparison.
 The [expression references](tests/fixtures/README.md#numeric-decimal-and-arithmetic-nullability)
 cover exact schemas, rows, required errors and separately recorded open gaps.
 
+The VALUES resolver validates eligible constant cells before outer pruning can
+erase their errors. Calls that are stable, volatile or opt out of constant folding
+are excluded throughout each expression. It prepares the original types before
+applying the shared rule for known NULL divisors to a discarded clone. Successful
+expressions and Fields remain in the plan to preserve their declarations and later
+execution behavior. `LiteralEvaluator::evaluate_physical` lets callers keep
+preparation errors outside the inline-table context while retaining original
+evaluation causes. The [inline references](tests/fixtures/README.md#inline-values-validation)
+cover these boundaries.
+
 ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
 batch results. The Spark analyzer exposes known NULLs through projection/alias
