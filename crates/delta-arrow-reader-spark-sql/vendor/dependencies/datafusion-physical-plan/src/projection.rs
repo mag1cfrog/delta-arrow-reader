@@ -1982,7 +1982,7 @@ fn projected_join_preserves_output_column_mapping() -> Result<()> {
                     )
                 })
                 .collect::<Vec<_>>();
-            let projection = ProjectionExec::try_new(expr, join.clone())?;
+            let projection = ProjectionExec::try_new(expr, Arc::clone(&join) as _)?;
             if let Some(rewritten) = join.try_swapping_with_projection(&projection)? {
                 assert_eq!(
                     rewritten.schema(),
