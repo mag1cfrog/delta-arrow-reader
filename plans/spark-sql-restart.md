@@ -511,12 +511,13 @@ The 1,280 focused observations yield 2,538 Spark matches and 22 exact retained-g
 comparisons at two batch sizes. Complete historical replacements are recorded
 without relaxing the matcher or its parallel-error alternatives.
 
-Five existing VALUES differences remain explicit: unreachable CASE branches
-widen analyzed nullability (#721), and an unused invalid inline CAST misses its
-required error (#722). Six additional projected-IN/NULL observations also differ
-from Spark on the unchanged staging baseline. They remain unresolved #142 work,
-separate from its previously approved four-case policy. Raw Spark facts remain
-intact and these observations do not count as compatibility matches.
+The earlier staging baseline recorded five VALUES differences: unreachable CASE
+branches widened analyzed nullability (#721), and an unused invalid inline CAST
+missed its required error (#722). The inline CAST raises that error during
+analysis in ANSI mode. Six projected-IN/NULL observations still differ from Spark. They remain
+unresolved #142 work, separate from its previously approved four-case policy. Raw
+Spark facts remain intact and these observations do not count as compatibility
+matches.
 #717 separately tracks generated DIV names, alongside #710's alias metadata.
 
 ### S04 grouping NULL predicates

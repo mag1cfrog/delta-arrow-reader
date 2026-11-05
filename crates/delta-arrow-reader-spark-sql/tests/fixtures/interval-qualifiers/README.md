@@ -48,6 +48,10 @@ day-time range to `Duration(Microsecond)` and every year-month range to
 `Interval(YearMonth)`, so types are compared at that level and interval fields
 are checked through generated names.
 
+The 12 inline VALUES scaling-error observations fail during analysis with
+`INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION`, retaining their underlying
+arithmetic error.
+
 Existing differences outside the name contract keep their Spark expectations.
 The test checks the current DAR result for each:
 
@@ -61,9 +65,6 @@ The test checks the current DAR result for each:
   `java.lang.ArithmeticException` for the multi-field day-time ones, and rejects
   the minimum `INTERVAL -9223372036854775808 MICROSECONDS` because unit syntax
   reads the magnitude before the sign.
-- #722: 12 failing scaling constants in inline VALUES fail while optimizing with
-  their own error, which Spark wraps in
-  `INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION` during analysis.
 - #979: 6 ANSI scaling queries with a `1 / 0` number fail while optimizing with
   `Arrow error: Divide by zero error` instead of Spark's `DIVIDE_BY_ZERO`.
 
