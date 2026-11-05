@@ -1,16 +1,11 @@
 //! Collection counts follow container nullability without changing native SQL.
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
-use arrow::array::{
-    Array, ArrayRef, Int32Array, Int32Builder, ListArray, ListBuilder, MapBuilder, StringBuilder,
-};
-use arrow::datatypes::{DataType, Field, Int32Type, Schema};
+use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 use datafusion::common::DataFusionError;
-use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::collect;
@@ -20,6 +15,8 @@ use sail_plan::error::PlanError;
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
+#[path = "support/spark_inputs.rs"]
+mod spark_inputs;
 #[path = "support/spark_results.rs"]
 #[expect(
     dead_code,
@@ -46,153 +43,93 @@ fn create_collection_length_session(batch_size: usize) -> SessionContext {
     )
 }
 
-fn decode_recorded_integer(value: &Value) -> TestResult<Option<i32>> {
-    Ok(if value.is_null() {
-        None
-    } else {
-        Some(value.as_str().ok_or("missing integer")?.parse()?)
-    })
-}
-
-fn build_recorded_integer_array_column(rows: &[Value], index: usize) -> TestResult<ArrayRef> {
-    let arrays = rows
-        .iter()
+fn assert_recorded_input_fidelity(input: &Value) -> TestResult<RecordBatch> {
+    let batch = spark_inputs::decode_recorded_batch(input)?;
+    let schema = batch.schema();
+    assert_eq!(capture_schema(schema.fields(), None)?, input["schema"]);
+    spark_results::validate_batch(schema.as_ref(), &batch)?;
+    let rows = (0..batch.num_rows())
         .map(|row| {
-            row[index]
-                .as_array()
-                .map(|values| {
-                    values
-                        .iter()
-                        .map(decode_recorded_integer)
-                        .collect::<TestResult<Vec<_>>>()
-                })
-                .transpose()
+            batch
+                .columns()
+                .iter()
+                .map(|column| encode_value(column.as_ref(), row))
+                .collect::<TestResult<Vec<_>>>()
         })
         .collect::<TestResult<Vec<_>>>()?;
-    Ok(Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(
-        arrays,
-    )))
+    assert_eq!(json!(rows), input["rows"]);
+    Ok(batch)
 }
 
-fn append_recorded_integer_map(
-    maps: &mut MapBuilder<StringBuilder, Int32Builder>,
-    value: &Value,
-) -> TestResult {
-    if let Some(entries) = value.as_array() {
-        for entry in entries {
-            maps.keys()
-                .append_value(entry[0].as_str().ok_or("missing map key")?);
-            maps.values()
-                .append_option(decode_recorded_integer(&entry[1])?);
+#[test]
+fn recorded_collection_length_inputs_preserve_fields_and_rows() -> TestResult {
+    for source in [REFERENCE, ORIGINAL] {
+        let header: Value = serde_json::from_str(source.lines().next().ok_or("missing header")?)?;
+        for input in header["inputs"].as_array().ok_or("missing inputs")? {
+            assert_recorded_input_fidelity(input)?;
         }
     }
-    maps.append(!value.is_null())?;
     Ok(())
 }
 
-fn register_recorded_columns(
-    session: &SessionContext,
-    input: &Value,
-    columns: Vec<ArrayRef>,
-    batch_size: usize,
-) -> TestResult {
-    let fields = input["schema"]["fields"]
-        .as_array()
-        .ok_or("missing fields")?;
-    assert_eq!(fields.len(), columns.len());
-    let schema = Arc::new(Schema::new(
-        fields
-            .iter()
-            .zip(&columns)
-            .map(|(field, column)| {
-                Ok(Field::new(
-                    field["name"].as_str().ok_or("missing field name")?,
-                    column.data_type().clone(),
-                    field["nullable"].as_bool().ok_or("missing nullability")?,
-                )
-                .with_metadata(serde_json::from_value(field["metadata"].clone())?))
-            })
-            .collect::<TestResult<Vec<_>>>()?,
-    ));
-    assert_eq!(capture_schema(schema.fields(), None)?, input["schema"]);
-    let batch = RecordBatch::try_new(schema.clone(), columns)?;
-    let batches = (0..batch.num_rows())
-        .step_by(batch_size)
-        .map(|offset| batch.slice(offset, batch_size.min(batch.num_rows() - offset)))
-        .collect();
-    session.register_table(
-        input["name"].as_str().ok_or("missing provider name")?,
-        Arc::new(MemTable::try_new(schema, vec![batches])?),
-    )?;
-    Ok(())
-}
-
-fn register_collection_length_inputs(
-    session: &SessionContext,
-    header: &Value,
-    batch_size: usize,
-) -> TestResult {
-    for input in header["inputs"].as_array().ok_or("missing inputs")? {
-        let rows = input["rows"].as_array().ok_or("missing rows")?;
-        let mut columns: Vec<ArrayRef> = vec![
-            Arc::new(Int32Array::from(
-                rows.iter()
-                    .map(|row| decode_recorded_integer(&row[0]))
-                    .collect::<TestResult<Vec<_>>>()?,
-            )),
-            build_recorded_integer_array_column(rows, 1)?,
-            build_recorded_integer_array_column(rows, 2)?,
-        ];
-        for index in [3, 4] {
-            let mut maps = MapBuilder::new(None, StringBuilder::new(), Int32Builder::new());
-            for row in rows {
-                append_recorded_integer_map(&mut maps, &row[index])?;
-            }
-            columns.push(Arc::new(maps.finish()));
-        }
-        register_recorded_columns(session, input, columns, batch_size)?;
+#[test]
+fn recorded_map_inputs_preserve_entries_nulls_and_nested_lists() -> TestResult {
+    let map_with_nullable_values = json!({
+        "type":"map", "keyType":"string", "valueType":"integer", "valueContainsNull":true,
+    });
+    let mut map_with_required_values = map_with_nullable_values.clone();
+    map_with_required_values["valueContainsNull"] = json!(false);
+    let input = json!({
+        "schema":{"type":"struct", "fields":[
+            {"name":"map", "type":map_with_nullable_values,
+                "nullable":true, "metadata":{"source":"map"}},
+            {"name":"maps", "type":{"type":"array", "elementType":map_with_nullable_values,
+                "containsNull":true}, "nullable":true, "metadata":{}},
+            {"name":"strict_maps", "type":{"type":"array", "elementType":map_with_required_values,
+                "containsNull":false}, "nullable":false, "metadata":{}}
+        ]},
+        "rows":[
+            [[["z","1"],["a",null],["z","2"]], [null,[],[["b",null]]], [[["q","3"]]]],
+            [null,null,[[]]],
+            [[],[],[]]
+        ]
+    });
+    let batch = assert_recorded_input_fidelity(&input)?;
+    let schema = batch.schema();
+    let DataType::Map(entries, ordered) = schema.field(0).data_type() else {
+        return Err("expected Map field".into());
+    };
+    assert!(!ordered);
+    assert_eq!(
+        entries.as_ref(),
+        &Field::new(
+            "entries",
+            DataType::Struct(
+                vec![
+                    Field::new("keys", DataType::Utf8, false),
+                    Field::new("values", DataType::Int32, true),
+                ]
+                .into(),
+            ),
+            false,
+        )
+    );
+    for (column, contains_null) in [(1, true), (2, false)] {
+        let DataType::List(item) = schema.field(column).data_type() else {
+            return Err("expected List field".into());
+        };
+        assert_eq!(item.name(), "item");
+        assert_eq!(item.is_nullable(), contains_null);
+        assert!(item.metadata().is_empty());
     }
-    Ok(())
-}
-
-fn register_original_size_inputs(
-    session: &SessionContext,
-    header: &Value,
-    batch_size: usize,
-) -> TestResult {
-    for input in header["inputs"].as_array().ok_or("missing inputs")? {
-        let rows = input["rows"].as_array().ok_or("missing rows")?;
-        let mut columns: Vec<ArrayRef> = [0, 1]
-            .into_iter()
-            .map(|index| {
-                Ok(Arc::new(Int32Array::from(
-                    rows.iter()
-                        .map(|row| decode_recorded_integer(&row[index]))
-                        .collect::<TestResult<Vec<_>>>()?,
-                )) as ArrayRef)
-            })
-            .collect::<TestResult<_>>()?;
-        columns.push(build_recorded_integer_array_column(rows, 2)?);
-        for (index, nullable) in [(3, true), (4, false)] {
-            let maps = MapBuilder::new(None, StringBuilder::new(), Int32Builder::new())
-                .with_values_field(Field::new("values", DataType::Int32, nullable));
-            let mut lists = ListBuilder::new(maps);
-            for row in rows {
-                if let Some(maps) = row[index].as_array() {
-                    for map in maps {
-                        append_recorded_integer_map(lists.values(), map)?;
-                    }
-                }
-                lists.append(!row[index].is_null());
-            }
-            let map_type = lists.values().finish_cloned().data_type().clone();
-            columns.push(Arc::new(
-                lists
-                    .with_field(Field::new("item", map_type, nullable))
-                    .finish(),
-            ));
-        }
-        register_recorded_columns(session, input, columns, batch_size)?;
+    for (column, invalid_value) in [
+        (0, json!([[null,"1"]])),
+        (0, json!([null])),
+        (2, json!([[["q",null]]])),
+    ] {
+        let mut invalid = input.clone();
+        invalid["rows"][0][column] = invalid_value;
+        assert!(spark_inputs::decode_recorded_batch(&invalid).is_err());
     }
     Ok(())
 }
@@ -504,7 +441,12 @@ async fn collection_length_fields_counts_and_action_errors_match_spark() -> Test
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = create_collection_length_session(batch_size);
-        register_collection_length_inputs(&session, &records[0], batch_size)?;
+        spark_inputs::register_recorded_inputs_with_partition_count(
+            &session,
+            &records[0],
+            batch_size,
+            1,
+        )?;
         let config_before = format!("{:?}", session.state().config_options());
         for case in &records[1..] {
             let mut observed = observe_collection_length_query(&session, case).await?;
@@ -541,7 +483,12 @@ async fn original_size_transform_consumers_match_all_six_spark_records() -> Test
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = create_collection_length_session(batch_size);
-        register_original_size_inputs(&session, &records[0], batch_size)?;
+        spark_inputs::register_recorded_inputs_with_partition_count(
+            &session,
+            &records[0],
+            batch_size,
+            1,
+        )?;
         for case in &cases {
             assert!(case.get("legacy_size_of_null").is_none());
             let mut observed = observe_collection_length_query(&session, case).await?;
@@ -601,7 +548,12 @@ async fn spark_collection_lengths_preserve_native_counts_fields_and_session_conf
             SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size));
         let configured = create_collection_length_session(batch_size);
         for session in [&native, &configured] {
-            register_collection_length_inputs(session, &records[0], batch_size)?;
+            spark_inputs::register_recorded_inputs_with_partition_count(
+                session,
+                &records[0],
+                batch_size,
+                1,
+            )?;
         }
         let configuration = format!("{:?}", configured.state().config_options());
         let queries = [

@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, StructArray, new_empty_array};
+use arrow::array::{ArrayRef, AsArray, MapArray, StructArray, new_empty_array};
+use arrow::buffer::OffsetBuffer;
 use arrow::datatypes::{DataType, Decimal128Type, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
@@ -36,6 +37,30 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
                 .as_bool()
                 .ok_or("missing containsNull")?,
         ))),
+        None if value["type"] == "map" => DataType::Map(
+            Arc::new(Field::new(
+                "entries",
+                DataType::Struct(
+                    vec![
+                        Field::new(
+                            "keys",
+                            decode_recorded_data_type(&value["keyType"])?,
+                            false,
+                        ),
+                        Field::new(
+                            "values",
+                            decode_recorded_data_type(&value["valueType"])?,
+                            value["valueContainsNull"]
+                                .as_bool()
+                                .ok_or("missing valueContainsNull")?,
+                        ),
+                    ]
+                    .into(),
+                ),
+                false,
+            )),
+            false,
+        ),
         None if value["type"] == "struct" => DataType::Struct(
             value["fields"]
                 .as_array()
@@ -117,6 +142,29 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
             field.data_type(),
             field.is_nullable(),
         )),
+        DataType::Map(field, ordered) => {
+            let recorded_entries = value.as_array().ok_or("missing map entries")?;
+            let entries = if recorded_entries.is_empty() {
+                new_empty_array(field.data_type())
+            } else {
+                ScalarValue::iter_to_array(
+                    recorded_entries
+                        .iter()
+                        .map(|entry| decode_recorded_value(entry, field.data_type()))
+                        .collect::<TestResult<Vec<_>>>()?,
+                )?
+            };
+            ScalarValue::Map(Arc::new(MapArray::try_new(
+                field.clone(),
+                OffsetBuffer::from_lengths([recorded_entries.len()]),
+                entries
+                    .as_struct_opt()
+                    .ok_or("map entries are not a Struct")?
+                    .clone(),
+                None,
+                *ordered,
+            )?))
+        }
         DataType::Struct(fields) => {
             let values = value.as_array().ok_or("missing struct values")?;
             assert_eq!(values.len(), fields.len());

@@ -22,6 +22,11 @@ NULL children, nested arrays, empty collections, untyped NULL, mixed providers,
 NULL-only providers and empty providers have separate assertions. CASE,
 COALESCE, filters and aggregates check consumers of those counts.
 
+Input-fidelity checks compare the complete recorded provider fields and raw
+rows before query evaluation. A separate Map check preserves entry order and
+duplicate keys, distinguishes NULL from empty Maps/lists, and rejects NULL
+entries, keys and required values.
+
 Forty references require planning rejection for the recorded argument type.
 Six require a bad-string-to-INT cast failure during Spark's collect action.
 That action includes lazy optimization and physical preparation. The Rust
