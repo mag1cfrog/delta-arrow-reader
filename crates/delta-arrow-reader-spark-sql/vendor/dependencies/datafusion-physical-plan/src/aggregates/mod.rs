@@ -33,8 +33,8 @@ use crate::filter_pushdown::{
 };
 use crate::metrics::{ExecutionPlanMetricsSet, MetricsSet};
 use crate::{
-    DisplayFormatType, Distribution, ExecutionPlan, InputOrderMode, SendableRecordBatchStream,
-    Statistics, check_if_same_properties,
+    DisplayFormatType, Distribution, ExecutionPlan, InputOrderMode,
+    SendableRecordBatchStream, Statistics, check_if_same_properties,
 };
 use datafusion_common::config::ConfigOptions;
 use datafusion_physical_expr::utils::collect_columns;
@@ -47,15 +47,17 @@ use arrow::record_batch::RecordBatch;
 use arrow_schema::FieldRef;
 use datafusion_common::stats::Precision;
 use datafusion_common::{
-    Constraint, Constraints, Result, ScalarValue, assert_eq_or_internal_err, internal_err,
-    not_impl_err,
+    Constraint, Constraints, Result, ScalarValue, assert_eq_or_internal_err,
+    internal_err, not_impl_err,
 };
 use datafusion_execution::TaskContext;
 use datafusion_expr::{Accumulator, Aggregate};
 use datafusion_physical_expr::aggregate::AggregateFunctionExpr;
 use datafusion_physical_expr::equivalence::ProjectionMapping;
 use datafusion_physical_expr::expressions::{Column, DynamicFilterPhysicalExpr, lit};
-use datafusion_physical_expr::{ConstExpr, EquivalenceProperties, physical_exprs_contains};
+use datafusion_physical_expr::{
+    ConstExpr, EquivalenceProperties, physical_exprs_contains,
+};
 use datafusion_physical_expr_common::physical_expr::{PhysicalExpr, fmt_sql};
 use datafusion_physical_expr_common::sort_expr::{
     LexOrdering, LexRequirement, OrderingRequirements, PhysicalSortRequirement,
@@ -216,9 +218,9 @@ impl AggregateMode {
     /// for details.
     pub fn input_mode(&self) -> AggregateInputMode {
         match self {
-            AggregateMode::Partial | AggregateMode::Single | AggregateMode::SinglePartitioned => {
-                AggregateInputMode::Raw
-            }
+            AggregateMode::Partial
+            | AggregateMode::Single
+            | AggregateMode::SinglePartitioned => AggregateInputMode::Raw,
             AggregateMode::Final
             | AggregateMode::FinalPartitioned
             | AggregateMode::PartialReduce => AggregateInputMode::Partial,
@@ -236,7 +238,9 @@ impl AggregateMode {
             | AggregateMode::FinalPartitioned
             | AggregateMode::Single
             | AggregateMode::SinglePartitioned => AggregateOutputMode::Final,
-            AggregateMode::Partial | AggregateMode::PartialReduce => AggregateOutputMode::Partial,
+            AggregateMode::Partial | AggregateMode::PartialReduce => {
+                AggregateOutputMode::Partial
+            }
         }
     }
 }
@@ -410,7 +414,9 @@ impl PhysicalGroupBy {
     /// Returns the fields that are used as the grouping keys.
     fn group_fields(&self, input_schema: &Schema) -> Result<Vec<FieldRef>> {
         let mut fields = Vec::with_capacity(self.num_group_exprs());
-        for ((expr, name), group_expr_nullable) in self.expr.iter().zip(self.exprs_nullable()) {
+        for ((expr, name), group_expr_nullable) in
+            self.expr.iter().zip(self.exprs_nullable())
+        {
             fields.push(
                 Field::new(
                     name,
@@ -447,16 +453,15 @@ impl PhysicalGroupBy {
     /// Returns the `PhysicalGroupBy` for a final aggregation if `self` is used for a partial
     /// aggregation.
     pub fn as_final(&self) -> PhysicalGroupBy {
-        let expr: Vec<_> = self
-            .output_exprs()
-            .into_iter()
-            .zip(
-                self.expr
-                    .iter()
-                    .map(|t| t.1.clone())
-                    .chain(std::iter::once(Aggregate::INTERNAL_GROUPING_ID.to_owned())),
-            )
-            .collect();
+        let expr: Vec<_> =
+            self.output_exprs()
+                .into_iter()
+                .zip(
+                    self.expr.iter().map(|t| t.1.clone()).chain(std::iter::once(
+                        Aggregate::INTERNAL_GROUPING_ID.to_owned(),
+                    )),
+                )
+                .collect();
         let num_exprs = expr.len();
         let groups = if self.expr.is_empty() && !self.has_grouping_set {
             // No GROUP BY expressions - should have no groups
@@ -776,28 +781,29 @@ impl AggregateExec {
         // Get GROUP BY expressions:
         let groupby_exprs = group_by.input_exprs();
         // Expanding one batch per set can revisit a sorted prefix before the next batch.
-        let (new_sort_exprs, indices) =
-            if mode.input_mode() == AggregateInputMode::Raw && group_by.groups.len() > 1 {
-                (vec![], vec![])
-            } else {
-                let unmasked_indices = group_by
-                    .exprs_nullable()
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(index, masked)| (!masked).then_some(index))
-                    .collect::<Vec<_>>();
-                let unmasked_exprs = unmasked_indices
-                    .iter()
-                    .map(|&index| Arc::clone(&groupby_exprs[index]))
-                    .collect::<Vec<_>>();
-                let (sort_exprs, indices) =
-                    input_eq_properties.find_longest_permutation(&unmasked_exprs)?;
-                let indices = indices
-                    .into_iter()
-                    .map(|index| unmasked_indices[index])
-                    .collect();
-                (sort_exprs, indices)
-            };
+        let (new_sort_exprs, indices) = if mode.input_mode() == AggregateInputMode::Raw
+            && group_by.groups.len() > 1
+        {
+            (vec![], vec![])
+        } else {
+            let unmasked_indices = group_by
+                .exprs_nullable()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, masked)| (!masked).then_some(index))
+                .collect::<Vec<_>>();
+            let unmasked_exprs = unmasked_indices
+                .iter()
+                .map(|&index| Arc::clone(&groupby_exprs[index]))
+                .collect::<Vec<_>>();
+            let (sort_exprs, indices) =
+                input_eq_properties.find_longest_permutation(&unmasked_exprs)?;
+            let indices = indices
+                .into_iter()
+                .map(|index| unmasked_indices[index])
+                .collect();
+            (sort_exprs, indices)
+        };
 
         let mut new_requirements = new_sort_exprs
             .into_iter()
@@ -943,7 +949,11 @@ impl AggregateExec {
         Arc::clone(&self.input_schema)
     }
 
-    fn execute_typed(&self, partition: usize, context: &Arc<TaskContext>) -> Result<StreamType> {
+    fn execute_typed(
+        &self,
+        partition: usize,
+        context: &Arc<TaskContext>,
+    ) -> Result<StreamType> {
         if self.group_by.is_true_no_grouping() {
             return Ok(StreamType::AggregateStream(AggregateStream::new(
                 self, context, partition,
@@ -1020,7 +1030,8 @@ impl AggregateExec {
         input_order_mode: &InputOrderMode,
         aggr_exprs: &[Arc<AggregateFunctionExpr>],
     ) -> Result<PlanProperties> {
-        let group_mapping = ProjectionMapping::try_new(group_by.expr.clone(), &input.schema())?;
+        let group_mapping =
+            ProjectionMapping::try_new(group_by.expr.clone(), &input.schema())?;
         let masked_exprs = group_by.exprs_nullable();
         // A masked output no longer has its input expression's value or properties.
         let property_mapping = group_mapping
@@ -1051,13 +1062,15 @@ impl AggregateExec {
             eq_properties.add_constants(new_constants)?;
         }
 
-        // Expansion repeats input keys, and partial emission can repeat complete groups.
-        let mut constraints =
-            if mode.output_mode() == AggregateOutputMode::Final && group_by.groups.len() <= 1 {
-                eq_properties.constraints().to_vec()
-            } else {
-                vec![]
-            };
+        // Masking can compact constraint indexes; expansion and partials can repeat keys.
+        let mut constraints = if mode.output_mode() == AggregateOutputMode::Final
+            && group_by.groups.len() <= 1
+            && !masked_exprs.contains(&true)
+        {
+            eq_properties.constraints().to_vec()
+        } else {
+            vec![]
+        };
         if mode.output_mode() == AggregateOutputMode::Final {
             constraints.push(Constraint::Unique(
                 (0..group_by.num_group_exprs()).collect(),
@@ -1149,10 +1162,12 @@ impl AggregateExec {
 
             for (idx, (expr, _)) in self.group_by.expr.iter().enumerate() {
                 if let Some(col) = expr.downcast_ref::<Column>() {
-                    let child_col_stats = &child_statistics.column_statistics[col.index()];
+                    let child_col_stats =
+                        &child_statistics.column_statistics[col.index()];
                     column_statistics[idx].max_value = child_col_stats.max_value.clone();
                     column_statistics[idx].min_value = child_col_stats.min_value.clone();
-                    column_statistics[idx].distinct_count = child_col_stats.distinct_count;
+                    column_statistics[idx].distinct_count =
+                        child_col_stats.distinct_count;
                 }
             }
 
@@ -1162,7 +1177,8 @@ impl AggregateExec {
             AggregateMode::Final | AggregateMode::FinalPartitioned
                 if self.group_by.expr.is_empty() =>
             {
-                let total_byte_size = Self::calculate_scaled_byte_size(child_statistics, 1);
+                let total_byte_size =
+                    Self::calculate_scaled_byte_size(child_statistics, 1);
 
                 Ok(Statistics {
                     num_rows: Precision::Exact(1),
@@ -1215,7 +1231,8 @@ impl AggregateExec {
                 child_statistics.num_rows
             } else {
                 let grouping_set_num = self.group_by.groups.len();
-                let mut num_rows = child_statistics.num_rows.map(|x| x * grouping_set_num);
+                let mut num_rows =
+                    child_statistics.num_rows.map(|x| x * grouping_set_num);
                 if let Some(limit) = limit {
                     num_rows = num_rows.map(|n| n.min(limit));
                 }
@@ -1263,8 +1280,8 @@ impl AggregateExec {
                     Some(&n) if n > 0 => 1usize,
                     _ => 0,
                 };
-                set_product =
-                    set_product.saturating_mul(ndv.saturating_add(null_adjustment).max(1));
+                set_product = set_product
+                    .saturating_mul(ndv.saturating_add(null_adjustment).max(1));
             }
             total = total.saturating_add(set_product);
         }
@@ -1368,7 +1385,8 @@ impl AggregateExec {
         ) {
             (Some(&input_rows), Some(&input_bytes)) if input_rows > 0 => {
                 let bytes_per_row = input_bytes as f64 / input_rows as f64;
-                let scaled_bytes = (bytes_per_row * target_row_count as f64).ceil() as usize;
+                let scaled_bytes =
+                    (bytes_per_row * target_row_count as f64).ceil() as usize;
                 Precision::Inexact(scaled_bytes)
             }
             _ => Precision::Absent,
@@ -1388,7 +1406,11 @@ impl AggregateExec {
 }
 
 impl DisplayAs for AggregateExec {
-    fn fmt_as(&self, t: DisplayFormatType, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt_as(
+        &self,
+        t: DisplayFormatType,
+        f: &mut std::fmt::Formatter,
+    ) -> std::fmt::Result {
         match t {
             DisplayFormatType::Default | DisplayFormatType::Verbose => {
                 let format_expr_with_alias =
@@ -1418,7 +1440,9 @@ impl DisplayAs for AggregateExec {
                                 .enumerate()
                                 .map(|(idx, is_null)| {
                                     if *is_null {
-                                        format_expr_with_alias(&self.group_by.null_expr[idx])
+                                        format_expr_with_alias(
+                                            &self.group_by.null_expr[idx],
+                                        )
                                     } else {
                                         format_expr_with_alias(&self.group_by.expr[idx])
                                     }
@@ -1473,7 +1497,9 @@ impl DisplayAs for AggregateExec {
                                 .enumerate()
                                 .map(|(idx, is_null)| {
                                     if *is_null {
-                                        format_expr_with_alias(&self.group_by.null_expr[idx])
+                                        format_expr_with_alias(
+                                            &self.group_by.null_expr[idx],
+                                        )
                                     } else {
                                         format_expr_with_alias(&self.group_by.expr[idx])
                                     }
@@ -1648,11 +1674,12 @@ impl ExecutionPlan for AggregateExec {
         let mut unsafe_filters = Vec::new();
 
         for filter in parent_filters {
-            let filter_columns: HashSet<_> = collect_columns(&filter).into_iter().collect();
+            let filter_columns: HashSet<_> =
+                collect_columns(&filter).into_iter().collect();
 
             // Check if this filter references non-grouping columns
-            let references_non_grouping =
-                !grouping_columns.is_empty() && !filter_columns.is_subset(&grouping_columns);
+            let references_non_grouping = !grouping_columns.is_empty()
+                && !filter_columns.is_subset(&grouping_columns);
 
             if references_non_grouping {
                 unsafe_filters.push(filter);
@@ -1751,7 +1778,8 @@ impl ExecutionPlan for AggregateExec {
                 let mut new_node = self.clone();
                 new_node.dynamic_filter = None;
 
-                result = result.with_updated_node(Arc::new(new_node) as Arc<dyn ExecutionPlan>);
+                result = result
+                    .with_updated_node(Arc::new(new_node) as Arc<dyn ExecutionPlan>);
             }
         }
 
@@ -1846,7 +1874,9 @@ fn get_aggregate_expr_req(
         // will definitely be satisfied -- Each group by expression will have
         // distinct values per group, hence all requirements are satisfied.
         let physical_exprs = group_by.input_exprs();
-        sort_exprs.retain(|sort_expr| !physical_exprs_contains(&physical_exprs, &sort_expr.expr));
+        sort_exprs.retain(|sort_expr| {
+            !physical_exprs_contains(&physical_exprs, &sort_expr.expr)
+        });
     }
     LexOrdering::new(sort_exprs)
 }
@@ -1859,7 +1889,10 @@ pub fn concat_slices<T: Clone>(lhs: &[T], rhs: &[T]) -> Vec<T> {
 // Determines if the candidate ordering is finer than the current ordering.
 // Returns `None` if they are incomparable, `Some(true)` if there is no current
 // ordering or candidate ordering is finer, and `Some(false)` otherwise.
-fn determine_finer(current: &Option<LexOrdering>, candidate: &LexOrdering) -> Option<bool> {
+fn determine_finer(
+    current: &Option<LexOrdering>,
+    candidate: &LexOrdering,
+) -> Option<bool> {
     if let Some(ordering) = current {
         candidate.partial_cmp(ordering).map(|cmp| cmp.is_gt())
     } else {
@@ -1900,10 +1933,13 @@ pub fn get_finer_aggregate_exprs_requirement(
     // requirements.
     for include_soft_requirement in [false, true] {
         for aggr_expr in aggr_exprs.iter_mut() {
-            let Some(aggr_req) =
-                get_aggregate_expr_req(aggr_expr, group_by, agg_mode, include_soft_requirement)
-                    .and_then(|o| eq_properties.normalize_sort_exprs(o))
-            else {
+            let Some(aggr_req) = get_aggregate_expr_req(
+                aggr_expr,
+                group_by,
+                agg_mode,
+                include_soft_requirement,
+            )
+            .and_then(|o| eq_properties.normalize_sort_exprs(o)) else {
                 // There is no aggregate ordering requirement, or it is trivially
                 // satisfied -- we can skip this expression.
                 continue;
@@ -2113,7 +2149,9 @@ pub(crate) fn group_id_array(
 ) -> Result<ArrayRef> {
     let n = group.len();
     if n > 64 {
-        return not_impl_err!("Grouping sets with more than 64 columns are not supported");
+        return not_impl_err!(
+            "Grouping sets with more than 64 columns are not supported"
+        );
     }
     let ordinal_bits = usize::BITS as usize - max_ordinal.leading_zeros() as usize;
     let total_bits = n + ordinal_bits;
@@ -2169,9 +2207,14 @@ pub fn evaluate_group_by(
 ) -> Result<Vec<Vec<ArrayRef>>> {
     let max_ordinal = max_duplicate_ordinal(&group_by.groups);
     let mut ordinal_per_pattern: HashMap<&[bool], usize> = HashMap::new();
-    let exprs = evaluate_expressions_to_arrays(group_by.expr.iter().map(|(expr, _)| expr), batch)?;
-    let null_exprs =
-        evaluate_expressions_to_arrays(group_by.null_expr.iter().map(|(expr, _)| expr), batch)?;
+    let exprs = evaluate_expressions_to_arrays(
+        group_by.expr.iter().map(|(expr, _)| expr),
+        batch,
+    )?;
+    let null_exprs = evaluate_expressions_to_arrays(
+        group_by.null_expr.iter().map(|(expr, _)| expr),
+        batch,
+    )?;
 
     group_by
         .groups
@@ -2217,7 +2260,9 @@ mod tests {
     use crate::metrics::MetricValue;
     use crate::test::TestMemoryExec;
     use crate::test::assert_is_pending;
-    use crate::test::exec::{BlockingExec, StatisticsExec, assert_strong_count_converges_to_zero};
+    use crate::test::exec::{
+        BlockingExec, StatisticsExec, assert_strong_count_converges_to_zero,
+    };
 
     use arrow::array::{
         DictionaryArray, Float32Array, Float64Array, Int32Array, Int64Array, StructArray,
@@ -2386,7 +2431,10 @@ mod tests {
         Arc::new(task_ctx)
     }
 
-    async fn check_grouping_sets(input: Arc<dyn ExecutionPlan>, spill: bool) -> Result<()> {
+    async fn check_grouping_sets(
+        input: Arc<dyn ExecutionPlan>,
+        spill: bool,
+    ) -> Result<()> {
         let input_schema = input.schema();
 
         let grouping_set = PhysicalGroupBy::new(
@@ -2429,7 +2477,8 @@ mod tests {
             Arc::clone(&input_schema),
         )?);
 
-        let result = collect(partial_aggregate.execute(0, Arc::clone(&task_ctx))?).await?;
+        let result =
+            collect(partial_aggregate.execute(0, Arc::clone(&task_ctx))?).await?;
 
         if spill {
             // In spill mode, we test with the limited memory, if the mem usage exceeds,
@@ -2578,7 +2627,8 @@ mod tests {
             Arc::clone(&input_schema),
         )?);
 
-        let result = collect(partial_aggregate.execute(0, Arc::clone(&task_ctx))?).await?;
+        let result =
+            collect(partial_aggregate.execute(0, Arc::clone(&task_ctx))?).await?;
 
         if spill {
             allow_duplicates! {
@@ -2706,7 +2756,11 @@ mod tests {
     }
 
     impl DisplayAs for TestYieldingExec {
-        fn fmt_as(&self, t: DisplayFormatType, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fn fmt_as(
+            &self,
+            t: DisplayFormatType,
+            f: &mut std::fmt::Formatter,
+        ) -> std::fmt::Result {
             match t {
                 DisplayFormatType::Default | DisplayFormatType::Verbose => {
                     write!(f, "TestYieldingExec")
@@ -2753,7 +2807,10 @@ mod tests {
             Ok(Box::pin(stream))
         }
 
-        fn partition_statistics(&self, partition: Option<usize>) -> Result<Arc<Statistics>> {
+        fn partition_statistics(
+            &self,
+            partition: Option<usize>,
+        ) -> Result<Arc<Statistics>> {
             if partition.is_some() {
                 return Ok(Arc::new(Statistics::new_unknown(self.schema().as_ref())));
             }
@@ -2950,7 +3007,8 @@ mod tests {
     #[tokio::test]
     async fn test_drop_cancel_without_groups() -> Result<()> {
         let task_ctx = Arc::new(TaskContext::default());
-        let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Float64, true)]));
+        let schema =
+            Arc::new(Schema::new(vec![Field::new("a", DataType::Float64, true)]));
 
         let groups = PhysicalGroupBy::default();
 
@@ -2990,7 +3048,8 @@ mod tests {
             Field::new("b", DataType::Float64, true),
         ]));
 
-        let groups = PhysicalGroupBy::new_single(vec![(col("a", &schema)?, "a".to_string())]);
+        let groups =
+            PhysicalGroupBy::new_single(vec![(col("a", &schema)?, "a".to_string())]);
 
         let aggregates: Vec<Arc<AggregateFunctionExpr>> = vec![Arc::new(
             AggregateExprBuilder::new(avg_udaf(), vec![col("b", &schema)?])
@@ -3074,13 +3133,14 @@ mod tests {
         human_display: Option<&str>,
         human_display_alias: Option<&str>,
     ) -> Result<AggregateFunctionExpr> {
-        let mut builder = AggregateExprBuilder::new(first_value_udaf(), vec![col(column, schema)?])
-            .order_by(vec![PhysicalSortExpr {
-                expr: col(column, schema)?,
-                options: SortOptions::new(false, false),
-            }])
-            .schema(Arc::clone(schema))
-            .alias(alias);
+        let mut builder =
+            AggregateExprBuilder::new(first_value_udaf(), vec![col(column, schema)?])
+                .order_by(vec![PhysicalSortExpr {
+                    expr: col(column, schema)?,
+                    options: SortOptions::new(false, false),
+                }])
+                .schema(Arc::clone(schema))
+                .alias(alias);
 
         if let Some(human_display) = human_display {
             builder = builder.human_display(human_display);
@@ -3130,7 +3190,9 @@ mod tests {
             &schema,
             "first_value_col",
             "agg",
-            Some("first_value(first_value_col) ORDER BY [first_value_col ASC NULLS LAST]"),
+            Some(
+                "first_value(first_value_col) ORDER BY [first_value_col ASC NULLS LAST]",
+            ),
             Some("agg"),
         )?;
 
@@ -3139,7 +3201,9 @@ mod tests {
         assert_eq!(reversed.name(), "agg");
         assert_eq!(
             reversed.human_display(),
-            Some("last_value(first_value_col) ORDER BY [first_value_col DESC NULLS FIRST]")
+            Some(
+                "last_value(first_value_col) ORDER BY [first_value_col DESC NULLS FIRST]"
+            )
         );
         assert_eq!(
             format_tree_aggregate_expr(&reversed),
@@ -3229,7 +3293,8 @@ mod tests {
         let partition3 = data[2].clone();
         let partition4 = data[3].clone();
 
-        let groups = PhysicalGroupBy::new_single(vec![(col("a", &schema)?, "a".to_string())]);
+        let groups =
+            PhysicalGroupBy::new_single(vec![(col("a", &schema)?, "a".to_string())]);
 
         let sort_options = SortOptions {
             descending: false,
@@ -3259,8 +3324,8 @@ mod tests {
             memory_exec,
             Arc::clone(&schema),
         )?);
-        let coalesce =
-            Arc::new(CoalescePartitionsExec::new(aggregate_exec)) as Arc<dyn ExecutionPlan>;
+        let coalesce = Arc::new(CoalescePartitionsExec::new(aggregate_exec))
+            as Arc<dyn ExecutionPlan>;
         let aggregate_final = Arc::new(AggregateExec::try_new(
             AggregateMode::Final,
             groups,
@@ -3401,7 +3466,8 @@ mod tests {
             Arc::clone(&blocking_exec) as Arc<dyn ExecutionPlan>,
             schema,
         )?);
-        let new_agg = Arc::clone(&aggregate_exec).with_new_children(vec![blocking_exec])?;
+        let new_agg =
+            Arc::clone(&aggregate_exec).with_new_children(vec![blocking_exec])?;
         assert_eq!(new_agg.schema(), aggregate_exec.schema());
         Ok(())
     }
@@ -3464,7 +3530,8 @@ mod tests {
             })
             .collect();
 
-        let input = TestMemoryExec::try_new_exec(&[input_batches], Arc::clone(&schema), None)?;
+        let input =
+            TestMemoryExec::try_new_exec(&[input_batches], Arc::clone(&schema), None)?;
 
         let aggregate_exec = Arc::new(AggregateExec::try_new(
             AggregateMode::Single,
@@ -3475,7 +3542,8 @@ mod tests {
             schema,
         )?);
 
-        let output = collect(aggregate_exec.execute(0, Arc::new(TaskContext::default()))?).await?;
+        let output =
+            collect(aggregate_exec.execute(0, Arc::new(TaskContext::default()))?).await?;
 
         allow_duplicates! {
         assert_snapshot!(batches_to_sort_string(&output), @r"
@@ -3613,7 +3681,8 @@ mod tests {
             Field::new("val", DataType::Int32, true),
         ]));
 
-        let group_by = PhysicalGroupBy::new_single(vec![(col("key", &schema)?, "key".to_string())]);
+        let group_by =
+            PhysicalGroupBy::new_single(vec![(col("key", &schema)?, "key".to_string())]);
 
         let aggr_expr = vec![
             AggregateExprBuilder::new(count_udaf(), vec![col("val", &schema)?])
@@ -3642,7 +3711,8 @@ mod tests {
             .unwrap(),
         ];
 
-        let input = TestMemoryExec::try_new_exec(&[input_data], Arc::clone(&schema), None)?;
+        let input =
+            TestMemoryExec::try_new_exec(&[input_data], Arc::clone(&schema), None)?;
         let aggregate_exec = Arc::new(AggregateExec::try_new(
             AggregateMode::Partial,
             group_by,
@@ -3690,7 +3760,8 @@ mod tests {
             Field::new("val", DataType::Int32, true),
         ]));
 
-        let group_by = PhysicalGroupBy::new_single(vec![(col("key", &schema)?, "key".to_string())]);
+        let group_by =
+            PhysicalGroupBy::new_single(vec![(col("key", &schema)?, "key".to_string())]);
 
         let aggr_expr = vec![
             AggregateExprBuilder::new(count_udaf(), vec![col("val", &schema)?])
@@ -3727,7 +3798,8 @@ mod tests {
             .unwrap(),
         ];
 
-        let input = TestMemoryExec::try_new_exec(&[input_data], Arc::clone(&schema), None)?;
+        let input =
+            TestMemoryExec::try_new_exec(&[input_data], Arc::clone(&schema), None)?;
         let aggregate_exec = Arc::new(AggregateExec::try_new(
             AggregateMode::Partial,
             group_by,
@@ -3908,7 +3980,10 @@ mod tests {
         Ok(())
     }
 
-    fn assert_spill_count_metric(expect_spill: bool, single_aggregate: Arc<AggregateExec>) {
+    fn assert_spill_count_metric(
+        expect_spill: bool,
+        single_aggregate: Arc<AggregateExec>,
+    ) {
         if let Some(metrics_set) = single_aggregate.metrics() {
             let mut spill_count = 0;
 
@@ -3921,9 +3996,13 @@ mod tests {
             }
 
             if expect_spill && spill_count == 0 {
-                panic!("Expected spill but SpillCount metric not found or SpillCount was 0.");
+                panic!(
+                    "Expected spill but SpillCount metric not found or SpillCount was 0."
+                );
             } else if !expect_spill && spill_count > 0 {
-                panic!("Expected no spill but found SpillCount metric with value greater than 0.");
+                panic!(
+                    "Expected no spill but found SpillCount metric with value greater than 0."
+                );
             }
         } else {
             panic!("No metrics returned from the operator; cannot verify spilling.");
@@ -4064,8 +4143,12 @@ mod tests {
                 ColumnStatistics::new_unknown(),
             ],
         };
-        let agg =
-            build_test_aggregate(&schema, absent_byte_stats, PhysicalGroupBy::default(), None)?;
+        let agg = build_test_aggregate(
+            &schema,
+            absent_byte_stats,
+            PhysicalGroupBy::default(),
+            None,
+        )?;
         let stats = agg.partition_statistics(None)?;
         assert_eq!(stats.total_byte_size, Precision::Absent);
 
@@ -4077,8 +4160,12 @@ mod tests {
                 ColumnStatistics::new_unknown(),
             ],
         };
-        let agg_zero =
-            build_test_aggregate(&schema, zero_row_stats, PhysicalGroupBy::default(), None)?;
+        let agg_zero = build_test_aggregate(
+            &schema,
+            zero_row_stats,
+            PhysicalGroupBy::default(),
+            None,
+        )?;
         let stats_zero = agg_zero.partition_statistics(None)?;
         assert_eq!(stats_zero.total_byte_size, Precision::Absent);
 
@@ -4091,8 +4178,8 @@ mod tests {
         group_by: PhysicalGroupBy,
         limit: Option<LimitOptions>,
     ) -> Result<AggregateExec> {
-        let input =
-            Arc::new(StatisticsExec::new(stats, (**schema).clone())) as Arc<dyn ExecutionPlan>;
+        let input = Arc::new(StatisticsExec::new(stats, (**schema).clone()))
+            as Arc<dyn ExecutionPlan>;
 
         let mut agg = AggregateExec::try_new(
             AggregateMode::Final,
@@ -4422,11 +4509,15 @@ mod tests {
             let input_stats = Statistics {
                 num_rows: case.input_rows,
                 total_byte_size: Precision::Inexact(1_000_000),
-                column_statistics: vec![case.col_a_stats.clone(), case.col_b_stats.clone()],
+                column_statistics: vec![
+                    case.col_a_stats.clone(),
+                    case.col_b_stats.clone(),
+                ],
             };
 
             let group_by = simple_group_by(&schema, &case.group_by_cols);
-            let agg = build_test_aggregate(&schema, input_stats, group_by, case.limit_options)?;
+            let agg =
+                build_test_aggregate(&schema, input_stats, group_by, case.limit_options)?;
 
             let stats = agg.partition_statistics(None)?;
             assert_eq!(
@@ -4460,8 +4551,12 @@ mod tests {
                 ColumnStatistics::new_unknown(),
             ],
         };
-        let agg =
-            build_test_aggregate(&schema, input_stats, simple_group_by(&schema, &["a"]), None)?;
+        let agg = build_test_aggregate(
+            &schema,
+            input_stats,
+            simple_group_by(&schema, &["a"]),
+            None,
+        )?;
 
         let stats = agg.partition_statistics(None)?;
         assert_eq!(
@@ -4562,7 +4657,8 @@ mod tests {
             col("b", &schema)?,
         ));
 
-        let group_by = PhysicalGroupBy::new_single(vec![(expr_a_plus_b, "a+b".to_string())]);
+        let group_by =
+            PhysicalGroupBy::new_single(vec![(expr_a_plus_b, "a+b".to_string())]);
         let agg = build_test_aggregate(&schema, input_stats, group_by, None)?;
 
         let stats = agg.partition_statistics(None)?;
@@ -4720,34 +4816,49 @@ mod tests {
             ),
             vec![
                 Arc::new(
-                    AggregateExprBuilder::new(avg_udaf(), vec![col("a", schema.as_ref())?])
-                        .schema(Arc::clone(&schema))
-                        .alias("AVG(a)")
-                        .build()?,
+                    AggregateExprBuilder::new(
+                        avg_udaf(),
+                        vec![col("a", schema.as_ref())?],
+                    )
+                    .schema(Arc::clone(&schema))
+                    .alias("AVG(a)")
+                    .build()?,
                 ),
                 Arc::new(
-                    AggregateExprBuilder::new(avg_udaf(), vec![col("b", schema.as_ref())?])
-                        .schema(Arc::clone(&schema))
-                        .alias("AVG(b)")
-                        .build()?,
+                    AggregateExprBuilder::new(
+                        avg_udaf(),
+                        vec![col("b", schema.as_ref())?],
+                    )
+                    .schema(Arc::clone(&schema))
+                    .alias("AVG(b)")
+                    .build()?,
                 ),
                 Arc::new(
-                    AggregateExprBuilder::new(avg_udaf(), vec![col("c", schema.as_ref())?])
-                        .schema(Arc::clone(&schema))
-                        .alias("AVG(c)")
-                        .build()?,
+                    AggregateExprBuilder::new(
+                        avg_udaf(),
+                        vec![col("c", schema.as_ref())?],
+                    )
+                    .schema(Arc::clone(&schema))
+                    .alias("AVG(c)")
+                    .build()?,
                 ),
                 Arc::new(
-                    AggregateExprBuilder::new(avg_udaf(), vec![col("d", schema.as_ref())?])
-                        .schema(Arc::clone(&schema))
-                        .alias("AVG(d)")
-                        .build()?,
+                    AggregateExprBuilder::new(
+                        avg_udaf(),
+                        vec![col("d", schema.as_ref())?],
+                    )
+                    .schema(Arc::clone(&schema))
+                    .alias("AVG(d)")
+                    .build()?,
                 ),
                 Arc::new(
-                    AggregateExprBuilder::new(avg_udaf(), vec![col("e", schema.as_ref())?])
-                        .schema(Arc::clone(&schema))
-                        .alias("AVG(e)")
-                        .build()?,
+                    AggregateExprBuilder::new(
+                        avg_udaf(),
+                        vec![col("e", schema.as_ref())?],
+                    )
+                    .schema(Arc::clone(&schema))
+                    .alias("AVG(e)")
+                    .build()?,
                 ),
             ],
             vec![None, None, None, None, None],
@@ -4809,7 +4920,8 @@ mod tests {
             ],
         )?;
 
-        let groups = PhysicalGroupBy::new_single(vec![(col("a", &schema)?, "a".to_string())]);
+        let groups =
+            PhysicalGroupBy::new_single(vec![(col("a", &schema)?, "a".to_string())]);
         let aggregates: Vec<Arc<AggregateFunctionExpr>> = vec![Arc::new(
             AggregateExprBuilder::new(sum_udaf(), vec![col("b", &schema)?])
                 .schema(Arc::clone(&schema))
@@ -4818,7 +4930,8 @@ mod tests {
         )];
 
         // Step 1: Partial aggregation on partition 1
-        let input1 = TestMemoryExec::try_new_exec(&[vec![batch1]], Arc::clone(&schema), None)?;
+        let input1 =
+            TestMemoryExec::try_new_exec(&[vec![batch1]], Arc::clone(&schema), None)?;
         let partial1 = Arc::new(AggregateExec::try_new(
             AggregateMode::Partial,
             groups.clone(),
@@ -4829,7 +4942,8 @@ mod tests {
         )?);
 
         // Step 2: Partial aggregation on partition 2
-        let input2 = TestMemoryExec::try_new_exec(&[vec![batch2]], Arc::clone(&schema), None)?;
+        let input2 =
+            TestMemoryExec::try_new_exec(&[vec![batch2]], Arc::clone(&schema), None)?;
         let partial2 = Arc::new(AggregateExec::try_new(
             AggregateMode::Partial,
             groups.clone(),
@@ -4873,11 +4987,15 @@ mod tests {
 
         // Collect PartialReduce results
         let reduce_result =
-            crate::collect(Arc::clone(&partial_reduce) as _, Arc::clone(&task_ctx)).await?;
+            crate::collect(Arc::clone(&partial_reduce) as _, Arc::clone(&task_ctx))
+                .await?;
 
         // Step 4: Final aggregation on the PartialReduce output
-        let final_input =
-            TestMemoryExec::try_new_exec(&[reduce_result], Arc::clone(&partial_schema), None)?;
+        let final_input = TestMemoryExec::try_new_exec(
+            &[reduce_result],
+            Arc::clone(&partial_schema),
+            None,
+        )?;
         let final_agg = Arc::new(AggregateExec::try_new(
             AggregateMode::Final,
             groups.clone(),
@@ -4943,7 +5061,8 @@ mod tests {
         // should still be accepted when the new children are equivalent to the originals.
         let new_df_as_pexpr: Arc<dyn PhysicalExpr> =
             Arc::<DynamicFilterPhysicalExpr>::clone(&new_df);
-        let remapped_pexpr = new_df_as_pexpr.with_new_children(vec![col("a", &schema)?])?;
+        let remapped_pexpr =
+            new_df_as_pexpr.with_new_children(vec![col("a", &schema)?])?;
         let Ok(remapped_df) = (remapped_pexpr as Arc<dyn std::any::Any + Send + Sync>)
             .downcast::<DynamicFilterPhysicalExpr>()
         else {

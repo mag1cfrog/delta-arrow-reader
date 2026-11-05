@@ -5,7 +5,8 @@ use std::sync::Arc;
 use arrow::array::Int32Array;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
-use datafusion::common::{Constraint, ScalarValue};
+use datafusion::common::{Constraint, Constraints, ScalarValue};
+use datafusion::datasource::memory::MemorySourceConfig;
 use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::physical_expr::aggregate::AggregateExprBuilder;
 use datafusion::physical_expr::expressions::{Column, lit};
@@ -416,5 +417,87 @@ async fn empty_group_key_lists_do_not_make_duplicate_ids_constant() -> TestResul
             .is_none()
     );
     assert!(!grouped.schema().field(0).is_nullable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn one_masked_grouping_set_keeps_unique_indexes_on_the_unmasked_key() -> TestResult {
+    let schema = Arc::new(Schema::new_with_metadata(
+        vec![
+            Field::new("a", DataType::Int32, false)
+                .with_metadata([("origin".into(), "masked-a".into())].into()),
+            Field::new("b", DataType::Int32, false)
+                .with_metadata([("origin".into(), "unique-b".into())].into()),
+        ],
+        [("source".into(), "single-mask-unique-key".into())].into(),
+    ));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![1, 1])),
+            Arc::new(Int32Array::from(vec![10, 20])),
+        ],
+    )?;
+    let source = MemorySourceConfig::try_new_exec(&[vec![batch]], schema.clone(), None)?;
+    let mut invalid = Vec::new();
+    for constraint in [Constraint::Unique(vec![1]), Constraint::PrimaryKey(vec![1])] {
+        let input: Arc<dyn ExecutionPlan> = Arc::new(
+            source
+                .as_ref()
+                .clone()
+                .with_constraints(Constraints::new_unverified(vec![constraint.clone()])),
+        );
+        assert_eq!(
+            input
+                .properties()
+                .equivalence_properties()
+                .constraints()
+                .iter()
+                .next(),
+            Some(&constraint)
+        );
+        let groups = grouping(
+            vec![(column("a", 0), "a".into()), (column("b", 1), "b".into())],
+            vec![vec![true, false]],
+        );
+        let grouped = aggregate(AggregateMode::Single, groups, input)?;
+        log_aggregate_properties(&format!("single_mask_input_{constraint:?}"), &grouped);
+        let actual = collect_encoded_rows(grouped.clone()).await?;
+        let constraints_valid = grouped
+            .properties()
+            .equivalence_properties()
+            .constraints()
+            .iter()
+            .all(|constraint| match constraint {
+                Constraint::Unique(indices) | Constraint::PrimaryKey(indices) => {
+                    indices.contains(&1)
+                }
+            });
+        eprintln!(
+            "GROUPING_SET_NATIVE_ROWS {}",
+            json!({
+                "id":"single_mask_constraint_index","input_constraint":format!("{constraint:?}"),
+                "actual":actual,"constraints_valid":constraints_valid,
+            })
+        );
+        assert_eq!(
+            actual,
+            json!([[null, "10", "2", "1"], [null, "20", "2", "1"]])
+        );
+        assert_eq!(grouped.schema().metadata(), schema.metadata());
+        for index in 0..2 {
+            assert_eq!(
+                grouped.schema().field(index).metadata(),
+                schema.field(index).metadata()
+            );
+        }
+        if !constraints_valid {
+            invalid.push(format!(
+                "{constraint:?}: {:?}",
+                grouped.properties().equivalence_properties().constraints()
+            ));
+        }
+    }
+    assert!(invalid.is_empty(), "{}", invalid.join("\n"));
     Ok(())
 }
