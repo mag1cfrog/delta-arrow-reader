@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 1546);
+    assert_eq!(records.len() - 1, 1756);
     Ok(records)
 }
 
@@ -49,6 +49,7 @@ fn spark_arrow_family(spark_type: &Value) -> TestResult<&'static str> {
             .as_str()
             .ok_or("expected a primitive Spark type")?
         {
+            "boolean" => "boolean",
             "integer" => "int32",
             "long" => "int64",
             "date" => "date32",
@@ -65,6 +66,7 @@ fn spark_arrow_family(spark_type: &Value) -> TestResult<&'static str> {
 
 fn dar_arrow_family(data_type: &DataType) -> TestResult<&'static str> {
     Ok(match data_type {
+        DataType::Boolean => "boolean",
         DataType::Int32 => "int32",
         DataType::Int64 => "int64",
         DataType::Date32 => "date32",
@@ -115,6 +117,7 @@ fn encode_typed_value(column: &dyn Array, row: usize) -> TestResult<Value> {
         return Ok(Value::Null);
     }
     Ok(match column.data_type() {
+        DataType::Boolean => json!(column.as_boolean().value(row).to_string()),
         DataType::Int32 => json!(column.as_primitive::<Int32Type>().value(row).to_string()),
         DataType::Int64 => json!(column.as_primitive::<Int64Type>().value(row).to_string()),
         DataType::Date32 => json!(column.as_primitive::<Date32Type>().value(row).to_string()),
@@ -260,18 +263,6 @@ fn compare(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     Ok(differences)
 }
 
-const DAY_TIME_QUALIFIERS: [&str; 10] = [
-    "day",
-    "day_hour",
-    "day_minute",
-    "day_second",
-    "hour",
-    "hour_minute",
-    "hour_second",
-    "minute",
-    "minute_second",
-    "second",
-];
 /// DAR's current rows for the RANGE offsets retained under #947: a running sum.
 const CUMULATIVE_WINDOW_ROWS: [[&str; 2]; 4] = [["0", "2"], ["1", "5"], ["2", "5"], ["3", "10"]];
 /// DAR's current error for each literal that Spark rejects at or past a storage limit,
@@ -330,11 +321,22 @@ const LIMIT_ERRORS: [(&str, &str); 27] = [
     ),
 ];
 
+/// DAR's current error for failing interval negation constants in inline VALUES,
+/// retained under #722. Spark wraps that error in its inline-table condition.
+const INLINE_TABLE_CAUSES: [(&str, &str); 2] = [
+    (
+        "negation_year_month_minimum_values",
+        "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION]",
+    ),
+    (
+        "negation_day_time_minimum_values",
+        "[INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION]",
+    ),
+];
+
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #782: the public field of day-time negation is nullable.
-    PublicNullability,
     /// #765: a narrowing interval CAST keeps the source value.
     CastTruncation,
     /// #727: an unaliased window keeps its function-call name.
@@ -343,19 +345,16 @@ enum RetainedDifference {
     RangeOffsetTyping,
     /// #955: a literal at or past a storage limit fails without Spark's error condition.
     LimitErrorCondition,
+    /// #722: a failing inline VALUES negation reports its own error while optimizing,
+    /// without Spark's inline-table condition from analysis.
+    InlineTableCondition,
     /// #979: ANSI division by a zero constant fails without Spark's `DIVIDE_BY_ZERO`.
     DivideByZeroCondition,
 }
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
-    let is_any = |qualifiers: &[&str], pattern: &dyn Fn(&str) -> String| {
-        qualifiers.iter().any(|qualifier| id == pattern(qualifier))
-    };
     match case["context"].as_str()? {
-        "literal" if is_any(&DAY_TIME_QUALIFIERS, &|q| format!("{q}_negative")) => {
-            Some(RetainedDifference::PublicNullability)
-        }
         "cast"
             if [
                 "cast_year",
@@ -394,6 +393,10 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "limit" if LIMIT_ERRORS.iter().any(|(limit, _)| id == *limit) => {
             Some(RetainedDifference::LimitErrorCondition)
         }
+        "negation_error" if id.ends_with("_values") || id.ends_with("_values_filtered") =>
+        {
+            Some(RetainedDifference::InlineTableCondition)
+        }
         "scaling_operand" | "dt_scaling_operand"
             if id.contains("_operand_number_divide_zero")
                 && case["expected"]["condition"] == "DIVIDE_BY_ZERO" =>
@@ -408,13 +411,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::PublicNullability => {
-            let field = &mut current["schema_stages"]["analyzed"]["fields"][0];
-            if field["nullable"] != false {
-                return Err(format!("expected a required public field: {field}").into());
-            }
-            field["nullable"] = json!(true);
-        }
         RetainedDifference::CastTruncation => {
             // The untruncated source: '2-3' YEAR TO MONTH or '2 03:04:05.123456' DAY TO SECOND.
             let source = if case["id"] == "cast_year" {
@@ -447,6 +443,19 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             current["expected"] = json!({"status": "error",
                 "current_error": format!("External error: invalid argument: {error}")});
         }
+        RetainedDifference::InlineTableCondition => {
+            let (_, cause) = INLINE_TABLE_CAUSES
+                .iter()
+                .find(|(prefix, _)| case["id"].as_str().is_some_and(|id| id.starts_with(prefix)))
+                .ok_or("expected a pinned inline-table cause")?;
+            if case["expected"]["condition"]
+                != "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION"
+            {
+                return Err(format!("expected Spark's inline-table condition: {case}").into());
+            }
+            current["spark_error_phase"] = json!("optimized");
+            current["expected"] = json!({"status": "error", "current_error": cause});
+        }
         RetainedDifference::DivideByZeroCondition => {
             current["expected"] =
                 json!({"status": "error", "current_error": "Arrow error: Divide by zero error"});
@@ -467,11 +476,11 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::PublicNullability, 20),
             (RetainedDifference::CastTruncation, 14),
             (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
             (RetainedDifference::LimitErrorCondition, 54),
+            (RetainedDifference::InlineTableCondition, 4),
             (RetainedDifference::DivideByZeroCondition, 12),
         ]
     );

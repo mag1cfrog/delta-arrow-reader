@@ -711,15 +711,14 @@ encoding and capture command.
 
 ## Interval qualifiers and generated names
 
-`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1546 Spark 4.2.0
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1756 Spark 4.2.0
 observations of interval literal names, signed and unit-syntax literals, storage
-limits, arithmetic and timestamp operand order, year-month and day-time
-interval scaling, interval CASTs and RANGE offsets. The query corpus preserves
-the original #749 capture.
-`interval_qualifiers.rs` compares names, fields, typed values and errors at
-batch sizes 1 and 32. See the
-[interval fixture notes](interval-qualifiers/README.md) for the encoding, the
-retained differences and their owners, and the capture command.
+limits, arithmetic and timestamp operand order, year-month and day-time interval
+scaling and negation, interval CASTs and RANGE offsets. The query corpus
+preserves the original #749 capture. `interval_qualifiers.rs` compares names,
+fields, typed values and errors at batch sizes 1 and 32. See the [interval
+fixture notes](interval-qualifiers/README.md) for the encoding, the retained
+differences and their owners, and the capture command.
 
 ## String-to-BOOLEAN casts
 

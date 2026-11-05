@@ -12,6 +12,7 @@ pub mod spark_conv;
 pub mod spark_decimal_round;
 pub mod spark_div;
 pub mod spark_integer_round;
+pub mod spark_interval_negate;
 pub mod spark_interval_scale;
 pub mod spark_negative;
 pub mod spark_pmod;
