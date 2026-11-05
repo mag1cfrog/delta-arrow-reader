@@ -830,7 +830,8 @@ impl<'a> ConstEvaluator<'a> {
     }
 }
 
-// Prune NULL-propagating parents and redundant Spark IS NULL checks before folding children.
+// Prune NULL-propagating parents and redundant Spark IS NULL and IS NOT NULL checks before
+// folding children.
 // Scalar subqueries retain their separate planning/error checks.
 pub fn prune_null(expr: Expr, info: &SimplifyContext) -> Result<Transformed<Expr>> {
     prune_null_with_local_input_errors(expr, info, false)
@@ -870,8 +871,9 @@ fn prune_null_with_local_input_errors(
     preserve_local_input_errors: bool,
 ) -> Result<Transformed<Expr>> {
     match &expr {
-        // Spark NULL inspection follows early local input evaluation.
-        Expr::IsNull(_)
+        // Spark NULL inspection follows early local input evaluation. Spark folds IS NULL and
+        // IS NOT NULL of a required expression before folding its constants.
+        Expr::IsNull(_) | Expr::IsNotNull(_)
             if !preserve_local_input_errors
                 && info
                     .config_options()

@@ -209,14 +209,30 @@ a failing constant operand fails while optimizing even beside a column operand
 or under a false filter.
 
 Spark names a different condition for the minimum interval divided by -1 when
-its optimizer interprets the expression than when generated code evaluates it
-at run time. The expression-error analyzer marks its own evaluation of constants
+its optimizer interprets the expression than when generated code evaluates it at
+run time. The expression-error analyzer marks its own evaluation of constants
 and local rows with the `SparkInterpretedEvaluation` configuration extension, so
 the function reports the optimizer's condition there and the run-time condition
-elsewhere. Its result range is typed as the interval, so enclosing sort keys keep
-their ordering properties. Interval addition, subtraction and negation and native
-DataFusion SQL are unchanged. The [interval references](tests/fixtures/interval-qualifiers/README.md)
-record the checks.
+elsewhere. Its result range is typed as the interval, so enclosing sort keys
+keep their ordering properties. Interval addition and subtraction and native
+DataFusion SQL are unchanged. The [interval
+references](tests/fixtures/interval-qualifiers/README.md) record the checks.
+
+### Interval negation
+
+A second local function follows Spark's `UnaryMinus` and `negative` for
+year-month and day-time intervals. It negates the stored count exactly, keeps the
+input's nullability, and raises `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION`
+for the minimum in both ANSI modes, with the same condition while optimizing and
+at run time. The expression-error analyzer folds a failing constant negation, so
+it fails while optimizing except in unused columns, LIMIT 0 and untaken CASE
+branches. Its result range is typed as the interval too. Other durations keep
+their existing negation.
+
+Spark folds IS NULL and IS NOT NULL of a required expression before it folds
+constants, so a failing constant scaling or negation under either check returns
+a value. The expression-error analyzer's NULL-inspection precheck in the
+DataFusion simplifier fork now folds IS NOT NULL as well as IS NULL.
 
 ## Licenses and maintenance
 
@@ -924,7 +940,8 @@ expression builder.
 Early local input preparation retains required IS NULL operands and comparison
 order until their conversions run. This covers ARRAY_COMPACT, ARRAY and STRUCT
 checks over VALUES. Later Spark NULL pruning uses a required operand's
-declaration to answer IS NULL before constant folding visits its children.
+declaration to answer IS NULL and IS NOT NULL before constant folding visits its
+children.
 Scalar subqueries retain their separate preparation checks, and native
 DataFusion keeps its existing evaluation order. Direct and STRUCT consumers
 still require the compacted values and retain reachable cast errors. The
