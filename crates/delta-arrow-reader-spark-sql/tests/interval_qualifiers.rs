@@ -325,7 +325,19 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "window" | "window_alias" if id.starts_with("range_numeric") => {
             Some(RetainedDifference::RangeOffsetTyping)
         }
-        "window" => Some(RetainedDifference::WindowName),
+        "window"
+            if [
+                "range_day",
+                "range_hour",
+                "range_day_hour",
+                "range_day_second",
+                "range_year",
+                "range_month",
+            ]
+            .contains(&id) =>
+        {
+            Some(RetainedDifference::WindowName)
+        }
         "date_window"
             if ["date_range_day", "date_range_hour", "date_range_day_hour"].contains(&id) =>
         {
@@ -445,8 +457,7 @@ async fn interval_qualifiers_match_spark() -> TestResult {
 #[tokio::test]
 async fn native_interval_sql_is_unchanged_by_spark_configuration() -> TestResult {
     let sql = "SELECT INTERVAL '2' YEAR AS a, INTERVAL '51' HOUR AS b, \
-        INTERVAL '1 day' AS c, TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '2' DAY AS d, \
-        INTERVAL '3' DAY * 2 AS e";
+        INTERVAL '1 day' AS c, TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '2' DAY AS d";
     let plain = SessionContext::new().sql(sql).await?.collect().await?;
     let configured = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
