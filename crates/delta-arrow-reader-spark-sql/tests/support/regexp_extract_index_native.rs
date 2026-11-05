@@ -21,7 +21,10 @@ pub fn native_controls(
     let mut inputs = BTreeMap::new();
     let mut profiles = BTreeMap::new();
     for case in cases {
-        if inputs.insert(control_key(case, keys)?, &case["sql"]).is_some() {
+        if inputs
+            .insert(control_key(case, keys)?, &case["sql"])
+            .is_some()
+        {
             return Err("duplicate native input identity".into());
         }
     }

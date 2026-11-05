@@ -251,7 +251,9 @@ async fn regexp_extract_preserves_native_async_source_controls() -> TestResult {
                 .map_err(|_| "async callback mutex poisoned")?
                 .clone()
         );
-        let contract = controls.remove(&control_key(case, keys)?).ok_or("missing native control")?;
+        let contract = controls
+            .remove(&control_key(case, keys)?)
+            .ok_or("missing native control")?;
         if !native_matches(&contract, case, &actual) {
             differences.push(format!("{} ANSI={}: {actual}", case["kind"], case["ansi"]));
         }

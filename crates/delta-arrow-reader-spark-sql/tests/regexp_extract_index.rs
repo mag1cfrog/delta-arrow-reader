@@ -85,16 +85,20 @@ fn reviewed_error_boundary(actual: &Value, expected: &Value, contract: Option<&V
         && contract["rationale"].is_string()
 }
 
-
 type ContextKey = (String, String, String, bool, usize, usize);
 
 fn context_key(value: &Value) -> TestResult<ContextKey> {
     Ok((
-        value["fixture"].as_str().ok_or("missing fixture")?.to_owned(),
+        value["fixture"]
+            .as_str()
+            .ok_or("missing fixture")?
+            .to_owned(),
         value["id"].as_str().ok_or("missing ID")?.to_owned(),
         value["sql"].as_str().ok_or("missing SQL")?.to_owned(),
         value["ansi"].as_bool().ok_or("missing ANSI")?,
-        value["representation"].as_u64().ok_or("missing representation")? as usize,
+        value["representation"]
+            .as_u64()
+            .ok_or("missing representation")? as usize,
         value["batch_size"].as_u64().ok_or("missing batch size")? as usize,
     ))
 }
@@ -112,16 +116,41 @@ fn by_context(records: impl IntoIterator<Item = Value>) -> TestResult<BTreeMap<C
 fn reference_cases() -> TestResult<BTreeMap<(String, String, bool), Value>> {
     let mut result = BTreeMap::new();
     for (fixture, source) in [
-        ("regexp-extract-index-original-spark.jsonl", include_str!("fixtures/regexp-extract-index-original-spark.jsonl")),
-        ("regexp-extract-index-expanded-spark.jsonl", include_str!("fixtures/regexp-extract-index-expanded-spark.jsonl")),
-        ("regexp-extract-index-cast-controls-spark.jsonl", include_str!("fixtures/regexp-extract-index-cast-controls-spark.jsonl")),
-        ("regexp-extract-index-cse-spark.jsonl", include_str!("fixtures/regexp-extract-index-cse-spark.jsonl")),
-        ("regexp-extract-index-local-frontier-spark.jsonl", include_str!("fixtures/regexp-extract-index-local-frontier-spark.jsonl")),
-        ("regexp-extract-index-foldable-null-spark.jsonl", include_str!("fixtures/regexp-extract-index-foldable-null-spark.jsonl")),
+        (
+            "regexp-extract-index-original-spark.jsonl",
+            include_str!("fixtures/regexp-extract-index-original-spark.jsonl"),
+        ),
+        (
+            "regexp-extract-index-expanded-spark.jsonl",
+            include_str!("fixtures/regexp-extract-index-expanded-spark.jsonl"),
+        ),
+        (
+            "regexp-extract-index-cast-controls-spark.jsonl",
+            include_str!("fixtures/regexp-extract-index-cast-controls-spark.jsonl"),
+        ),
+        (
+            "regexp-extract-index-cse-spark.jsonl",
+            include_str!("fixtures/regexp-extract-index-cse-spark.jsonl"),
+        ),
+        (
+            "regexp-extract-index-local-frontier-spark.jsonl",
+            include_str!("fixtures/regexp-extract-index-local-frontier-spark.jsonl"),
+        ),
+        (
+            "regexp-extract-index-foldable-null-spark.jsonl",
+            include_str!("fixtures/regexp-extract-index-foldable-null-spark.jsonl"),
+        ),
     ] {
         for line in source.lines().skip(1) {
             let case: Value = serde_json::from_str(line)?;
-            let key = (fixture.to_owned(), case["id"].as_str().ok_or("missing reference ID")?.to_owned(), case["ansi"].as_bool().ok_or("missing reference ANSI")?);
+            let key = (
+                fixture.to_owned(),
+                case["id"]
+                    .as_str()
+                    .ok_or("missing reference ID")?
+                    .to_owned(),
+                case["ansi"].as_bool().ok_or("missing reference ANSI")?,
+            );
             assert!(result.insert(key, case).is_none(), "duplicate reference");
         }
     }
@@ -137,7 +166,11 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
         "rows":if error {actual.get("rows").is_none()} else {actual.get("rows") == expected.get("rows")},
     });
     for key in ["analyzed_schema", "physical_schema"] {
-        facets[key] = expected.get(key).map_or(json!("reference_unavailable"), |field| json!(actual.get(key) == Some(field)));
+        facets[key] = expected
+            .get(key)
+            .map_or(json!("reference_unavailable"), |field| {
+                json!(actual.get(key) == Some(field))
+            });
     }
     if error {
         facets["meaningful_cause"] = json!(error_cause(actual, expected));
@@ -149,36 +182,96 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
             _ => "unknown Spark phase",
         };
         facets["phase"] = json!(actual["error_stage"] == stage);
-        facets["diagnostic_identifier"] = json!(expected["condition"].as_str().is_some_and(|condition| actual["error"].as_str().is_some_and(|message| message.contains(&format!("[{condition}]")))));
+        facets["diagnostic_identifier"] =
+            json!(expected["condition"].as_str().is_some_and(|condition| {
+                actual["error"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(&format!("[{condition}]")))
+            }));
     }
-    let analyzed = actual["analyzed_schema"].is_object() && actual["analyzed_arrow_schema"].is_string();
-    let physical = actual["physical_schema"].is_object() && actual["physical_arrow_schema"].is_string();
-    let null_fields = |keys: &[&str]| keys.iter().all(|key| actual.get(*key).is_some_and(Value::is_null));
+    let analyzed =
+        actual["analyzed_schema"].is_object() && actual["analyzed_arrow_schema"].is_string();
+    let physical =
+        actual["physical_schema"].is_object() && actual["physical_arrow_schema"].is_string();
+    let null_fields = |keys: &[&str]| {
+        keys.iter()
+            .all(|key| actual.get(*key).is_some_and(Value::is_null))
+    };
     let completed = match actual["error_stage"].as_str() {
-        Some("resolve") => null_fields(&["analyzed_schema", "analyzed_arrow_schema", "physical_schema", "physical_arrow_schema"]) && actual.get("rows").is_none(),
-        Some("physical") => analyzed && null_fields(&["physical_schema", "physical_arrow_schema"]) && actual.get("rows").is_none(),
+        Some("resolve") => {
+            null_fields(&[
+                "analyzed_schema",
+                "analyzed_arrow_schema",
+                "physical_schema",
+                "physical_arrow_schema",
+            ]) && actual.get("rows").is_none()
+        }
+        Some("physical") => {
+            analyzed
+                && null_fields(&["physical_schema", "physical_arrow_schema"])
+                && actual.get("rows").is_none()
+        }
         Some("execute") => analyzed && physical && actual.get("rows").is_none(),
         None => analyzed && physical && actual["rows"].is_array(),
         Some(_) => false,
     };
-    let keys: BTreeSet<_> = ["analyzed_schema", "analyzed_arrow_schema", "physical_schema", "physical_arrow_schema"]
-        .into_iter().chain(if actual.get("error").is_some() {vec!["error", "error_stage"]} else {vec!["rows"]}).collect();
-    let shape = actual.as_object().is_some_and(|object| object.keys().map(String::as_str).collect::<BTreeSet<_>>() == keys);
+    let keys: BTreeSet<_> = [
+        "analyzed_schema",
+        "analyzed_arrow_schema",
+        "physical_schema",
+        "physical_arrow_schema",
+    ]
+    .into_iter()
+    .chain(if actual.get("error").is_some() {
+        vec!["error", "error_stage"]
+    } else {
+        vec!["rows"]
+    })
+    .collect();
+    let shape = actual
+        .as_object()
+        .is_some_and(|object| object.keys().map(String::as_str).collect::<BTreeSet<_>>() == keys);
     let evidence = json!({"completed_stages":completed,"primary_shape":shape});
-    let strict = facets.as_object().unwrap().values().all(|value| value != false) && completed && shape;
+    let strict = facets
+        .as_object()
+        .unwrap()
+        .values()
+        .all(|value| value != false)
+        && completed
+        && shape;
     let mut available = json!({});
-    for key in ["analyzed_schema", "analyzed_arrow_schema", "physical_schema", "physical_arrow_schema", "rows", "optimized_schema"] {
-        available[key] = json!({"spark_reference":availability(expected,key),"actual":availability(actual,key)});
+    for key in [
+        "analyzed_schema",
+        "analyzed_arrow_schema",
+        "physical_schema",
+        "physical_arrow_schema",
+        "rows",
+        "optimized_schema",
+    ] {
+        available[key] =
+            json!({"spark_reference":availability(expected,key),"actual":availability(actual,key)});
     }
     json!({"facets":facets,"evidence":evidence,"availability":available,"strict_compatibility":strict,"full_compatibility":false})
 }
 
 fn false_facets(comparison: &Value) -> Value {
-    let mut result = ["facets", "evidence"].into_iter().flat_map(|group| {
-        comparison[group].as_object().unwrap().iter()
-            .filter(|(_, value)| value.as_bool() == Some(false))
-            .map(move |(key, _)| if group == "facets" {key.clone()} else {format!("evidence.{key}")})
-    }).collect::<Vec<_>>();
+    let mut result = ["facets", "evidence"]
+        .into_iter()
+        .flat_map(|group| {
+            comparison[group]
+                .as_object()
+                .unwrap()
+                .iter()
+                .filter(|(_, value)| value.as_bool() == Some(false))
+                .map(move |(key, _)| {
+                    if group == "facets" {
+                        key.clone()
+                    } else {
+                        format!("evidence.{key}")
+                    }
+                })
+        })
+        .collect::<Vec<_>>();
     result.sort();
     json!(result)
 }
@@ -198,14 +291,31 @@ fn retained_matches(profile: &Value, context: &Value, actual: &Value, comparison
 }
 
 fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
-    let source: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-native-stages.json"))?;
-    let contracts = by_context(source["contracts"].as_array().ok_or("missing native contracts")?.iter().cloned())?;
+    let source: Value = serde_json::from_str(include_str!(
+        "fixtures/regexp-extract-index-native-stages.json"
+    ))?;
+    let contracts = by_context(
+        source["contracts"]
+            .as_array()
+            .ok_or("missing native contracts")?
+            .iter()
+            .cloned(),
+    )?;
     let mut required = BTreeSet::new();
     for ((fixture, id, ansi), case) in reference_cases()? {
-        if case["expected"]["status"] != "error" {continue;}
+        if case["expected"]["status"] != "error" {
+            continue;
+        }
         for representation in 0..3 {
             for batch_size in [1, 32] {
-                required.insert((fixture.clone(), id.clone(), case["sql"].as_str().ok_or("missing SQL")?.to_owned(), ansi, representation, batch_size));
+                required.insert((
+                    fixture.clone(),
+                    id.clone(),
+                    case["sql"].as_str().ok_or("missing SQL")?.to_owned(),
+                    ansi,
+                    representation,
+                    batch_size,
+                ));
             }
         }
     }
@@ -217,21 +327,58 @@ fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
 fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
     let mut lines = include_str!("fixtures/regexp-extract-index-native-negative.jsonl").lines();
     let header: Value = serde_json::from_str(lines.next().ok_or("missing negative header")?)?;
-    assert_eq!(header["kind"], "complete-native-negative-observations-not-spark-oracle");
+    assert_eq!(
+        header["kind"],
+        "complete-native-negative-observations-not-spark-oracle"
+    );
     assert_eq!(header["acceptance_waivers"], false);
-    let profiles = by_context(lines.map(serde_json::from_str).collect::<Result<Vec<Value>, _>>()?)?;
-    assert_eq!(profiles.len() as u64, header["observations"].as_u64().ok_or("missing negative count")?);
+    let profiles = by_context(
+        lines
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?,
+    )?;
+    assert_eq!(
+        profiles.len() as u64,
+        header["observations"]
+            .as_u64()
+            .ok_or("missing negative count")?
+    );
     let references = reference_cases()?;
     let contracts = load_contracts()?;
     let mut owner_counts = BTreeMap::<&str, usize>::new();
     for (key, profile) in &profiles {
-        let reference = references.get(&(key.0.clone(), key.1.clone(), key.3)).ok_or("unknown negative reference")?;
+        let reference = references
+            .get(&(key.0.clone(), key.1.clone(), key.3))
+            .ok_or("unknown negative reference")?;
         assert_eq!(profile["sql"], reference["sql"]);
-        let comparison = reference_comparison(&profile["actual"], &reference["expected"], contracts.get(key));
-        assert!(retained_matches(profile, profile, &profile["actual"], &comparison));
-        let owners = profile["facet_owners"].as_object().ok_or("missing facet owners")?;
-        assert_eq!(owners.keys().cloned().collect::<BTreeSet<_>>(), false_facets(&comparison).as_array().unwrap().iter().map(|key| key.as_str().unwrap().to_owned()).collect());
-        assert!(owners.values().all(|value| value.as_str().is_some_and(|owner| ["#813", "#897", "#922", "#722", "#788"].contains(&owner))));
+        let comparison = reference_comparison(
+            &profile["actual"],
+            &reference["expected"],
+            contracts.get(key),
+        );
+        assert!(retained_matches(
+            profile,
+            profile,
+            &profile["actual"],
+            &comparison
+        ));
+        let owners = profile["facet_owners"]
+            .as_object()
+            .ok_or("missing facet owners")?;
+        assert_eq!(
+            owners.keys().cloned().collect::<BTreeSet<_>>(),
+            false_facets(&comparison)
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|key| key.as_str().unwrap().to_owned())
+                .collect()
+        );
+        assert!(owners.values().all(|value| {
+            value
+                .as_str()
+                .is_some_and(|owner| ["#813", "#897", "#922", "#722", "#788"].contains(&owner))
+        }));
         for owner in owners.values() {
             *owner_counts.entry(owner.as_str().unwrap()).or_default() += 1;
         }
@@ -288,11 +435,26 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         let reference = references
             .get(&(key.0.clone(), key.1.clone(), key.3))
             .ok_or("missing frozen reference")?;
-        Ok(reference_comparison(actual, &reference["expected"], contracts.get(&key)))
+        Ok(reference_comparison(
+            actual,
+            &reference["expected"],
+            contracts.get(&key),
+        ))
     };
-    assert_eq!(compare(inline, &inline["actual"])?["facets"]["meaningful_cause"], false);
-    assert!(retained_matches(inline, inline, &inline["actual"], &compare(inline, &inline["actual"])?));
-    assert_eq!(compare(inline, &inline["actual"])?["strict_compatibility"], false);
+    assert_eq!(
+        compare(inline, &inline["actual"])?["facets"]["meaningful_cause"],
+        false
+    );
+    assert!(retained_matches(
+        inline,
+        inline,
+        &inline["actual"],
+        &compare(inline, &inline["actual"])?
+    ));
+    assert_eq!(
+        compare(inline, &inline["actual"])?["strict_compatibility"],
+        false
+    );
     for (profile, before, after) in [
         (overflow, "4294967296", "4294967297"),
         (overflow, "Int32", "Int64"),
@@ -300,44 +462,112 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
     ] {
         let mut actual = profile["actual"].clone();
         actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
-        assert!(!retained_matches(profile, profile, &actual, &compare(profile, &actual)?));
+        assert!(!retained_matches(
+            profile,
+            profile,
+            &actual,
+            &compare(profile, &actual)?
+        ));
     }
     for key in ["error_stage", "analyzed_arrow_schema", "physical_schema"] {
         let mut actual = overflow["actual"].clone();
         actual[key] = json!("changed observed value");
-        assert!(!retained_matches(overflow, overflow, &actual, &compare(overflow, &actual)?));
+        assert!(!retained_matches(
+            overflow,
+            overflow,
+            &actual,
+            &compare(overflow, &actual)?
+        ));
     }
     let mut missing = overflow["actual"].clone();
     missing.as_object_mut().unwrap().remove("physical_schema");
-    assert!(!retained_matches(overflow, overflow, &missing, &compare(overflow, &missing)?));
+    assert!(!retained_matches(
+        overflow,
+        overflow,
+        &missing,
+        &compare(overflow, &missing)?
+    ));
     let mut arbitrary = overflow["actual"].clone();
     arbitrary["error"] = json!("physical: arbitrary overflow");
-    assert!(!retained_matches(overflow, overflow, &arbitrary, &compare(overflow, &arbitrary)?));
+    assert!(!retained_matches(
+        overflow,
+        overflow,
+        &arbitrary,
+        &compare(overflow, &arbitrary)?
+    ));
     let mut identified = overflow["actual"].clone();
-    identified["error"] = json!(format!("physical: [CAST_OVERFLOW] {}", identified["error"].as_str().unwrap()));
-    assert_eq!(compare(overflow, &overflow["actual"])?["facets"]["diagnostic_identifier"], false);
-    assert_eq!(compare(overflow, &identified)?["facets"]["diagnostic_identifier"], true);
-    assert!(!retained_matches(overflow, overflow, &identified, &compare(overflow, &identified)?));
+    identified["error"] = json!(format!(
+        "physical: [CAST_OVERFLOW] {}",
+        identified["error"].as_str().unwrap()
+    ));
+    assert_eq!(
+        compare(overflow, &overflow["actual"])?["facets"]["diagnostic_identifier"],
+        false
+    );
+    assert_eq!(
+        compare(overflow, &identified)?["facets"]["diagnostic_identifier"],
+        true
+    );
+    assert!(!retained_matches(
+        overflow,
+        overflow,
+        &identified,
+        &compare(overflow, &identified)?
+    ));
     for (key, replacement) in [
-        ("fixture", json!("unknown.jsonl")), ("id", json!("unknown")),
-        ("sql", json!("SELECT 1")), ("ansi", json!(false)),
-        ("representation", json!(9)), ("batch_size", json!(9)),
+        ("fixture", json!("unknown.jsonl")),
+        ("id", json!("unknown")),
+        ("sql", json!("SELECT 1")),
+        ("ansi", json!(false)),
+        ("representation", json!(9)),
+        ("batch_size", json!(9)),
     ] {
         let mut context = overflow.clone();
         context[key] = replacement;
-        assert!(!retained_matches(overflow, &context, &overflow["actual"], &compare(overflow, &overflow["actual"])?));
+        assert!(!retained_matches(
+            overflow,
+            &context,
+            &overflow["actual"],
+            &compare(overflow, &overflow["actual"])?
+        ));
     }
     assert!(by_context([overflow.clone(), overflow.clone()]).is_err());
 
-    let inputs: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-selection-inputs.json"))?;
-    let native: Value = serde_json::from_str(include_str!("fixtures/regexp-extract-index-selection-native.json"))?;
+    let inputs: Value = serde_json::from_str(include_str!(
+        "fixtures/regexp-extract-index-selection-inputs.json"
+    ))?;
+    let native: Value = serde_json::from_str(include_str!(
+        "fixtures/regexp-extract-index-selection-native.json"
+    ))?;
     let cases = inputs["cases"].as_array().ok_or("missing native inputs")?;
-    let controls = native["controls"].as_array().ok_or("missing native profiles")?;
+    let controls = native["controls"]
+        .as_array()
+        .ok_or("missing native profiles")?;
     let keys = &["kind", "folding", "surface", "ansi"];
     let exact = index_native::native_controls(cases, controls, keys)?;
-    let control = controls.iter().find(|control| !control["actual"]["invocations"].as_array().unwrap().is_empty()).ok_or("missing measured callback")?;
-    let case = cases.iter().find(|case| case["sql"] == control["sql"] && case["ansi"] == control["ansi"] && case["folding"] == control["folding"] && case["surface"] == control["surface"]).ok_or("missing callback input")?;
-    assert!(index_native::native_matches(control, case, &control["actual"]));
+    let control = controls
+        .iter()
+        .find(|control| {
+            !control["actual"]["invocations"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        })
+        .ok_or("missing measured callback")?;
+    let case = cases
+        .iter()
+        .find(|case| {
+            case["sql"] == control["sql"]
+                && case["ansi"] == control["ansi"]
+                && case["folding"] == control["folding"]
+                && case["surface"] == control["surface"]
+        })
+        .ok_or("missing callback input")?;
+    assert!(index_native::native_matches(
+        control,
+        case,
+        &control["actual"]
+    ));
     assert_eq!(exact.len(), 32);
     for field in ["name", "type", "nullable", "metadata"] {
         let mut actual = control["actual"].clone();
@@ -348,7 +578,12 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         };
         assert!(!index_native::native_matches(control, case, &actual));
     }
-    for key in ["rows", "invocations", "physical_arrow_schema", "after_physical"] {
+    for key in [
+        "rows",
+        "invocations",
+        "physical_arrow_schema",
+        "after_physical",
+    ] {
         let mut actual = control["actual"].clone();
         actual[key] = json!("changed observed value");
         assert!(!index_native::native_matches(control, case, &actual));
@@ -619,8 +854,10 @@ async fn capture_references(
                     let contract = contracts.get(&key);
                     let comparison = reference_comparison(&actual, expected, contract);
                     let strict = comparison["strict_compatibility"] == true;
-                    let profile = if strict {None} else {profiles.remove(&key)};
-                    let preserved = profile.as_ref().is_some_and(|profile| retained_matches(profile, &context, &actual, &comparison));
+                    let profile = if strict { None } else { profiles.remove(&key) };
+                    let preserved = profile.as_ref().is_some_and(|profile| {
+                        retained_matches(profile, &context, &actual, &comparison)
+                    });
                     observations += 1;
                     strict_matches += usize::from(strict);
                     eprintln!(
@@ -648,7 +885,11 @@ async fn capture_references(
         "full_compatibility_pass":false,"complete_raw_diagnostic_parity":"unverified"})
     );
     assert_eq!(capture_failures, 0);
-    assert!(profiles.is_empty(), "unused negative profiles: {:?}", profiles.keys());
+    assert!(
+        profiles.is_empty(),
+        "unused negative profiles: {:?}",
+        profiles.keys()
+    );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

@@ -249,7 +249,9 @@ async fn regexp_extract_index_selection_controls() -> TestResult {
                 .clone()
         );
         observed += 1;
-        let contract = controls.remove(&control_key(case, keys)?).ok_or("missing native control")?;
+        let contract = controls
+            .remove(&control_key(case, keys)?)
+            .ok_or("missing native control")?;
         if !native_matches(&contract, case, &actual) {
             differences.push(format!(
                 "{kind} folding={folding} surface={surface} ANSI={ansi_mode}: {actual}"
