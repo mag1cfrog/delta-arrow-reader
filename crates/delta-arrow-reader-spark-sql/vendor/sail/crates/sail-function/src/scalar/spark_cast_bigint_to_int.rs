@@ -100,13 +100,12 @@ impl ScalarUDFImpl for SparkCastBigintToInt {
     }
 
     fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
-        if matches!(
-            args.as_slice(),
-            [Expr::Literal(ScalarValue::Int64(None), _)]
-        ) {
-            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Int32(
-                None,
-            ))));
+        if let [Expr::Literal(value @ ScalarValue::Int64(_), _)] = args.as_slice() {
+            // Keep literal CAST failures at the native planning boundary.
+            let value = self.cast_value(&ColumnarValue::Scalar(value.clone()))?;
+            if let ColumnarValue::Scalar(value) = value {
+                return Ok(ExprSimplifyResult::Simplified(lit(value)));
+            }
         }
         Ok(ExprSimplifyResult::Original(args))
     }

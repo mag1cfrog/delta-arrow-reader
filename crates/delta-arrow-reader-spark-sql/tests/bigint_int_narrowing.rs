@@ -710,7 +710,98 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
         } else {
             result?;
         }
+        if expected.is_empty() {
+            assert_eq!(final_invocations, 0, "unreachable input: {sql}");
+        }
         assert_eq!(actual.ok_or("poisoned BIGINT recorder")?, expected, "{sql}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn try_cast_preserves_volatile_bigint_producer_errors() -> TestResult {
+    let expected_error =
+        datafusion::common::DataFusionError::Execution("synthetic_bigint_producer_failure".into())
+            .to_string();
+    let sql = "SELECT TRY_CAST(failing_bigint_input() AS INT) AS r";
+    let mut observations = Vec::new();
+    for batch_size in [1, 32] {
+        for ansi in [false, true] {
+            let session = session(batch_size, true);
+            let invocations = Arc::new(AtomicUsize::new(0));
+            let callback_invocations = Arc::clone(&invocations);
+            session.register_udf(create_udf(
+                "failing_bigint_input",
+                vec![],
+                DataType::Int64,
+                Volatility::Volatile,
+                Arc::new(move |_| {
+                    callback_invocations.fetch_add(1, Ordering::SeqCst);
+                    Err(datafusion::common::DataFusionError::Execution(
+                        "synthetic_bigint_producer_failure".into(),
+                    ))
+                }),
+            ));
+            let mut phase = "resolve";
+            let mut after_resolve = None;
+            let mut after_physical = None;
+            let result: TestResult = async {
+                let query = plan_query(
+                    &session,
+                    sql,
+                    &SparkSqlOptions {
+                        ansi_mode: ansi,
+                        ..Default::default()
+                    },
+                )
+                .await;
+                after_resolve = Some(invocations.load(Ordering::SeqCst));
+                let query = query?;
+                phase = "create_physical_plan";
+                let physical = query.create_physical_plan(&session).await;
+                after_physical = Some(invocations.load(Ordering::SeqCst));
+                let physical = physical?;
+                phase = "collect";
+                collect(physical, session.task_ctx()).await?;
+                phase = "complete";
+                Ok(())
+            }
+            .await;
+            let final_invocations = invocations.load(Ordering::SeqCst);
+            let error = result.err().map(|error| error.to_string());
+            eprintln!(
+                "BIGINT_INT_PRODUCER_FAILURE {}",
+                json!({
+                    "sql":sql,"ansi":ansi,"batch":batch_size,"native_phase":phase,
+                    "callback_counts":{"after_resolve":after_resolve,
+                        "after_physical":after_physical,"final":final_invocations},
+                    "error":error,"expected_error":expected_error,"spark_oracle_credit":false,
+                })
+            );
+            observations.push((
+                ansi,
+                batch_size,
+                phase,
+                after_resolve,
+                after_physical,
+                final_invocations,
+                error,
+            ));
+        }
+    }
+    assert_eq!(observations.len(), 4);
+    for (ansi, batch_size, phase, after_resolve, after_physical, final_invocations, error) in
+        observations
+    {
+        assert_eq!(after_resolve, Some(0), "ansi={ansi}, batch={batch_size}");
+        assert_eq!(after_physical, Some(0), "ansi={ansi}, batch={batch_size}");
+        assert_eq!(phase, "collect", "ansi={ansi}, batch={batch_size}");
+        assert_eq!(
+            error.ok_or("TRY_CAST must propagate the BIGINT producer error")?,
+            expected_error,
+            "ansi={ansi}, batch={batch_size}"
+        );
+        assert_eq!(final_invocations, 1, "ansi={ansi}, batch={batch_size}");
     }
     Ok(())
 }

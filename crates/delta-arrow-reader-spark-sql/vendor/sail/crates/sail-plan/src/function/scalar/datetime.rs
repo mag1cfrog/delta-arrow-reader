@@ -55,23 +55,30 @@ use crate::function::common::{literal_value_without_evaluation, without_metadata
 
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
+    let function = ScalarUDF::from(SparkMakeYmInterval::new());
+    let argument_types = arguments
+        .iter()
+        .map(|argument| argument.get_type(input.function_context.schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    if function.coerce_types(&argument_types).is_err() {
+        // Preserve the original argument types in native admission diagnostics.
+        return Ok(function.call(arguments));
+    }
     let known_null = arguments.iter().any(|argument| {
         literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
     });
     let mut bigint_argument = false;
-    if arguments.len() <= 2 {
-        for argument in &mut arguments {
-            if argument.get_type(input.function_context.schema)? == DataType::Int64 {
-                bigint_argument = true;
-                *argument = ScalarUDF::from(SparkCastBigintToInt::new(
-                    input.function_context.plan_config.ansi_mode,
-                    false,
-                ))
-                .call(vec![argument.clone()]);
-            }
+    for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
+        if data_type == DataType::Int64 {
+            bigint_argument = true;
+            *argument = ScalarUDF::from(SparkCastBigintToInt::new(
+                input.function_context.plan_config.ansi_mode,
+                false,
+            ))
+            .call(vec![argument.clone()]);
         }
     }
-    let interval = ScalarUDF::from(SparkMakeYmInterval::new()).call(arguments);
+    let interval = function.call(arguments);
     if bigint_argument && known_null {
         // Keep the original call available for type admission before NULL pruning.
         return Ok(when(lit(true), lit(ScalarValue::IntervalYearMonth(None))).otherwise(interval)?);
