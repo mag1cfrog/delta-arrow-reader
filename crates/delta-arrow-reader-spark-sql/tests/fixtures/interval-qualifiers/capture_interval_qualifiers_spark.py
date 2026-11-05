@@ -2,7 +2,8 @@
 
 The query corpus is the original #749 capture (candidate commit c54d99c3,
 script SHA256 12cc8fd6...) plus review probes for NULL coercion, signs and
-boundaries written inside interval literals, and quoted unit strings. Values
+boundaries written inside interval literals and quoted unit strings, and the
+#951 storage limits of every interval qualifier. Values
 are recorded from Spark's internal rows instead of string casts. Run from the
 crate root in the reference environment described in README.md; the output
 path must not exist.
@@ -148,6 +149,82 @@ QUOTED_UNIT_PROBES = [
     ("mixed_zero_months", "SELECT INTERVAL '0 months 5 days'"),
 ]
 
+# Each qualifier at its storage limits and one unit past them (#951), and minimum
+# qualified strings cast to their own type.
+LIMIT_PROBES = [
+    ("year_min", "INTERVAL '-178956970' YEAR"),
+    ("year_max", "INTERVAL '178956970' YEAR"),
+    ("year_below_min", "INTERVAL '-178956971' YEAR"),
+    ("year_above_max", "INTERVAL '178956971' YEAR"),
+    ("year_month_min", "INTERVAL '-178956970-8' YEAR TO MONTH"),
+    ("year_month_min_outer_sign", "INTERVAL -'178956970-8' YEAR TO MONTH"),
+    ("year_month_max", "INTERVAL '178956970-7' YEAR TO MONTH"),
+    ("year_month_below_min", "INTERVAL '-178956970-9' YEAR TO MONTH"),
+    ("year_month_above_max", "INTERVAL '178956970-8' YEAR TO MONTH"),
+    ("month_min", "INTERVAL '-2147483648' MONTH"),
+    ("month_min_outer_sign", "INTERVAL -'2147483648' MONTH"),
+    ("month_max", "INTERVAL '2147483647' MONTH"),
+    ("month_below_min", "INTERVAL '-2147483649' MONTH"),
+    ("month_above_max", "INTERVAL '2147483648' MONTH"),
+    ("months_min_units", "INTERVAL -2147483648 MONTHS"),
+    ("years_months_min_units", "INTERVAL -178956970 YEARS -8 MONTHS"),
+    ("months_min_quoted_units", "INTERVAL '-2147483648 months'"),
+    ("day_min", "INTERVAL '-106751991' DAY"),
+    ("day_max", "INTERVAL '106751991' DAY"),
+    ("day_below_min", "INTERVAL '-106751992' DAY"),
+    ("day_above_max", "INTERVAL '106751992' DAY"),
+    ("day_hour_min", "INTERVAL '-106751991 04' DAY TO HOUR"),
+    ("day_hour_max", "INTERVAL '106751991 04' DAY TO HOUR"),
+    ("day_hour_below_min", "INTERVAL '-106751991 05' DAY TO HOUR"),
+    ("day_hour_above_max", "INTERVAL '106751991 05' DAY TO HOUR"),
+    ("day_minute_min", "INTERVAL '-106751991 04:00' DAY TO MINUTE"),
+    ("day_minute_max", "INTERVAL '106751991 04:00' DAY TO MINUTE"),
+    ("day_minute_below_min", "INTERVAL '-106751991 04:01' DAY TO MINUTE"),
+    ("day_minute_above_max", "INTERVAL '106751991 04:01' DAY TO MINUTE"),
+    ("day_second_min", "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"),
+    ("day_second_max", "INTERVAL '106751991 04:00:54.775807' DAY TO SECOND"),
+    ("day_second_below_min", "INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND"),
+    ("day_second_above_max", "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND"),
+    ("hour_min", "INTERVAL '-2562047788' HOUR"),
+    ("hour_max", "INTERVAL '2562047788' HOUR"),
+    ("hour_below_min", "INTERVAL '-2562047789' HOUR"),
+    ("hour_above_max", "INTERVAL '2562047789' HOUR"),
+    ("hour_minute_min", "INTERVAL '-2562047788:00' HOUR TO MINUTE"),
+    ("hour_minute_max", "INTERVAL '2562047788:00' HOUR TO MINUTE"),
+    ("hour_minute_below_min", "INTERVAL '-2562047788:01' HOUR TO MINUTE"),
+    ("hour_minute_above_max", "INTERVAL '2562047788:01' HOUR TO MINUTE"),
+    ("hour_second_min", "INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND"),
+    ("hour_second_max", "INTERVAL '2562047788:00:54.775807' HOUR TO SECOND"),
+    ("hour_second_below_min", "INTERVAL '-2562047788:00:54.775809' HOUR TO SECOND"),
+    ("hour_second_above_max", "INTERVAL '2562047788:00:54.775808' HOUR TO SECOND"),
+    ("minute_min", "INTERVAL '-153722867280' MINUTE"),
+    ("minute_max", "INTERVAL '153722867280' MINUTE"),
+    ("minute_below_min", "INTERVAL '-153722867281' MINUTE"),
+    ("minute_above_max", "INTERVAL '153722867281' MINUTE"),
+    ("minute_second_min", "INTERVAL '-153722867280:54.775808' MINUTE TO SECOND"),
+    ("minute_second_max", "INTERVAL '153722867280:54.775807' MINUTE TO SECOND"),
+    ("minute_second_below_min", "INTERVAL '-153722867280:54.775809' MINUTE TO SECOND"),
+    ("minute_second_above_max", "INTERVAL '153722867280:54.775808' MINUTE TO SECOND"),
+    ("second_min", "INTERVAL '-9223372036854.775808' SECOND"),
+    ("second_min_outer_sign", "INTERVAL -'9223372036854.775808' SECOND"),
+    ("second_below_min", "INTERVAL '-9223372036854.775809' SECOND"),
+    ("second_above_max", "INTERVAL '9223372036854.775808' SECOND"),
+    ("microseconds_min_units", "INTERVAL -9223372036854775808 MICROSECONDS"),
+    ("seconds_min_units", "INTERVAL -9223372036854.775808 SECONDS"),
+    ("seconds_min_quoted_units", "INTERVAL '-9223372036854.775808 seconds'"),
+    ("cast_month_min", """CAST("INTERVAL '-2147483648' MONTH" AS INTERVAL MONTH)"""),
+    ("cast_month_min_outer_sign", """CAST("INTERVAL -'2147483648' MONTH" AS INTERVAL MONTH)"""),
+    ("cast_year_month_min",
+     """CAST("INTERVAL '-178956970-8' YEAR TO MONTH" AS INTERVAL YEAR TO MONTH)"""),
+    ("cast_day_second_min",
+     """CAST("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND" AS INTERVAL DAY TO SECOND)"""),
+    ("cast_hour_second_min",
+     """CAST("INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND" AS INTERVAL HOUR TO SECOND)"""),
+    ("cast_minute_second_min", """CAST("INTERVAL '-153722867280:54.775808' MINUTE TO SECOND" """
+                               """AS INTERVAL MINUTE TO SECOND)"""),
+    ("cast_second_min", """CAST("INTERVAL '-9223372036854.775808' SECOND" AS INTERVAL SECOND)"""),
+]
+
 
 def definitions():
     yield from queries()
@@ -157,6 +234,8 @@ def definitions():
         yield f"signed_literal_{name}", "signed_literal", sql
     for name, sql in QUOTED_UNIT_PROBES:
         yield f"quoted_units_{name}", "quoted_units", sql
+    for name, interval in LIMIT_PROBES:
+        yield f"limit_{name}", "limit", f"SELECT {interval}"
 
 
 def encode_value(row, index, data_type, types, get_field):
@@ -206,9 +285,14 @@ def capture(spark, sql, types, get_field, Py4JError):
         record["expected"] = {"status": "ok", "schema": frame.schema.jsonValue(), "rows": rows}
     except Exception as error:
         condition = error_condition(error, Py4JError)
-        assert condition is not None, (sql, str(error))
         record["expected"] = {"status": "error", "condition": condition,
                               "message": str(error).splitlines()[0]}
+        if condition is None:
+            # Some overflows raise a plain Java exception, which PySpark captures as the
+            # original throwable; record its class instead.
+            origin = getattr(error, "_origin", None)
+            assert origin is not None, (sql, str(error))
+            record["expected"]["exception"] = origin.getClass().getName()
         record["spark_error_phase"] = phase
     return record
 
