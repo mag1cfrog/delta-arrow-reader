@@ -34,6 +34,7 @@ use sail_function::scalar::math::spark_decimal_round::SparkDecimalRound;
 use sail_function::scalar::math::spark_div::SparkIntervalDiv;
 use sail_function::scalar::math::spark_float_round::SparkFloatRound;
 use sail_function::scalar::math::spark_integer_round::SparkIntegerRound;
+use sail_function::scalar::math::spark_interval_scale::SparkIntervalScale;
 use sail_function::scalar::math::spark_negative::SparkNegative;
 use sail_function::scalar::math::spark_pmod::SparkPmod;
 use sail_function::scalar::math::spark_signum::SparkSignum;
@@ -44,7 +45,6 @@ use sail_function::scalar::math::spark_try_mult::SparkTryMult;
 use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
-use sail_function::scalar::math::spark_year_month_interval_scale::SparkYearMonthIntervalScale;
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
@@ -437,19 +437,15 @@ fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
         right.get_type(function_context.schema),
     );
     Ok(match (left_type, right_type) {
-        (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(number))
-            if SparkYearMonthIntervalScale::accepts_number(&number) =>
-        {
-            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Multiply))
-                .call(vec![left, right])
+        (Ok(interval), Ok(number)) if SparkIntervalScale::scales(&interval, &number) => {
+            ScalarUDF::from(SparkIntervalScale::new(Operator::Multiply)).call(vec![left, right])
         }
         // Spark evaluates the interval first whatever the operand order.
-        (Ok(number), Ok(DataType::Interval(IntervalUnit::YearMonth)))
-            if SparkYearMonthIntervalScale::accepts_number(&number) =>
-        {
-            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Multiply))
-                .call(vec![right, left])
+        (Ok(number), Ok(interval)) if SparkIntervalScale::scales(&interval, &number) => {
+            ScalarUDF::from(SparkIntervalScale::new(Operator::Multiply)).call(vec![right, left])
         }
+        // Only day-time operands that `SparkIntervalScale::scales` rejects, such as STRING
+        // numbers (#976), reach this native multiplication.
         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
         //  Seems to be a bug in DataFusion.
         (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(_)) => {
@@ -1344,15 +1340,12 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let dividend_type = dividend.get_type(function_context.schema);
     let divisor_type = divisor.get_type(function_context.schema);
 
-    // Spark rejects a zero divisor of a year-month interval in both ANSI modes.
-    if let (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(number)) =
-        (&dividend_type, &divisor_type)
-        && SparkYearMonthIntervalScale::accepts_number(number)
+    // Spark rejects a zero divisor of an interval in both ANSI modes.
+    if let (Ok(interval), Ok(number)) = (&dividend_type, &divisor_type)
+        && SparkIntervalScale::scales(interval, number)
     {
-        return Ok(
-            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Divide))
-                .call(vec![dividend, divisor]),
-        );
+        return Ok(ScalarUDF::from(SparkIntervalScale::new(Operator::Divide))
+            .call(vec![dividend, divisor]));
     }
 
     if let (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) =
@@ -1473,6 +1466,7 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
         | (Ok(_), Ok(DataType::Decimal256(_, _)))
         | (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(_))
         | (Ok(DataType::Interval(IntervalUnit::DayTime)), Ok(_)) => dividend / divisor,
+        // Only divisors that `SparkIntervalScale::scales` rejects reach this native division.
         (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(_)) => {
             // Match duration because we cast Spark's DayTime interval to Duration.
             cast(

@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 1096);
+    assert_eq!(records.len() - 1, 1546);
     Ok(records)
 }
 
@@ -330,13 +330,23 @@ const LIMIT_ERRORS: [(&str, &str); 27] = [
     ),
 ];
 
-/// DAR's current error for each failing year-month scaling constant in inline VALUES,
-/// retained under #722. Spark wraps that error in its inline-table condition.
-const INLINE_TABLE_CAUSES: [(&str, &str); 3] = [
-    ("divide_zero", "[INTERVAL_DIVIDED_BY_ZERO]"),
-    ("multiply_overflow", "integer overflow"),
+/// DAR's current error for each failing interval scaling constant in inline VALUES, by
+/// record identifier prefix, retained under #722. Spark wraps that error in its
+/// inline-table condition.
+const INLINE_TABLE_CAUSES: [(&str, &str); 6] = [
+    ("scaling_divide_zero_values", "[INTERVAL_DIVIDED_BY_ZERO]"),
+    ("scaling_multiply_overflow_values", "integer overflow"),
     (
-        "divide_minimum",
+        "scaling_divide_minimum_values",
+        "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION]",
+    ),
+    (
+        "dt_scaling_divide_zero_values",
+        "[INTERVAL_DIVIDED_BY_ZERO]",
+    ),
+    ("dt_scaling_multiply_overflow_values", "long overflow"),
+    (
+        "dt_scaling_divide_minimum_values",
         "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION]",
     ),
 ];
@@ -344,7 +354,7 @@ const INLINE_TABLE_CAUSES: [(&str, &str); 3] = [
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #782: the public field of day-time negation or division is nullable.
+    /// #782: the public field of day-time negation is nullable.
     PublicNullability,
     /// #765: a narrowing interval CAST keeps the source value.
     CastTruncation,
@@ -368,12 +378,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     };
     match case["context"].as_str()? {
         "literal" if is_any(&DAY_TIME_QUALIFIERS, &|q| format!("{q}_negative")) => {
-            Some(RetainedDifference::PublicNullability)
-        }
-        "arithmetic"
-            if is_any(&DAY_TIME_QUALIFIERS, &|q| format!("{q}_divide"))
-                || id == "arithmetic_fractional_divide" =>
-        {
             Some(RetainedDifference::PublicNullability)
         }
         "cast"
@@ -414,11 +418,13 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "limit" if LIMIT_ERRORS.iter().any(|(limit, _)| id == *limit) => {
             Some(RetainedDifference::LimitErrorCondition)
         }
-        "scaling_error" if id.ends_with("_values") || id.ends_with("_values_filtered") => {
+        "scaling_error" | "dt_scaling_error"
+            if id.ends_with("_values") || id.ends_with("_values_filtered") =>
+        {
             Some(RetainedDifference::InlineTableCondition)
         }
-        "scaling_operand"
-            if id.starts_with("scaling_operand_number_divide_zero")
+        "scaling_operand" | "dt_scaling_operand"
+            if id.contains("_operand_number_divide_zero")
                 && case["expected"]["condition"] == "DIVIDE_BY_ZERO" =>
         {
             Some(RetainedDifference::DivideByZeroCondition)
@@ -473,11 +479,7 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
         RetainedDifference::InlineTableCondition => {
             let (_, cause) = INLINE_TABLE_CAUSES
                 .iter()
-                .find(|(probe, _)| {
-                    case["id"]
-                        .as_str()
-                        .is_some_and(|id| id.starts_with(&format!("scaling_{probe}_values")))
-                })
+                .find(|(prefix, _)| case["id"].as_str().is_some_and(|id| id.starts_with(prefix)))
                 .ok_or("expected a pinned inline-table cause")?;
             if case["expected"]["condition"]
                 != "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION"
@@ -507,13 +509,13 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::PublicNullability, 42),
+            (RetainedDifference::PublicNullability, 20),
             (RetainedDifference::CastTruncation, 14),
             (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
             (RetainedDifference::LimitErrorCondition, 54),
-            (RetainedDifference::InlineTableCondition, 12),
-            (RetainedDifference::DivideByZeroCondition, 6),
+            (RetainedDifference::InlineTableCondition, 24),
+            (RetainedDifference::DivideByZeroCondition, 12),
         ]
     );
     let mut differences = Vec::new();
@@ -630,6 +632,7 @@ async fn native_interval_scaling_is_unchanged_by_spark_configuration() -> TestRe
         "SELECT 2 * INTERVAL '27' MONTH",
         "SELECT INTERVAL '27' MONTH / 2",
         "SELECT INTERVAL '2' DAY * 2",
+        "SELECT INTERVAL '2' SECOND / 3",
     ] {
         assert_eq!(
             outcome(&SessionContext::new(), sql).await,
