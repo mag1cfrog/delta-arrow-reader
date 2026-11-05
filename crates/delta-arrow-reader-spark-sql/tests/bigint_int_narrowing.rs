@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use arrow::array::Int32Array;
@@ -349,17 +350,21 @@ async fn configured_native_bigint_int_casts_keep_plain_results() -> TestResult {
 #[tokio::test]
 async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
     let manifest: Value = serde_json::from_str(MANIFEST)?;
+    let mut observations = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size, true);
         register_inputs(&session, &manifest, batch_size)?;
         let visited = Arc::new(Mutex::new(Vec::<i32>::new()));
         let recorder = Arc::clone(&visited);
+        let invocations = Arc::new(AtomicUsize::new(0));
+        let callback_invocations = Arc::clone(&invocations);
         session.register_udf(create_udf(
             "count_bigint_input",
             vec![DataType::Int32, DataType::Int64],
             DataType::Int64,
             Volatility::Volatile,
             Arc::new(move |args| {
+                callback_invocations.fetch_add(1, Ordering::SeqCst);
                 let [ColumnarValue::Array(ids), value] = args else {
                     return Err(datafusion::common::DataFusionError::Execution(
                         "counted BIGINT expects ID array and value".into(),
@@ -425,51 +430,97 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 vec![],
             ),
         ] {
-            visited
-                .lock()
-                .map_err(|_| "poisoned BIGINT recorder")?
-                .clear();
+            invocations.store(0, Ordering::SeqCst);
             let sql = format!("SELECT {expression} AS r FROM {table} {predicate}");
-            let query = plan_query(
-                &session,
-                &sql,
-                &SparkSqlOptions {
-                    ansi_mode: ansi,
-                    ..Default::default()
-                },
-            )
-            .await?;
-            assert!(
+            let mut phase = "reset_recorder";
+            let mut after_resolve = None;
+            let mut after_physical = None;
+            let mut resolve_invocations = None;
+            let mut physical_invocations = None;
+            let result: TestResult<_> = async {
                 visited
                     .lock()
                     .map_err(|_| "poisoned BIGINT recorder")?
-                    .is_empty(),
-                "resolve: {sql}"
-            );
-            let physical = query.create_physical_plan(&session).await?;
-            assert!(
-                visited
-                    .lock()
-                    .map_err(|_| "poisoned BIGINT recorder")?
-                    .is_empty(),
-                "physical planning: {sql}"
-            );
-            let batches = collect(physical, session.task_ctx()).await?;
-            let mut actual = visited
+                    .clear();
+                phase = "resolve";
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode: ansi,
+                        ..Default::default()
+                    },
+                )
+                .await;
+                resolve_invocations = Some(invocations.load(Ordering::SeqCst));
+                after_resolve = Some(
+                    visited
+                        .lock()
+                        .map_err(|_| "poisoned BIGINT recorder")?
+                        .clone(),
+                );
+                let query = query?;
+                phase = "create_physical_plan";
+                let physical = query.create_physical_plan(&session).await;
+                physical_invocations = Some(invocations.load(Ordering::SeqCst));
+                after_physical = Some(
+                    visited
+                        .lock()
+                        .map_err(|_| "poisoned BIGINT recorder")?
+                        .clone(),
+                );
+                let physical = physical?;
+                phase = "collect";
+                let batches = collect(physical, session.task_ctx()).await?;
+                phase = "complete";
+                Ok(batches)
+            }
+            .await;
+            let visited_ids_raw = visited
                 .lock()
-                .map_err(|_| "poisoned BIGINT recorder")?
-                .clone();
-            actual.sort_unstable();
+                .map(|rows| rows.clone())
+                .map_err(|_| "poisoned BIGINT recorder");
+            let mut actual = visited_ids_raw.as_ref().ok().cloned();
+            if let Some(actual) = &mut actual {
+                actual.sort_unstable();
+            }
             eprintln!(
                 "BIGINT_INT_INPUT_EVALUATION {}",
                 json!({
                     "sql":sql,"ansi":ansi,"batch":batch_size,"visited_ids":actual,
-                    "rows":batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                    "visited_ids_raw":visited_ids_raw.as_ref().ok(),
+                    "recorder_error":visited_ids_raw.as_ref().err(),
+                    "native_phase":phase,"after_resolve":after_resolve,"after_physical":after_physical,
+                    "callback_counts":{"after_resolve":resolve_invocations,
+                        "after_physical":physical_invocations,"final":invocations.load(Ordering::SeqCst)},
+                    "error":result.as_ref().err().map(ToString::to_string),
+                    "error_debug":result.as_ref().err().map(|error| format!("{error:?}")),
+                    "rows":result.as_ref().ok().map(|batches| batches.iter().map(|batch| batch.num_rows()).sum::<usize>()),
                     "expected_visited_ids":expected,"spark_oracle_credit":false,
                 })
             );
-            assert_eq!(actual, expected, "{sql}");
+            observations.push((
+                sql,
+                expected,
+                after_resolve,
+                after_physical,
+                actual,
+                result.map(|_| ()),
+            ));
         }
+    }
+    assert_eq!(observations.len(), 12);
+    for (sql, expected, after_resolve, after_physical, actual, result) in observations {
+        assert!(
+            after_resolve.is_some_and(|rows| rows.is_empty()),
+            "resolve: {sql}"
+        );
+        assert!(
+            after_physical.is_some_and(|rows| rows.is_empty()),
+            "physical planning: {sql}"
+        );
+        result?;
+        assert_eq!(actual.ok_or("poisoned BIGINT recorder")?, expected, "{sql}");
     }
     Ok(())
 }
