@@ -151,7 +151,10 @@ fn literal_lookup_leaves_computed_and_aggregate_producers_opaque() -> TestResult
     producers.push(
         LogicalPlanBuilder::empty(false)
             .project(vec![lit(7_i32).alias("key")])?
-            .aggregate(vec![col("key")], Vec::new())?
+            .aggregate(
+                vec![col("key")],
+                Vec::<datafusion::logical_expr::Expr>::new(),
+            )?
             .build()?,
     );
     for producer in producers {
