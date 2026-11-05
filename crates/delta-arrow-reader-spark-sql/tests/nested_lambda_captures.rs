@@ -1178,7 +1178,9 @@ async fn lambda_rewrites_preserve_callback_errors_and_reconstruction_validation(
     use datafusion::common::DataFusionError;
     use datafusion::common::config::ConfigOptions;
     use datafusion::logical_expr::async_udf::{AsyncScalarUDF, AsyncScalarUDFImpl};
-    use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility};
+    use datafusion::logical_expr::{
+        ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    };
     use datafusion::physical_expr::ScalarFunctionExpr;
     use datafusion::physical_expr::expressions::Column;
     use datafusion::physical_expr::utils::rewrite_expr_columns;
@@ -1195,7 +1197,10 @@ async fn lambda_rewrites_preserve_callback_errors_and_reconstruction_validation(
         fn return_type(&self, _: &[DataType]) -> datafusion::common::Result<DataType> {
             Ok(DataType::Int64)
         }
-        fn invoke_with_args(&self, _: ScalarFunctionArgs) -> datafusion::common::Result<ColumnarValue> {
+        fn invoke_with_args(
+            &self,
+            _: ScalarFunctionArgs,
+        ) -> datafusion::common::Result<ColumnarValue> {
             datafusion::common::exec_err!("lambda async identity requires asynchronous invocation")
         }
     }
@@ -1203,8 +1208,17 @@ async fn lambda_rewrites_preserve_callback_errors_and_reconstruction_validation(
         fn invoke_async_with_args<'life0, 'async_trait>(
             &'life0 self,
             args: ScalarFunctionArgs,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = datafusion::common::Result<ColumnarValue>> + Send + 'async_trait>>
-        where 'life0: 'async_trait, Self: 'async_trait {
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = datafusion::common::Result<ColumnarValue>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            Self: 'async_trait,
+        {
             Box::pin(async move { Ok(args.args[0].clone()) })
         }
     }
@@ -1249,16 +1263,26 @@ async fn lambda_rewrites_preserve_callback_errors_and_reconstruction_validation(
         fn children(&self) -> Vec<&Arc<dyn PhysicalExpr>> {
             vec![&self.child]
         }
-        fn with_new_children(self: Arc<Self>, children: Vec<Arc<dyn PhysicalExpr>>) -> datafusion::common::Result<Arc<dyn PhysicalExpr>> {
+        fn with_new_children(
+            self: Arc<Self>,
+            children: Vec<Arc<dyn PhysicalExpr>>,
+        ) -> datafusion::common::Result<Arc<dyn PhysicalExpr>> {
             let [child] = children.as_slice() else {
-                return datafusion::common::internal_err!("capture reconstruction probe expects one child");
+                return datafusion::common::internal_err!(
+                    "capture reconstruction probe expects one child"
+                );
             };
             // Own normalization maps k@2 to k@0; the outer rebase maps it to k@1.
-            let rebased = child.downcast_ref::<Column>().is_some_and(|column| column.index() == 1);
+            let rebased = child
+                .downcast_ref::<Column>()
+                .is_some_and(|column| column.index() == 1);
             if rebased && let Some(udf) = &self.udf {
                 return Ok(Arc::new(ScalarFunctionExpr::new(
-                    "lambda_async_identity", Arc::clone(udf), vec![Arc::clone(child)],
-                    Arc::new(Field::new("", DataType::Int64, true)), Arc::new(ConfigOptions::new()),
+                    "lambda_async_identity",
+                    Arc::clone(udf),
+                    vec![Arc::clone(child)],
+                    Arc::new(Field::new("", DataType::Int64, true)),
+                    Arc::new(ConfigOptions::new()),
                 )));
             }
             if rebased {
@@ -1266,135 +1290,234 @@ async fn lambda_rewrites_preserve_callback_errors_and_reconstruction_validation(
                 use datafusion::logical_expr::Operator;
                 use datafusion::physical_expr::expressions::{BinaryExpr, Literal};
                 return Ok(Arc::new(BinaryExpr::new(
-                    Arc::clone(child), Operator::Plus,
+                    Arc::clone(child),
+                    Operator::Plus,
                     Arc::new(Literal::new(ScalarValue::Int64(Some(100)))),
                 )));
             }
             Ok(Arc::new(Self {
-                child: Arc::clone(child), udf: self.udf.clone(),
+                child: Arc::clone(child),
+                udf: self.udf.clone(),
             }))
         }
     }
 
     let session = session(32);
-    let frame = session.sql("SELECT 0 AS ignored,[1,2] AS items,3 AS k").await?;
+    let frame = session
+        .sql("SELECT 0 AS ignored,[1,2] AS items,3 AS k")
+        .await?;
     let expression = array_transform(col("items"), lambda(["x"], lambda_var("x") + col("k")))
-        .resolve_lambda_variables(frame.schema())?.data;
+        .resolve_lambda_variables(frame.schema())?
+        .data;
     let physical = create_physical_expr(&expression, frame.schema(), &ExecutionProps::new())?;
     let bound_lambda = Arc::clone(physical.children()[1]);
     let width = frame.schema().fields().len();
     let mut mapped = Vec::new();
     let error = rewrite_expr_columns(Arc::clone(&bound_lambda), width, |column| {
         mapped.push((column.name().to_owned(), column.index()));
-        Err(DataFusionError::Execution("lambda identity callback sentinel".into()))
-    }).unwrap_err();
+        Err(DataFusionError::Execution(
+            "lambda identity callback sentinel".into(),
+        ))
+    })
+    .unwrap_err();
     assert_eq!(mapped, vec![("k".to_owned(), 2)]);
-    assert!(matches!(error, DataFusionError::Execution(ref cause) if cause == "lambda identity callback sentinel"), "{error}");
+    assert!(
+        matches!(error, DataFusionError::Execution(ref cause) if cause == "lambda identity callback sentinel"),
+        "{error}"
+    );
 
-    let udf = AsyncScalarUDF::new(Arc::new(AsyncIdentity(Signature::exact(vec![DataType::Int64], Volatility::Volatile))))
-        .into_scalar_udf();
+    let udf = AsyncScalarUDF::new(Arc::new(AsyncIdentity(Signature::exact(
+        vec![DataType::Int64],
+        Volatility::Volatile,
+    ))))
+    .into_scalar_udf();
     let udf = Arc::new(udf);
     let asynchronous: Arc<dyn PhysicalExpr> = Arc::new(ScalarFunctionExpr::new(
-        "lambda_async_identity", Arc::clone(&udf), vec![Arc::new(Column::new("k", 2))],
-        Arc::new(Field::new("", DataType::Int64, true)), Arc::new(ConfigOptions::new()),
+        "lambda_async_identity",
+        Arc::clone(&udf),
+        vec![Arc::new(Column::new("k", 2))],
+        Arc::new(Field::new("", DataType::Int64, true)),
+        Arc::new(ConfigOptions::new()),
     ));
     for error in [
-        rewrite_expr_columns(Arc::clone(&bound_lambda), width, |_| Ok(Arc::clone(&asynchronous))).unwrap_err(),
-        bound_lambda.with_new_children(vec![Arc::clone(&asynchronous)]).unwrap_err(),
+        rewrite_expr_columns(Arc::clone(&bound_lambda), width, |_| {
+            Ok(Arc::clone(&asynchronous))
+        })
+        .unwrap_err(),
+        bound_lambda
+            .with_new_children(vec![Arc::clone(&asynchronous)])
+            .unwrap_err(),
     ] {
-        assert!(matches!(error, DataFusionError::Plan(ref cause) if cause.contains("Async functions in lambdas aren't supported")), "{error}");
+        assert!(
+            matches!(error, DataFusionError::Plan(ref cause) if cause.contains("Async functions in lambdas aren't supported")),
+            "{error}"
+        );
     }
-    let nested = array_transform(col("items"), lambda(["outer"], array_transform(
-        col("items"), lambda(["inner"], lambda_var("inner") + col("k")),
-    ))).resolve_lambda_variables(frame.schema())?.data;
+    let nested = array_transform(
+        col("items"),
+        lambda(
+            ["outer"],
+            array_transform(
+                col("items"),
+                lambda(["inner"], lambda_var("inner") + col("k")),
+            ),
+        ),
+    )
+    .resolve_lambda_variables(frame.schema())?
+    .data;
     let nested = create_physical_expr(&nested, frame.schema(), &ExecutionProps::new())?;
     let outer_lambda = Arc::clone(nested.children()[1]);
     let inner_function = Arc::clone(outer_lambda.children()[0]);
     let inner_lambda = Arc::clone(inner_function.children()[1]);
     let batches = frame.clone().collect().await?;
     for inject_async in [true, false] {
-        let replacement = Arc::clone(&inner_lambda).with_new_children(vec![Arc::new(CaptureReconstructionProbe {
-            child: Arc::new(Column::new("k", 2)),
-            udf: inject_async.then(|| Arc::clone(&udf)),
-        })])?;
-        let mut children = inner_function.children().into_iter().cloned().collect::<Vec<_>>();
+        let replacement = Arc::clone(&inner_lambda).with_new_children(vec![Arc::new(
+            CaptureReconstructionProbe {
+                child: Arc::new(Column::new("k", 2)),
+                udf: inject_async.then(|| Arc::clone(&udf)),
+            },
+        )])?;
+        let mut children = inner_function
+            .children()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
         children[1] = replacement;
         let replaced_inner = Arc::clone(&inner_function).with_new_children(children)?;
         let result = Arc::clone(&outer_lambda).with_new_children(vec![replaced_inner]);
         if inject_async {
             let error = result.unwrap_err();
-            assert!(matches!(error, DataFusionError::Plan(ref cause) if cause.contains("Async functions in lambdas aren't supported")), "{error}");
+            assert!(
+                matches!(error, DataFusionError::Plan(ref cause) if cause.contains("Async functions in lambdas aren't supported")),
+                "{error}"
+            );
         } else {
             let mut children = nested.children().into_iter().cloned().collect::<Vec<_>>();
             children[1] = result?;
             let rebuilt = Arc::clone(&nested).with_new_children(children)?;
-            assert_eq!(rebuilt.return_field(frame.schema().as_arrow())?, nested.return_field(frame.schema().as_arrow())?);
+            assert_eq!(
+                rebuilt.return_field(frame.schema().as_arrow())?,
+                nested.return_field(frame.schema().as_arrow())?
+            );
             let mut actual = Vec::new();
             for batch in &batches {
                 let values = rebuilt.evaluate(batch)?.into_array(batch.num_rows())?;
-                for row in 0..values.len() { actual.push(encode_value(values.as_ref(), row)?); }
+                for row in 0..values.len() {
+                    actual.push(encode_value(values.as_ref(), row)?);
+                }
             }
-            assert_eq!(actual, vec![json!([["103","103"],["103","103"]])]);
+            assert_eq!(actual, vec![json!([["103", "103"], ["103", "103"]])]);
         }
     }
     Ok(())
 }
 
 #[test]
-fn nested_capture_compaction_and_equal_width_permutations_preserve_values_and_fields() -> TestResult {
+fn nested_capture_compaction_and_equal_width_permutations_preserve_values_and_fields() -> TestResult
+{
     use datafusion::physical_expr::expressions::Column;
     use datafusion::physical_expr::utils::rewrite_expr_columns;
 
     let items: ArrayRef = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
-        Some(vec![Some(1), Some(2)]), Some(vec![]), None,
+        Some(vec![Some(1), Some(2)]),
+        Some(vec![]),
+        None,
     ]));
     let schema = Arc::new(Schema::new(vec![
-        Field::new("items", items.data_type().clone(), true).with_metadata([("source".into(), "items".into())].into()),
-        Field::new("left", DataType::Int32, true).with_metadata([("source".into(), "left".into())].into()),
-        Field::new("right", DataType::Int32, true).with_metadata([("source".into(), "right".into())].into()),
+        Field::new("items", items.data_type().clone(), true)
+            .with_metadata([("source".into(), "items".into())].into()),
+        Field::new("left", DataType::Int32, true)
+            .with_metadata([("source".into(), "left".into())].into()),
+        Field::new("right", DataType::Int32, true)
+            .with_metadata([("source".into(), "right".into())].into()),
         Field::new("trailing", DataType::Int32, false),
     ]));
-    let input = RecordBatch::try_new(Arc::clone(&schema), vec![
-        items, Arc::new(Int32Array::from(vec![3,4,5])), Arc::new(Int32Array::from(vec![7,8,9])), Arc::new(Int32Array::from(vec![99;3])),
-    ])?;
+    let input = RecordBatch::try_new(
+        Arc::clone(&schema),
+        vec![
+            items,
+            Arc::new(Int32Array::from(vec![3, 4, 5])),
+            Arc::new(Int32Array::from(vec![7, 8, 9])),
+            Arc::new(Int32Array::from(vec![99; 3])),
+        ],
+    )?;
     let input_schema = DFSchema::try_from(schema.as_ref().clone())?;
-    let permutation = [0,2,1,3];
+    let permutation = [0, 2, 1, 3];
     let permuted = input.project(&permutation)?;
-    assert_eq!(permuted.schema().as_ref(), &Schema::new(vec![
-        schema.field(0).clone(), schema.field(2).clone(), schema.field(1).clone(), schema.field(3).clone(),
-    ]));
-    let nested_type = DataType::List(Arc::new(Field::new("item", DataType::List(Arc::new(Field::new("item", DataType::Int32, true))), true)));
+    assert_eq!(
+        permuted.schema().as_ref(),
+        &Schema::new(vec![
+            schema.field(0).clone(),
+            schema.field(2).clone(),
+            schema.field(1).clone(),
+            schema.field(3).clone(),
+        ])
+    );
+    let nested_type = DataType::List(Arc::new(Field::new(
+        "item",
+        DataType::List(Arc::new(Field::new("item", DataType::Int32, true))),
+        true,
+    )));
     let expected_field = Arc::new(Field::new("", nested_type, true));
     for (capture_outer, use_case) in [(false, false), (true, false), (false, true)] {
         let body = lambda_var("inner") + col("left") * lit(10i32) + col("right");
-        let body = if capture_outer { body + lambda_var("outer") } else { body };
+        let body = if capture_outer {
+            body + lambda_var("outer")
+        } else {
+            body
+        };
         let body = if use_case {
             when(col("left").gt(lit(0i32)), body.clone()).otherwise(body + lit(100i32))?
-        } else { body };
-        let expression = array_transform(col("items"), lambda(["outer"], array_transform(col("items"), lambda(["inner"], body))))
-            .resolve_lambda_variables(&input_schema)?.data;
+        } else {
+            body
+        };
+        let expression = array_transform(
+            col("items"),
+            lambda(
+                ["outer"],
+                array_transform(col("items"), lambda(["inner"], body)),
+            ),
+        )
+        .resolve_lambda_variables(&input_schema)?
+        .data;
         let physical = create_physical_expr(&expression, &input_schema, &ExecutionProps::new())?;
         let mut mapped = Vec::new();
-        let rewritten = rewrite_expr_columns(Arc::clone(&physical), schema.fields().len(), |column| {
-            mapped.push((column.name().to_owned(), column.index()));
-            let index = match column.index() { 1 => 2, 2 => 1, index => index };
-            Ok(Arc::new(Column::new(column.name(), index)))
-        })?;
+        let rewritten =
+            rewrite_expr_columns(Arc::clone(&physical), schema.fields().len(), |column| {
+                mapped.push((column.name().to_owned(), column.index()));
+                let index = match column.index() {
+                    1 => 2,
+                    2 => 1,
+                    index => index,
+                };
+                Ok(Arc::new(Column::new(column.name(), index)))
+            })?;
         assert!(mapped.contains(&("left".to_owned(), 1)), "{mapped:?}");
         assert!(mapped.contains(&("right".to_owned(), 2)), "{mapped:?}");
-        let expected = if capture_outer { vec![json!([["39","40"],["40","41"]]), json!([]), Value::Null] }
-            else { vec![json!([["38","39"],["38","39"]]), json!([]), Value::Null] };
+        let expected = if capture_outer {
+            vec![json!([["39", "40"], ["40", "41"]]), json!([]), Value::Null]
+        } else {
+            vec![json!([["38", "39"], ["38", "39"]]), json!([]), Value::Null]
+        };
         for (expression, batch) in [(physical, &input), (rewritten, &permuted)] {
-            assert_eq!(expression.return_field(batch.schema().as_ref())?, expected_field);
-            for batch_size in [1,32] {
+            assert_eq!(
+                expression.return_field(batch.schema().as_ref())?,
+                expected_field
+            );
+            for batch_size in [1, 32] {
                 let mut actual = Vec::new();
                 for offset in (0..batch.num_rows()).step_by(batch_size) {
-                    let chunk = batch.slice(offset, batch_size.min(batch.num_rows()-offset));
+                    let chunk = batch.slice(offset, batch_size.min(batch.num_rows() - offset));
                     let values = expression.evaluate(&chunk)?.into_array(chunk.num_rows())?;
                     assert_eq!(values.data_type(), expected_field.data_type());
-                    for row in 0..values.len() { actual.push(encode_value(values.as_ref(), row)?); }
+                    for row in 0..values.len() {
+                        actual.push(encode_value(values.as_ref(), row)?);
+                    }
                 }
-                assert_eq!(actual, expected, "capture_outer={capture_outer} use_case={use_case} batch={batch_size}");
+                assert_eq!(
+                    actual, expected,
+                    "capture_outer={capture_outer} use_case={use_case} batch={batch_size}"
+                );
             }
         }
     }

@@ -395,12 +395,18 @@ pub(crate) fn compact_lambda_captures(
     let compact_capture = |index: usize| {
         if index < input_schema_size {
             column_index_map.get(&index).copied().ok_or_else(|| {
-                internal_datafusion_err!("lambda projection lost captured index {}", index)
+                internal_datafusion_err!(
+                    "lambda projection lost captured index {}",
+                    index
+                )
             })
         } else {
-            index.checked_sub(input_schema_size)
+            index
+                .checked_sub(input_schema_size)
                 .and_then(|offset| compact_width.checked_add(offset))
-                .ok_or_else(|| internal_datafusion_err!("invalid lambda parameter boundary"))
+                .ok_or_else(|| {
+                    internal_datafusion_err!("invalid lambda parameter boundary")
+                })
         }
     };
     rewrite_scoped_columns(
@@ -408,13 +414,22 @@ pub(crate) fn compact_lambda_captures(
         compact_width,
         Some((input_schema_size, compact_width)),
         &mut |column: &Column| {
-            let index = column_index_map.get(&column.index()).copied().ok_or_else(|| {
-                internal_datafusion_err!("lambda projection lost captured index {}", column.index())
-            })?;
+            let index =
+                column_index_map
+                    .get(&column.index())
+                    .copied()
+                    .ok_or_else(|| {
+                        internal_datafusion_err!(
+                            "lambda projection lost captured index {}",
+                            column.index()
+                        )
+                    })?;
             Ok(Arc::new(Column::new(column.name(), index)) as Arc<dyn PhysicalExpr>)
         },
         &|lambda: &LambdaExpr, body, size| {
-            let capture_indices = lambda.capture_indices().iter()
+            let capture_indices = lambda
+                .capture_indices()
+                .iter()
                 .map(|index| compact_capture(*index))
                 .collect::<Result<Vec<_>>>()?;
             lambda.with_compacted_outer_captures(body, size, capture_indices)

@@ -32,11 +32,11 @@ use arrow::{
     datatypes::{DataType, Schema},
     record_batch::RecordBatch,
 };
+use datafusion_common::{HashSet, Result, internal_err};
 use datafusion_common::{
     plan_err,
     tree_node::{TreeNode, TreeNodeRecursion},
 };
-use datafusion_common::{HashSet, Result, internal_err};
 use datafusion_expr::ColumnarValue;
 
 /// Represents a lambda with the given parameters names and body
@@ -133,11 +133,8 @@ impl LambdaExpr {
 
         capture_indices.sort();
 
-        let projected_body = compact_lambda_captures(
-            Arc::clone(&body),
-            input_size,
-            &capture_indices,
-        )?;
+        let projected_body =
+            compact_lambda_captures(Arc::clone(&body), input_size, &capture_indices)?;
 
         Ok(Self {
             params,
@@ -211,9 +208,13 @@ impl LambdaExpr {
         }
         if capture_indices.len() != self.capture_indices.len()
             || capture_indices.windows(2).any(|pair| pair[0] >= pair[1])
-            || capture_indices.last().is_some_and(|index| *index >= input_schema_size)
+            || capture_indices
+                .last()
+                .is_some_and(|index| *index >= input_schema_size)
         {
-            return internal_err!("lambda capture compaction changed capture order or bounds");
+            return internal_err!(
+                "lambda capture compaction changed capture order or bounds"
+            );
         }
         Ok(Self {
             params: self.params.clone(),
@@ -223,7 +224,6 @@ impl LambdaExpr {
             input_schema_size: Some(input_schema_size),
         })
     }
-
 }
 
 impl std::fmt::Display for LambdaExpr {
