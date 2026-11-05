@@ -12,6 +12,7 @@ pub mod spark_conv;
 pub mod spark_decimal_round;
 pub mod spark_div;
 pub mod spark_integer_round;
+pub mod spark_interval_scale;
 pub mod spark_negative;
 pub mod spark_pmod;
 pub mod spark_signum;
@@ -22,7 +23,6 @@ pub mod spark_try_mult;
 pub mod spark_try_subtract;
 pub mod spark_unhex;
 pub mod spark_uniform;
-pub mod spark_year_month_interval_scale;
 mod utils;
 pub mod xorshift;
 
