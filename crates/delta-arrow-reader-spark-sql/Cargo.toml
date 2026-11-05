@@ -20,6 +20,11 @@ resolver = "3"
 [profile.dev]
 opt-level = 1
 
+# Many integration tests link the same large dependency graph; keep their binaries smaller.
+[profile.test]
+debug = 0
+strip = "symbols"
+
 [workspace.package]
 version = "0.7.1"
 authors = ["LakeSail <hello@lakesail.com>"]

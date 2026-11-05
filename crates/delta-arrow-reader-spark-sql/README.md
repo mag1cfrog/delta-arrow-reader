@@ -24,6 +24,18 @@ reconstruct files from experimental build caches.
 dependency overrides. The crate's CI uses these commands on Linux, macOS and
 Windows.
 
+The test profile omits debug information and requests symbol stripping to reduce
+artifact sizes. To keep symbols and line tables for a focused test backtrace:
+
+```sh
+CARGO_PROFILE_TEST_DEBUG=line-tables-only \
+CARGO_PROFILE_TEST_STRIP=none \
+RUST_BACKTRACE=1 \
+cargo test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test collection_size
+```
+
+Replace `collection_size` with the integration test target you are debugging.
+
 The public API provides session configuration, query resolution and physical
 planning. Its crate-level example shows how to execute a query using the host
 session. The host must install `configure_spark_sql` before using `plan_query`.
