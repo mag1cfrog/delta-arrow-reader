@@ -1,0 +1,61 @@
+{
+  "status": "provisional; final-current-source replay and independent complete-diff review required",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "spark_build_date": "2026-07-11T15:29:54Z",
+  "reference_sources": [
+    {
+      "family": "frozen-strings",
+      "source": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/780-boundary-runtime/spark-r1-frozen-strings.jsonl",
+      "sha256": "753794baf6b5b9674408d12827fe0dbbda042ee5a18ebb26f84f6a0b2a4cf483",
+      "references": 72
+    },
+    {
+      "family": "frozen-ws",
+      "source": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/780-boundary-runtime/spark-r1-frozen-ws.jsonl",
+      "sha256": "6cca071578fb43f43278def9a13aebcaad6df9312f8eadf448df83b0adb34672",
+      "references": 4
+    },
+    {
+      "family": "boundary",
+      "source": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/780-boundary-runtime/spark-r1-boundary.jsonl",
+      "sha256": "d39d1192957436c08fcf737bddcaa8adaf89ebfca5bb9d42a967327cabf6a3bb",
+      "references": 32
+    },
+    {
+      "family": "controls",
+      "source": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/780-boundary-runtime/spark-r1-controls.jsonl",
+      "sha256": "0d3a0650e6ff87447994df189f8972fa3f2c63582cc36abc451b7f2c2e1083dd",
+      "references": 22
+    }
+  ],
+  "native_source": {
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/928-candidate-762/native.jsonl",
+    "sha256": "ccec4573053062a9f7f320cfddf10c2469eea1046a20952135bc33ddd383dacd",
+    "commit": "76207734698c7c912782e850f7d865029970b641",
+    "tree": "b2f8b0c2af3f872bfba962179396ad3746d5120a",
+    "delivered_commit": "4fcdc5f8992a84badf0127429d8149af4885b8c8"
+  },
+  "native_projection": "key, exact SQL, actual primary fields/rows/errors and availability, capture_failure, actual independent diagnostic fields/errors/bytes; omit only diagnostic plans and repeated batch layout/schema strings",
+  "diagnostic_source": {
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/780-support-boundary-source-r3/c06_binary_string_boundary_probe.rs",
+    "sha256": "0858f69a2ded9b816c3fc252367cc08bd5d3a546dcb9950c2fc081a6eeb6e40a"
+  },
+  "spark_byte_codec": "QueryExecution.executedPlan().executeCollect() detached InternalRow; getUTF8String(i).getBytes()/getBinary(i); displayed replacement characters are not bytes",
+  "spark_collector": {
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/780-support-boundary-source-r3/recapture_string_binary_spark.py",
+    "sha256": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8"
+  },
+  "comparison": "Full primary JSON fields and actual Arrow fields remain separate. Diagnostic optimized fields never substitute for primary fields. Only ordering/spacing of metadata maps in Arrow Debug text is canonicalized; no field property is removed.",
+  "references": 130,
+  "observations": 780,
+  "strict_spark_matches": 396,
+  "strict_spark_differences": 384,
+  "full_spark_compatibility": false,
+  "fixture_sha256": {
+    "boundary-spark.jsonl": "d39d1192957436c08fcf737bddcaa8adaf89ebfca5bb9d42a967327cabf6a3bb",
+    "controls-spark.jsonl": "0d3a0650e6ff87447994df189f8972fa3f2c63582cc36abc451b7f2c2e1083dd",
+    "native-profiles.jsonl": "5879ee6ebbb80b506481e96167e500cdabaed47d35a16e79a385efb3bc30acaf",
+    "references.json": "9b7de8aed3040e4ffa5e3ec0a93fbaf6ab9bd9eb6fc3b7389fe37e5100620ee1"
+  }
+}
