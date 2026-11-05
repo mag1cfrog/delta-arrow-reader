@@ -1,8 +1,8 @@
 """Capture Spark interval qualifiers, generated names and typed interval values.
 
 The query corpus is the original #749 capture (candidate commit c54d99c3,
-script SHA256 12cc8fd6...) plus review probes for NULL coercion and for signs
-and boundaries written inside interval literals. Values
+script SHA256 12cc8fd6...) plus review probes for NULL coercion, signs and
+boundaries written inside interval literals, and quoted unit strings. Values
 are recorded from Spark's internal rows instead of string casts. Run from the
 crate root in the reference environment described in README.md; the output
 path must not exist.
@@ -141,6 +141,13 @@ SIGNED_LITERAL_PROBES = [
     ("second_maximum", "SELECT INTERVAL '9223372036854.775807' SECOND"),
 ]
 
+QUOTED_UNIT_PROBES = [
+    ("zero_year_month", "SELECT INTERVAL '0 years 0 months'"),
+    ("cancelled_day_hour", "SELECT INTERVAL '1 day -24 hours'"),
+    ("mixed_zero_days", "SELECT INTERVAL '1 year 0 days'"),
+    ("mixed_zero_months", "SELECT INTERVAL '0 months 5 days'"),
+]
+
 
 def definitions():
     yield from queries()
@@ -148,6 +155,8 @@ def definitions():
         yield f"null_coercion_{name}", "null_coercion", sql
     for name, sql in SIGNED_LITERAL_PROBES:
         yield f"signed_literal_{name}", "signed_literal", sql
+    for name, sql in QUOTED_UNIT_PROBES:
+        yield f"quoted_units_{name}", "quoted_units", sql
 
 
 def encode_value(row, index, data_type, types, get_field):
