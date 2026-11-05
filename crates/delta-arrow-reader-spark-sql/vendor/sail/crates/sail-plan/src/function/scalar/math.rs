@@ -34,6 +34,7 @@ use sail_function::scalar::math::spark_decimal_round::SparkDecimalRound;
 use sail_function::scalar::math::spark_div::SparkIntervalDiv;
 use sail_function::scalar::math::spark_float_round::SparkFloatRound;
 use sail_function::scalar::math::spark_integer_round::SparkIntegerRound;
+use sail_function::scalar::math::spark_interval_negate::SparkIntervalNegate;
 use sail_function::scalar::math::spark_interval_scale::SparkIntervalScale;
 use sail_function::scalar::math::spark_negative::SparkNegative;
 use sail_function::scalar::math::spark_pmod::SparkPmod;
@@ -2233,11 +2234,15 @@ fn negate_literal(arg: &Expr) -> Option<Expr> {
     Some(lit(negated))
 }
 
-/// Spark unary minus / `negative(x)`. Duration negation goes through
-/// `NegateDuration`; everything else uses `SparkNegative`, which honors the ANSI
-/// overflow semantics with `ansi_mode` baked at planning time.
+/// Spark unary minus / `negative(x)`. ANSI intervals go through `SparkIntervalNegate`,
+/// other durations through `NegateDuration`; everything else uses `SparkNegative`, which
+/// honors the ANSI overflow semantics with `ansi_mode` baked at planning time.
 fn spark_unary_negate(arg: Expr, ansi_mode: bool, schema: &DFSchemaRef) -> Expr {
     match arg.get_type(schema) {
+        // Spark raises the same interval overflow for the minimum in both ANSI modes.
+        Ok(data_type) if SparkIntervalNegate::negates(&data_type) => {
+            ScalarUDF::from(SparkIntervalNegate::new()).call(vec![arg])
+        }
         // DataFusion's `Negative` doesn't support Duration types, so route those
         // to the dedicated UDF.
         Ok(DataType::Duration(_)) => ScalarUDF::from(NegateDuration::new()).call(vec![arg]),

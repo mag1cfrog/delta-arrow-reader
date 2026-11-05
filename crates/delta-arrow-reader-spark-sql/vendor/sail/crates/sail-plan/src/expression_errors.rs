@@ -47,7 +47,7 @@ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmeti
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
-    spark_interval_scale::SparkIntervalScale,
+    spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
 use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
@@ -181,6 +181,7 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
             if f.func.inner().is::<SparkAbs>()
                 || f.func.inner().is::<SparkCheckedArithmetic>()
                 || f.func.inner().is::<SparkIntervalScale>()
+                || f.func.inner().is::<SparkIntervalNegate>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkDecimalCast>()
