@@ -180,7 +180,9 @@ literal values. In a SQL literal, unit presence decides the family even when a
 unit-syntax literal is zero or cancels, and SQL literals that mix year-month and
 day-time units are rejected as in Spark. Interval strings converted at run time,
 by string casts and `window` durations, keep choosing the family by non-zero
-values.
+values. Qualified and single-unit interval values, including run-time strings in
+casts and `window` durations, apply their sign before narrowing to the stored
+month or microsecond value, so each qualifier's minimum is accepted as in Spark.
 
 The existing Spark formatter uses those fields for literal and CAST names, and
 unqualified interval literals use its full-range form.
