@@ -85,7 +85,18 @@ fn array_repeat_with_nullable_element(
     ))
 }
 
-fn array_compact(array: expr::Expr) -> expr::Expr {
+fn array_compact(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let array = input.arguments.one()?;
+    let data_type = array.get_type(input.function_context.schema)?;
+    if data_type != DataType::Null && array_element_field(&data_type).is_none() {
+        return Err(PlanError::invalid(format!(
+            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] ARRAY_COMPACT requires an ARRAY, got {data_type}"
+        )));
+    }
+    Ok(array_compact_expr(array))
+}
+
+fn array_compact_expr(array: expr::Expr) -> expr::Expr {
     ScalarUDF::from(SparkArrayCompact::new()).call(vec![array])
 }
 
@@ -667,7 +678,10 @@ fn arrays_overlap(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     .when(
         or(left_has_null, right_has_null),
         or(
-            expr_fn::array_has_any(array_compact(left.clone()), array_compact(right.clone())),
+            expr_fn::array_has_any(
+                array_compact_expr(left.clone()),
+                array_compact_expr(right.clone()),
+            ),
             lit(ScalarValue::Null),
         ),
     )
@@ -1073,7 +1087,7 @@ pub(super) fn list_built_in_array_functions() -> Vec<(&'static str, ScalarFuncti
     vec![
         ("array", F::udf(SparkArray::new())),
         ("array_append", F::custom(array_append)),
-        ("array_compact", F::unary(array_compact)),
+        ("array_compact", F::custom(array_compact)),
         ("array_contains", F::custom(array_contains)),
         ("array_contains_all", F::binary(array_contains_all)),
         ("array_distinct", F::unary(expr_fn::array_distinct)),
@@ -1111,6 +1125,46 @@ mod tests {
     use datafusion_expr::{ColumnarValue, col};
 
     use super::*;
+
+    #[test]
+    fn array_compact_validation_preserves_array_arguments() -> PlanResult<()> {
+        use crate::function::common::FunctionContextInput;
+        use arrow::datatypes::Schema;
+
+        let session = SessionContext::new();
+        let config = Arc::new(crate::config::PlanConfig::default());
+        let element = Arc::new(Field::new_list_field(
+            DataType::Dictionary(Box::new(DataType::Int8), Box::new(DataType::Int32)),
+            true,
+        ));
+        for data_type in [
+            DataType::Null,
+            DataType::List(element.clone()),
+            DataType::LargeList(element.clone()),
+            DataType::ListView(element.clone()),
+            DataType::LargeListView(element.clone()),
+            DataType::FixedSizeList(element, 2),
+        ] {
+            let schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+                "a", data_type, true,
+            )]))?);
+            let expression = array_compact(ScalarFunctionInput {
+                arguments: vec![col("a")],
+                function_context: FunctionContextInput {
+                    argument_display_names: &[],
+                    plan_config: &config,
+                    session_context: &session,
+                    schema: &schema,
+                },
+            })?;
+            let expr::Expr::ScalarFunction(function) = expression else {
+                return Err(PlanError::internal("expected ARRAY_COMPACT expression"));
+            };
+            assert!(function.func.inner().is::<SparkArrayCompact>());
+            assert_eq!(function.args, vec![col("a")]);
+        }
+        Ok(())
+    }
 
     #[test]
     fn arrays_overlap_normalizes_float_bits_across_list_storage_and_slices() -> PlanResult<()> {
