@@ -49,7 +49,10 @@ The shared single-row list builder uses the supplied field and Arrow's existing
 constructors, which still reject mismatched child types and required elements
 containing logical NULLs. The [literal field tests](tests/literal_list_fields.rs)
 cover direct scalar construction, conversion, casts, folding and NULL parents.
-Required Struct-element cast admission remains tracked separately in #910.
+SLICE retains required Struct elements through result declaration and literal
+folding while allowing NULLs in optional Struct children. Its native result
+adaptation uses checked Arrow casts after removing hidden NULL children from
+NULL list parents with required elements.
 
 Arrow cast also exposes `parse_string_rows_until_error` for callers that need
 successful rows before a strict parse failure. It reuses the primitive parser
