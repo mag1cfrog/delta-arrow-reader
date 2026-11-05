@@ -248,7 +248,7 @@ impl PlanResolver<'_> {
             }
         };
         if let ScalarValue::Utf8(Some(field_name)) = &extraction {
-            let expr = Self::resolve_potentially_nested_field(
+            let (expr, _display_suffix) = Self::resolve_nested_field_and_display_suffix(
                 expr,
                 &data_type,
                 std::slice::from_ref(field_name),

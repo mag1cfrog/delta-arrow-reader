@@ -41,27 +41,28 @@ impl PlanResolver<'_> {
                 .unwrap_or(declared.as_str())
                 .to_string();
             let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field.clone()));
+            let mut expression_name = LAMBDA_VARIABLE_EXPRESSION_NAME.to_string();
             if let Some(field) = field {
                 // Spark resolves dotted lambda tails with strict NULL-base validation.
-                expr = Self::resolve_potentially_nested_field(
+                let (resolved, display_suffix) = Self::resolve_nested_field_and_display_suffix(
                     expr,
                     field.data_type(),
                     rest,
                     schema,
                     false,
                 )?;
+                expr = resolved;
+                expression_name.push_str(&display_suffix);
             } else {
                 for part in rest {
                     expr = expr::Expr::ScalarFunction(ScalarFunction::new_udf(
                         get_field(),
                         vec![expr, lit(part.as_ref().to_string())],
                     ));
+                    expression_name.push('.');
+                    expression_name.push_str(part.as_ref());
                 }
             }
-            let expression_name = std::iter::once(LAMBDA_VARIABLE_EXPRESSION_NAME)
-                .chain(rest.iter().map(|part| part.as_ref()))
-                .collect::<Vec<_>>()
-                .join(".");
             return Ok(
                 NamedExpr::new(vec![projection_name], expr).with_expression_name(expression_name)
             );
@@ -153,7 +154,7 @@ impl PlanResolver<'_> {
             return Ok(None);
         };
         // A bound local base shadows outer columns even when its nested tail is invalid.
-        let expr = Self::resolve_potentially_nested_field(
+        let (expr, display_suffix) = Self::resolve_nested_field_and_display_suffix(
             col((qualifier, field)),
             field.data_type(),
             inner,
@@ -165,13 +166,7 @@ impl PlanResolver<'_> {
         Ok(Some(if inner.is_empty() {
             named
         } else {
-            named.with_expression_name(
-                std::iter::once(name)
-                    .chain(inner.iter())
-                    .map(|part| part.as_ref())
-                    .collect::<Vec<_>>()
-                    .join("."),
-            )
+            named.with_expression_name(format!("{}{display_suffix}", name.as_ref()))
         }))
     }
 
@@ -304,15 +299,17 @@ impl PlanResolver<'_> {
         Ok(field)
     }
 
-    pub(super) fn resolve_potentially_nested_field<T: AsRef<str>>(
+    /// Resolve a dotted tail into its expression and display suffix, without the base name.
+    /// Map steps use brackets; field steps keep dots and input spelling. Projection names stay caller-owned.
+    pub(super) fn resolve_nested_field_and_display_suffix<T: AsRef<str>>(
         expr: expr::Expr,
         data_type: &DataType,
         inner: &[T],
         schema: &DFSchemaRef,
         allow_null_base: bool,
-    ) -> PlanResult<expr::Expr> {
+    ) -> PlanResult<(expr::Expr, String)> {
         match inner {
-            [] => Ok(expr),
+            [] => Ok((expr, String::new())),
             [name, remaining @ ..] => {
                 let lookup_type = match data_type {
                     DataType::Dictionary(_, value_type)
@@ -322,9 +319,15 @@ impl PlanResolver<'_> {
                     }
                     _ => data_type,
                 };
-                match lookup_type {
+                let (expr, display_suffix) = match lookup_type {
                     // Spark folds NULL extraction before evaluating even a projected base.
-                    DataType::Null if allow_null_base => Ok(lit(ScalarValue::Null)),
+                    DataType::Null if allow_null_base => {
+                        let display_suffix = inner
+                            .iter()
+                            .map(|part| format!(".{}", part.as_ref()))
+                            .collect::<String>();
+                        return Ok((lit(ScalarValue::Null), display_suffix));
+                    }
                     DataType::Struct(fields) => {
                         let field = Self::resolve_struct_field(fields, name.as_ref())?;
                         let args = vec![expr, lit(field.name().to_string())];
@@ -337,7 +340,7 @@ impl PlanResolver<'_> {
                         } else {
                             field.data_type()
                         };
-                        Self::resolve_potentially_nested_field(
+                        Self::resolve_nested_field_and_display_suffix(
                             expr,
                             result_type,
                             remaining,
@@ -348,7 +351,7 @@ impl PlanResolver<'_> {
                     DataType::Map(_, _) => {
                         let expr = get_field().call(vec![expr, lit(name.as_ref().to_string())]);
                         let data_type = expr.get_type(schema)?;
-                        Self::resolve_potentially_nested_field(
+                        Self::resolve_nested_field_and_display_suffix(
                             expr,
                             &data_type,
                             remaining,
@@ -381,7 +384,7 @@ impl PlanResolver<'_> {
                             }
                             _ => unreachable!("list data type matched above"),
                         };
-                        Self::resolve_potentially_nested_field(
+                        Self::resolve_nested_field_and_display_suffix(
                             expr,
                             &data_type,
                             remaining,
@@ -393,7 +396,13 @@ impl PlanResolver<'_> {
                         "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field {:?} cannot be extracted from {data_type}",
                         name.as_ref()
                     ))),
-                }
+                }?;
+                let display_suffix = if matches!(lookup_type, DataType::Map(_, _)) {
+                    format!("[{}]{display_suffix}", name.as_ref())
+                } else {
+                    format!(".{}{display_suffix}", name.as_ref())
+                };
+                Ok((expr, display_suffix))
             }
         }
     }
