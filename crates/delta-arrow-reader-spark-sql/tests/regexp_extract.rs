@@ -120,10 +120,10 @@ async fn regexp_extract_matches_spark() -> TestResult {
                         representation,
                         batch_size,
                         &observed,
-                    );
+                    )?;
                     let engine_boundary = case["id"] == "regexp_extract_literal_lookbehind";
                     let matches_reference = if expected["status"] == "error" {
-                        !regexp_capability::has_recorded_case(fixture, case)
+                        !regexp_capability::has_recorded_case(fixture, case)?
                             && observed["analyzed_schema"] == expected["analyzed_schema"]
                             && observed["error"]
                                 .as_str()

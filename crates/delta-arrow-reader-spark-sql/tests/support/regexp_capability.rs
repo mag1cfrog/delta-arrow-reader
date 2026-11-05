@@ -1,5 +1,6 @@
 //! Exact recorded limits for the two Spark regex adapters.
 
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use serde_json::{Value, json};
@@ -40,16 +41,32 @@ fn selected_fields(value: &Value, fields: &[&str]) -> Value {
     )
 }
 
-fn profiles() -> &'static [Value] {
-    static PROFILES: OnceLock<Vec<Value>> = OnceLock::new();
-    PROFILES.get_or_init(|| {
-        include_str!("../fixtures/regex-native-limit-profiles.jsonl")
-            .split('\n')
-            .skip(1)
-            .filter(|line| !line.is_empty())
-            .map(|line| serde_json::from_str(line).expect("recorded regex profile JSON"))
-            .collect()
-    })
+fn validate_profiles(profiles: Vec<Value>) -> Result<Vec<Value>, String> {
+    let keys = profiles
+        .iter()
+        .map(|profile| profile["key"].to_string())
+        .collect::<HashSet<_>>();
+    if profiles.len() != 516 || keys.len() != profiles.len() {
+        return Err("recorded regex profile inventory requires 516 unique context keys".into());
+    }
+    Ok(profiles)
+}
+
+fn profiles() -> Result<&'static [Value], &'static str> {
+    static PROFILES: OnceLock<Result<Vec<Value>, String>> = OnceLock::new();
+    PROFILES
+        .get_or_init(|| {
+            include_str!("../fixtures/regex-native-limit-profiles.jsonl")
+                .split('\n')
+                .skip(1)
+                .filter(|line| !line.is_empty())
+                .map(serde_json::from_str)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("recorded regex profile JSON: {error}"))
+                .and_then(validate_profiles)
+        })
+        .as_deref()
+        .map_err(String::as_str)
 }
 
 fn profile_matches(
@@ -91,10 +108,10 @@ pub(super) fn recorded_limit(
     representation: usize,
     batch_size: usize,
     actual: &Value,
-) -> Option<&'static str> {
+) -> Result<Option<&'static str>, &'static str> {
     let key = json!({"fixture":fixture,"id":case["id"],"ansi":case["ansi"],
         "representation":representation,"batch_size":batch_size});
-    profiles()
+    Ok(profiles()?
         .iter()
         .find(|profile| {
             profile["key"] == key
@@ -106,29 +123,34 @@ pub(super) fn recorded_limit(
                     batch_size,
                     Some(actual),
                 )
-        })?
-        .get("category")?
-        .as_str()
+        })
+        .and_then(|profile| profile.get("category"))
+        .and_then(Value::as_str))
 }
 
 // A recorded diagnostic must not fall through to a looser legacy error matcher.
-pub(super) fn has_recorded_case(fixture: &str, case: &Value) -> bool {
-    profiles().iter().any(|profile| {
+pub(super) fn has_recorded_case(fixture: &str, case: &Value) -> Result<bool, &'static str> {
+    Ok(profiles()?.iter().any(|profile| {
         profile["key"]["fixture"] == fixture && profile["key"]["id"] == case["id"]
-    })
+    }))
 }
 
 #[test]
-fn recorded_regex_limits_require_complete_identity_and_outcome() {
-    use std::collections::{BTreeMap, HashSet};
+fn recorded_regex_limits_require_complete_identity_and_outcome() -> crate::string_binary::TestResult {
+    use std::collections::BTreeMap;
 
-    let mut keys = HashSet::new();
     let mut counts = BTreeMap::new();
-    for profile in profiles() {
-        assert!(keys.insert(profile["key"].to_string()));
-        *counts.entry(profile["category"].as_str().unwrap()).or_insert(0) += 1;
+    let profiles = profiles()?;
+    assert!(validate_profiles(Vec::new()).is_err());
+    let mut truncated = profiles.to_vec();
+    truncated.pop();
+    assert!(validate_profiles(truncated).is_err());
+    let mut duplicated = profiles.to_vec();
+    duplicated[1] = duplicated[0].clone();
+    assert!(validate_profiles(duplicated).is_err());
+    for profile in profiles {
+        *counts.entry(profile["category"].as_str().ok_or("missing profile category")?).or_insert(0) += 1;
     }
-    assert_eq!(keys.len(), 516);
     assert_eq!(
         counts,
         BTreeMap::from([
@@ -141,13 +163,13 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() {
         ])
     );
     for category in counts.keys() {
-        let profile = profiles()
+        let profile = profiles
             .iter()
             .find(|profile| profile["category"] == *category)
-            .unwrap();
-        let fixture = profile["key"]["fixture"].as_str().unwrap();
-        let representation = profile["key"]["representation"].as_u64().unwrap() as usize;
-        let batch_size = profile["key"]["batch_size"].as_u64().unwrap() as usize;
+            .ok_or("missing profile category example")?;
+        let fixture = profile["key"]["fixture"].as_str().ok_or("missing profile fixture")?;
+        let representation = profile["key"]["representation"].as_u64().ok_or("missing profile representation")? as usize;
+        let batch_size = profile["key"]["batch_size"].as_u64().ok_or("missing profile batch size")? as usize;
         let case = json!({"id":profile["key"]["id"],"ansi":profile["key"]["ansi"],
             "sql":profile["sql"],"expected":profile["spark_expected"]});
         let actual = &profile["native_actual"];
@@ -159,24 +181,24 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() {
         assert!(!profile_matches(profile, "wrong.jsonl", &case, representation, batch_size, Some(actual)));
         assert!(!profile_matches(profile, fixture, &case, 3, batch_size, Some(actual)));
         assert!(!profile_matches(profile, fixture, &case, representation, 7, Some(actual)));
-        for (key, value) in [("id", json!("wrong")), ("sql", json!("SELECT 1")), ("ansi", json!(!case["ansi"].as_bool().unwrap()))] {
+        for (key, value) in [("id", json!("wrong")), ("sql", json!("SELECT 1")), ("ansi", json!(!case["ansi"].as_bool().ok_or("missing case ANSI mode")?))] {
             let mut changed = case.clone();
             changed[key] = value;
             assert!(!matches(&changed, Some(actual)));
         }
         for stage in ["analyzed_schema", "physical_schema"] {
-            for (field, value) in [("name", json!("wrong")), ("type", json!("binary")), ("nullable", json!(!actual[stage]["fields"][0]["nullable"].as_bool().unwrap())), ("metadata", json!({"wrong":"metadata"}))] {
+            for (field, value) in [("name", json!("wrong")), ("type", json!("binary")), ("nullable", json!(!actual[stage]["fields"][0]["nullable"].as_bool().ok_or("missing field nullability")?)), ("metadata", json!({"wrong":"metadata"}))] {
                 let mut changed = actual.clone();
                 changed[stage]["fields"][0][field] = value;
                 assert!(!matches(&case, Some(&changed)));
             }
             let mut changed = actual.clone();
-            changed.as_object_mut().unwrap().remove(stage);
+            changed.as_object_mut().ok_or("native actual is not an object")?.remove(stage);
             assert!(!matches(&case, Some(&changed)));
         }
         for key in ["analyzed_arrow_schema", "physical_arrow_schema"] {
             let mut changed = actual.clone();
-            changed.as_object_mut().unwrap().remove(key);
+            changed.as_object_mut().ok_or("native actual is not an object")?.remove(key);
             assert!(!matches(&case, Some(&changed)));
         }
         let mut changed_case = case.clone();
@@ -195,7 +217,7 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() {
                 changed[key] = value;
                 assert!(!matches(&case, Some(&changed)));
             }
-            let error = actual["error"].as_str().unwrap();
+            let error = actual["error"].as_str().ok_or("native error is not a string")?;
             let wrong_cause = if let Some((prefix, _)) = error.rsplit_once('\n') {
                 format!("{prefix}\nerror: wrong cause")
             } else {
@@ -232,21 +254,21 @@ fn recorded_regex_limits_require_complete_identity_and_outcome() {
             assert!(!matches(&case, Some(&positive)));
         }
     }
-    let profile = profiles()
+    let profile = profiles
         .iter()
         .find(|profile| profile["native_actual"]["rows"].as_array().is_some_and(|rows| rows.len() > 1))
-        .unwrap();
+        .ok_or("missing multi-row profile")?;
+    let fixture = profile["key"]["fixture"].as_str().ok_or("missing profile fixture")?;
+    let representation = profile["key"]["representation"].as_u64().ok_or("missing profile representation")? as usize;
+    let batch_size = profile["key"]["batch_size"].as_u64().ok_or("missing profile batch size")? as usize;
     let case = json!({"id":profile["key"]["id"],"ansi":profile["key"]["ansi"],
         "sql":profile["sql"],"expected":profile["spark_expected"]});
     let mut reversed = profile["native_actual"].clone();
-    reversed["rows"].as_array_mut().unwrap().reverse();
-    assert!(!profile_matches(profile, profile["key"]["fixture"].as_str().unwrap(), &case,
-        profile["key"]["representation"].as_u64().unwrap() as usize,
-        profile["key"]["batch_size"].as_u64().unwrap() as usize, Some(&reversed)));
+    reversed["rows"].as_array_mut().ok_or("native rows are not an array")?.reverse();
+    assert!(!profile_matches(profile, fixture, &case, representation, batch_size, Some(&reversed)));
     let mut duplicate = profile["native_actual"].clone();
     let row = duplicate["rows"][0].clone();
-    duplicate["rows"].as_array_mut().unwrap().push(row);
-    assert!(!profile_matches(profile, profile["key"]["fixture"].as_str().unwrap(), &case,
-        profile["key"]["representation"].as_u64().unwrap() as usize,
-        profile["key"]["batch_size"].as_u64().unwrap() as usize, Some(&duplicate)));
+    duplicate["rows"].as_array_mut().ok_or("native rows are not an array")?.push(row);
+    assert!(!profile_matches(profile, fixture, &case, representation, batch_size, Some(&duplicate)));
+    Ok(())
 }

@@ -307,7 +307,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                         representation,
                         batch_size,
                         &observed,
-                    );
+                    )?;
                     if !regexp_capability::completed_stages_are_retained(&observed) {
                         differences.push(format!("{id}: missing completed native stage"));
                     }
@@ -332,7 +332,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                     }
                     let status = if error.is_none() && complete_result_matches(&observed, expected) {
                         "exact"
-                    } else if !regexp_capability::has_recorded_case(fixture_name, case)
+                    } else if !regexp_capability::has_recorded_case(fixture_name, case)?
                         && physical_comparison != "difference" && error.is_some_and(|error| required_error_outcome_matches(error, analyzed_schema, expected)) {
                         if expected.get("analyzed_schema").is_some() { "required_error" } else { "required_admission_error" }
                     } else if error.is_none() && known_like_name(&observed, expected, id) {
@@ -506,7 +506,7 @@ async fn regexp_replace_nonboundaries_match_spark_and_retain_adjacent_patterns()
                     representation,
                     batch_size,
                     &actual,
-                );
+                )?;
                 if !regexp_capability::completed_stages_are_retained(&actual) {
                     differences.push(format!("{id}: missing completed native stage"));
                 }
@@ -640,7 +640,7 @@ async fn regexp_native_capability_limits_retain_strict_spark_differences() -> Te
                         representation,
                         batch_size,
                         &actual,
-                    );
+                    )?;
                     if matches_reference {
                         exact += 1;
                         assert!(limit.is_none(), "a positive control cannot use a gap profile");
