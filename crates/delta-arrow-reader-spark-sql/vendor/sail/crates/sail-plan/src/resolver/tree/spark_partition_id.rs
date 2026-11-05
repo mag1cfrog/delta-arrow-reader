@@ -38,7 +38,7 @@ impl TreeNodeRewriter for SparkPartitionIdRewriter<'_> {
     type Node = Expr;
 
     fn f_down(&mut self, node: Expr) -> Result<Transformed<Expr>> {
-        Ok(skip_aggregate_arguments_needing_validation(node))
+        skip_aggregate_arguments_needing_validation(node)
     }
 
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {

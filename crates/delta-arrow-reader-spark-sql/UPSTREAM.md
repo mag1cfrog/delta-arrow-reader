@@ -526,6 +526,15 @@ removed, so required evaluations and errors remain. UNION ALL retains every
 original value and duplicate. Floating UNION schemas allow nullable physical
 results when native simplification removes an inner constant marker.
 
+Spark aggregate admission retains argument structure through input typing and
+structural checks. COUNT/COUNT_IF pruning and AVG/LISTAGG NULL handling must
+preserve nested aggregate/window and nondeterministic-argument errors, including
+scalar-subquery producers. SQL-produced monotonic IDs remain nondeterministic;
+internal IDs used for stable window ordering have a distinct purpose that
+survives plan cloning and rebuilding. The
+[global aggregate admission references](tests/fixtures/README.md#global-aggregate-argument-admission)
+cover the admission rules and retain scoped #142/#156 differences.
+
 COUNT_IF retains its SQL FILTER separately from the count argument. The native
 NULLIF expression shape permits common subexpression elimination before FILTER,
 matching Spark's complex-predicate evaluation. Native simplification handles

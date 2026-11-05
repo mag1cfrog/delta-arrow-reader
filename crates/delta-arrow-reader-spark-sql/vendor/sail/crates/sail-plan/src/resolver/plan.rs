@@ -88,28 +88,25 @@ impl PlanResolver<'_> {
                     "COUNT_IF FILTER cannot contain an aggregate function",
                 ));
             }
-            if let Some(argument) = function
-                .params
-                .args
-                .iter()
-                .find(|arg| expression_is_nondeterministic(arg))
-            {
-                if count_if {
-                    return Err(PlanError::invalid(
-                        "COUNT_IF argument requires a deterministic expression",
-                    ));
+            for argument in &function.params.args {
+                if expression_is_nondeterministic(argument)? {
+                    if count_if {
+                        return Err(PlanError::invalid(
+                            "COUNT_IF argument requires a deterministic expression",
+                        ));
+                    }
+                    return Err(PlanError::analysis(format!(
+                        "[AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION] Non-deterministic expression {argument} should not appear in the arguments of aggregate function {}",
+                        function.func.name()
+                    )));
                 }
-                return Err(PlanError::analysis(format!(
-                    "[AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION] Non-deterministic expression {argument} should not appear in the arguments of aggregate function {}",
-                    function.func.name()
-                )));
             }
             if count_if
                 && function
                     .params
                     .filter
                     .as_deref()
-                    .is_some_and(expression_is_nondeterministic)
+                    .map_or(Ok(false), expression_is_nondeterministic)?
             {
                 return Err(PlanError::invalid(
                     "COUNT_IF FILTER requires a deterministic expression",

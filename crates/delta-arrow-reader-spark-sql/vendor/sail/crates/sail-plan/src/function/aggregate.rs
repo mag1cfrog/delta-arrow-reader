@@ -487,7 +487,13 @@ fn count(input: AggFunctionInput) -> PlanResult<expr::Expr> {
     }
 
     // Keep original arguments until the complete query has passed type checking.
-    if args.iter().any(aggregate_argument_needs_validation) {
+    if args.iter().try_fold(false, |found, argument| {
+        if found {
+            Ok(true)
+        } else {
+            aggregate_argument_needs_validation(argument)
+        }
+    })? {
         return Ok(expr::Expr::AggregateFunction(AggregateFunction {
             func: count::count_udaf(),
             params: AggregateFunctionParams {
@@ -660,16 +666,16 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         schema,
         input.function_context.plan_config.ansi_mode,
     )?;
-    if let Some(filter) = &input.filter {
-        if filter.get_type(schema)? != DataType::Boolean {
-            return Err(PlanError::invalid("COUNT_IF FILTER requires BOOLEAN"));
-        }
+    if let Some(filter) = &input.filter
+        && filter.get_type(schema)? != DataType::Boolean
+    {
+        return Err(PlanError::invalid("COUNT_IF FILTER requires BOOLEAN"));
     }
-    if aggregate_argument_needs_validation(&predicate)
+    if aggregate_argument_needs_validation(&predicate)?
         || input
             .filter
             .as_deref()
-            .is_some_and(aggregate_argument_needs_validation)
+            .map_or(Ok(false), aggregate_argument_needs_validation)?
     {
         // Keep pending COUNT_IF fields distinct from native COUNT while deferring checks.
         let argument_name = format!("count_if({})", predicate.schema_name());
@@ -787,43 +793,45 @@ pub(crate) fn require_deterministic_scalar_expression(
     Ok(())
 }
 
-pub(crate) fn aggregate_argument_needs_validation(expression: &expr::Expr) -> bool {
-    !find_aggregate_exprs([expression]).is_empty()
+pub(crate) fn aggregate_argument_needs_validation(
+    expression: &expr::Expr,
+) -> datafusion_common::Result<bool> {
+    Ok(!find_aggregate_exprs([expression]).is_empty()
         || !find_window_exprs([expression]).is_empty()
-        || expression_is_nondeterministic(expression)
+        || expression_is_nondeterministic(expression)?)
 }
 
-pub(crate) fn expression_is_nondeterministic(expression: &expr::Expr) -> bool {
-    expression
-        .exists(|expression| {
-            if expression.is_volatile_node() {
-                return Ok(true);
+pub(crate) fn expression_is_nondeterministic(
+    expression: &expr::Expr,
+) -> datafusion_common::Result<bool> {
+    expression.exists(|expression| {
+        if expression.is_volatile_node() {
+            return Ok(true);
+        }
+        let expr::Expr::ScalarSubquery(subquery) = expression else {
+            return Ok(false);
+        };
+        let mut volatile = false;
+        subquery.subquery.apply_with_subqueries(|plan| {
+            if let datafusion_expr::LogicalPlan::Extension(extension) = plan {
+                let node = extension.node.as_any();
+                volatile |= node.is::<SparkPartitionIdNode>()
+                    || node
+                        .downcast_ref::<MonotonicIdNode>()
+                        .is_some_and(|node| node.purpose() == MonotonicIdPurpose::SqlFunction);
             }
-            let expr::Expr::ScalarSubquery(subquery) = expression else {
-                return Ok(false);
-            };
-            let mut volatile = false;
-            subquery.subquery.apply_with_subqueries(|plan| {
-                if let datafusion_expr::LogicalPlan::Extension(extension) = plan {
-                    let node = extension.node.as_any();
-                    volatile |= node.is::<SparkPartitionIdNode>()
-                        || node
-                            .downcast_ref::<MonotonicIdNode>()
-                            .is_some_and(|node| node.purpose() == MonotonicIdPurpose::SqlFunction);
-                }
-                plan.apply_expressions(|expression| {
-                    volatile |= expression.is_volatile();
-                    Ok(TreeNodeRecursion::Continue)
-                })?;
-                Ok(if volatile {
-                    TreeNodeRecursion::Stop
-                } else {
-                    TreeNodeRecursion::Continue
-                })
+            plan.apply_expressions(|expression| {
+                volatile |= expression.is_volatile();
+                Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(volatile)
-        })
-        .expect("volatility inspection does not evaluate expressions")
+            Ok(if volatile {
+                TreeNodeRecursion::Stop
+            } else {
+                TreeNodeRecursion::Continue
+            })
+        })?;
+        Ok(volatile)
+    })
 }
 
 fn collect_set(input: AggFunctionInput) -> PlanResult<expr::Expr> {
