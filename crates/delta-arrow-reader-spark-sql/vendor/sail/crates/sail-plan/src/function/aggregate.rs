@@ -11,6 +11,7 @@ use datafusion::functions_aggregate::{
 use datafusion::functions_nested::string::array_to_string;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, ScalarValue};
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionParams};
 use datafusion_expr::simplify::SimplifyContext;
@@ -61,7 +62,7 @@ lazy_static! {
 }
 
 fn avg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
-    let (args, null_treatment) =
+    let (mut args, null_treatment) =
         get_arguments_and_null_treatment(input.arguments, input.ignore_nulls)?;
     if args
         .first()
@@ -69,7 +70,7 @@ fn avg(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         .transpose()?
         == Some(DataType::Null)
     {
-        return Ok(lit(ScalarValue::Null));
+        args[0] = cast(args[0].clone(), DataType::Float64);
     }
     Ok(expr::Expr::AggregateFunction(AggregateFunction {
         func: average::avg_udaf(),
@@ -483,6 +484,20 @@ fn count(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         }
     }
 
+    // Keep original arguments until the complete query has passed type checking.
+    if args.iter().any(aggregate_argument_needs_validation) {
+        return Ok(expr::Expr::AggregateFunction(AggregateFunction {
+            func: count::count_udaf(),
+            params: AggregateFunctionParams {
+                args,
+                distinct,
+                filter,
+                order_by,
+                null_treatment,
+            },
+        }));
+    }
+
     let filter = match filter {
         Some(filter)
             if matches!(
@@ -643,12 +658,26 @@ fn count_if(input: AggFunctionInput) -> PlanResult<expr::Expr> {
         schema,
         input.function_context.plan_config.ansi_mode,
     )?;
-    require_deterministic_scalar_expression(&predicate, "COUNT_IF argument")?;
     if let Some(filter) = &input.filter {
         if filter.get_type(schema)? != DataType::Boolean {
             return Err(PlanError::invalid("COUNT_IF FILTER requires BOOLEAN"));
         }
-        require_deterministic_scalar_expression(filter, "COUNT_IF FILTER")?;
+    }
+    if aggregate_argument_needs_validation(&predicate)
+        || input.filter.as_deref().is_some_and(aggregate_argument_needs_validation)
+    {
+        // Keep pending COUNT_IF fields distinct from native COUNT while deferring checks.
+        let argument_name = format!("count_if({})", predicate.schema_name());
+        return Ok(expr::Expr::AggregateFunction(AggregateFunction {
+            func: Arc::new(count::count_udaf().as_ref().clone().with_aliases(["count_if"])),
+            params: AggregateFunctionParams {
+                args: vec![predicate.alias(argument_name)],
+                distinct: input.distinct,
+                order_by: input.order_by,
+                filter: input.filter,
+                null_treatment: get_null_treatment(input.ignore_nulls),
+            },
+        }));
     }
     let counts_no_rows = filtered_count_if_is_constant_zero(
         &predicate,
@@ -746,6 +775,32 @@ pub(crate) fn require_deterministic_scalar_expression(
         )));
     }
     Ok(())
+}
+
+pub(crate) fn aggregate_argument_needs_validation(expression: &expr::Expr) -> bool {
+    !find_aggregate_exprs([expression]).is_empty()
+        || !find_window_exprs([expression]).is_empty()
+        || expression_is_nondeterministic(expression)
+}
+
+pub(crate) fn expression_is_nondeterministic(expression: &expr::Expr) -> bool {
+    expression.exists(|expression| {
+        if expression.is_volatile_node() {
+            return Ok(true);
+        }
+        let expr::Expr::ScalarSubquery(subquery) = expression else {
+            return Ok(false);
+        };
+        let mut volatile = false;
+        subquery.subquery.apply_with_subqueries(|plan| {
+            plan.apply_expressions(|expression| {
+                volatile |= expression.is_volatile();
+                Ok(TreeNodeRecursion::Continue)
+            })?;
+            Ok(if volatile { TreeNodeRecursion::Stop } else { TreeNodeRecursion::Continue })
+        })?;
+        Ok(volatile)
+    }).expect("volatility inspection does not evaluate expressions")
 }
 
 fn collect_set(input: AggFunctionInput) -> PlanResult<expr::Expr> {

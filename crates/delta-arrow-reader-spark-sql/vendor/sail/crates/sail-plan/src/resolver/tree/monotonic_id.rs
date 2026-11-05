@@ -10,7 +10,7 @@ use sail_function::scalar::misc::monotonically_increasing_id::SparkMonotonically
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
 
 use crate::resolver::state::PlanResolverState;
-use crate::resolver::tree::{PlanRewriter, empty_logical_plan};
+use crate::resolver::tree::{PlanRewriter, empty_logical_plan, skip_aggregate_arguments};
 
 pub(crate) struct MonotonicIdRewriter<'s> {
     plan: LogicalPlan,
@@ -34,6 +34,10 @@ impl<'s> PlanRewriter<'s> for MonotonicIdRewriter<'s> {
 
 impl TreeNodeRewriter for MonotonicIdRewriter<'_> {
     type Node = Expr;
+
+    fn f_down(&mut self, node: Expr) -> Result<Transformed<Expr>> {
+        Ok(skip_aggregate_arguments(node))
+    }
 
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {
         let (func, args) = match node {

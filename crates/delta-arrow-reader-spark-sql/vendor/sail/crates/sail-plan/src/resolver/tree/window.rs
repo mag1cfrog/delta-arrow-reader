@@ -19,7 +19,7 @@ use crate::error::PlanResult;
 use crate::function::sort_keys::spark_sort_key;
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
-use crate::resolver::tree::{PlanRewriter, empty_logical_plan};
+use crate::resolver::tree::{PlanRewriter, empty_logical_plan, skip_aggregate_arguments};
 
 pub(crate) struct WindowRewriter<'s> {
     plan: LogicalPlan,
@@ -76,6 +76,10 @@ impl<'s> PlanRewriter<'s> for WindowRewriter<'s> {
 
 impl TreeNodeRewriter for WindowRewriter<'_> {
     type Node = Expr;
+
+    fn f_down(&mut self, node: Expr) -> Result<Transformed<Expr>> {
+        Ok(skip_aggregate_arguments(node))
+    }
 
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {
         match node {

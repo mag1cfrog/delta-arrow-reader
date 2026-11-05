@@ -148,10 +148,6 @@ impl PlanResolver<'_> {
             } else {
                 arguments
             };
-            let volatile_argument = arguments
-                .iter()
-                .find(|argument| argument.is_volatile())
-                .cloned();
             let input = AggFunctionInput {
                 arguments,
                 distinct: is_distinct,
@@ -165,16 +161,8 @@ impl PlanResolver<'_> {
                     schema,
                 },
             };
-            let expression = func(input)?;
-            if let Some(argument) = volatile_argument {
-                // Builders may erase arguments; invalid input types still take priority.
-                expression.get_type(schema)?;
-                return Err(PlanError::analysis(format!(
-                    "[AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION] Non-deterministic expression {argument} should not appear in the arguments of aggregate function {canonical_function_name}",
-                )));
-            }
             // Normalize only the DISTINCT operations retained by the function builder.
-            expression
+            func(input)?
                 .transform_up(|mut expression| {
                     if let Expr::AggregateFunction(function) = &mut expression
                         && function.params.distinct

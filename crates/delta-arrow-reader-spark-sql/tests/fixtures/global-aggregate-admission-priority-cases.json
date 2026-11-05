@@ -1,0 +1,132 @@
+{
+  "input_version": 1,
+  "capture_kind": "global_aggregate_admission_priority",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "main_manifest_sha256": "12a4be1302fe3422cd23884e9611141e2f80bb4b10203ce142996172af23e734",
+  "registered_udf": {
+    "name": "observed_arg",
+    "return_type": "double",
+    "volatility": "nondeterministic",
+    "constant_result": 0.5
+  },
+  "udf_success_assertions": "exact_schema_and_rows",
+  "cases": [
+    {
+      "id": "nested_count_if_rand",
+      "scope": "nested_count_if",
+      "sql": "SELECT COUNT_IF(SUM(RAND())>0) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "admission_fields_and_cardinality",
+      "udf_sql": "SELECT COUNT_IF(SUM(observed_arg(v))>0) AS result FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "nested_count_if_deterministic",
+      "scope": "nested_count_if",
+      "sql": "SELECT COUNT_IF(SUM(v)>0) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_count_if_invalid_rand_array",
+      "scope": "nested_count_if",
+      "sql": "SELECT COUNT_IF(SUM(ARRAY(RAND()))>0) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "admission_fields_and_cardinality",
+      "udf_sql": "SELECT COUNT_IF(SUM(ARRAY(observed_arg(v)))>0) AS result FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "nested_count_if_invalid_deterministic_array",
+      "scope": "nested_count_if",
+      "sql": "SELECT COUNT_IF(SUM(ARRAY(v))>0) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_sum_rand",
+      "scope": "nested_sum",
+      "sql": "SELECT SUM(SUM(RAND())) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "admission_fields_and_cardinality",
+      "udf_sql": "SELECT SUM(SUM(observed_arg(v))) AS result FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "nested_sum_deterministic",
+      "scope": "nested_sum",
+      "sql": "SELECT SUM(SUM(v)) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_sum_invalid_rand_array",
+      "scope": "nested_sum",
+      "sql": "SELECT SUM(SUM(ARRAY(RAND()))) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "admission_fields_and_cardinality",
+      "udf_sql": "SELECT SUM(SUM(ARRAY(observed_arg(v)))) AS result FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "nested_sum_invalid_deterministic_array",
+      "scope": "nested_sum",
+      "sql": "SELECT SUM(SUM(ARRAY(v))) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "invalid_sibling_count_first",
+      "scope": "sibling_type_priority",
+      "sql": "SELECT COUNT(RAND()) AS a,SUM(ARRAY(v)) AS b FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS a,SUM(ARRAY(v)) AS b FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "invalid_sibling_sum_first",
+      "scope": "sibling_type_priority",
+      "sql": "SELECT SUM(ARRAY(v)) AS b,COUNT(RAND()) AS a FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT SUM(ARRAY(v)) AS b,COUNT(observed_arg(v)) AS a FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "valid_sibling_count_first",
+      "scope": "sibling_type_priority",
+      "sql": "SELECT COUNT(RAND()) AS a,SUM(v) AS b FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS a,SUM(v) AS b FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "valid_sibling_sum_first",
+      "scope": "sibling_type_priority",
+      "sql": "SELECT SUM(v) AS b,COUNT(RAND()) AS a FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT SUM(v) AS b,COUNT(observed_arg(v)) AS a FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "invalid_sibling_deterministic_count_first",
+      "scope": "sibling_type_priority",
+      "sql": "SELECT COUNT(v) AS a,SUM(ARRAY(v)) AS b FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "invalid_sibling_deterministic_sum_first",
+      "scope": "sibling_type_priority",
+      "sql": "SELECT SUM(ARRAY(v)) AS b,COUNT(v) AS a FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "scalar_subquery_rand_argument",
+      "scope": "scalar_subquery_argument",
+      "sql": "SELECT SUM((SELECT RAND())) AS result FROM VALUES(1),(2)t(v)",
+      "udf_sql": "SELECT SUM((SELECT observed_arg(1))) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "valid_inner_sum",
+      "scope": "valid_control",
+      "sql": "SELECT SUM(v) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "udf_execution_control",
+      "scope": "callback_control",
+      "sql": "SELECT observed_arg(v) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    }
+  ]
+}
