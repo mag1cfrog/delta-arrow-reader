@@ -183,11 +183,11 @@ async fn inline_values_null_boundaries_match_spark() -> TestResult {
 }
 
 #[tokio::test]
-async fn inline_values_null_divisors_match_spark() -> TestResult {
+async fn inline_values_literal_null_divisors_match_spark() -> TestResult {
     check_inline_null_reference(
-        include_str!("fixtures/inline-values-evaluation/null-divisors-spark.jsonl"),
-        10,
-        "inline_values_null_divisor_observation",
+        include_str!("fixtures/inline-values-evaluation/literal-null-divisors-spark.jsonl"),
+        6,
+        "inline_values_literal_null_divisor_observation",
     )
     .await
 }

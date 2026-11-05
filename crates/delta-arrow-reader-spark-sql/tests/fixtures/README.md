@@ -351,6 +351,21 @@ observations match Spark and 6 retain exact baseline differences. The retained-g
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
 
+## Inline VALUES validation
+
+`inline-values-evaluation/spark-reference.jsonl` records 72 Spark observations for
+constant inline expressions, including errors preserved under filters, LIMIT 0
+and unused projections, row/column error order, CASE branches and NULL/TRY_CAST.
+`null-boundaries-spark.jsonl` adds eight NULL-operand observations, and
+`literal-null-divisors-spark.jsonl` adds six integral DIV, remainder and Decimal
+division observations with literal NULL divisors, all in the same directory.
+The tests compare complete Fields, rows, error conditions, causes and stages at
+batch sizes 1 and 32. Native session modes and nonfoldable functions have separate
+preservation controls.
+
+Computed NULL divisors remain open in [#990](https://github.com/mag1cfrog/delta-arrow-reader/issues/990),
+and NULLIF inline-table admission remains open in [#991](https://github.com/mag1cfrog/delta-arrow-reader/issues/991).
+
 ## Historical expression-schema corrections
 
 `expression-nullability-replay-spark.jsonl` records independent Spark results for
