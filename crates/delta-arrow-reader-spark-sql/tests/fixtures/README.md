@@ -481,7 +481,15 @@ returns -1 for NULL only when ANSI mode is off and the legacy setting is on.
 accept arrays and maps; ARRAY_SIZE accepts arrays and always returns NULL for
 NULL. The captures check values, INT output types, argument admission, untyped
 NULLs, empty inputs and live cast errors. Returned NULLs must fit both output
-schemas; exact Spark schema-nullability parity remains S07 work.
+schemas.
+
+The [collection-length field references](collection-length-fields/README.md)
+add 144 unchanged independent observations for complete analyzed, optimized
+and executed fields under all four ANSI/legacy settings. The strict replay
+also checks all six original SIZE-over-TRANSFORM provider records, native SQL
+and session options. Required containers have required count fields even when
+their elements or Map values are nullable. ARRAY_SIZE keeps its NULL-on-NULL
+rule in every setting.
 
 Separate public-API tests cover sliced and empty List, LargeList, ListView,
 LargeListView, FixedSizeList, Map and Null arrays. A counted volatile input must
