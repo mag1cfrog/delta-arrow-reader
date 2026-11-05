@@ -155,6 +155,44 @@ fn read_records(source: &str) -> TestResult<Vec<Value>> {
         .collect::<Result<Vec<_>, _>>()?)
 }
 
+// The #813 receipts remain historical evidence; those contexts require strict Spark equality.
+fn current_native_profile<'a>(profiles: &'a [Value], case: &Value) -> Option<&'a Value> {
+    profiles.iter().find(|profile| {
+        profile["owner"] != "#813" && profile["id"] == case["id"] && profile["ansi"] == case["ansi"]
+    })
+}
+
+#[test]
+fn legacy_bigint_profiles_are_historical_only() -> TestResult {
+    let references = read_records(include_str!(
+        "fixtures/regexp-replace-position-int-spark.jsonl"
+    ))?;
+    let native = read_records(include_str!(
+        "fixtures/regexp-replace-position-native.jsonl"
+    ))?;
+    let profiles = &native[1..];
+    let mut retired = 0;
+    for profile in profiles {
+        let case = references
+            .iter()
+            .skip(1)
+            .find(|case| case["id"] == profile["id"] && case["ansi"] == profile["ansi"])
+            .ok_or("missing native-profile reference")?;
+        if profile["owner"] == "#813" {
+            assert_eq!(profile["ansi"], false);
+            let (semantic, _, strict) = reference_comparison(&profile["actual"], &case["expected"]);
+            assert!(!semantic);
+            assert!(!strict);
+            assert!(current_native_profile(profiles, case).is_none());
+            retired += 1;
+        } else {
+            assert_eq!(current_native_profile(profiles, case), Some(profile));
+        }
+    }
+    assert_eq!(retired, 7);
+    Ok(())
+}
+
 #[test]
 fn position_error_comparison_rejects_later_stages_and_missing_fields() -> TestResult {
     let references = read_records(include_str!(
@@ -262,9 +300,7 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
                 let actual = capture_observation(&session, case).await?;
                 let expected = &case["expected"];
                 let (semantic, identifier, strict) = reference_comparison(&actual, expected);
-                let profile = profiles
-                    .iter()
-                    .find(|profile| profile["id"] == case["id"] && profile["ansi"] == case["ansi"]);
+                let profile = current_native_profile(profiles, case);
                 let preserved = profile.is_some_and(|profile| {
                     profile["sql"] == case["sql"]
                         && actual == profile["actual"]
@@ -291,8 +327,8 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
         }
     }
     assert_eq!(observations, 660);
-    assert_eq!(semantic_matches, 588);
-    assert_eq!(strict_matches, 528);
+    assert_eq!(semantic_matches, 630);
+    assert_eq!(strict_matches, 570);
     eprintln!(
         "c06 position regression summary: {}",
         json!({"references":110,"observations":observations,

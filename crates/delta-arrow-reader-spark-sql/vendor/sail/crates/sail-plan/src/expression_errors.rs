@@ -49,6 +49,7 @@ use sail_function::scalar::math::{
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
     spark_year_month_interval_scale::SparkYearMonthIntervalScale,
 };
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
@@ -81,6 +82,7 @@ fn null_literal(expr: &Expr) -> bool {
         Expr::ScalarFunction(f)
             if (f.func.inner().is::<SparkNullIfZero>()
                 || f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastBigintToInt>()
                 || f.func.inner().is::<SparkNullIf>()
                 || f.func
                     .inner()
@@ -103,6 +105,7 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
                 || (f.func.inner().is::<NormalizeNestedFloatKeys>()
                     && f.func.inner().supports_constant_folding())
                 || f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastBigintToInt>()
                 || f.func.inner().is::<SparkComparisonFloat>() =>
         {
             match f.args.as_slice() {
@@ -1544,6 +1547,8 @@ fn one_row_exprs(plan: &LogicalPlan) -> Result<Option<Vec<Expr>>> {
 
 fn has_cast(expr: &Expr) -> Result<bool> {
     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
+        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().downcast_ref::<SparkCastBigintToInt>()
+            .is_some_and(|cast| !cast.is_try()))
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
             || f.func.inner().is::<SparkDecimalCast>()

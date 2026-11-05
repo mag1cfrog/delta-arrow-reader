@@ -212,6 +212,38 @@ pub(crate) fn decode_recorded_batch(input: &Value) -> TestResult<RecordBatch> {
     Ok(RecordBatch::try_new(schema, columns)?)
 }
 
+/// Retains hidden Arrow storage for inputs marked `native_slice`.
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared input registrations."
+)]
+pub(crate) fn register_recorded_inputs_with_slices(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+) -> TestResult {
+    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
+        let mut storage = input.clone();
+        let visible_rows = input["rows"].as_array().ok_or("missing rows")?.len();
+        if input["native_slice"] == true {
+            let rows = storage["rows"].as_array_mut().ok_or("missing rows")?;
+            rows.insert(0, metadata["native"]["sliced_hidden_rows"][0].clone());
+            rows.push(metadata["native"]["sliced_hidden_rows"][1].clone());
+        }
+        let storage = decode_recorded_batch(&storage)?;
+        let batch = storage.slice(usize::from(input["native_slice"] == true), visible_rows);
+        let mut partitions = vec![Vec::new(), Vec::new()];
+        for (chunk, offset) in (0..visible_rows).step_by(batch_size).enumerate() {
+            partitions[chunk % 2].push(batch.slice(offset, batch_size.min(visible_rows - offset)));
+        }
+        session.register_table(
+            input["name"].as_str().ok_or("missing table name")?,
+            Arc::new(MemTable::try_new(batch.schema(), partitions)?),
+        )?;
+    }
+    Ok(())
+}
+
 pub(crate) fn register_recorded_inputs(
     session: &SessionContext,
     metadata: &Value,
