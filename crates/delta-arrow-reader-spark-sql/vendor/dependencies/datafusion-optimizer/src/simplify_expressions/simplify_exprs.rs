@@ -20,8 +20,9 @@
 
 use std::sync::Arc;
 
+use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode};
-use datafusion_common::{Column, DFSchema, DFSchemaRef, DataFusionError, Result};
+use datafusion_common::{Column, DFSchema, DFSchemaRef, DataFusionError, Result, ScalarValue};
 use datafusion_expr::Expr;
 use datafusion_expr::logical_plan::{Aggregate, LogicalPlan, Projection};
 use datafusion_expr::simplify::SimplifyContext;
@@ -133,27 +134,89 @@ impl SimplifyExpressions {
             simplifier
         };
 
+        let literal_input = match &plan {
+            LogicalPlan::Projection(projection)
+                if config
+                    .options()
+                    .extensions
+                    .iter()
+                    .any(|(prefix, _)| prefix == "dar_spark_sql_errors") =>
+            {
+                Some(Arc::clone(&projection.input))
+            }
+            _ => None,
+        };
+        let mut propagated_literals = false;
+
         // Preserve expression names to avoid changing the schema of the plan.
         let name_preserver = NamePreserver::new(&plan);
         let mut rewrite_expr = |expr: Expr| {
             let name = name_preserver.save(&expr);
-            let expr = simplifier.simplify_with_cycle_count_transformed(expr)?.0;
+            let expr = if let Some(input) = &literal_input {
+                expr.transform_down(|expr| {
+                    if let Expr::Column(column) = &expr
+                        && let Some(index) = input.schema().maybe_index_of_column(column)
+                        && let Some(value) = projected_literal_value(input, index)
+                    {
+                        let field = input.schema().field(index);
+                        let metadata = (!field.metadata().is_empty())
+                            .then(|| FieldMetadata::from(field.as_ref()));
+                        return Ok(Transformed::yes(Expr::Literal(value.clone(), metadata)));
+                    }
+                    Ok(Transformed::no(expr))
+                })?
+            } else {
+                Transformed::no(expr)
+            };
+            let propagated = expr.transformed;
+            propagated_literals |= propagated;
+            let expr = simplifier
+                .simplify_with_cycle_count_transformed(expr.data)?
+                .0;
             Ok(Transformed::new_transformed(
                 name.restore(expr.data),
-                expr.transformed,
+                propagated || expr.transformed,
             ))
         };
 
-        plan.map_expressions(|expr| {
+        let plan = plan.map_expressions(|expr| {
             // Preserve the aliasing of grouping sets.
             if let Expr::GroupingSet(_) = &expr {
                 expr.map_children(&mut rewrite_expr)
             } else {
                 rewrite_expr(expr)
             }
-        })?
-        .transform_data(rewrite_aggregate_non_aggregate_aggr_expr)
+        })?;
+        let plan = if propagated_literals {
+            plan.map_data(LogicalPlan::recompute_schema)?
+        } else {
+            plan
+        };
+        plan.transform_data(rewrite_aggregate_non_aggregate_aggr_expr)
     }
+}
+
+// Carry existing literals across aliases without evaluating or duplicating producers.
+fn projected_literal_value(plan: &LogicalPlan, index: usize) -> Option<&ScalarValue> {
+    let value = match plan {
+        LogicalPlan::Projection(projection) => {
+            let mut expression = projection.expr.get(index)?;
+            while let Expr::Alias(alias) = expression {
+                expression = &alias.expr;
+            }
+            match expression {
+                Expr::Literal(value, _) => value,
+                Expr::Column(column) => projected_literal_value(
+                    &projection.input,
+                    projection.input.schema().maybe_index_of_column(column)?,
+                )?,
+                _ => return None,
+            }
+        }
+        LogicalPlan::SubqueryAlias(alias) => projected_literal_value(&alias.input, index)?,
+        _ => return None,
+    };
+    (value.data_type() == *plan.schema().fields().get(index)?.data_type()).then_some(value)
 }
 
 impl SimplifyExpressions {
