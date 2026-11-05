@@ -123,9 +123,9 @@ fn recorded_map_inputs_preserve_entries_nulls_and_nested_lists() -> TestResult {
         assert!(item.metadata().is_empty());
     }
     for (column, invalid_value) in [
-        (0, json!([[null,"1"]])),
+        (0, json!([[null, "1"]])),
         (0, json!([null])),
-        (2, json!([[["q",null]]])),
+        (2, json!([[["q", null]]])),
     ] {
         let mut invalid = input.clone();
         invalid["rows"][0][column] = invalid_value;

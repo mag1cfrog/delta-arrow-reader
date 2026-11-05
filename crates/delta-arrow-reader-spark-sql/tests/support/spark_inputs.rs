@@ -42,11 +42,7 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
                 "entries",
                 DataType::Struct(
                     vec![
-                        Field::new(
-                            "keys",
-                            decode_recorded_data_type(&value["keyType"])?,
-                            false,
-                        ),
+                        Field::new("keys", decode_recorded_data_type(&value["keyType"])?, false),
                         Field::new(
                             "values",
                             decode_recorded_data_type(&value["valueType"])?,
