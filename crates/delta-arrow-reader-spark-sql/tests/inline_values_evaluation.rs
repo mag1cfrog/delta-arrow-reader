@@ -172,6 +172,99 @@ async fn inline_values_match_spark_stages_rows_and_causes() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn inline_values_null_boundaries_match_spark() -> TestResult {
+    let records = include_str!("fixtures/inline-values-evaluation/null-boundaries-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len(), 9);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(records[0]["timezone"], "UTC");
+    assert_eq!(records[0]["observations"], 8);
+    assert_eq!(
+        json!(
+            records[1..]
+                .iter()
+                .map(|case| json!({"id":case["id"], "ansi":case["ansi"]}))
+                .collect::<Vec<_>>()
+        ),
+        records[0]["identities"]
+    );
+    let cases = records[0]["cases"]
+        .as_array()
+        .ok_or("missing NULL-boundary SQL seeds")?;
+    assert_eq!(cases.len(), 4);
+    for (case, seed) in records[1..].iter().zip(cases.iter().cycle()) {
+        for key in ["id", "sql", "ordered", "group"] {
+            assert_eq!(case[key], seed[key]);
+        }
+    }
+    let mut differences = Vec::new();
+    let mut observation_count = 0;
+    for batch_size in [1, 32] {
+        let session = session(batch_size);
+        for case in &records[1..] {
+            let actual =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await
+                    .unwrap_or_else(|error| json!({"observer_error":error.to_string()}));
+            let mut matches = actual["matches"] == true && actual["optimized_matches"] == true;
+            if let Some(rows) = case["expected"]["rows"].as_array() {
+                matches &= actual["rows"].as_array().map(Vec::len) == Some(rows.len())
+                    && case["row_count"].as_u64() == Some(rows.len() as u64)
+                    && actual["before_collect"] == case["schema_stages"]["physical"]
+                    && case["schema_stages"]["public"] == case["schema_stages"]["analyzed"];
+            }
+            let mut cause_matches = None;
+            let mut cause_error = None;
+            if case["expected"]["condition"] == INLINE_CONDITION {
+                let result = plan_query(
+                    &session,
+                    case["sql"].as_str().ok_or("missing NULL-boundary SQL")?,
+                    &SparkSqlOptions {
+                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await;
+                cause_matches = Some(match result {
+                    Err(error) => match matches_inline_cause(case, &error) {
+                        Ok(matches) => matches,
+                        Err(error) => {
+                            cause_error = Some(error.to_string());
+                            false
+                        }
+                    },
+                    Ok(_) => false,
+                });
+                matches &= cause_matches == Some(true);
+            }
+            println!(
+                "inline_values_null_boundary_observation={}",
+                json!({
+                "id":case["id"], "ansi":case["ansi"], "sql":case["sql"],
+                "batch_size":batch_size, "observation":actual, "cause_matches":cause_matches,
+                "cause_error":cause_error, "matches":matches})
+            );
+            observation_count += 1;
+            if !matches {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: {actual}; cause_matches={cause_matches:?}",
+                    case["id"], case["ansi"]
+                ));
+            }
+        }
+    }
+    assert_eq!(observation_count, 16);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
 #[derive(Debug)]
 struct DeferredInlineValue(Arc<AtomicUsize>);
 
