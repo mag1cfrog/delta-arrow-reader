@@ -1259,7 +1259,9 @@ mod tests {
     fn single_row_list_builder_preserves_complete_field_and_setter_order() {
         let values = Arc::new(Int32Array::from(vec![1, 2]));
         assert_eq!(
-            SingleRowListArrayBuilder::new(values.clone()).build_list_array().data_type(),
+            SingleRowListArrayBuilder::new(values.clone())
+                .build_list_array()
+                .data_type(),
             &DataType::List(Arc::new(Field::new_list_field(DataType::Int32, true))),
         );
         let field = Field::new("kept_element", DataType::Int32, false)
@@ -1291,20 +1293,27 @@ mod tests {
             assert_eq!(array.len(), 1);
             array.to_data().validate_full().unwrap();
         }
-        let renamed = builder.clone()
+        let renamed = builder
+            .clone()
             .with_field_name(Some("renamed".into()))
             .with_nullable(true)
             .build_list_array();
         assert_eq!(
             renamed.data_type(),
-            &DataType::List(Arc::new(field.clone().with_name("renamed").with_nullable(true))),
+            &DataType::List(Arc::new(
+                field.clone().with_name("renamed").with_nullable(true)
+            )),
         );
-        let replaced = builder.clone()
+        let replaced = builder
+            .clone()
             .with_nullable(true)
             .with_field_name(Some("replaced".into()))
             .with_field(&field)
             .build_list_array();
-        assert_eq!(replaced.data_type(), &DataType::List(Arc::new(field.clone())));
+        assert_eq!(
+            replaced.data_type(),
+            &DataType::List(Arc::new(field.clone()))
+        );
         let default_name = builder.with_field_name(None).build_list_array();
         assert_eq!(
             default_name.data_type(),
