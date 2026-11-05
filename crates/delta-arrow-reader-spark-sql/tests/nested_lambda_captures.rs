@@ -1125,6 +1125,29 @@ async fn original_concat_nested_lambda_consumer_keeps_both_parameter_scopes() ->
                     "{} {payload_type:?} batch={batch_size} ANSI={}",
                     case["id"], case["ansi"]
                 );
+                // Separate resolve-only probe; the primary observation is collected below.
+                let resolved = plan_query(
+                    &session,
+                    case["sql"].as_str().ok_or("missing SQL")?,
+                    &SparkSqlOptions {
+                        ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI")?,
+                        session_timezone: "UTC".into(),
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await;
+                let analyzed_payload_type_matches = resolved.as_ref().is_ok_and(|query| {
+                    query
+                        .column_names
+                        .get(1)
+                        .is_some_and(|name| name == "payload")
+                        && query
+                            .logical_plan
+                            .schema()
+                            .fields()
+                            .get(1)
+                            .is_some_and(|field| field.data_type() == &payload_type)
+                });
                 let observed = string_binary::capture_observation(&session, case).await;
                 match observed {
                     Ok(actual)
@@ -1132,17 +1155,15 @@ async fn original_concat_nested_lambda_consumer_keeps_both_parameter_scopes() ->
                             && actual["analyzed_schema"] == case["schema_stages"]["analyzed"]
                             && actual["physical_schema"] == case["schema_stages"]["executed"]
                             && actual["rows"] == case["expected"]["rows"]
-                            && actual["analyzed_arrow_schema"].as_str().is_some_and(|raw| {
-                                raw.contains(&format!(
-                                    "name: \"payload\", data_type: {payload_type:?},"
-                                ))
-                            })
+                            && analyzed_payload_type_matches
                             && actual["physical_arrow_schema"].as_str().is_some_and(|raw| {
                                 raw.contains(&format!(
                                     "name: \"payload\", data_type: {payload_type:?},"
                                 ))
                             }) => {}
-                    Ok(actual) => differences.push(format!("{label}: {actual}")),
+                    Ok(actual) => differences.push(format!(
+                        "{label}: resolve-only payload probe={analyzed_payload_type_matches}, {actual}"
+                    )),
                     Err(error) => differences.push(format!("{label}: {error}")),
                 }
             }
