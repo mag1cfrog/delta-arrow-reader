@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -35,7 +36,7 @@ use crate::coalesce::LimitedBatchCoalescer;
 use crate::execution_plan::{CardinalityEffect, EvaluationType, SchedulingType};
 use crate::hash_utils::create_hashes;
 use crate::metrics::{BaselineMetrics, SpillMetrics};
-use crate::projection::{ProjectionExec, all_columns, make_with_child, update_expr};
+use crate::projection::{ProjectionExec, all_columns, make_with_child, update_expr_with_input_schema_size};
 use crate::sorts::streaming_merge::StreamingMergeBuilder;
 use crate::spill::spill_manager::SpillManager;
 use crate::spill::spill_pool::{self, SpillPoolWriter};
@@ -1422,7 +1423,7 @@ impl ExecutionPlan for RepartitionExec {
                 let mut new_partitions = vec![];
                 for partition in partitions {
                     let Some(new_partition) =
-                        update_expr(partition, projection.expr(), false)?
+                        update_expr_with_input_schema_size(partition, projection.expr(), false, projection.expr().len())?
                     else {
                         return Ok(None);
                     };

@@ -22,7 +22,7 @@ pub use guarantee::{Guarantee, LiteralGuarantee};
 use std::borrow::Borrow;
 use std::sync::Arc;
 
-use crate::expressions::{BinaryExpr, Column, LambdaVariable, Literal};
+use crate::expressions::{BinaryExpr, Column, LambdaExpr, LambdaVariable, Literal};
 use crate::tree_node::ExprContext;
 use crate::{
     AcrossPartitions, ConstExpr, EquivalenceProperties, PhysicalExpr, PhysicalSortExpr,
@@ -32,7 +32,7 @@ use arrow::datatypes::Schema;
 use datafusion_common::tree_node::{
     Transformed, TransformedResult, TreeNode, TreeNodeRecursion,
 };
-use datafusion_common::{HashMap, HashSet, Result};
+use datafusion_common::{HashMap, HashSet, Result, internal_datafusion_err};
 use datafusion_expr::Operator;
 
 use petgraph::graph::NodeIndex;
@@ -283,58 +283,38 @@ where
     Ok((root.data.unwrap(), builder.graph))
 }
 
-/// Plans the input projection and reindexes Column and LambdaVariable references.
+/// Projects referenced inputs and rebases nested lambda parameters after them.
 pub(crate) fn plan_expression_input_projection(
     expr: &Arc<dyn PhysicalExpr>,
 ) -> Result<(Vec<usize>, Arc<dyn PhysicalExpr>)> {
     let mut used_column_indices = HashSet::new();
-
     expr.apply(|node| {
-        if let Some(col) = node.downcast_ref::<Column>() {
-            used_column_indices.insert(col.index());
-        } else if let Some(var) = node.downcast_ref::<LambdaVariable>() {
-            used_column_indices.insert(var.index());
+        if let Some(lambda) = node.downcast_ref::<LambdaExpr>() {
+            used_column_indices.extend(lambda.projection());
+            return Ok(TreeNodeRecursion::Jump);
         }
-
+        if let Some(column) = node.downcast_ref::<Column>() {
+            used_column_indices.insert(column.index());
+        } else if let Some(variable) = node.downcast_ref::<LambdaVariable>() {
+            used_column_indices.insert(variable.index());
+        }
         Ok(TreeNodeRecursion::Continue)
-    })
-    .expect("closure should be infallible");
+    })?;
 
     let mut projection = used_column_indices.into_iter().collect::<Vec<_>>();
-
     projection.sort();
-
     let column_index_map = projection
         .iter()
         .enumerate()
         .map(|(projected, original)| (*original, projected))
         .collect::<HashMap<_, _>>();
-
-    let projected_body = Arc::clone(expr)
-        .transform_down(|e| {
-            if let Some(column) = e.downcast_ref::<Column>() {
-                let original = column.index();
-                let projected = *column_index_map.get(&original).unwrap();
-                if projected != original {
-                    return Ok(Transformed::yes(Arc::new(Column::new(
-                        column.name(),
-                        projected,
-                    ))));
-                }
-            } else if let Some(lambda_variable) = e.downcast_ref::<LambdaVariable>() {
-                let original = lambda_variable.index();
-                let projected = *column_index_map.get(&original).unwrap();
-                if projected != original {
-                    return Ok(Transformed::yes(Arc::new(LambdaVariable::new(
-                        projected,
-                        Arc::clone(lambda_variable.field()),
-                    ))));
-                }
-            }
-            Ok(Transformed::no(e))
-        })?
-        .data;
-    Ok((projection, projected_body))
+    let projected = rewrite_expr_columns(Arc::clone(expr), projection.len(), |column| {
+        let index = column_index_map.get(&column.index()).copied().ok_or_else(|| {
+            internal_datafusion_err!("input projection lost captured index {}", column.index())
+        })?;
+        Ok(Arc::new(Column::new(column.name(), index)))
+    })?;
+    Ok((projection, projected))
 }
 
 /// Recursively extract referenced [`Column`]s within a [`PhysicalExpr`].
@@ -364,18 +344,92 @@ pub fn reassign_expr_columns(
     expr: Arc<dyn PhysicalExpr>,
     schema: &Schema,
 ) -> Result<Arc<dyn PhysicalExpr>> {
-    expr.transform_down(|expr| {
-        if let Some(column) = expr.downcast_ref::<Column>() {
-            let index = schema.index_of(column.name())?;
-
-            return Ok(Transformed::yes(Arc::new(Column::new(
-                column.name(),
-                index,
-            ))));
-        }
-        Ok(Transformed::no(expr))
+    rewrite_expr_columns(expr, schema.fields().len(), |column| {
+        Ok(Arc::new(Column::new(column.name(), schema.index_of(column.name())?)))
     })
-    .data()
+}
+
+/// Rewrites input columns while preserving lambda parameter slots after the new input schema.
+pub fn rewrite_expr_columns<F>(
+    expr: Arc<dyn PhysicalExpr>,
+    new_input_size: usize,
+    mut rewrite: F,
+) -> Result<Arc<dyn PhysicalExpr>>
+where
+    F: FnMut(&Column) -> Result<Arc<dyn PhysicalExpr>>,
+{
+    rewrite_scoped_columns(expr, new_input_size, None, &mut rewrite)
+}
+
+pub(crate) fn rewrite_lambda_body<F>(
+    body: Arc<dyn PhysicalExpr>,
+    old_input_size: usize,
+    new_input_size: usize,
+    mut rewrite: F,
+) -> Result<Arc<dyn PhysicalExpr>>
+where
+    F: FnMut(&Column) -> Result<Arc<dyn PhysicalExpr>>,
+{
+    rewrite_scoped_columns(body, new_input_size, Some((old_input_size, new_input_size)), &mut rewrite)
+}
+
+fn rewrite_scoped_columns<F>(
+    expr: Arc<dyn PhysicalExpr>,
+    new_input_size: usize,
+    parameter_scope: Option<(usize, usize)>,
+    rewrite: &mut F,
+) -> Result<Arc<dyn PhysicalExpr>>
+where
+    F: FnMut(&Column) -> Result<Arc<dyn PhysicalExpr>>,
+{
+    let shift_parameter = |index: usize, old: usize, new: usize| {
+        index.checked_sub(old).and_then(|offset| new.checked_add(offset))
+            .ok_or_else(|| internal_datafusion_err!("invalid lambda parameter boundary"))
+    };
+    if let Some(lambda) = expr.downcast_ref::<LambdaExpr>() {
+        let old_size = lambda.input_schema_size().ok_or_else(|| {
+            internal_datafusion_err!("cannot rewrite an unbound physical lambda")
+        })?;
+        let new_size = match parameter_scope {
+            Some((old, new)) => shift_parameter(old_size, old, new)?,
+            None => new_input_size,
+        };
+        let body = rewrite_scoped_columns(Arc::clone(lambda.body()), new_size,
+            parameter_scope.or(Some((old_size, new_size))), rewrite)?;
+        if old_size == new_size && Arc::ptr_eq(&body, lambda.body()) {
+            return Ok(expr);
+        }
+        return Ok(Arc::new(lambda.with_new_body_and_input_schema_size(body, new_size)?));
+    }
+    if let Some(variable) = expr.downcast_ref::<LambdaVariable>() {
+        if let Some((old, new)) = parameter_scope {
+            if variable.index() >= old {
+                let index = shift_parameter(variable.index(), old, new)?;
+                return if index == variable.index() { Ok(expr) } else {
+                    Ok(Arc::new(LambdaVariable::new(index, Arc::clone(variable.field()))))
+                };
+            }
+        }
+        let rewritten = rewrite(&Column::new(variable.name(), variable.index()))?;
+        return if let Some(column) = rewritten.downcast_ref::<Column>() {
+            if column.index() == variable.index() && column.name() == variable.name() {
+                return Ok(expr);
+            }
+            Ok(Arc::new(LambdaVariable::new(column.index(),
+                Arc::new(variable.field().as_ref().clone().with_name(column.name())))))
+        } else {
+            Ok(rewritten)
+        };
+    }
+    if let Some(column) = expr.downcast_ref::<Column>() {
+        let rewritten = rewrite(column)?;
+        return if rewritten.eq(&expr) { Ok(expr) } else { Ok(rewritten) };
+    }
+    expr.map_children(|child| {
+        let rewritten = rewrite_scoped_columns(Arc::clone(&child), new_input_size, parameter_scope, rewrite)?;
+        let changed = !Arc::ptr_eq(&child, &rewritten);
+        Ok(Transformed::new_transformed(rewritten, changed))
+    }).data()
 }
 
 #[cfg(test)]

@@ -58,7 +58,7 @@ use datafusion_physical_expr_common::sort_expr::{
 // Re-exported from datafusion-physical-expr for backwards compatibility
 // We recommend updating your imports to use datafusion-physical-expr directly
 pub use datafusion_physical_expr::projection::{
-    ProjectionExpr, ProjectionExprs, update_expr,
+    ProjectionExpr, ProjectionExprs, update_expr, update_expr_with_input_schema_size,
 };
 
 use futures::stream::{Stream, StreamExt};
@@ -336,11 +336,14 @@ impl ExecutionPlan for ProjectionExec {
         mut children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         check_if_same_properties!(self, children);
-        ProjectionExec::try_from_projector(
-            self.projector.clone(),
-            children.swap_remove(0),
-        )
-        .map(|p| Arc::new(p.with_row_error_prefix(self.row_error_prefix)) as _)
+        let input = children.swap_remove(0);
+        let projector = if input.schema() == self.input.schema() {
+            self.projector.clone()
+        } else {
+            self.projector.projection().make_projector(&input.schema())?
+        };
+        ProjectionExec::try_from_projector(projector, input)
+            .map(|p| Arc::new(p.with_row_error_prefix(self.row_error_prefix)) as _)
     }
 
     fn execute(
@@ -672,7 +675,7 @@ pub fn try_embed_projection<Exec: EmbeddedProjection + 'static>(
     let new_execution_plan =
         Arc::new(execution_plan.with_projection(Some(projection_index.to_vec()))?);
 
-    // Build projection expressions for update_expr. Zip the projection_index with the new_execution_plan output schema fields.
+    // Build projection expressions for update_expr_with_input_schema_size. Zip the projection_index with the new_execution_plan output schema fields.
     let embed_project_exprs = projection_index
         .iter()
         .zip(new_execution_plan.schema().fields())
@@ -687,7 +690,7 @@ pub fn try_embed_projection<Exec: EmbeddedProjection + 'static>(
     for proj_expr in projection.expr() {
         // update column index for projection expression since the input schema has been changed.
         let Some(expr) =
-            update_expr(&proj_expr.expr, embed_project_exprs.as_slice(), false)?
+            update_expr_with_input_schema_size(&proj_expr.expr, embed_project_exprs.as_slice(), false, new_execution_plan.schema().fields().len())?
         else {
             return Ok(None);
         };
@@ -883,14 +886,14 @@ pub fn all_columns(exprs: &[ProjectionExpr]) -> bool {
 }
 
 /// Updates the given lexicographic ordering according to given projected
-/// expressions using the [`update_expr`] function.
+/// expressions using the [`update_expr_with_input_schema_size`] function.
 pub fn update_ordering(
     ordering: LexOrdering,
     projected_exprs: &[ProjectionExpr],
 ) -> Result<Option<LexOrdering>> {
     let mut updated_exprs = vec![];
     for mut sort_expr in ordering.into_iter() {
-        let Some(updated_expr) = update_expr(&sort_expr.expr, projected_exprs, false)?
+        let Some(updated_expr) = update_expr_with_input_schema_size(&sort_expr.expr, projected_exprs, false, projected_exprs.len())?
         else {
             return Ok(None);
         };
@@ -901,14 +904,14 @@ pub fn update_ordering(
 }
 
 /// Updates the given lexicographic requirement according to given projected
-/// expressions using the [`update_expr`] function.
+/// expressions using the [`update_expr_with_input_schema_size`] function.
 pub fn update_ordering_requirement(
     reqs: LexRequirement,
     projected_exprs: &[ProjectionExpr],
 ) -> Result<Option<LexRequirement>> {
     let mut updated_exprs = vec![];
     for mut sort_expr in reqs.into_iter() {
-        let Some(updated_expr) = update_expr(&sort_expr.expr, projected_exprs, false)?
+        let Some(updated_expr) = update_expr_with_input_schema_size(&sort_expr.expr, projected_exprs, false, projected_exprs.len())?
         else {
             return Ok(None);
         };
@@ -1139,8 +1142,8 @@ fn try_unifying_projections(
     for proj_expr in projection.expr() {
         // If there is no match in the input projection, we cannot unify these
         // projections. This case will arise if the projection expression contains
-        // a `PhysicalExpr` variant `update_expr` doesn't support.
-        let Some(expr) = update_expr(&proj_expr.expr, child.expr(), true)? else {
+        // a `PhysicalExpr` variant `update_expr_with_input_schema_size` doesn't support.
+        let Some(expr) = update_expr_with_input_schema_size(&proj_expr.expr, child.expr(), true, child.input().schema().fields().len())? else {
             return Ok(None);
         };
         projected_exprs.push(ProjectionExpr {

@@ -41,7 +41,7 @@ use crate::limit::LocalLimitExec;
 use crate::metrics::{MetricBuilder, MetricType};
 use crate::projection::{
     EmbeddedProjection, ProjectionExec, ProjectionExpr, all_columns, make_with_child,
-    try_embed_projection, update_expr,
+    try_embed_projection, update_expr_with_input_schema_size,
 };
 use crate::stream::EmptyRecordBatchStream;
 use crate::{
@@ -600,7 +600,7 @@ impl ExecutionPlan for FilterExec {
         {
             // Each column in the predicate expression must exist after the projection.
             if let Some(new_predicate) =
-                update_expr(self.predicate(), projection.expr(), false)?
+                update_expr_with_input_schema_size(self.predicate(), projection.expr(), false, projection.expr().len())?
             {
                 return FilterExecBuilder::from(self)
                     .with_input(make_with_child(projection, self.input())?)

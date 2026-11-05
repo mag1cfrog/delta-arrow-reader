@@ -20,7 +20,8 @@ mod literal_lookup_table;
 
 use super::{Column, Literal};
 use crate::PhysicalExpr;
-use crate::expressions::{LambdaVariable, lit, try_cast};
+use crate::expressions::{LambdaExpr, LambdaVariable, lit, try_cast};
+use crate::utils::rewrite_expr_columns;
 use arrow::array::*;
 use arrow::compute::kernels::zip::zip;
 use arrow::compute::{
@@ -134,6 +135,10 @@ impl CaseBody {
         let mut used_column_indices = BTreeSet::<usize>::new();
         let mut collect_column_indices = |expr: &Arc<dyn PhysicalExpr>| {
             expr.apply(|expr| {
+                if let Some(lambda) = expr.downcast_ref::<LambdaExpr>() {
+                    used_column_indices.extend(lambda.projection());
+                    return Ok(TreeNodeRecursion::Jump);
+                }
                 if let Some(column) = expr.downcast_ref::<Column>() {
                     used_column_indices.insert(column.index());
                 } else if let Some(lambda_variable) =
@@ -167,32 +172,12 @@ impl CaseBody {
         // Construct the projected body by rewriting each expression from the original body
         // using the column index mapping.
         let project = |expr: &Arc<dyn PhysicalExpr>| -> Result<Arc<dyn PhysicalExpr>> {
-            Arc::clone(expr)
-                .transform_down(|e| {
-                    if let Some(column) = e.downcast_ref::<Column>() {
-                        let original = column.index();
-                        let projected = *column_index_map.get(&original).unwrap();
-                        if projected != original {
-                            return Ok(Transformed::yes(Arc::new(Column::new(
-                                column.name(),
-                                projected,
-                            ))));
-                        }
-                    } else if let Some(lambda_variable) =
-                        e.downcast_ref::<LambdaVariable>()
-                    {
-                        let original = lambda_variable.index();
-                        let projected = *column_index_map.get(&original).unwrap();
-                        if projected != original {
-                            return Ok(Transformed::yes(Arc::new(LambdaVariable::new(
-                                projected,
-                                Arc::clone(lambda_variable.field()),
-                            ))));
-                        }
-                    }
-                    Ok(Transformed::no(e))
-                })
-                .map(|t| t.data)
+            rewrite_expr_columns(Arc::clone(expr), used_column_indices.len(), |column| {
+                let index = *column_index_map.get(&column.index()).ok_or_else(|| {
+                    datafusion_common::internal_datafusion_err!("CASE projection lost input index {}", column.index())
+                })?;
+                Ok(Arc::new(Column::new(column.name(), index)))
+            })
         };
 
         let projected_body = CaseBody {
@@ -1048,15 +1033,9 @@ impl CaseExpr {
         projected: &ProjectedCaseBody,
     ) -> Result<ColumnarValue> {
         let return_type = self.data_type(&batch.schema())?;
-        // projected.projection may include indexes of lambda variables not available on this batch
-        let projection = projected
-            .projection
-            .iter()
-            .copied()
-            .filter(|index| *index < batch.num_columns())
-            .collect::<Vec<_>>();
+        let projection = &projected.projection;
         if projection.len() < batch.num_columns() {
-            let projected_batch = batch.project(&projection)?;
+            let projected_batch = batch.project(projection)?;
             projected
                 .body
                 .case_when_with_expr(&projected_batch, &return_type)
@@ -1078,15 +1057,9 @@ impl CaseExpr {
         projected: &ProjectedCaseBody,
     ) -> Result<ColumnarValue> {
         let return_type = self.data_type(&batch.schema())?;
-        // projected.projection may include indexes of lambda variables not available on this batch
-        let projection = projected
-            .projection
-            .iter()
-            .copied()
-            .filter(|index| *index < batch.num_columns())
-            .collect::<Vec<_>>();
+        let projection = &projected.projection;
         if projection.len() < batch.num_columns() {
-            let projected_batch = batch.project(&projection)?;
+            let projected_batch = batch.project(projection)?;
             projected
                 .body
                 .case_when_no_expr(&projected_batch, &return_type)
@@ -1220,17 +1193,11 @@ impl CaseExpr {
                 );
             }
 
-            // projected.projection may include indexes of lambda variables not available on this batch
-            let projection = projected
-                .projection
-                .iter()
-                .copied()
-                .filter(|index| *index < batch.num_columns())
-                .collect::<Vec<_>>();
+            let projection = &projected.projection;
             if projection.len() < batch.num_columns() {
                 // The case expressions do not use all the columns of the input batch.
                 // Project first to reduce time spent filtering.
-                let projected_batch = batch.project(&projection)?;
+                let projected_batch = batch.project(projection)?;
                 projected.body.expr_or_expr(&projected_batch, when_value)
             } else {
                 // All columns are used in the case expressions, so there is no need to project.

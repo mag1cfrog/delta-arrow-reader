@@ -113,11 +113,6 @@ impl ScalarFunctionExpr {
                         EvaluatedRowPrefix::complete(ColumnarValue::Scalar(literal.value().clone()))
                     } else {
                         let (projection, projected) = plan_expression_input_projection(expr)?;
-                        // Nested lambda variables are appended after the current input columns.
-                        let projection = projection
-                            .into_iter()
-                            .filter(|index| *index < input.num_columns())
-                            .collect::<Vec<_>>();
                         if projection.len() < input.num_columns() {
                             let selected_input = input.project(&projection)?;
                             evaluate_selected(projected.as_ref(), &selected_input, mask)?

@@ -23,15 +23,19 @@ use std::sync::Arc;
 
 use crate::{
     ScalarFunctionExpr,
+    expressions::{Column, LambdaVariable},
     physical_expr::PhysicalExpr,
-    utils::plan_expression_input_projection,
+    utils::rewrite_lambda_body,
 };
 use arrow::{
     datatypes::{DataType, Schema},
     record_batch::RecordBatch,
 };
-use datafusion_common::tree_node::TreeNode;
-use datafusion_common::{HashSet, Result, internal_err, plan_err};
+use datafusion_common::{
+    HashMap, plan_err,
+    tree_node::{TreeNode, TreeNodeRecursion},
+};
+use datafusion_common::{HashSet, Result, internal_datafusion_err, internal_err};
 use datafusion_expr::ColumnarValue;
 
 /// Represents a lambda with the given parameters names and body
@@ -41,12 +45,16 @@ pub struct LambdaExpr {
     body: Arc<dyn PhysicalExpr>,
     projected_body: Arc<dyn PhysicalExpr>,
     projection: Vec<usize>,
+    // The enclosing higher-order expression supplies the parameter boundary.
+    input_schema_size: Option<usize>,
 }
 
 // Manually derive PartialEq and Hash to work around https://github.com/rust-lang/rust/issues/78808 [https://github.com/apache/datafusion/issues/13196]
 impl PartialEq for LambdaExpr {
     fn eq(&self, other: &Self) -> bool {
-        self.params.eq(&other.params) && self.body.eq(&other.body)
+        self.params.eq(&other.params)
+            && self.body.eq(&other.body)
+            && self.input_schema_size.eq(&other.input_schema_size)
     }
 }
 
@@ -54,6 +62,7 @@ impl Hash for LambdaExpr {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.params.hash(state);
         self.body.hash(state);
+        self.input_schema_size.hash(state);
     }
 }
 
@@ -69,19 +78,67 @@ impl LambdaExpr {
 
         check_async_udf(&body)?;
 
-        Ok(Self::new(params, body))
+        Self::new(params, body, None)
     }
 
-    fn new(params: Vec<String>, body: Arc<dyn PhysicalExpr>) -> Self {
-        let (projection, projected_body) = plan_expression_input_projection(&body)
-            .expect("closure should be infallible");
+    fn new(
+        params: Vec<String>,
+        body: Arc<dyn PhysicalExpr>,
+        input_schema_size: Option<usize>,
+    ) -> Result<Self> {
+        let Some(input_size) = input_schema_size else {
+            return Ok(Self {
+                params,
+                projected_body: Arc::clone(&body),
+                body,
+                projection: vec![],
+                input_schema_size,
+            });
+        };
+        let mut used_column_indices = HashSet::new();
 
-        Self {
+        body.apply(|node| {
+            if let Some(lambda) = node.downcast_ref::<LambdaExpr>() {
+                used_column_indices.extend(lambda.projection().iter().copied().filter(|index| *index < input_size));
+                return Ok(TreeNodeRecursion::Jump);
+            }
+            if let Some(col) = node.downcast_ref::<Column>() {
+                if col.index() < input_size {
+                    used_column_indices.insert(col.index());
+                }
+            } else if let Some(var) = node.downcast_ref::<LambdaVariable>() {
+                if var.index() < input_size {
+                    used_column_indices.insert(var.index());
+                }
+            }
+
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+
+        let mut projection = used_column_indices.into_iter().collect::<Vec<_>>();
+
+        projection.sort();
+
+        let column_index_map = projection
+            .iter()
+            .enumerate()
+            .map(|(projected, original)| (*original, projected))
+            .collect::<HashMap<_, _>>();
+
+        let projected_body = rewrite_lambda_body(Arc::clone(&body), input_size, projection.len(), |column| {
+            let index = column_index_map.get(&column.index()).copied().ok_or_else(|| {
+                internal_datafusion_err!("lambda projection lost captured index {}", column.index())
+            })?;
+            Ok(Arc::new(Column::new(column.name(), index)))
+        })?;
+
+        Ok(Self {
             params,
             body,
             projected_body,
             projection,
-        }
+            input_schema_size,
+        })
     }
 
     /// Get the lambda's params names
@@ -100,6 +157,21 @@ impl LambdaExpr {
 
     pub(crate) fn projected_body(&self) -> &Arc<dyn PhysicalExpr> {
         &self.projected_body
+    }
+
+    pub(crate) fn input_schema_size(&self) -> Option<usize> {
+        self.input_schema_size
+    }
+
+    pub(crate) fn with_input_schema_size(&self, size: usize) -> Result<Self> {
+        Self::new(self.params.clone(), Arc::clone(&self.body), Some(size))
+    }
+
+    pub(crate) fn with_new_body_and_input_schema_size(
+        &self, body: Arc<dyn PhysicalExpr>, size: usize,
+    ) -> Result<Self> {
+        check_async_udf(&body)?;
+        Self::new(self.params.clone(), body, Some(size))
     }
 }
 
@@ -139,7 +211,7 @@ impl PhysicalExpr for LambdaExpr {
 
         check_async_udf(body)?;
 
-        Ok(Arc::new(Self::new(self.params.clone(), Arc::clone(body))))
+        Ok(Arc::new(Self::new(self.params.clone(), Arc::clone(body), self.input_schema_size)?))
     }
 
     fn fmt_sql(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -26,13 +26,14 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Thirteen dependencies have local source overrides in this crate's Cargo.toml:
+Fourteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
 | DataFusion common | 54.1.0 | Preserve complete list element Fields during scalar conversion and scalar casts |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
+| DataFusion datasource | 54.1.0 | Supply the owned complete table schema width when unprojecting filters, including custom file sources |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
 
@@ -1087,3 +1088,29 @@ which visits original descendants through the cast wrapper. The
 require all 192 contexts from 32 independent Spark references. Native structured
 error parameters remain unavailable; the regression checks the exact native
 cause and result-field boundary without claiming complete raw diagnostic parity.
+
+### Nested lambda capture positions
+
+Physical lambdas retain their complete enclosing input width. Capture projection
+rebases parameter offsets after the compact inputs while preserving every
+declared parameter slot, including unused outer parameters. Nested lambdas
+contribute their captures without exposing their own parameter slots. One scoped
+column rewrite carries this boundary through CASE, selected scalar inputs,
+projection, filter, ordering, repartition and join reconstruction. Physical
+field, index, qualifier, parameter-name and async checks remain active.
+
+Projection APIs retain their signatures. `from_indices` and `make_projector`
+record authoritative source widths; expression-only constructors cannot infer
+unused trailing columns. Lambda unprojection without that context names the
+explicit-width method in its error, while ordinary column unprojection keeps
+its existing behavior. The datasource override supplies the owned full table
+width before source filter support is checked. Its pinned archive and single
+modified file are recorded in [source-provenance.json](source-provenance.json).
+
+Projection child replacement reuses the projector for an equal input schema
+and rebases it when that schema changes, retaining child-derived properties and
+the accepted row-error-prefix option. The shared projector prefix transport,
+scalar NULL masks and once-only evaluation paths retain their existing code.
+Internal CONCAT lambdas keep their dummy parameter and selected-row cardinality
+API. The [nested lambda references](tests/fixtures/README.md#nested-lambda-capture-positions)
+cover all original and supplemental cases plus CASE and connected consumers.

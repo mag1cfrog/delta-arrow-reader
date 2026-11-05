@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -21,9 +22,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::PhysicalExpr;
-use crate::expressions::{CastExpr, Column, Literal};
+use crate::expressions::{CastExpr, Column, LambdaExpr, Literal};
 use crate::scalar_function::ScalarFunctionExpr;
-use crate::utils::collect_columns;
+use crate::utils::{collect_columns, rewrite_expr_columns};
 
 use arrow::array::{ArrayRef, RecordBatch, RecordBatchOptions, new_empty_array};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
@@ -125,11 +126,28 @@ impl From<ProjectionExpr> for (Arc<dyn PhysicalExpr>, String) {
 ///
 /// See [`ProjectionExprs::from_indices`] to select a subset of columns by
 /// indices.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct ProjectionExprs {
     /// [`Arc`] used for a cheap clone, which improves physical plan optimization performance.
     exprs: Arc<[ProjectionExpr]>,
+    // Full source width, when construction supplied its schema; never inferred from indices.
+    input_schema_size: Option<usize>,
 }
+
+impl std::fmt::Debug for ProjectionExprs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProjectionExprs").field("exprs", &self.exprs).finish()
+    }
+}
+
+impl PartialEq for ProjectionExprs {
+    fn eq(&self, other: &Self) -> bool {
+        // Source width guides rewrites; the projection still compares its expressions.
+        self.exprs == other.exprs
+    }
+}
+
+impl Eq for ProjectionExprs {}
 
 impl std::fmt::Display for ProjectionExprs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -142,6 +160,7 @@ impl From<Vec<ProjectionExpr>> for ProjectionExprs {
     fn from(value: Vec<ProjectionExpr>) -> Self {
         Self {
             exprs: value.into(),
+            input_schema_size: None,
         }
     }
 }
@@ -150,6 +169,7 @@ impl From<&[ProjectionExpr]> for ProjectionExprs {
     fn from(value: &[ProjectionExpr]) -> Self {
         Self {
             exprs: value.iter().cloned().collect(),
+            input_schema_size: None,
         }
     }
 }
@@ -158,6 +178,7 @@ impl FromIterator<ProjectionExpr> for ProjectionExprs {
     fn from_iter<T: IntoIterator<Item = ProjectionExpr>>(exprs: T) -> Self {
         Self {
             exprs: exprs.into_iter().collect(),
+            input_schema_size: None,
         }
     }
 }
@@ -173,6 +194,7 @@ impl ProjectionExprs {
     pub fn new(exprs: impl IntoIterator<Item = ProjectionExpr>) -> Self {
         Self {
             exprs: exprs.into_iter().collect(),
+            input_schema_size: None,
         }
     }
 
@@ -180,6 +202,7 @@ impl ProjectionExprs {
     pub fn from_expressions(exprs: impl Into<Arc<[ProjectionExpr]>>) -> Self {
         Self {
             exprs: exprs.into(),
+            input_schema_size: None,
         }
     }
 
@@ -235,7 +258,9 @@ impl ProjectionExprs {
             }
         });
 
-        Self::from_iter(projection_exprs)
+        let mut projection = Self::from_iter(projection_exprs);
+        projection.input_schema_size = Some(schema.fields().len());
+        projection
     }
 
     /// Returns an iterator over the projection expressions
@@ -267,6 +292,10 @@ impl ProjectionExprs {
     /// the alias. This is useful for rewriting expressions, such as when adapting
     /// expressions to a different schema.
     ///
+    /// If any expression changes, the recorded source width is cleared. A later
+    /// lambda unprojection must supply the complete source schema width through
+    /// [`Self::unproject_expr_with_input_schema_size`].
+    ///
     /// # Example
     ///
     /// ```rust
@@ -293,16 +322,23 @@ impl ProjectionExprs {
     where
         F: FnMut(Arc<dyn PhysicalExpr>) -> Result<Arc<dyn PhysicalExpr>>,
     {
+        let mut unchanged = true;
         let exprs = self
             .exprs
             .iter()
             .cloned()
             .map(|mut proj| {
-                proj.expr = f(proj.expr)?;
+                let rewritten = f(Arc::clone(&proj.expr))?;
+                unchanged &= rewritten == proj.expr;
+                proj.expr = rewritten;
                 Ok(proj)
             })
             .collect::<Result<Arc<_>>>()?;
-        Ok(Self::from_expressions(exprs))
+        let mut projection = Self::from_expressions(exprs);
+        if unchanged {
+            projection.input_schema_size = self.input_schema_size;
+        }
+        Ok(projection)
     }
 
     /// Apply another projection on top of this projection, returning the combined projection.
@@ -378,7 +414,9 @@ impl ProjectionExprs {
                 alias: proj_expr.alias.clone(),
             });
         }
-        Ok(ProjectionExprs::new(new_exprs))
+        let mut projection = ProjectionExprs::new(new_exprs);
+        projection.input_schema_size = self.input_schema_size;
+        Ok(projection)
     }
 
     /// Extract the column indices used in this projection.
@@ -489,17 +527,39 @@ impl ProjectionExprs {
     /// * a projection `c1 + c2 as c1_c2`
     ///
     /// This method would rewrite the expression to `c1 + c2 > 5`
+    ///
+    /// Lambda unprojection needs the source width recorded by [`Self::from_indices`]
+    /// or supplied to [`Self::unproject_expr_with_input_schema_size`].
     pub fn unproject_expr(
         &self,
         expr: &Arc<dyn PhysicalExpr>,
     ) -> Result<Arc<dyn PhysicalExpr>> {
-        update_expr(expr, &self.exprs, true)?.ok_or_else(|| {
+        if self.input_schema_size.is_none() && expr.exists(|node| Ok(node.is::<LambdaExpr>()))? {
+            return Err(internal_datafusion_err!(
+                "Lambda unprojection requires the complete source schema width; use ProjectionExprs::unproject_expr_with_input_schema_size(expr, input_schema.fields().len())"
+            ));
+        }
+        let rewritten = match self.input_schema_size {
+            Some(size) => update_expr_with_input_schema_size(expr, &self.exprs, true, size)?,
+            None => update_expr(expr, &self.exprs, true)?,
+        };
+        rewritten.ok_or_else(|| {
             internal_datafusion_err!(
                 "Failed to unproject an expression {} with ProjectionExprs {}",
                 expr,
                 self.exprs.iter().map(|e| format!("{e}")).join(", ")
             )
         })
+    }
+
+    /// Unprojects an expression using the complete original source schema width,
+    /// including unused columns. This context is required for lambda parameters.
+    pub fn unproject_expr_with_input_schema_size(
+        &self, expr: &Arc<dyn PhysicalExpr>, input_schema_size: usize,
+    ) -> Result<Arc<dyn PhysicalExpr>> {
+        let mut source = self.clone();
+        source.input_schema_size = Some(input_schema_size);
+        source.unproject_expr(expr)
     }
 
     /// "project" an expression using these projection's expressions
@@ -525,15 +585,23 @@ impl ProjectionExprs {
     /// Create a new [`Projector`] from this projection and an input schema.
     ///
     /// A [`Projector`] can be used to apply this projection to record batches.
+    /// Bound lambda parameter slots are rebased to the supplied input schema.
+    /// The borrowed projection is unchanged.
     ///
     /// # Errors
     /// This function returns an error if the output schema cannot be constructed from the input schema
     /// with the given projection expressions.
     /// For example, if an expression only works with integer columns but the input schema has a string column at that index.
     pub fn make_projector(&self, input_schema: &Schema) -> Result<Projector> {
-        let output_schema = Arc::new(self.project_schema(input_schema)?);
+        let mut projection = self.clone().try_map_exprs(|expr| {
+            rewrite_expr_columns(expr, input_schema.fields().len(), |column| {
+                Ok(Arc::new(column.clone()))
+            })
+        })?;
+        projection.input_schema_size = Some(input_schema.fields().len());
+        let output_schema = Arc::new(projection.project_schema(input_schema)?);
         Ok(Projector {
-            projection: self.clone(),
+            projection,
             output_schema,
             expression_metrics: None,
         })
@@ -1013,6 +1081,9 @@ pub fn combine_projections(
 ///    * `a@1` becomes `a@0`
 ///    * `b@2` results in `None` since the projection does not include `b`.
 ///
+/// Lambda unprojection requires [`update_expr_with_input_schema_size`]; this entry
+/// point returns `None` when the destination width is unknown.
+///
 /// # Errors
 /// This function returns an error if `unproject` is `true` and if any expression references
 /// an index that is out of bounds for `projected_exprs`.
@@ -1027,6 +1098,24 @@ pub fn update_expr(
     projected_exprs: &[ProjectionExpr],
     unproject: bool,
 ) -> Result<Option<Arc<dyn PhysicalExpr>>> {
+    if unproject && expr.exists(|node| Ok(node.is::<LambdaExpr>()))? {
+        return Ok(None);
+    }
+    update_expr_with_input_schema_size(expr, projected_exprs, unproject,
+        if unproject { 0 } else { projected_exprs.len() })
+}
+
+/// Rewrites expressions using the complete receiving schema width, including unused columns.
+///
+/// For unprojection, `input_schema_size` is the original source schema width.
+/// For projection, it is the projected output width. Lambda parameter slots
+/// follow that complete schema, even when some input columns are unused.
+pub fn update_expr_with_input_schema_size(
+    expr: &Arc<dyn PhysicalExpr>,
+    projected_exprs: &[ProjectionExpr],
+    unproject: bool,
+    input_schema_size: usize,
+) -> Result<Option<Arc<dyn PhysicalExpr>>> {
     #[derive(Debug, PartialEq)]
     enum RewriteState {
         /// The expression is unchanged.
@@ -1040,57 +1129,38 @@ pub fn update_expr(
 
     let mut state = RewriteState::Unchanged;
 
-    let new_expr = Arc::clone(expr)
-        .transform_up(|expr| {
-            if state == RewriteState::RewrittenInvalid {
-                return Ok(Transformed::no(expr));
-            }
-
-            let Some(column) = expr.downcast_ref::<Column>() else {
-                return Ok(Transformed::no(expr));
-            };
-            if unproject {
-                state = RewriteState::RewrittenValid;
-                // Update the index of `column`:
-                let projected_expr = projected_exprs.get(column.index()).ok_or_else(|| {
-                    internal_datafusion_err!(
-                        "Column index {} out of bounds for projected expressions of length {}",
-                        column.index(),
-                        projected_exprs.len()
-                    )
-                })?;
-                Ok(Transformed::yes(Arc::clone(&projected_expr.expr)))
-            } else {
-                // default to invalid, in case we can't find the relevant column
-                state = RewriteState::RewrittenInvalid;
-                // Determine how to update `column` to accommodate `projected_exprs`
-                projected_exprs
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, proj_expr)| {
-                        proj_expr
-                            .expr
-                            .downcast_ref::<Column>()
-                            .and_then(|projected_column| {
-                                (column.name().eq(projected_column.name())
-                                    && column.index() == projected_column.index())
-                                .then(|| {
-                                    state = RewriteState::RewrittenValid;
-                                    Arc::new(Column::new(&proj_expr.alias, index)) as _
-                                })
-                            })
+    let new_expr = rewrite_expr_columns(Arc::clone(expr), input_schema_size, |column| {
+        if state == RewriteState::RewrittenInvalid {
+            return Ok(Arc::new(column.clone()));
+        }
+        if unproject {
+            state = RewriteState::RewrittenValid;
+            let projected_expr = projected_exprs.get(column.index()).ok_or_else(|| {
+                internal_datafusion_err!(
+                    "Column index {} out of bounds for projected expressions of length {}",
+                    column.index(), projected_exprs.len()
+                )
+            })?;
+            Ok(Arc::clone(&projected_expr.expr))
+        } else {
+            state = RewriteState::RewrittenInvalid;
+            Ok(projected_exprs.iter().enumerate().find_map(|(index, projected)| {
+                projected.expr.downcast_ref::<Column>().and_then(|source| {
+                    (column.name() == source.name() && column.index() == source.index()).then(|| {
+                        state = RewriteState::RewrittenValid;
+                        Arc::new(Column::new(&projected.alias, index)) as Arc<dyn PhysicalExpr>
                     })
-                    .map_or_else(|| Ok(Transformed::no(expr)), |c| Ok(Transformed::yes(c)))
-            }
-        })
-        .data()?;
+                })
+            }).unwrap_or_else(|| Arc::new(column.clone())))
+        }
+    });
 
     match state {
         RewriteState::RewrittenInvalid => Ok(None),
         // Both Unchanged and RewrittenValid are valid:
         // - Unchanged means no columns to rewrite (e.g., literals)
         // - RewrittenValid means columns were successfully rewritten
-        RewriteState::Unchanged | RewriteState::RewrittenValid => Ok(Some(new_expr)),
+        RewriteState::Unchanged | RewriteState::RewrittenValid => Ok(Some(new_expr?)),
     }
 }
 
@@ -1176,8 +1246,7 @@ impl ProjectionMapping {
                         "Input field name {matching_name} does not match with the projection expression {}",
                         col.name()
                     );
-                    let matching_column = Column::new(matching_name, idx);
-                    Ok(Transformed::yes(Arc::new(matching_column)))
+                    Ok(Transformed::no(e))
                 }
                 None => Ok(Transformed::no(e)),
             })

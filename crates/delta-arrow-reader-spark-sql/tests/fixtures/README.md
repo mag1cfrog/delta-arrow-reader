@@ -3594,3 +3594,49 @@ python tests/fixtures/recapture_string_binary_spark.py \
 cargo test --locked --workspace --test like_escapes -- --nocapture
 
 ```
+
+## Nested lambda capture positions
+
+The four `nested-lambda-captures-*-spark.jsonl` references retain independent
+Spark 4.2.0 records at revision `32f7299601108917fb01920a54e084595b7b3bf8`.
+The original corpus has 92 records, the supplement 126, and the CASE and
+projection/filter/join interaction corpora 54 each. Their unchanged hashes are
+in [nested-lambda-captures-source-provenance.json](nested-lambda-captures-source-provenance.json).
+Each header retains provider schemas, values and capture settings. Successful
+records retain complete analyzed, optimized and executed fields and rows;
+required planning errors retain their precise conditions.
+
+`nested_lambda_captures` replays every record in both ANSI modes at batch sizes
+1 and 32, accumulating differences before its final assertion. The four original
+corpora have no ORDER BY; their capture helpers sorted expected outer rows.
+Their row comparison preserves duplicates without requiring a sequence. Raw
+rows and references remain unchanged, and complete fields from every stage are
+still checked.
+
+`nested-lambda-inherited-declarations.jsonl` retains ten complete native baseline
+comparisons for five unchanged references at the exact same batch sizes. Six
+contexts track unresolved ANSI SIZE nullability under #822 and four track
+unresolved unaliased MAP labels under #823. These controls require the unchanged
+whole native observation or a complete Spark match; they are not Spark-compatible
+expectations. All own-scope successes require full Spark fields and values.
+Precise free/qualified-variable cause checks retain rejection guarantees without
+claiming parity for the missing Spark condition identifiers. The provenance file
+records the accepted parent, observer head and unchanged control-file hash.
+
+Native expression tests cover reconstruction, full source widths, file-source
+fallback, partition injection and strict malformed bindings. Connected runtime
+CONCAT tests use `nested-lambda-concat-consumer-spark.jsonl`, a fresh six-record
+independent capture of the exact issue 906 SQL and wrapper-isolation controls.
+They replay its original SQL at all 36 payload-representation/batch/ANSI
+contexts and retain raw Arrow schema evidence. Its explicit ORDER BY k keeps an
+exact unsorted collected-row comparison. The capture script is
+`capture_nested_lambda_concat_consumer_spark.py`; its unchanged hash is in the
+same provenance file. NULL masks, empty providers and a capture-free volatile
+body have a separate exact row-counter guard.
+Cross-input join rewriting #829 and malformed bindings erased by optimization
+#856 retain their separate before/after evidence; these references do not waive
+unrelated errors or establish those issues' acceptance.
+
+```sh
+cargo test --locked --workspace --test nested_lambda_captures -- --nocapture
+```
