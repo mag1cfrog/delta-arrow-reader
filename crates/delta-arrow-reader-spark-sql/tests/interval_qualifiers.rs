@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 448);
+    assert_eq!(records.len() - 1, 472);
     Ok(records)
 }
 
@@ -454,6 +454,35 @@ async fn interval_qualifiers_match_spark() -> TestResult {
 }
 
 /// Spark configuration must not change interval SQL planned by native DataFusion.
+/// Interval strings converted at run time choose their family by non-zero values, so a
+/// zero-month `window` duration stays a day-time interval. Spark returns the window
+/// [2020-01-01 00:00:00, 01:00:00) for both durations.
+#[tokio::test]
+async fn window_durations_accept_zero_month_interval_strings() -> TestResult {
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let options = SparkSqlOptions {
+        session_timezone: "UTC".into(),
+        ..SparkSqlOptions::default()
+    };
+    let mut windows = Vec::new();
+    for duration in ["0 months 1 hour", "1 hour"] {
+        let sql = format!("SELECT window(TIMESTAMP '2020-01-01 00:30:00', '{duration}') AS w");
+        let query = plan_query(&session, &sql, &options).await?;
+        let physical = query.create_physical_plan(&session).await?;
+        let batches = collect(physical, session.task_ctx()).await?;
+        windows.push(datafusion::arrow::util::pretty::pretty_format_batches(&batches)?.to_string());
+    }
+    assert_eq!(windows[0], windows[1]);
+    assert!(
+        windows[0].contains("2020-01-01T00:00:00") && windows[0].contains("2020-01-01T01:00:00"),
+        "{}",
+        windows[0]
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn native_interval_sql_is_unchanged_by_spark_configuration() -> TestResult {
     let sql = "SELECT INTERVAL '2' YEAR AS a, INTERVAL '51' HOUR AS b, \
