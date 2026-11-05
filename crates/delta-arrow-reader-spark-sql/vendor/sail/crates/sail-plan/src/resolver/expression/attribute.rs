@@ -41,14 +41,16 @@ impl PlanResolver<'_> {
                 .unwrap_or(declared.as_str())
                 .to_string();
             let mut expr = expr::Expr::LambdaVariable(LambdaVariable::new(declared, field.clone()));
+            let mut expression_name = LAMBDA_VARIABLE_EXPRESSION_NAME.to_string();
             if let Some(field) = field {
                 // Spark resolves dotted lambda tails with strict NULL-base validation.
-                expr = Self::resolve_potentially_nested_field(
+                expr = Self::resolve_nested_field_and_append_display(
                     expr,
                     field.data_type(),
                     rest,
                     schema,
                     false,
+                    &mut expression_name,
                 )?;
             } else {
                 for part in rest {
@@ -56,12 +58,10 @@ impl PlanResolver<'_> {
                         get_field(),
                         vec![expr, lit(part.as_ref().to_string())],
                     ));
+                    expression_name.push('.');
+                    expression_name.push_str(part.as_ref());
                 }
             }
-            let expression_name = std::iter::once(LAMBDA_VARIABLE_EXPRESSION_NAME)
-                .chain(rest.iter().map(|part| part.as_ref()))
-                .collect::<Vec<_>>()
-                .join(".");
             return Ok(
                 NamedExpr::new(vec![projection_name], expr).with_expression_name(expression_name)
             );
@@ -153,25 +153,21 @@ impl PlanResolver<'_> {
             return Ok(None);
         };
         // A bound local base shadows outer columns even when its nested tail is invalid.
-        let expr = Self::resolve_potentially_nested_field(
+        let mut expression_name = name.as_ref().to_string();
+        let expr = Self::resolve_nested_field_and_append_display(
             col((qualifier, field)),
             field.data_type(),
             inner,
             schema,
             true,
+            &mut expression_name,
         )?;
         let projection_name = inner.last().unwrap_or(name).as_ref().to_string();
         let named = NamedExpr::new(vec![projection_name], expr);
         Ok(Some(if inner.is_empty() {
             named
         } else {
-            named.with_expression_name(
-                std::iter::once(name)
-                    .chain(inner.iter())
-                    .map(|part| part.as_ref())
-                    .collect::<Vec<_>>()
-                    .join("."),
-            )
+            named.with_expression_name(expression_name)
         }))
     }
 
@@ -304,12 +300,16 @@ impl PlanResolver<'_> {
         Ok(field)
     }
 
-    pub(super) fn resolve_potentially_nested_field<T: AsRef<str>>(
+    /// Resolve a dotted tail and append its display to the caller's base name.
+    /// Map steps use brackets; field steps keep dots and input spelling.
+    /// Callers own projection names and must discard partial display on error.
+    pub(super) fn resolve_nested_field_and_append_display<T: AsRef<str>>(
         expr: expr::Expr,
         data_type: &DataType,
         inner: &[T],
         schema: &DFSchemaRef,
         allow_null_base: bool,
+        display_name: &mut String,
     ) -> PlanResult<expr::Expr> {
         match inner {
             [] => Ok(expr),
@@ -322,9 +322,21 @@ impl PlanResolver<'_> {
                     }
                     _ => data_type,
                 };
+                let map_key = matches!(lookup_type, DataType::Map(_, _));
+                display_name.push(if map_key { '[' } else { '.' });
+                display_name.push_str(name.as_ref());
+                if map_key {
+                    display_name.push(']');
+                }
                 match lookup_type {
                     // Spark folds NULL extraction before evaluating even a projected base.
-                    DataType::Null if allow_null_base => Ok(lit(ScalarValue::Null)),
+                    DataType::Null if allow_null_base => {
+                        for part in remaining {
+                            display_name.push('.');
+                            display_name.push_str(part.as_ref());
+                        }
+                        Ok(lit(ScalarValue::Null))
+                    }
                     DataType::Struct(fields) => {
                         let field = Self::resolve_struct_field(fields, name.as_ref())?;
                         let args = vec![expr, lit(field.name().to_string())];
@@ -337,23 +349,25 @@ impl PlanResolver<'_> {
                         } else {
                             field.data_type()
                         };
-                        Self::resolve_potentially_nested_field(
+                        Self::resolve_nested_field_and_append_display(
                             expr,
                             result_type,
                             remaining,
                             schema,
                             allow_null_base,
+                            display_name,
                         )
                     }
                     DataType::Map(_, _) => {
                         let expr = get_field().call(vec![expr, lit(name.as_ref().to_string())]);
                         let data_type = expr.get_type(schema)?;
-                        Self::resolve_potentially_nested_field(
+                        Self::resolve_nested_field_and_append_display(
                             expr,
                             &data_type,
                             remaining,
                             schema,
                             allow_null_base,
+                            display_name,
                         )
                     }
                     DataType::List(field)
@@ -381,12 +395,13 @@ impl PlanResolver<'_> {
                             }
                             _ => unreachable!("list data type matched above"),
                         };
-                        Self::resolve_potentially_nested_field(
+                        Self::resolve_nested_field_and_append_display(
                             expr,
                             &data_type,
                             remaining,
                             schema,
                             allow_null_base,
+                            display_name,
                         )
                     }
                     _ => Err(PlanError::analysis(format!(
@@ -484,6 +499,148 @@ mod tests {
 
     use super::*;
     use crate::config::PlanConfig;
+
+    #[test]
+    fn nested_display_appends_preserve_typed_lookup_policies() -> PlanResult<()> {
+        let leaf = Arc::new(
+            Field::new("Leaf", DataType::Int32, false)
+                .with_metadata([("source".into(), "child".into())].into()),
+        );
+        let record = DataType::Struct(vec![leaf.clone()].into());
+        let map = |value_type| {
+            DataType::Map(
+                Arc::new(Field::new(
+                    "entries",
+                    DataType::Struct(
+                        vec![
+                            Field::new("keys", DataType::Utf8, false),
+                            Field::new("values", value_type, true),
+                        ]
+                        .into(),
+                    ),
+                    false,
+                )),
+                false,
+            )
+        };
+        let list_item = Arc::new(Field::new_list_field(record.clone(), true));
+        let result_item = Arc::new(leaf.as_ref().clone().with_name("item").with_nullable(true));
+        for (data_type, tail, display, expected_type) in [
+            (record.clone(), vec!["leaf"], "base.leaf", DataType::Int32),
+            (
+                DataType::Dictionary(Box::new(DataType::Int8), Box::new(record.clone())),
+                vec!["leaf"],
+                "base.leaf",
+                DataType::Dictionary(Box::new(DataType::Int8), Box::new(DataType::Int32)),
+            ),
+            (
+                DataType::List(list_item.clone()),
+                vec!["leaf"],
+                "base.leaf",
+                DataType::List(result_item.clone()),
+            ),
+            (
+                DataType::LargeList(list_item.clone()),
+                vec!["leaf"],
+                "base.leaf",
+                DataType::LargeList(result_item.clone()),
+            ),
+            (
+                DataType::FixedSizeList(list_item, 2),
+                vec!["leaf"],
+                "base.leaf",
+                DataType::FixedSizeList(result_item, 2),
+            ),
+            (
+                map(record),
+                vec!["outer", "leaf"],
+                "base[outer].leaf",
+                DataType::Int32,
+            ),
+            (
+                DataType::Struct(vec![Field::new("Map", map(DataType::Int32), true)].into()),
+                vec!["map", "a.b"],
+                "base.map[a.b]",
+                DataType::Int32,
+            ),
+            (
+                map(map(DataType::Int32)),
+                vec!["outer", "key"],
+                "base[outer][key]",
+                DataType::Int32,
+            ),
+        ] {
+            let field = Arc::new(Field::new("base", data_type, true));
+            let schema = Arc::new(DFSchema::new_with_metadata(
+                vec![(None, field.clone())],
+                Default::default(),
+            )?);
+            let mut actual_display = "base".to_string();
+            let resolved = PlanResolver::resolve_nested_field_and_append_display(
+                col((None::<&TableReference>, &field)),
+                field.data_type(),
+                &tail,
+                &schema,
+                false,
+                &mut actual_display,
+            )?;
+            assert_eq!(actual_display, display);
+            assert_eq!(resolved.get_type(&schema)?, expected_type);
+        }
+        let schema = Arc::new(DFSchema::empty());
+        let mut display = "base".to_string();
+        assert_eq!(
+            PlanResolver::resolve_nested_field_and_append_display(
+                lit(ScalarValue::Null),
+                &DataType::Null,
+                &["key", "unvalidated"],
+                &schema,
+                true,
+                &mut display,
+            )?,
+            lit(ScalarValue::Null),
+        );
+        assert_eq!(display, "base.key.unvalidated");
+        for data_type in [DataType::Null, DataType::Int32] {
+            let result = PlanResolver::resolve_nested_field_and_append_display(
+                lit(ScalarValue::try_from(&data_type)?),
+                &data_type,
+                &["key"],
+                &schema,
+                false,
+                &mut String::new(),
+            );
+            assert!(matches!(result, Err(PlanError::AnalysisError(message))
+            if message == format!(
+                "cannot resolve attribute: [INVALID_EXTRACT_BASE_FIELD_TYPE] field \"key\" cannot be extracted from {data_type}"
+            )));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn nested_display_appends_handle_a_bounded_deep_struct_path() -> PlanResult<()> {
+        let data_type = (0..64).fold(DataType::Int32, |inner, _| {
+            DataType::Struct(vec![Field::new("next", inner, false)].into())
+        });
+        let field = Arc::new(Field::new("base", data_type, false));
+        let schema = Arc::new(DFSchema::new_with_metadata(
+            vec![(None, field.clone())],
+            Default::default(),
+        )?);
+        let mut display = "base".to_string();
+        let resolved = PlanResolver::resolve_nested_field_and_append_display(
+            col((None::<&TableReference>, &field)),
+            field.data_type(),
+            &["next"; 64],
+            &schema,
+            false,
+            &mut display,
+        )?;
+        assert_eq!(display, format!("base{}", ".next".repeat(64)));
+        assert_eq!(resolved.get_type(&schema)?, DataType::Int32);
+        Ok(())
+    }
 
     #[test]
     fn qualified_columns_win_without_hiding_ambiguity() -> PlanResult<()> {

@@ -159,15 +159,6 @@ async fn verify_nested_lambda_query_contracts(
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(reference_records.len() - 1, expected_query_count);
-    let inherited_controls = include_str!("fixtures/nested-lambda-inherited-declarations.jsonl")
-        .lines()
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(inherited_controls.len() - 1, 10);
-    assert_eq!(
-        inherited_controls[0]["product_parent"],
-        "e1622a8999bf6bd3ef21aa5f0834f0551374f742"
-    );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let query_session = session(batch_size);
@@ -234,32 +225,7 @@ async fn verify_nested_lambda_query_contracts(
                             && observed["before_collect"] == case["schema_stages"]["executed"]
                             && observed["physical_schema"] == case["schema_stages"]["executed"]
                             && observed["rows_match"] == true => {}
-                    Ok(mut observed) => {
-                        observed["batch"] = json!(batch_size);
-                        let inherited = inherited_controls[1..].iter().find(|control| {
-                            control["id"] == case["id"]
-                                && control["input"] == case["input"]
-                                && control["ansi"] == case["ansi"]
-                                && control["batch_size"] == batch_size
-                                && control["observation"]["batch"] == batch_size
-                        });
-                        match inherited {
-                            Some(control)
-                                if matches!(
-                                    control["tracking_issue"].as_u64(),
-                                    Some(822) | Some(823)
-                                ) && spark_results::matches_inherited_query_observation(
-                                    case, &observed, control,
-                                ) =>
-                            {
-                                eprintln!(
-                                    "Unresolved #{} declaration control {label}: {observed}",
-                                    control["tracking_issue"]
-                                );
-                            }
-                            _ => differences.push(format!("{label}: {observed}")),
-                        }
-                    }
+                    Ok(observed) => differences.push(format!("{label}: {observed}")),
                     Err(error) => differences.push(format!("{label}: {error}")),
                 }
             }

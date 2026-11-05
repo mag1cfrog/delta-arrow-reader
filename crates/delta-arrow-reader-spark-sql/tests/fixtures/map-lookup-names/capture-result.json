@@ -1,0 +1,29 @@
+{
+  "started_at": "2026-11-05T10:41:07.783891+00:00",
+  "command": [
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-capture.py",
+    "--output",
+    "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-spark-v2.jsonl"
+  ],
+  "central_source": "a7fa575af36f11f62e61b474dc9627f4f9969ff4",
+  "capture_sha256": "14cfa012e4721377f1526a1b34e821015efb8e67b4fb5c51bfdf7ad1aa7fce72",
+  "cases_sha256": "5fa149c53fdcebf8e15f3a5c2a49bb5326c6e6386868c6ae35bf063e91284f01",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "SPARK_LOCAL_IP": "127.0.0.1",
+    "TZ": "UTC",
+    "JAVA_HOME": "/home/hanbo/.cache/hermit/pkg/openjdk-21.0.8_9"
+  },
+  "java_executable_sha256": "90d0a6d25da103678013f193db078b90ed8aeb27b66ebe78e0149616c9c1b811",
+  "java_version": "openjdk version \"21.0.8\" 2025-07-15 LTS\nOpenJDK Runtime Environment Temurin-21.0.8+9 (build 21.0.8+9-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.8+9 (build 21.0.8+9-LTS, mixed mode, sharing)\n",
+  "prior_attempt": "v1 failed in infrastructure before Spark session: omittedJAVA_HOME; source/manifest unchanged; evidence preserved",
+  "scope": "independent reference preparation only, no product changes",
+  "exit_code": 0,
+  "seconds": 12.255331844091415,
+  "completed_at": "2026-11-05T10:41:20.039684+00:00",
+  "log": "823-preparation-v2-spark-v2.log",
+  "log_sha256": "13f18f7522641b5c41993f0d3371028183fdc4a4fe263f1d88aa3ad692218ff8",
+  "output_exists": true,
+  "output_sha256": "1645333e24c085f749e09975e4a6a97456eafffda95be63e5da67999d626509c"
+}

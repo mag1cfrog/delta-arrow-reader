@@ -1,0 +1,248 @@
+{
+  "issue": 823,
+  "kind": "independent-spark-references-and-exact-owned-native-preservation-contracts",
+  "product_base": "a7fa575af36f11f62e61b474dc9627f4f9969ff4",
+  "staging_target": "feat/spark-sql-staging",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "scenario_count": 44,
+  "spark_observation_count": 88,
+  "spark_successes": 68,
+  "spark_errors": 20,
+  "native_batch_sizes": [
+    1,
+    32
+  ],
+  "native_observation_count": 176,
+  "original_controls": 4,
+  "files": [
+    {
+      "path": "spark-reference.jsonl",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-spark-v2.jsonl",
+      "bytes": 359219,
+      "sha256": "1645333e24c085f749e09975e4a6a97456eafffda95be63e5da67999d626509c",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "capture.py",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-capture.py",
+      "bytes": 13366,
+      "sha256": "14cfa012e4721377f1526a1b34e821015efb8e67b4fb5c51bfdf7ad1aa7fce72",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "823-preparation-v2-cases.json",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-cases.json",
+      "bytes": 65500,
+      "sha256": "5fa149c53fdcebf8e15f3a5c2a49bb5326c6e6386868c6ae35bf063e91284f01",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "capture-result.json",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/823-preparation-v2-spark-v2-result.json",
+      "bytes": 1735,
+      "sha256": "01cb8109c610ee731fccc7d64456c6ff133dd7cf3fe5d4d34b61910d8324b6f1",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "sources/capture_floating_group_keys_spark.py",
+      "original_path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_floating_group_keys_spark.py",
+      "bytes": 9736,
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "sources/capture_map_owner_interactions.py",
+      "original_path": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures/correlated-scalar-metadata-stages/map-interactions/capture_map_owner_interactions.py",
+      "bytes": 4727,
+      "sha256": "1eeaf8a8eeae3cdb541a5242981cc935b012b708bf529f48d3853244d979a386",
+      "copy": "byte-identical"
+    },
+    {
+      "path": "sources/821-inherited-declarations-current-v1.jsonl",
+      "original_path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/821-inherited-declarations-current-v1.jsonl",
+      "bytes": 30679,
+      "sha256": "70c2a79d714b4fc9d60eba24ae410fd825e016c13857c0d1b952a17d62656082",
+      "copy": "byte-identical"
+    }
+  ],
+  "successful_capture": "Unchanged source/cases run by root with existing JAVA_HOME=/home/hanbo/.cache/hermit/pkg/openjdk-21.0.8_9; immutable successful v2 output. v1 failed before the session because JAVA_HOME was omitted and is preserved in external evidence only.",
+  "reference_policy": "No expected Fields, SQL, row order, guard classifications or exact Spark cause/stage details were changed. Every unknown case remains an independent observation.",
+  "input_map_order": "Declared provider rows and observed_rows_raw are both retained in the captured header. Spark-side mixed-provider Map pair order differs; decoded dictionary semantic contents roundtrip. The encoder uses returned dict.items() order and never sorts output rows or Map pairs. Rust registers the declared input rows, preserving their recorded pair order.",
+  "bare_map_projection_names": "Use exact captured names. Dotted Map projection names are key-only; bracket projections retain brackets. quoted_punctuation fields are id,a.b,m[a.b],sp ace,m[sp ace],a`b,m[a`b]. No global suffix substitution is valid.",
+  "native_api_boundaries": {
+    "resolve": "plan_query parses/analyzes/resolves into SparkSqlQuery before session analyzer/optimizer.",
+    "create_physical_plan": "SparkSqlQuery::create_physical_plan invokes DataFrame::create_physical_plan, which includes session analysis, optimization and physical preparation. This is an observed API boundary, not an inferred internal failure stage.",
+    "collect": "collect executes the prepared physical plan.",
+    "separate_optimizer": "capture_spark_optimized_observation resolves the SQL again before independently attempting session optimization. It records raw schema/name checks or a raw error, but does not expose a separate failure-phase tag. An optimized_error value alone does not establish that the optimizer ran; use the main native API phase and retained error for inspection."
+  },
+  "observer_policy": "The final target compares 104 successful observations completely with independent Spark, including full public/optimized/pre/postphysical Fields and raw ordered rows. 72 observations instead require exact root-reviewed native preservation contracts with explicit case/config/owner, plus independent Map contribution assertions where available. 52 original false Spark flag comparisons remain false and fully retained; expected error identities are reported separately and never credited by tokens. Native helper infrastructure errors propagate via Result and cannot pass through identical JSON equality. Source diagnostic instrumentation remains in its proof ref/external evidence.",
+  "limitations": [
+    "The implementer did not run final Cargo/Rust/format/lint/Spark/JVM commands; root must run the final identical harness on baseline and candidate.",
+    "The initial archived capture script/cases and reference header retain original absolute source-dependency paths honestly. recapture.py separately rebases only source paths to the archived relative helper sources and executes unchanged capture.py. Its original/rebased case and recipe hashes are printed; no original header is rewritten.",
+    "Shared native-control helper records exact query error strings/phases and complete public/pre/postphysical Fields but sorts its comparison rows and lacks native optimized/raw-pre-sort rows. No native raw row-order claim is made. Spark-case records retain rows_raw and all required schema stages.",
+    "Separate shared optimized_error does not expose an independent failure-phase tag; its field name alone does not establish optimizer execution. The observed main resolve/create_physical_plan/collect API boundary and exact error remain authoritative.",
+    "Grouped original queries and their classifications remain unchanged, including duplicate generated-column and independently owned residual gaps. Exact native preservation is not independent Spark compatibility; do not promote diagnostic booleans to acceptance."
+  ],
+  "root_command": "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test map_lookup_names map_lookup_names_match_recorded_contracts -- --exact --nocapture --test-threads=1",
+  "final_interface_roles_before_body_edits": {
+    "source_head": "8af51c60a275d69abadab5ea88d9dc7cd6d1a822",
+    "runtime_helper": {
+      "name": "resolve_nested_field_and_append_display",
+      "declaration": "pub(super) fn resolve_nested_field_and_append_display<T: AsRef<str>>(expr: expr::Expr, data_type: &DataType, inner: &[T], schema: &DFSchemaRef, allow_null_base: bool, display_name: &mut String) -> PlanResult<expr::Expr>",
+      "docs": "Resolve a dotted tail and append its type-directed display to display_name. The caller supplies the base, owns projection names, and must discard partial display on any error.",
+      "cost": "Milestone1 prepends the entire returned tail with format! at every level, so total copied display text grows with the sum of tail lengths. One mutable String appends each step once in the existing type walk; no measured speed claim.",
+      "callers": {
+        "typed_lambda": "Pass the local namedlambdavariable() expression_name; ? propagates failures before any name is exposed.",
+        "ordinary_attribute": "Pass the local bound-base expression_name; keep last-part projection names; ? discards partial display on failure.",
+        "explicit_extraction": "Pass a local discarded_display while preserving the existing literal/bracket formatter; ? propagates errors."
+      },
+      "policies": "Same typed Struct/Map/Dictionary/List recursion, native type inference, strict NULL versus folding NULL, and actual lookup expressions. Folding NULL appends remaining input parts with dots without validating them."
+    },
+    "test_target": {
+      "path": "tests/map_lookup_names.rs",
+      "function": "map_lookup_names_match_recorded_contracts",
+      "role": "Replay all88 exact references at batches1/32. Full independent Spark agreement for compatible cases; exact root-reviewed retained native contracts with explicit owners for existing gaps/errors. Raw false-Spark objects remain visible; no generic allowed-error or acceptance by condition token."
+    },
+    "retained_native_contracts": {
+      "path": "tests/fixtures/map-lookup-names/retained-native-contracts.jsonl",
+      "role": "Preserve complete reference, before-fix native baseline and audited M1 native observations. These are native preservation contracts, distinct from independent Spark expectations. Explicit Map contribution checks are additional assertions for965/966/967/757."
+    },
+    "arrow_controls": {
+      "function": "nested_display_appends_preserve_typed_lookup_policies",
+      "role": "Table of Struct, Dictionary<Struct>, List/LargeList/FixedSizeList<Struct>, Map/Struct mixed steps, NULL fold/strict errors and invalid tails with exact result type/Field/error checks."
+    },
+    "deep_control": {
+      "function": "nested_display_appends_handle_a_bounded_deep_struct_path",
+      "role": "64 valid field steps retain correct result and exact display with one appended path; assertion only, no benchmark."
+    },
+    "connected_originals": "Remove closed822/823 fallback from nested_lambda_captures; all original10 must use existing full-schema/row comparisons. Keep raw provenance/reference bytes and the shared helper used by unary_negate_result_fields.",
+    "portable_recipe": {
+      "path": "tests/fixtures/map-lookup-names/recapture.py",
+      "function": "main",
+      "role": "Use runpy to execute unchanged archived capture.py with a temporary copy of unchanged cases; rebase only helper/source dependency paths to archived sources, retaining source hashes and every scenario/input. Optional --output selects a fresh output. Print original/rebased manifest and wrapper hashes; no duplicated capture loop or header rewriting."
+    }
+  },
+  "accepted_staging_parent": "555665e216743cfdcf4aaeea4f3ad940c383c2e8",
+  "historical_observer_file": {
+    "path": "crates/delta-arrow-reader-spark-sql/tests/map_lookup_names_observer.rs",
+    "bytes": 10404,
+    "sha256": "12b0de199b3da65ee2166952b69a92a77c8e69a7961012f089e043a8c038919d",
+    "proof_ref": "refs/dar-evidence/823-baseline-observer-v1"
+  },
+  "historical_observer_output_records": {
+    "prefix": "MAP_LOOKUP_NAME_BASELINE ",
+    "header": 1,
+    "query_observations": 176,
+    "session_observations": 2,
+    "native_controls": 8,
+    "summary": 1,
+    "total_expected": 188,
+    "error_review": "Always explicit when Spark expects an error or DAR reports one; generic condition checks are not exact cause acceptance."
+  },
+  "final_output_records": {
+    "query_prefix": "MAP_LOOKUP_NAME_RESULT ",
+    "query_observations": 176,
+    "native_prefix": "MAP_LOOKUP_NAME_NATIVE ",
+    "native_controls": 8,
+    "expected_total": 184
+  },
+  "portable_recipe": {
+    "path": "recapture.py",
+    "runs": "unchanged capture.py with temporary rebased copy of unchanged 823-preparation-v2-cases.json",
+    "output_option": "--output is optional; existing outputs are rejected",
+    "expected_differences": [
+      "header.leaf_encoder_path",
+      "header.source_dependencies[*].path",
+      "header.cases_sha256"
+    ],
+    "initial_reference_produced_by_portable_recipe": false,
+    "recipe_sha256": "be7cce8ec12457cd555f76884aafb273aefc1741065f381ec9ce9412e5953e72"
+  },
+  "retained_native_contracts": {
+    "path": "retained-native-contracts.jsonl",
+    "sha256": "3cf5d3e342e99109819d928611ca879d9b3f4aca26716e41155b484875a0d38a",
+    "records": 72,
+    "independent_spark_false_flag_records": 52,
+    "strict_independent_spark_successes": 104,
+    "owners": {
+      "156": 44,
+      "757": 8,
+      "965": 4,
+      "966": 12,
+      "967": 4
+    },
+    "scope_748": "STRUCT path preservation remains connected to open #748; the actual struct_paths residual in this capture is STRUCT child col1 versus leaf under #757."
+  },
+  "final_test_file": {
+    "path": "crates/delta-arrow-reader-spark-sql/tests/map_lookup_names.rs",
+    "sha256": "8eb4fcfb90feedd1efb1f5304d9f7d2c6c0b334e98efadc92ccc456c1b69ce9e"
+  },
+  "final_implementation_file_hashes": [
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/attribute.rs",
+      "bytes": 37921,
+      "sha256": "baa7baa021d0294f20630224314006974d00d04b0c183e0c44a286488ed17c5e"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/misc.rs",
+      "bytes": 13128,
+      "sha256": "369d3531d866e2e03ce51d06cb2e523e12dbc73a0ce3ed611c7fa69e93e2f9a3"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-sql-analyzer/src/expression.rs",
+      "bytes": 47714,
+      "sha256": "0a84e85ba348d00d295fc863b0a7dd3a2e552c66584a6abf5aa3eb6b2827b36c"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/tests/map_lookup_names.rs",
+      "bytes": 12792,
+      "sha256": "8eb4fcfb90feedd1efb1f5304d9f7d2c6c0b334e98efadc92ccc456c1b69ce9e"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/tests/nested_lambda_captures.rs",
+      "bytes": 60318,
+      "sha256": "f45f4342911980104d546fd1b5b2671b4ea7fe809193ea5cba43cdd5b4dabfde"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/map-lookup-names/recapture.py",
+      "bytes": 1906,
+      "sha256": "be7cce8ec12457cd555f76884aafb273aefc1741065f381ec9ce9412e5953e72"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/map-lookup-names/README.md",
+      "bytes": 1319,
+      "sha256": "58c85207f2bb3f9b628c55e5022f320621dac3443aa86653fe94ec75caf8f897"
+    },
+    {
+      "path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/map-lookup-names/retained-native-contracts.jsonl",
+      "bytes": 502297,
+      "sha256": "3cf5d3e342e99109819d928611ca879d9b3f4aca26716e41155b484875a0d38a"
+    }
+  ],
+  "static_policy_audit_only": {
+    "inputs": [
+      "823-baseline-observer-v1-observations.json",
+      "823-runtime-milestone1-observer-v1-observations.json"
+    ],
+    "baseline": {
+      "query_objects": 176,
+      "independent_successes": 32,
+      "matching_final_contracts": 88,
+      "matching_owned_map_contributions": 160
+    },
+    "milestone1": {
+      "query_objects": 176,
+      "independent_successes": 104,
+      "matching_final_contracts": 176,
+      "matching_owned_map_contributions": 176
+    },
+    "runtime_or_final_harness_execution": false
+  },
+  "proposed_root_checks": [
+    "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test map_lookup_names map_lookup_names_match_recorded_contracts -- --exact --nocapture --test-threads=1",
+    "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --test nested_lambda_captures",
+    "cargo +1.96.0 test --locked --manifest-path crates/delta-arrow-reader-spark-sql/Cargo.toml --workspace --lib nested_display_appends",
+    "python crates/delta-arrow-reader-spark-sql/tests/fixtures/map-lookup-names/recapture.py --output <fresh-reference.jsonl>"
+  ]
+}
