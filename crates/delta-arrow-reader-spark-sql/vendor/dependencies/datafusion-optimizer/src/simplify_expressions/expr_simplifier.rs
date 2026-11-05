@@ -830,7 +830,7 @@ impl<'a> ConstEvaluator<'a> {
     }
 }
 
-// Discard a NULL-propagating parent before trying to fold its fallible children.
+// Prune NULL-propagating parents and redundant Spark IS NULL checks before folding children.
 // Scalar subqueries retain their separate planning/error checks.
 pub fn prune_null(expr: Expr, info: &SimplifyContext) -> Result<Transformed<Expr>> {
     prune_null_with_local_input_errors(expr, info, false)
