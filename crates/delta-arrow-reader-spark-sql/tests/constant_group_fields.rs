@@ -31,6 +31,162 @@ fn session(batch_size: usize, spark: bool) -> SessionContext {
     })
 }
 
+#[test]
+fn literal_projection_aliases_preserve_types_metadata_and_native_plans() -> TestResult {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use arrow::array::{Float32Array, ListArray};
+    use arrow::buffer::OffsetBuffer;
+    use arrow::datatypes::{DataType, Field};
+    use datafusion::common::{ScalarValue, config::ConfigOptions, metadata::FieldMetadata};
+    use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, col, lit};
+    use datafusion::optimizer::optimizer::{OptimizerContext, OptimizerRule};
+    use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+
+    let metadata = HashMap::from([("source".to_owned(), "literal-alias".to_owned())]);
+    let nested = ScalarValue::List(Arc::new(ListArray::new(
+        Arc::new(
+            Field::new("kept_element", DataType::Float32, true).with_metadata(metadata.clone()),
+        ),
+        OffsetBuffer::from_lengths([1]),
+        Arc::new(Float32Array::from(vec![-0.0])),
+        None,
+    )));
+    for value in [
+        ScalarValue::Float32(Some(-0.0)),
+        ScalarValue::Float32(None),
+        nested,
+    ] {
+        let producer = LogicalPlanBuilder::empty(false)
+            .project(vec![lit(value.clone()).alias("value")])?
+            .alias("first")?
+            .project(vec![col("first.value").alias_with_metadata(
+                "key",
+                Some(FieldMetadata::from(metadata.clone())),
+            )])?
+            .alias("second")?
+            .build()?;
+        let plan = LogicalPlanBuilder::from(producer)
+            .project(vec![col("second.key").alias("result")])?
+            .build()?;
+        for spark in [false, true] {
+            let mut options = ConfigOptions::default();
+            if spark {
+                options
+                    .extensions
+                    .insert(SparkSqlExpressionSemantics::default());
+            }
+            let config = OptimizerContext::new_with_config_options(Arc::new(options));
+            let actual = SimplifyExpressions::new()
+                .rewrite(plan.clone(), &config)?
+                .data;
+            assert_eq!(actual.schema().fields(), plan.schema().fields());
+            assert_eq!(actual.schema().field(0).metadata(), &metadata);
+            if !spark {
+                assert_eq!(actual, plan);
+                continue;
+            }
+            let LogicalPlan::Projection(projection) = actual else {
+                return Err("expected literal consumer projection".into());
+            };
+            let Expr::Literal(actual, _) = projection.expr[0].clone().unalias() else {
+                return Err("qualified literal binding was not propagated".into());
+            };
+            assert_eq!(actual.data_type(), value.data_type());
+            assert_eq!(actual, value);
+            if let ScalarValue::Float32(Some(value)) = actual {
+                assert_eq!(value.to_bits(), (-0.0_f32).to_bits());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn literal_lookup_leaves_computed_and_aggregate_producers_opaque() -> TestResult {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use arrow::datatypes::DataType;
+    use datafusion::common::{ScalarValue, config::ConfigOptions};
+    use datafusion::logical_expr::{
+        ColumnarValue, LogicalPlanBuilder, Volatility, col, create_udf, lit,
+    };
+    use datafusion::optimizer::optimizer::{OptimizerContext, OptimizerRule};
+    use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+
+    let mut options = ConfigOptions::default();
+    options
+        .extensions
+        .insert(SparkSqlExpressionSemantics::default());
+    let config = OptimizerContext::new_with_config_options(Arc::new(options));
+    let callbacks = Arc::new(AtomicUsize::new(0));
+    let mut producers = Vec::new();
+    for volatility in [Volatility::Immutable, Volatility::Volatile] {
+        let observed = Arc::clone(&callbacks);
+        let function = create_udf(
+            "literal_source",
+            vec![],
+            DataType::Int32,
+            volatility,
+            Arc::new(move |_| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(ColumnarValue::Scalar(ScalarValue::Int32(Some(7))))
+            }),
+        );
+        producers.push(
+            LogicalPlanBuilder::empty(false)
+                .project(vec![function.call(vec![]).alias("key")])?
+                .build()?,
+        );
+    }
+    producers.push(
+        LogicalPlanBuilder::empty(false)
+            .project(vec![(lit(1_i32) + lit(2_i32)).alias("key")])?
+            .build()?,
+    );
+    producers.push(
+        LogicalPlanBuilder::empty(false)
+            .project(vec![lit(7_i32).alias("key")])?
+            .aggregate(vec![col("key")], Vec::new())?
+            .build()?,
+    );
+    for producer in producers {
+        let plan = LogicalPlanBuilder::from(producer)
+            .alias("producer")?
+            .project(vec![col("producer.key").alias("result")])?
+            .build()?;
+        let actual = SimplifyExpressions::new()
+            .rewrite(plan.clone(), &config)?
+            .data;
+        assert_eq!(actual, plan);
+    }
+    let left = LogicalPlanBuilder::empty(false)
+        .project(vec![lit(7_i32).alias("key")])?
+        .alias("left")?
+        .build()?;
+    let right = LogicalPlanBuilder::empty(false)
+        .project(vec![lit(9_i32).alias("key")])?
+        .alias("right")?
+        .build()?;
+    let joined = LogicalPlanBuilder::from(left)
+        .cross_join(right)?
+        .project(vec![
+            col("left.key").alias("left_key"),
+            col("right.key").alias("right_key"),
+        ])?
+        .build()?;
+    let actual = SimplifyExpressions::new()
+        .rewrite(joined.clone(), &config)?
+        .data;
+    assert_eq!(actual, joined);
+    assert_eq!(callbacks.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
 #[tokio::test]
 async fn original_constant_groups_keep_public_fields_and_signed_zero_representatives() -> TestResult
 {
@@ -183,6 +339,94 @@ async fn constant_group_fields_match_each_independent_spark_stage() -> TestResul
                      cast_cause={cause_matches} raw_payload={raw_payload_matches} {actual}",
                     case["id"], case["ansi"]
                 ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_array_consumers_match_independent_boundary_stages() -> TestResult {
+    let records = include_str!("fixtures/constant-group-literal-consumers-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/constant-group-literal-consumers-cases.json"
+    ))?;
+    assert_eq!(records.len() - 1, 24);
+    assert_eq!(records[0]["inputs"], manifest["inputs"]);
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert((
+            case["id"].as_str().ok_or("missing ID")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?
+        )));
+        let definition = manifest["cases"]
+            .as_array()
+            .ok_or("missing definitions")?
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("missing boundary query")?;
+        assert_eq!(case["sql"], definition["sql"]);
+        assert_eq!(case["category"], definition["category"]);
+        if case["expected"].get("rows").is_none() {
+            assert_eq!(case["expected"]["condition"], "INVALID_ARRAY_INDEX");
+        } else {
+            assert_eq!(case["public_schema"], case["expected"]["schema"]);
+            for stage in [
+                "analyzed",
+                "optimized",
+                "executed_before_collect",
+                "executed",
+            ] {
+                assert!(case["schema_stages"].get(stage).is_some(), "{case}");
+            }
+        }
+    }
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size, true);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await?;
+            let cause_matches = if case["expected"]["condition"] == "INVALID_ARRAY_INDEX" {
+                let parameters = &case["spark_error_details"]["message_parameters"];
+                let index = parameters["indexValue"]
+                    .as_str()
+                    .ok_or("missing failing index")?;
+                let length = parameters["arraySize"]
+                    .as_str()
+                    .ok_or("missing array size")?;
+                actual["error"].as_str().is_some_and(|error| error.contains(&format!(
+                    "[INVALID_ARRAY_INDEX] The index {index} is out of bounds. The array has {length} elements."
+                )))
+            } else {
+                true
+            };
+            let public_matches = case["expected"]
+                .get("schema")
+                .is_none_or(|expected| actual["public_schema"] == *expected);
+            eprintln!(
+                "CONSTANT_LITERAL_BOUNDARY {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "observation":actual,"cause_matches":cause_matches,
+                    "public_result_matches":public_matches,
+                })
+            );
+            if actual["matches"] != true
+                || actual["optimized_matches"] != true
+                || !cause_matches
+                || !public_matches
+            {
+                differences.push(format!("{} ANSI={} batch={batch_size}: cause={cause_matches} public={public_matches} {actual}",
+                    case["id"],case["ansi"]));
             }
         }
     }
