@@ -146,6 +146,7 @@ harness = false
 arrow-arith = { path = "vendor/dependencies/arrow-arith" }
 arrow-array = { path = "vendor/dependencies/arrow-array" }
 arrow-cast = { path = "vendor/dependencies/arrow-cast" }
+datafusion-common = { path = "vendor/dependencies/datafusion-common" }
 datafusion-expr = { path = "vendor/dependencies/datafusion-expr" }
 datafusion-functions = { path = "vendor/dependencies/datafusion-functions" }
 datafusion-functions-aggregate = { path = "vendor/dependencies/datafusion-functions-aggregate" }

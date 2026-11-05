@@ -36,6 +36,14 @@ Floating DISTINCT set results can differ from Spark in their `0.0`/`-0.0` text
 after projection and LIMIT optimization. The [set-result references](tests/fixtures/README.md#floating-intersect-and-except-results)
 record this limitation separately from equality, row counts and NULL behavior.
 
+REGEXP_EXTRACT and REGEXP_REPLACE use the native regex matcher, with recorded
+limits for Java lookbehind, final line terminators, Unicode word categories,
+optional UTF-16 advancement and regions beginning inside a surrogate pair.
+Exact empty-pattern and raw nonboundary UTF-16 replacement remain supported.
+The [regex capability references](tests/fixtures/regexp-replace-README.md#native-regex-capability-limits)
+define the measured inputs and complete outcomes. Other pattern, value, field
+or error differences require investigation.
+
 The proposed native STRING/BINARY capability boundary uses Arrow's valid UTF-8
 STRING representations and permits arbitrary BINARY bytes. BINARY-to-STRING
 conversion, mixed CONCAT and CONCAT_WS require valid UTF-8 in each evaluated,

@@ -26,10 +26,11 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Twelve dependencies have local source overrides in this crate's Cargo.toml:
+Thirteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
+| DataFusion common | 54.1.0 | Preserve complete list element Fields during scalar conversion and scalar casts |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
@@ -39,6 +40,16 @@ The JSON inventory lists each package and its original crates.io archive checksu
 Unmodified files came from those archives, rather than mutable Cargo source caches.
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
+
+Typed List and LargeList literals retain their complete element fields when
+converted from Arrow rows or cast to a declared list type. For example, an
+element named `kept_element` with `source=constant-coordinate-test` keeps that
+metadata after a constant `SLICE(..., 1, 1)`, including nested and empty results.
+The shared single-row list builder uses the supplied field and Arrow's existing
+constructors, which still reject mismatched child types and required elements
+containing logical NULLs. The [literal field tests](tests/literal_list_fields.rs)
+cover direct scalar construction, conversion, casts, folding and NULL parents.
+Required Struct-element cast admission remains tracked separately in #910.
 
 Arrow cast also exposes `parse_string_rows_until_error` for callers that need
 successful rows before a strict parse failure. It reuses the primitive parser
@@ -237,8 +248,8 @@ Their inputs retain their own field declarations. Explicit SQL CAST keeps its
 separate declared type.
 The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
 retain independent public and executed fields, the original scalar guards and
-the explicit Arrow type-contract difference from Spark. Native DataFusion
-scalar construction is unchanged.
+the explicit Arrow type-contract difference from Spark. These annotations do
+not change native DataFusion scalar-subquery construction.
 VALUES column declarations use the coerced expressions' nullability. Projected
 IN can reuse its nonnullable match result when both operands are nonnullable;
 nullable operands retain the existing three-valued comparison.
@@ -860,9 +871,18 @@ complete Spark fields and values for direct and connected consumers.
 The Spark function builder rejects non-array arguments during resolution with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, preserving untyped NULL and the
 existing array coercion path. Internal ARRAYS_OVERLAP compaction keeps the direct
-expression builder. The constant bad-cast IS NULL gap remains under #890; only
-its exact inherited observation permits a difference from Spark. The historical
-#891 controls stay frozen, while their non-array errors require strict matches.
+expression builder.
+
+Early local input preparation retains required IS NULL operands and comparison
+order until their conversions run. This covers ARRAY_COMPACT, ARRAY and STRUCT
+checks over VALUES. Later Spark NULL pruning uses a required operand's
+declaration to answer IS NULL before constant folding visits its children.
+Scalar subqueries retain their separate preparation checks, and native
+DataFusion keeps its existing evaluation order. Direct and STRUCT consumers
+still require the compacted values and retain reachable cast errors. The
+references require all 148 original comparisons, 28 supplemental input-admission
+comparisons and 44 NULL-inspection boundary comparisons to match strictly, with
+no inherited exceptions.
 
 ### Projection metadata
 
