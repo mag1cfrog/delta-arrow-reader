@@ -1,0 +1,210 @@
+{
+  "group": "array-compact-890-null-inspection-boundaries-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "capture_script_sha256": "9c179a8727eb067d91552aba504524fbbfe3b0f1b9245ba2af339035f2380417",
+  "scenario_count": 10,
+  "observation_count": 20,
+  "input_encoding": "Integers are decimal strings, strings are unchanged, NULL is JSON null, arrays and structs are positional JSON arrays.",
+  "inputs": [
+    {
+      "name": "compact_boundaries",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "x",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "required"
+        ]
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "local_compact_column_is_null",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY(CAST(x AS INT), CAST(NULL AS INT))) IS NULL AS r FROM VALUES ('bad') t(x)",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "local_compact_constant_is_null",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY(CAST('bad' AS INT), CAST(NULL AS INT))) IS NULL AS r FROM VALUES (1) t(k)",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "local_array_column_is_null",
+      "sql": "SELECT ARRAY(CAST(x AS INT), CAST(NULL AS INT)) IS NULL AS r FROM VALUES ('bad') t(x)",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "local_struct_column_is_null",
+      "sql": "SELECT STRUCT(CAST(x AS INT) AS v) IS NULL AS r FROM VALUES ('bad') t(x)",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "provider_required_sibling_after_null_check",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY(CAST('discarded' AS INT))) IS NULL AS r, CAST(x AS INT) AS live FROM compact_boundaries",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "provider_required_sibling_before_null_check",
+      "sql": "SELECT CAST(x AS INT) AS live, ARRAY_COMPACT(ARRAY(CAST('discarded' AS INT))) IS NULL AS r FROM compact_boundaries",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "direct_first_cast_error",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY(CAST('first' AS INT), CAST('second' AS INT))) AS r",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "struct_first_cast_error",
+      "sql": "SELECT STRUCT(ARRAY_COMPACT(ARRAY(CAST('first' AS INT), CAST('second' AS INT))) AS values) AS r",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "scalar_subquery_is_null",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY((SELECT CAST(x AS INT) FROM compact_boundaries))) IS NULL AS r",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    },
+    {
+      "id": "volatile_array_is_null",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY(CAST('discarded' AS INT), CAST(RAND(0) AS INT))) IS NULL AS r",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    }
+  ],
+  "identities": [
+    {
+      "id": "local_compact_column_is_null",
+      "ansi": true
+    },
+    {
+      "id": "local_compact_constant_is_null",
+      "ansi": true
+    },
+    {
+      "id": "local_array_column_is_null",
+      "ansi": true
+    },
+    {
+      "id": "local_struct_column_is_null",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_sibling_after_null_check",
+      "ansi": true
+    },
+    {
+      "id": "provider_required_sibling_before_null_check",
+      "ansi": true
+    },
+    {
+      "id": "direct_first_cast_error",
+      "ansi": true
+    },
+    {
+      "id": "struct_first_cast_error",
+      "ansi": true
+    },
+    {
+      "id": "scalar_subquery_is_null",
+      "ansi": true
+    },
+    {
+      "id": "volatile_array_is_null",
+      "ansi": true
+    },
+    {
+      "id": "local_compact_column_is_null",
+      "ansi": false
+    },
+    {
+      "id": "local_compact_constant_is_null",
+      "ansi": false
+    },
+    {
+      "id": "local_array_column_is_null",
+      "ansi": false
+    },
+    {
+      "id": "local_struct_column_is_null",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_sibling_after_null_check",
+      "ansi": false
+    },
+    {
+      "id": "provider_required_sibling_before_null_check",
+      "ansi": false
+    },
+    {
+      "id": "direct_first_cast_error",
+      "ansi": false
+    },
+    {
+      "id": "struct_first_cast_error",
+      "ansi": false
+    },
+    {
+      "id": "scalar_subquery_is_null",
+      "ansi": false
+    },
+    {
+      "id": "volatile_array_is_null",
+      "ansi": false
+    }
+  ],
+  "capture_idiom_reused_from": [
+    {
+      "path": "../array-compact-844-current-v1/capture_spark.py",
+      "sha256": "b4553bd52fceb3c9f4f15b994a05704fb1c2566d83764dcd437a38ed50167d5f",
+      "roles": [
+        "Spark/JAR pin",
+        "complete schema stages and plans",
+        "provider roundtrip",
+        "query error capture",
+        "exclusive output creation"
+      ]
+    }
+  ],
+  "scope": "NULL-inspection ordering at early VALUES, required siblings, direct/STRUCT first errors, scalar subqueries and a volatile discarded array. Outcomes must come only from root pinned Spark capture."
+}

@@ -1951,7 +1951,7 @@ impl Prepare {
         exists: bool,
     ) -> Result<LogicalPlan> {
         use datafusion_expr::logical_plan::EmptyRelation;
-        let spark_comparison_errors = options
+        let is_spark_query = options
             .extensions
             .get::<SparkSqlExpressionSemantics>()
             .is_some();
@@ -1963,11 +1963,11 @@ impl Prepare {
                     let mut casts = false;
                     let mut evaluable = true;
                     for expr in &project.expr {
-                        casts |= early_cast(expr, project.input.schema(), spark_comparison_errors)?;
+                        casts |= early_cast(expr, project.input.schema(), is_spark_query)?;
                         evaluable &= row_expression(expr, true)?;
                     }
                     if casts
-                        && (evaluable || spark_comparison_errors)
+                        && (evaluable || is_spark_query)
                         && let Some(batch) = self.local_batch(&project.input)?
                     {
                         if batch.num_rows() == 0 {
@@ -1983,8 +1983,8 @@ impl Prepare {
                             .with_config_options(Arc::new(options.clone()))
                             .build();
                         let mut simplifier = ExprSimplifier::new(info);
-                        if spark_comparison_errors {
-                            simplifier = simplifier.with_left_to_right_comparison_errors();
+                        if is_spark_query {
+                            simplifier = simplifier.with_local_input_errors();
                         }
                         for expr in &project.expr {
                             if !row_expression(expr, true)? {
@@ -2040,7 +2040,7 @@ impl Prepare {
         // Decide LIKE's early local eligibility before column pruning can
         // remove an unevaluable sibling. Other expressions retain their
         // existing post-projection LIMIT-zero pruning below.
-        let plan = if spark_comparison_errors {
+        let plan = if is_spark_query {
             plan.transform_down(|node| {
                 if let LogicalPlan::Limit(limit) = &node
                     && crate::like_errors::contains_spark_like(&limit.input)?
@@ -2057,7 +2057,7 @@ impl Prepare {
         };
         let plan = self.prune_projections(plan, &config, exists)?;
         let plan = plan
-            .transform_down(|node| self.prune_limit_zero(node, spark_comparison_errors))?
+            .transform_down(|node| self.prune_limit_zero(node, is_spark_query))?
             .data;
         if !self.has_null_sensitive_comparison {
             return Ok(plan);

@@ -2956,7 +2956,8 @@ and elements, typed/untyped NULLs, nested arrays and STRUCTs, zero-row providers
 fallible casts, repeated compaction, membership, overlap and flattening. The
 observer verifies internal output names and order before mapping optimized
 fields to public names. Successful native array controls compare configured
-and unconfigured sessions before and after Spark execution.
+and unconfigured sessions before and after Spark execution. A fallible native
+array NULL check also retains its planning error.
 
 The SparkArrayCompact unit tests check both list widths, immediate versus deeper
 fields, custom element metadata, sliced child storage, scalar adaptation and
@@ -2970,20 +2971,10 @@ pass safe construction with required elements.
 
 `array-compact-inherited-controls.jsonl` preserves three complete DAR observation
 objects from baseline `87384089cc4d902a70a9a984b7782abe7ddb357c`, paired with the
-full independent Spark records. Only the ANSI constant bad-cast IS NULL result
-under #890 permits an inherited observation, giving two comparisons across the
-batch sizes. The other 146 comparisons require strict Spark fields, rows and
-errors, including the `invalid_non_array` references in both ANSI modes. The
-historical #891 controls remain frozen and must fail the inherited guard. The
-summary reports strict matches separately from the issue contract.
-
-The #890 inherited guard requires the same identity, complete reference and
-complete baseline observation, normalizing only batch 1 versus 32. It preserves every
-canonical comparison flag. A full strict success also passes, so a later fix can
-resolve an inherited gap. Adversarial checks reject changed queries, conditions,
-phases, causes, fields, metadata, rows, flags, missing/extra keys, unsupported
-batches, ANSI modes and panics. These controls do not establish full
-ARRAY_COMPACT compatibility.
+full independent Spark records. These historical observations remain unchanged
+as raw evidence and grant no current exception. All 148 comparisons require
+strict Spark fields, rows and errors, including constant bad-cast IS NULL success
+and non-array rejection in both ANSI modes.
 
 `array-compact-input-types/` contains 14 supplemental Spark observations for
 integer, STRING, STRUCT, MAP and typed NULL integer inputs, plus valid ARRAY and
@@ -2997,10 +2988,21 @@ DataFusion controls compare complete successful and rejected observations before
 and after Spark execution. The builder unit test preserves original arguments
 for NULL, all five list representations and dictionary children.
 
+The [NULL-inspection boundary references](array-compact-null-inspection/README.md)
+retain 22 further independent observations for VALUES, required provider siblings
+in both output orders, direct/STRUCT first errors, scalar subqueries and a
+discarded volatile operand. Local ARRAY_COMPACT, ARRAY and STRUCT NULL checks
+retain their early conversions. The constant-subquery supplement preserves
+preparation errors before outer NULL pruning. `compact_null_inspection.rs`
+requires 44 strict comparisons of complete fields, rows, phases and first cast
+inputs at batch sizes 1 and 32. These bounded references do not establish full
+ARRAY_COMPACT compatibility.
+
 From this crate, replay the references and focused kernel checks with:
 
 ```sh
 cargo test --locked --workspace --test compact_result_fields -- --nocapture
+cargo test --locked --workspace --test compact_null_inspection -- --nocapture
 cargo test --locked --workspace -p sail-plan --lib array_compact_validation -- --nocapture
 cargo test --locked --workspace -p sail-function --lib spark_array_compact -- --nocapture
 cargo test --locked --workspace -p sail-function --lib scalar_adapter -- --nocapture

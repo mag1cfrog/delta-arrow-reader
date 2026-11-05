@@ -1,0 +1,72 @@
+{
+  "group": "array-compact-890-subquery-preparation-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "capture_script_sha256": "29eea237d80188dfc57fbf7e46bcf5d83a2f6a55f945016b19c17191264aec55",
+  "scenario_count": 1,
+  "observation_count": 2,
+  "input_encoding": "Integers are decimal strings, strings are unchanged, NULL is JSON null, arrays and structs are positional JSON arrays.",
+  "inputs": [
+    {
+      "name": "compact_boundaries",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "x",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "required"
+        ]
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scalar_subquery_constant_is_null",
+      "sql": "SELECT ARRAY_COMPACT(ARRAY((SELECT CAST('bad' AS INT) FROM compact_boundaries))) IS NULL AS r",
+      "allowed_error_conditions": [
+        "CAST_INVALID_INPUT"
+      ]
+    }
+  ],
+  "identities": [
+    {
+      "id": "scalar_subquery_constant_is_null",
+      "ansi": true
+    },
+    {
+      "id": "scalar_subquery_constant_is_null",
+      "ansi": false
+    }
+  ],
+  "capture_idiom_reused_from": [
+    {
+      "path": "../890-null-inspection-boundaries-v1/capture_spark.py",
+      "sha256": "9c179a8727eb067d91552aba504524fbbfe3b0f1b9245ba2af339035f2380417",
+      "roles": [
+        "complete pinned capture",
+        "actual first-cast Spark message parameters"
+      ]
+    }
+  ],
+  "scope": "A constant failure while preparing a provider-backed scalar subquery under a required ARRAY_COMPACT NULL check. Input-only supplement; expected outcomes come only from the root pinned Spark capture."
+}
