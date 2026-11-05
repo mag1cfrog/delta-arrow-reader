@@ -59,13 +59,6 @@ async fn date_string_boundaries_match_spark() -> TestResult {
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(records.len(), 517);
-    assert_eq!(
-        records
-            .iter()
-            .filter(|r| r.get("retained_difference").is_some())
-            .count(),
-        2
-    );
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
@@ -83,14 +76,6 @@ async fn date_string_boundaries_match_spark() -> TestResult {
         for case in &records[1..] {
             let actual = execute_date_query(&session, case).await;
             let expected = &case["expected"];
-            if case["retained_difference"] == "timestamp_separator_632" {
-                assert_eq!(expected["condition"], "INVALID_TYPED_LITERAL");
-                assert_eq!(
-                    actual?,
-                    json!({"type":"string", "rows":[["2026-01-02 01:02:03.123456"]]})
-                );
-                continue;
-            }
             let matches = match &actual {
                 Ok(actual) => {
                     expected["status"] == "ok"

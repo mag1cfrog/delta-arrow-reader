@@ -671,10 +671,19 @@ dates, NULLs and empty results in both ANSI modes. Timestamp literals provide
 controls for the shared date-component grammar.
 
 `date_boundaries.rs` checks exact values, result types and expected errors at
-batch sizes 1 and 32. It strictly matches 514 observations. The other two retain
-an existing lowercase timestamp-separator difference tracked in #632; their
-Spark error expectations stay unchanged, and the test explicitly checks the
-current staged result. They are not counted as supported Spark behavior.
+batch sizes 1 and 32, and strictly matches all 516 observations, including the
+lowercase timestamp-separator controls fixed by #632.
+
+## Timestamp date/time separators
+
+`timestamp-separators/timestamp-separators-spark.jsonl` contains 3,348 Spark
+4.2.0 observations of the date/time separator in timestamp strings and typed
+literals. CAST, TRY_CAST, TO_TIMESTAMP, TO_TIMESTAMP_NTZ, DATE_FORMAT, STRING
+comparison and DATE casts read constant and registered-column inputs in both
+ANSI modes, UTC and New York. `timestamp_separators.rs` compares typed values,
+schemas at each stage and failing stages at batch sizes 1 and 32. See the
+[separator fixture notes](timestamp-separators/README.md) for the inputs,
+encoding and capture command.
 
 ## String-to-BOOLEAN casts
 
@@ -2742,14 +2751,15 @@ assertions retain the independent Spark discriminators without inherited
 allowances. Local tests also cover all four list input layouts, complete
 element fields, nested literal folding and opaque runtime Scalar operands.
 Runtime layout checks retain immediate element metadata. The constant fixture
-constructs List/LargeList scalars directly for three input declarations:
-required Int32 elements, nullable Int32 elements, and nullable Struct elements
-with metadata on the element and named required/nullable child fields. All six
+constructs List/LargeList scalars directly for four input declarations:
+required/nullable Int32 elements and required/nullable Struct elements, with
+metadata on the element and named required/nullable child fields. All eight
 cases check the complete input and output types, valid Arrow data and the
-interpreted empty result. The common-valid typed literal test separately folds
-nested `SLICE(..., 1, 1)` calls over primitive and nested List values, checking
-immediate and nested fields, empty inputs and results, selected NULL elements
-and NULL arguments for List and LargeList.
+interpreted empty result. The common-valid typed literal test separately checks
+direct and nested `SLICE(..., 1, 1)` calls over primitive, nested List and Struct
+values through native evaluation and constant folding. It checks immediate and
+nested fields, empty inputs and results, selected NULL elements, NULL optional
+Struct children and NULL arguments for List and LargeList.
 
 The [typed literal field tests](../literal_list_fields.rs) check direct
 scalar construction, row conversion, scalar casts, coercion and cast folding
@@ -2758,8 +2768,10 @@ nonempty lists, NULL parents, nullable Struct elements, target-field changes and
 native rejection of incompatible types or NULLs in required elements. These
 tests cover the scalar metadata boundary tracked in
 [#909](https://github.com/mag1cfrog/delta-arrow-reader/issues/909).
-Required Struct-element cast admission remains tracked in
-[#910](https://github.com/mag1cfrog/delta-arrow-reader/issues/910).
+SLICE retains required Struct-element declarations while preserving nullable
+children. Native Scalar and Array result checks reject actual NULL Struct
+elements in a required result. Runtime NULL-parent tests cover both list widths
+and retain hidden child storage only for nullable element declarations.
 
 `slice-conditional-coordinates/` adds twelve independent Spark observations for
 six CASE scenarios, with raw SHA256

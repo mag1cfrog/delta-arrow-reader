@@ -509,8 +509,8 @@
 {"id":"bad_date_literal","sql":"SELECT DATE 'bad' AS r","ansi":false,"expected":{"status":"error","condition":"INVALID_TYPED_LITERAL"}}
 {"id":"timestamp_upper","sql":"SELECT CAST(TIMESTAMP '2026-01-02T01:02:03.123456Z' AS STRING) AS r","ansi":true,"expected":{"status":"ok","type":"string","rows":[["2026-01-02 01:02:03.123456"]]}}
 {"id":"timestamp_upper","sql":"SELECT CAST(TIMESTAMP '2026-01-02T01:02:03.123456Z' AS STRING) AS r","ansi":false,"expected":{"status":"ok","type":"string","rows":[["2026-01-02 01:02:03.123456"]]}}
-{"id":"timestamp_lower","sql":"SELECT CAST(TIMESTAMP '2026-01-02t01:02:03.123456Z' AS STRING) AS r","ansi":true,"expected":{"status":"error","condition":"INVALID_TYPED_LITERAL"},"retained_difference":"timestamp_separator_632"}
-{"id":"timestamp_lower","sql":"SELECT CAST(TIMESTAMP '2026-01-02t01:02:03.123456Z' AS STRING) AS r","ansi":false,"expected":{"status":"error","condition":"INVALID_TYPED_LITERAL"},"retained_difference":"timestamp_separator_632"}
+{"id":"timestamp_lower","sql":"SELECT CAST(TIMESTAMP '2026-01-02t01:02:03.123456Z' AS STRING) AS r","ansi":true,"expected":{"status":"error","condition":"INVALID_TYPED_LITERAL"}}
+{"id":"timestamp_lower","sql":"SELECT CAST(TIMESTAMP '2026-01-02t01:02:03.123456Z' AS STRING) AS r","ansi":false,"expected":{"status":"error","condition":"INVALID_TYPED_LITERAL"}}
 {"id":"timestamp_partial","sql":"SELECT CAST(TIMESTAMP '2026-01' AS STRING) AS r","ansi":true,"expected":{"status":"ok","type":"string","rows":[["2026-01-01 00:00:00"]]}}
 {"id":"timestamp_partial","sql":"SELECT CAST(TIMESTAMP '2026-01' AS STRING) AS r","ansi":false,"expected":{"status":"ok","type":"string","rows":[["2026-01-01 00:00:00"]]}}
 {"id":"timestamp_space","sql":"SELECT CAST(TIMESTAMP '2026-01-02 01:02:03' AS STRING) AS r","ansi":true,"expected":{"status":"ok","type":"string","rows":[["2026-01-02 01:02:03"]]}}

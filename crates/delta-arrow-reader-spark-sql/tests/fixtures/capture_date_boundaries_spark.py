@@ -62,10 +62,7 @@ def main():
                     if condition not in ["CAST_INVALID_INPUT", "INVALID_TYPED_LITERAL", "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION"]:
                         raise
                     expected = {"status": "error", "condition": condition}
-                record = {"id": name, "sql": sql, "ansi": ansi, "expected": expected}
-                if name == "timestamp_lower":
-                    record["retained_difference"] = "timestamp_separator_632"
-                records.append(record)
+                records.append({"id": name, "sql": sql, "ansi": ansi, "expected": expected})
         assert len({(r["id"], r["ansi"]) for r in records}) == len(records)
         metadata = {"spark_version": spark.version, "timezone": "UTC"}
         Path(__file__).with_name('date-boundaries-spark.jsonl').write_text(
