@@ -146,12 +146,6 @@ fn single_field(schema: &Value, kind: &str, nullable: bool) -> bool {
         })
 }
 
-fn fields_equal_reference(case: &Value, actual: &Value) -> bool {
-    ["analyzed_schema", "physical_schema"]
-        .into_iter()
-        .all(|key| actual[key] == case["expected"][key])
-}
-
 pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static str> {
     let id = case["id"].as_str()?;
     let ansi = case["ansi"].as_bool()?;
@@ -167,31 +161,6 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
         )
     {
         return Some("open_780_invalid_utf8");
-    }
-    let legacy_rows = match (id, ansi) {
-        ("admission_substring_bigint_length_above_int" | "long_column_7", false) => Some("abcdef"),
-        ("admission_substring_bigint_length_below_int" | "long_column_6", false) => Some(""),
-        _ => None,
-    };
-    if let Some(value) = legacy_rows
-        && expected["status"] == "ok"
-        && fields_equal_reference(case, actual)
-        && actual.get("error").is_none()
-        && actual["rows"] == serde_json::json!([[value]])
-    {
-        return Some("open_813_legacy_bigint");
-    }
-    if id == "binary_long_column_4"
-        && !ansi
-        && expected["status"] == "ok"
-        && fields_equal_reference(case, actual)
-        && error_is(
-            actual,
-            "execute",
-            "execute: Execution error: substring position exceeds INT range",
-        )
-    {
-        return Some("open_813_legacy_bigint");
     }
     if matches!(
         id,

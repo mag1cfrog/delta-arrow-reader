@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 
 use arrow::array::Int32Array;
 use arrow::datatypes::DataType;
-use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::{ColumnarValue, Volatility, create_udf};
 use datafusion::physical_plan::collect;
@@ -28,6 +27,9 @@ const ORIGINAL: &str =
     include_str!("fixtures/bigint-int-narrowing/original-cast-controls-spark.jsonl");
 const TRACKED_FACETS: &str =
     include_str!("fixtures/bigint-int-narrowing/tracked-adapter-facets.json");
+const INSPECTION_MANIFEST: &str =
+    include_str!("fixtures/bigint-int-narrowing/inspection-manifest.json");
+const INSPECTION: &str = include_str!("fixtures/bigint-int-narrowing/inspection-spark.jsonl");
 
 fn records(text: &str) -> TestResult<Vec<Value>> {
     Ok(text
@@ -109,7 +111,87 @@ fn references() -> TestResult<(Value, Vec<Value>)> {
         case["before_collect_reference_unobserved"] = json!(true);
         cases.push(case);
     }
+    cases.extend(inspection_references(&manifest)?);
     Ok((manifest, cases))
+}
+
+fn inspection_references(inputs: &Value) -> TestResult<Vec<Value>> {
+    let manifest: Value = serde_json::from_str(INSPECTION_MANIFEST)?;
+    let captured = records(INSPECTION)?;
+    assert_eq!(captured.len() - 1, 8);
+    let header = &captured[0];
+    assert_eq!(header["spark_version"], "4.2.0");
+    assert_eq!(
+        header["spark_build"]["SPARK_REVISION"]["value"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    for key in [
+        "scope",
+        "spark_version",
+        "spark_revision",
+        "timezone",
+        "observations",
+    ] {
+        assert_eq!(header[key], manifest[key], "{key}");
+    }
+    for key in ["inputs", "native"] {
+        assert_eq!(header[key], inputs[key], "{key}");
+    }
+    let registered = inputs["inputs"]
+        .as_array()
+        .ok_or("missing inputs")?
+        .iter()
+        .map(|input| json!({"name":input["name"],"schema":input["schema"],"rows":input["rows"]}))
+        .collect::<Vec<_>>();
+    assert_eq!(header["registered_inputs"], json!(registered));
+    let definitions = manifest["cases"].as_array().ok_or("missing cases")?;
+    assert_eq!(definitions.len(), 4);
+    let mut expected_ids = BTreeSet::new();
+    for source in definitions {
+        assert_eq!(source["domain"], "inspection");
+        assert_eq!(source["ansi_modes"], json!([true, false]));
+        for ansi in source["ansi_modes"].as_array().ok_or("missing modes")? {
+            assert!(expected_ids.insert((source["id"].to_string(), ansi.to_string())));
+        }
+    }
+    let mut actual_ids = BTreeSet::new();
+    for case in &captured[1..] {
+        assert!(actual_ids.insert((case["id"].to_string(), case["ansi"].to_string())));
+        let source = definitions
+            .iter()
+            .find(|source| source["id"] == case["id"])
+            .ok_or("unexpected inspection ID")?;
+        for key in ["sql", "purpose", "domain", "ordered", "input_tables"] {
+            assert_eq!(case[key], source[key], "{key}: {case}");
+        }
+        for (key, value) in manifest["settings"].as_object().ok_or("missing settings")? {
+            assert_eq!(&case["settings"][key], value, "{key}: {case}");
+        }
+        assert_eq!(
+            case["settings"]["spark.sql.ansi.enabled"],
+            case["ansi"].to_string()
+        );
+        assert!(case["schema_stages"]["analyzed"].is_object());
+        if case["expected"]["condition"].is_null() {
+            assert!(case["expected"]["rows"].is_array());
+            assert_eq!(
+                case["expected"]["schema"],
+                case["schema_stages"]["analyzed"]
+            );
+            for stage in ["optimized", "executed_before_collect", "executed"] {
+                assert!(case["schema_stages"][stage].is_object(), "{stage}: {case}");
+            }
+        } else {
+            assert!(case["spark_error_details"]["parameters"].is_object());
+            assert!(case["spark_error_details"]["message"].is_string());
+            assert_eq!(
+                case["expected"]["condition"],
+                case["spark_error_details"]["condition"]
+            );
+        }
+    }
+    assert_eq!(actual_ids, expected_ids);
+    Ok(captured[1..].to_vec())
 }
 
 fn session(batch_size: usize, spark: bool) -> SessionContext {
@@ -125,29 +207,6 @@ fn session(batch_size: usize, spark: bool) -> SessionContext {
     } else {
         builder.build()
     })
-}
-
-fn register_inputs(session: &SessionContext, manifest: &Value, batch_size: usize) -> TestResult {
-    for input in manifest["inputs"].as_array().ok_or("missing inputs")? {
-        let mut storage = input.clone();
-        let visible_rows = input["rows"].as_array().ok_or("missing rows")?.len();
-        if input["native_slice"] == true {
-            let rows = storage["rows"].as_array_mut().ok_or("missing rows")?;
-            rows.insert(0, manifest["native"]["sliced_hidden_rows"][0].clone());
-            rows.push(manifest["native"]["sliced_hidden_rows"][1].clone());
-        }
-        let storage = spark_inputs::decode_recorded_batch(&storage)?;
-        let batch = storage.slice(usize::from(input["native_slice"] == true), visible_rows);
-        let mut partitions = vec![Vec::new(), Vec::new()];
-        for (chunk, offset) in (0..visible_rows).step_by(batch_size).enumerate() {
-            partitions[chunk % 2].push(batch.slice(offset, batch_size.min(visible_rows - offset)));
-        }
-        session.register_table(
-            input["name"].as_str().ok_or("missing table name")?,
-            Arc::new(MemTable::try_new(batch.schema(), partitions)?),
-        )?;
-    }
-    Ok(())
 }
 
 fn matches_expected_error_cause(case: &Value, error: &str) -> bool {
@@ -365,7 +424,7 @@ async fn compare_domain(adapter: bool) -> TestResult {
     let mut profiled_count = 0;
     for batch_size in [1, 32] {
         let session = session(batch_size, true);
-        register_inputs(&session, &manifest, batch_size)?;
+        spark_inputs::register_recorded_inputs_with_slices(&session, &manifest, batch_size)?;
         for case in cases
             .iter()
             .filter(|case| (case["domain"] == "adapter") == adapter)
@@ -411,7 +470,7 @@ async fn compare_domain(adapter: bool) -> TestResult {
             }
         }
     }
-    assert_eq!(count, if adapter { 40 } else { 344 });
+    assert_eq!(count, if adapter { 40 } else { 360 });
     assert_eq!(profiled_count, if adapter { 24 } else { 0 });
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
@@ -445,7 +504,7 @@ async fn configured_native_bigint_int_casts_keep_plain_results() -> TestResult {
         let plain = session(batch_size, false);
         let configured = session(batch_size, true);
         for context in [&plain, &configured] {
-            register_inputs(context, &manifest, batch_size)?;
+            spark_inputs::register_recorded_inputs_with_slices(context, &manifest, batch_size)?;
         }
         for after_spark in [false, true] {
             if after_spark {
@@ -497,7 +556,7 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
     let mut observations = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size, true);
-        register_inputs(&session, &manifest, batch_size)?;
+        spark_inputs::register_recorded_inputs_with_slices(&session, &manifest, batch_size)?;
         let visited = Arc::new(Mutex::new(Vec::<i32>::new()));
         let recorder = Arc::clone(&visited);
         let invocations = Arc::new(AtomicUsize::new(0));
