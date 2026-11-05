@@ -85,7 +85,8 @@ The harness reports these retained dependencies separately from exact matches:
   named-group strings without SQL text substitution.
 - Mixed unaliased queries retain the LIKE label difference under #791. Their
   available type, nullability and metadata comparisons remain strict.
-- Java's `$` before a final newline remains a #779 pattern-language difference.
+- Accepted-pattern final line-terminator matching remains a #930 difference
+  under the #779 native-regex capability decision.
 - A nonempty pattern with a position inside a supplementary surrogate pair returns an explicit native
   region-boundary error. Java can instead match the remaining surrogate unit.
   #798 owns this UTF-16 boundary gap and its support decision.
@@ -218,3 +219,44 @@ disabled. Its folding-disabled cases in both ANSI modes remain strict host-contr
 differences under #893. These callback observations carry no Apache Spark oracle
 credit. Their fixture retains actual fields, names,
 rows, errors and counters, including absent later stages after rejection.
+
+## Native regex capability limits
+
+The independent syntax, line-terminator, UTF-16 and word-category fixtures retain
+full Spark headers, build identities, settings, typed inputs, available schema
+stages and ordered results. `regex-syntax-missing-spark.jsonl`,
+`regex-line-missing-spark.jsonl` and `regex-utf16-missing-spark.jsonl` preserve the
+original captures without edits. `regex-word-categories-spark.jsonl` preserves
+the paired raw boundary/nonboundary/word observations. Reused references retain
+their existing fixture homes.
+
+| Facet | Measured input | Retained limit |
+| --- | --- | --- |
+| Java syntax, #779 | `(?<=a)(b)` on evaluated non-NULL inputs | Native look-around parser error; complete available fields remain required |
+| Final terminators, #930 | `^(.).*$` with LF/CRLF; replacement also with CR/NEL/LS/PS | Exact differing rows; plain/internal-LF, dotall, absolute-end and matching extraction controls remain strict |
+| Word categories, #931 | Raw `\b`, raw `\B` and `\w` with leading U+0301, U+203F and U+200C/U+200D; word replacement also with U+10400 and combining marks | Exact recorded category differences; ASCII, empty/NULL and the supplementary raw nonboundary control remain strict |
+| Optional advancement, #798 | `(a)?` over `a😀b` | Native scalar-boundary output differs from Spark's UTF-16 advancement |
+| Split region, #798 | Nonempty `.` at position 3 inside `a😀b` | Exact native region error and Spark output; positions 2/4 and NULL/empty controls remain strict |
+| Malformed diagnostics | `[` | Separate exact function/pattern/cause and stage profile; differing diagnostics remain strict false |
+
+`regex-native-limit-profiles.jsonl` preserves the native observations at their
+actual source pins: `3604170473198736a026d50aad9feb35d13c4131` for the earlier
+matrix and `4fcdc5f8992a84badf0127429d8149af4885b8c8` for word categories. Each
+profile requires the exact fixture, SQL, case, ANSI mode, representation and
+batch size, complete corresponding fields, and recorded rows or error. Original
+raw Arrow schemas remain visible in observations. Native optimized fields stay
+unavailable; analyzed and physical fields never substitute for them. Profile
+approval requires replay of the complete combined reference matrix on the final
+current staging source and independent review.
+
+Recognizing a recorded limit admits its regression observation while keeping
+`matches_reference` and `full_compatibility_pass` false. A changed value, field,
+metadata item, missing completed stage, unrelated error or capture failure
+fails. This is a bounded decision for the measured inputs, with no exception
+for every Rust-accepted pattern, Unicode source or error.
+
+Raw zero-width extraction at index 0 returns an empty string for both a match
+and no match, so those exact values establish output equality only. The new
+supplementary-letter raw `\B` control requires `a|?|?|b` in both engines. The
+completed empty-pattern and raw nonboundary UTF-16 repairs retain their full
+positive suites and ownership; broader word classification is separate.
