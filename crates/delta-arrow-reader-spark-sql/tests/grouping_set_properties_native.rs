@@ -184,14 +184,11 @@ fn mask_filtering_keeps_original_alias_indexes_and_unmasked_equalities() -> Test
     assert!(eq.is_expr_constant(&masked).is_none());
     assert!(eq.is_expr_constant(&kept).is_some());
     assert!(eq.is_expr_constant(&also_kept).is_some());
-    assert_eq!(
-        eq.eq_group().normalize_expr(kept.clone()),
-        eq.eq_group().normalize_expr(also_kept)
-    );
-    assert_ne!(
-        eq.eq_group().normalize_expr(masked),
-        eq.eq_group().normalize_expr(kept)
-    );
+    let normalized_kept = eq.eq_group().normalize_expr(kept);
+    let normalized_also_kept = eq.eq_group().normalize_expr(also_kept);
+    let normalized_masked = eq.eq_group().normalize_expr(masked);
+    assert!(normalized_kept.eq(&normalized_also_kept));
+    assert!(!normalized_masked.eq(&normalized_kept));
     Ok(())
 }
 
