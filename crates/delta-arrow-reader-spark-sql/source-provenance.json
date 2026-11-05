@@ -4,6 +4,12 @@
   "sail_upstream_commit": "9544c9253e981a82c5f9e493c43ce98a4d9d41b7",
   "dependency_origins": [
     {
+      "package": "datafusion-common",
+      "version": "54.1.0",
+      "registry_archive_sha256": "ca43b263cdff57042cfa8fb817fb3469f4878933380dccff25f5e793580abbf9",
+      "source": "vendor/dependencies/datafusion-common"
+    },
+    {
       "package": "datafusion-physical-plan",
       "version": "54.1.0",
       "registry_archive_sha256": "9bc84da934c903407ba297971ebcc020c4c1a38aafd765d6c144c76eff3fa6a1",
