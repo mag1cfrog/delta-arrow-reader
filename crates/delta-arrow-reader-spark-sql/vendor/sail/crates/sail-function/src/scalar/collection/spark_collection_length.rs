@@ -67,8 +67,12 @@ mod tests {
     fn collection_length_fields_follow_containers_and_keep_native_fallbacks() -> Result<()> {
         for children_nullable in [false, true] {
             let array = Arc::new(
-                Field::new("a", DataType::new_list(DataType::Int32, children_nullable), false)
-                    .with_metadata([("source".into(), "array".into())].into()),
+                Field::new(
+                    "a",
+                    DataType::new_list(DataType::Int32, children_nullable),
+                    false,
+                )
+                .with_metadata([("source".into(), "array".into())].into()),
             );
             let map = Arc::new(Field::new(
                 "m",
@@ -111,7 +115,10 @@ mod tests {
                 ),
                 (
                     SparkCollectionLength::Array(ArrayLength::new()),
-                    vec![array.clone(), Arc::new(Field::new("dimension", DataType::Int64, false))],
+                    vec![
+                        array.clone(),
+                        Arc::new(Field::new("dimension", DataType::Int64, false)),
+                    ],
                     true,
                 ),
                 (
@@ -125,7 +132,10 @@ mod tests {
                     arg_fields: &fields,
                     scalar_arguments: &scalar_arguments,
                 })?;
-                assert_eq!(field.as_ref(), &Field::new(kernel.name(), DataType::UInt64, nullable));
+                assert_eq!(
+                    field.as_ref(),
+                    &Field::new(kernel.name(), DataType::UInt64, nullable)
+                );
                 assert_eq!(kernel.signature(), kernel.inner().signature());
             }
         }

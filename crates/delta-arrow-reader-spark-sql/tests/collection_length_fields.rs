@@ -4,8 +4,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, ArrayRef, Int32Array, Int32Builder, ListArray, ListBuilder, MapBuilder,
-    StringBuilder,
+    Array, ArrayRef, Int32Array, Int32Builder, ListArray, ListBuilder, MapBuilder, StringBuilder,
 };
 use arrow::datatypes::{DataType, Field, Int32Type, Schema};
 use arrow::error::ArrowError;
@@ -62,7 +61,10 @@ fn build_recorded_integer_array_column(rows: &[Value], index: usize) -> TestResu
             row[index]
                 .as_array()
                 .map(|values| {
-                    values.iter().map(decode_recorded_integer).collect::<TestResult<Vec<_>>>()
+                    values
+                        .iter()
+                        .map(decode_recorded_integer)
+                        .collect::<TestResult<Vec<_>>>()
                 })
                 .transpose()
         })
@@ -80,7 +82,8 @@ fn append_recorded_integer_map(
         for entry in entries {
             maps.keys()
                 .append_value(entry[0].as_str().ok_or("missing map key")?);
-            maps.values().append_option(decode_recorded_integer(&entry[1])?);
+            maps.values()
+                .append_option(decode_recorded_integer(&entry[1])?);
         }
     }
     maps.append(!value.is_null())?;
@@ -224,9 +227,9 @@ fn matches_collection_length_type_error(error: &DataFusionError, id: &str) -> bo
     } else {
         argument == "Int32"
     };
-    let Some(help) = signature.strip_prefix(
-        "OneOf(ArraySignature(array), ArraySignature(array, index)) failed",
-    ) else {
+    let Some(help) =
+        signature.strip_prefix("OneOf(ArraySignature(array), ArraySignature(array, index)) failed")
+    else {
         return false;
     };
     correct_type
@@ -342,29 +345,33 @@ async fn observe_collection_length_query(
             && optimized.as_ref() == case["schema_stages"].get("optimized")
             && before.as_ref() == case["schema_stages"].get("executed")
             && executed.as_ref() == case["schema_stages"].get("executed")
-            && actual.as_ref().is_ok_and(|rows| json!(rows) == case["expected"]["rows"])
+            && actual
+                .as_ref()
+                .is_ok_and(|rows| json!(rows) == case["expected"]["rows"])
     } else {
         actual
             .as_ref()
             .err()
             .and_then(|error| error.downcast_ref::<DataFusionError>())
-            .is_some_and(|error| match (
-                case["phase"].as_str(),
-                case["expected"]["condition"].as_str(),
-            ) {
-                (Some("planning"), Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")) => {
-                    phase == "resolve"
-                        && matches_collection_length_type_error(
-                            error,
-                            case["id"].as_str().unwrap_or(""),
-                        )
+            .is_some_and(|error| {
+                match (
+                    case["phase"].as_str(),
+                    case["expected"]["condition"].as_str(),
+                ) {
+                    (Some("planning"), Some("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")) => {
+                        phase == "resolve"
+                            && matches_collection_length_type_error(
+                                error,
+                                case["id"].as_str().unwrap_or(""),
+                            )
+                    }
+                    // Spark's collect action includes lazy optimization and physical preparation.
+                    (Some("execution"), Some("CAST_INVALID_INPUT")) => {
+                        matches!(phase, "create_physical_plan" | "collect")
+                            && matches_bad_integer_cast(error)
+                    }
+                    _ => false,
                 }
-                // Spark's collect action includes lazy optimization and physical preparation.
-                (Some("execution"), Some("CAST_INVALID_INPUT")) => {
-                    matches!(phase, "create_physical_plan" | "collect")
-                        && matches_bad_integer_cast(error)
-                }
-                _ => false,
             })
     };
     let mut observation = json!({
@@ -391,8 +398,14 @@ fn collection_length_error_checks_reject_unrelated_native_causes() {
             "size expects List or Map as argument, got Int32".into(),
         )))
     };
-    assert!(matches_collection_length_type_error(&scalar(), "size_invalid_scalar"));
-    assert!(!matches_collection_length_type_error(&scalar(), "array_size_invalid_scalar"));
+    assert!(matches_collection_length_type_error(
+        &scalar(),
+        "size_invalid_scalar"
+    ));
+    assert!(!matches_collection_length_type_error(
+        &scalar(),
+        "array_size_invalid_scalar"
+    ));
     assert!(!matches_collection_length_type_error(
         &DataFusionError::Plan("size expects List or Map as argument, got Int32".into()),
         "size_invalid_scalar",
@@ -472,14 +485,19 @@ async fn collection_length_fields_counts_and_action_errors_match_spark() -> Test
                 case["id"].as_str().ok_or("missing ID")?,
                 case["input"].as_str().ok_or("missing provider")?,
                 case["ansi"].as_bool().ok_or("missing ANSI")?,
-                case["legacy_size_of_null"].as_bool().ok_or("missing legacy mode")?,
+                case["legacy_size_of_null"]
+                    .as_bool()
+                    .ok_or("missing legacy mode")?,
             ))
         })
         .collect::<TestResult<BTreeSet<_>>>()?;
     assert_eq!(identities.len(), 144);
     for (phase, count) in [("success", 98), ("planning", 40), ("execution", 6)] {
         assert_eq!(
-            records[1..].iter().filter(|case| case["phase"] == phase).count(),
+            records[1..]
+                .iter()
+                .filter(|case| case["phase"] == phase)
+                .count(),
             count
         );
     }
@@ -493,10 +511,15 @@ async fn collection_length_fields_counts_and_action_errors_match_spark() -> Test
             observed["batch"] = json!(batch_size);
             eprintln!("COLLECTION_LENGTH_OBSERVATION {observed}");
             if observed["matches"] != true {
-                differences.push(format!("batch={batch_size}, expected={case}, actual={observed}"));
+                differences.push(format!(
+                    "batch={batch_size}, expected={case}, actual={observed}"
+                ));
             }
         }
-        assert_eq!(config_before, format!("{:?}", session.state().config_options()));
+        assert_eq!(
+            config_before,
+            format!("{:?}", session.state().config_options())
+        );
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
@@ -526,7 +549,9 @@ async fn original_size_transform_consumers_match_all_six_spark_records() -> Test
             observed["batch"] = json!(batch_size);
             eprintln!("COLLECTION_LENGTH_ORIGINAL_OBSERVATION {observed}");
             if observed["matches"] != true {
-                differences.push(format!("batch={batch_size}, expected={case}, actual={observed}"));
+                differences.push(format!(
+                    "batch={batch_size}, expected={case}, actual={observed}"
+                ));
             }
         }
     }
@@ -572,9 +597,8 @@ async fn spark_collection_lengths_preserve_native_counts_fields_and_session_conf
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
     for batch_size in [1, 32] {
-        let native = SessionContext::new_with_config(
-            SessionConfig::new().with_batch_size(batch_size),
-        );
+        let native =
+            SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size));
         let configured = create_collection_length_session(batch_size);
         for session in [&native, &configured] {
             register_collection_length_inputs(session, &records[0], batch_size)?;
@@ -583,11 +607,16 @@ async fn spark_collection_lengths_preserve_native_counts_fields_and_session_conf
         let queries = [
             (
                 "SELECT id,array_length(required_array) AS array_count,cardinality(required_map) AS map_count FROM size_fields_mixed",
-                json!([["0","2","2"],["1","0","0"],["2","1","1"],["3","2","1"]]),
+                json!([
+                    ["0", "2", "2"],
+                    ["1", "0", "0"],
+                    ["2", "1", "1"],
+                    ["3", "2", "1"]
+                ]),
             ),
             (
                 "SELECT array_length([[1,2],[3,4]],2) AS dimension_count,cardinality([[1,2],[3,4]]) AS deep_count",
-                json!([["2","4"]]),
+                json!([["2", "4"]]),
             ),
         ];
         for after_spark in [false, true] {
@@ -604,16 +633,22 @@ async fn spark_collection_lengths_preserve_native_counts_fields_and_session_conf
                     "{sql}, batch={batch_size}, after Spark={after_spark}"
                 );
                 assert_eq!(&actual["rows"], expected_rows);
-                eprintln!("COLLECTION_LENGTH_NATIVE_CONTROL {}", json!({
-                    "sql":sql, "batch":batch_size, "after_spark":after_spark, "observation":actual,
-                }));
+                eprintln!(
+                    "COLLECTION_LENGTH_NATIVE_CONTROL {}",
+                    json!({
+                        "sql":sql, "batch":batch_size, "after_spark":after_spark, "observation":actual,
+                    })
+                );
             }
         }
         let configuration_after = format!("{:?}", configured.state().config_options());
         assert_eq!(configuration, configuration_after);
-        eprintln!("COLLECTION_LENGTH_CONFIGURATION_CONTROL {}", json!({
-            "batch":batch_size, "before":configuration, "after":configuration_after,
-        }));
+        eprintln!(
+            "COLLECTION_LENGTH_CONFIGURATION_CONTROL {}",
+            json!({
+                "batch":batch_size, "before":configuration, "after":configuration_after,
+            })
+        );
     }
     Ok(())
 }
