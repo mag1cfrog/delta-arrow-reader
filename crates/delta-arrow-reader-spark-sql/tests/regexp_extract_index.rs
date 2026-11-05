@@ -6,6 +6,10 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::configure_spark_sql;
 use serde_json::{Value, json};
 
+#[expect(
+    dead_code,
+    reason = "This target uses full observations rather than capture_result."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
 use string_binary::{TestResult, capture_observation, register_inputs};
@@ -234,9 +238,7 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
     let evidence = json!({"completed_stages":completed,"primary_shape":shape});
     let strict = facets
         .as_object()
-        .unwrap()
-        .values()
-        .all(|value| value != false)
+        .is_some_and(|facets| facets.values().all(|value| value != false))
         && completed
         && shape;
     let mut available = json!({});
@@ -254,26 +256,27 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
     json!({"facets":facets,"evidence":evidence,"availability":available,"strict_compatibility":strict,"full_compatibility":false})
 }
 
-fn false_facets(comparison: &Value) -> Value {
-    let mut result = ["facets", "evidence"]
-        .into_iter()
-        .flat_map(|group| {
-            comparison[group]
-                .as_object()
-                .unwrap()
+fn false_facets(comparison: &Value) -> TestResult<Vec<String>> {
+    let mut result = Vec::new();
+    for group in ["facets", "evidence"] {
+        let facets = comparison[group]
+            .as_object()
+            .ok_or("missing or malformed comparison group")?;
+        result.extend(
+            facets
                 .iter()
                 .filter(|(_, value)| value.as_bool() == Some(false))
-                .map(move |(key, _)| {
+                .map(|(key, _)| {
                     if group == "facets" {
                         key.clone()
                     } else {
                         format!("evidence.{key}")
                     }
-                })
-        })
-        .collect::<Vec<_>>();
+                }),
+        );
+    }
     result.sort();
-    json!(result)
+    Ok(result)
 }
 
 fn retained_matches(profile: &Value, context: &Value, actual: &Value, comparison: &Value) -> bool {
@@ -287,7 +290,7 @@ fn retained_matches(profile: &Value, context: &Value, actual: &Value, comparison
         && context_key(context).is_ok()
         && profile["actual"] == *actual
         && profile["comparison"] == *comparison
-        && profile["false_facets"] == false_facets(comparison)
+        && false_facets(comparison).is_ok_and(|facets| profile["false_facets"] == json!(facets))
 }
 
 fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
@@ -367,20 +370,12 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
             .ok_or("missing facet owners")?;
         assert_eq!(
             owners.keys().cloned().collect::<BTreeSet<_>>(),
-            false_facets(&comparison)
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|key| key.as_str().unwrap().to_owned())
-                .collect()
+            false_facets(&comparison)?.into_iter().collect::<BTreeSet<_>>()
         );
-        assert!(owners.values().all(|value| {
-            value
-                .as_str()
-                .is_some_and(|owner| ["#813", "#897", "#922", "#722", "#788"].contains(&owner))
-        }));
         for owner in owners.values() {
-            *owner_counts.entry(owner.as_str().unwrap()).or_default() += 1;
+            let owner = owner.as_str().ok_or("malformed facet owner")?;
+            assert!(["#813", "#897", "#922", "#722", "#788"].contains(&owner));
+            *owner_counts.entry(owner).or_default() += 1;
         }
     }
     assert_eq!(json!(owner_counts), header["owner_facets"]);
@@ -430,6 +425,27 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         .values()
         .find(|profile| profile["id"] == "index_long_negative_group")
         .ok_or("missing measured group error")?;
+    for group in ["facets", "evidence"] {
+        for malformed in [Value::Null, json!([])] {
+            let mut comparison = overflow["comparison"].clone();
+            comparison[group] = malformed;
+            assert!(false_facets(&comparison).is_err());
+            let mut profile = overflow.clone();
+            profile["comparison"] = comparison.clone();
+            assert!(!retained_matches(
+                &profile,
+                overflow,
+                &overflow["actual"],
+                &comparison
+            ));
+        }
+        let mut comparison = overflow["comparison"].clone();
+        comparison
+            .as_object_mut()
+            .ok_or("missing measured comparison")?
+            .remove(group);
+        assert!(false_facets(&comparison).is_err());
+    }
     let compare = |profile: &Value, actual: &Value| -> TestResult<Value> {
         let key = context_key(profile)?;
         let reference = references
@@ -866,7 +882,7 @@ async fn capture_references(
                         "id":case["id"],"ansi":case["ansi"],"representation":representation,"batch_size":batch_size,"sql":case["sql"],
                         "expected":expected,"actual":actual,"comparison":comparison,
                         "strict_reference_match":strict,"known_negative_preserved":preserved,
-                        "false_facets":false_facets(&comparison),"facet_owners":profile.as_ref().map(|profile| &profile["facet_owners"]),
+                        "false_facets":false_facets(&comparison)?,"facet_owners":profile.as_ref().map(|profile| &profile["facet_owners"]),
                         "full_compatibility_pass":false})
                     );
                     if !strict && !preserved {
