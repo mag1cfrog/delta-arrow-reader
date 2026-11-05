@@ -3,8 +3,8 @@
 The query corpus is the original #749 capture (candidate commit c54d99c3,
 script SHA256 12cc8fd6...) plus review probes for NULL coercion, signs and
 boundaries written inside interval literals and quoted unit strings, the
-#951 storage limits of every interval qualifier, and the #781 scaling of
-year-month intervals by constant and column numbers. Values are recorded from
+#951 storage limits of every interval qualifier, and the #781 and #985 scaling
+of year-month and day-time intervals by constant and column numbers. Values are recorded from
 Spark's internal rows instead of string casts. Run from the crate root in the
 reference environment described in README.md; the output path must not exist.
 """
@@ -339,6 +339,32 @@ SCALING_INPUTS = [
         [2147483647, -2147483648, 0, -1, -1, 9223372036854775807, 2, 0.0, -0.0, float("nan"),
          "0.0"],
     ]),
+    # Day-time intervals hold microsecond counts (#985).
+    ("dt_scale_inputs", [
+        ("t", "interval day to second", True), ("i", "integer", True), ("b", "byte", False),
+        ("s", "short", False), ("l", "long", False), ("f", "float", False),
+        ("d", "double", False), ("x", "decimal(10,2)", False),
+        ("w", "decimal(38,37)", False),
+    ], [
+        [27, 2, 2, -2, 4, 0.5, -0.5, "0.50", "2.0000000000000000000000000000000000001"],
+        [-27, 2, -4, 4, -4, 0.5, 0.5, "-0.50", "0.5000000000000000000000000000000000000"],
+        [25, 4, 3, 3, 3, 0.3, 0.49999999999999994, "2.50", "1.0000000000000000000000000000000000000"],
+        [-1, 3, 3, -3, 3, 1.5, -1.5, "1.50", "1.5000000000000000000000000000000000000"],
+        # A NULL interval skips its zero divisor.
+        [None, 0, 1, 1, 1, 1.0, 1.0, "1.00", "1.0000000000000000000000000000000000000"],
+        [27, None, 1, 1, 1, 1.0, 1.0, "1.00", "1.0000000000000000000000000000000000000"],
+    ]),
+    ("dt_scale_limits", [
+        ("high", "interval day to second", False), ("low", "interval day to second", False),
+        ("zero", "integer", False), ("minus_one", "integer", False),
+        ("long_minus_one", "long", False), ("long_max", "long", False),
+        ("two", "integer", False), ("double_zero", "double", False),
+        ("negative_zero", "double", False), ("nan", "double", False),
+        ("double_one", "double", False), ("decimal_zero", "decimal(2,1)", False),
+    ], [
+        [9223372036854775807, -9223372036854775808, 0, -1, -1, 9223372036854775807, 2, 0.0,
+         -0.0, float("nan"), 1.0, "0.0"],
+    ]),
 ]
 
 SCALING_COLUMN_PROBES = [
@@ -390,6 +416,149 @@ SCALING_OPERAND_PROBES = [
 ]
 
 
+def seconds_literal(micros):
+    """A SECOND interval literal for a microsecond count."""
+    sign = "-" if micros < 0 else ""
+    seconds, fraction = divmod(abs(micros), 1_000_000)
+    return f"INTERVAL '{sign}{seconds}.{fraction:06d}' SECOND"
+
+
+# Day-time intervals multiplied and divided by constant numbers (#985): the microsecond
+# count and the number's SQL.
+DT_SCALING_PROBES = [
+    ("tie", 27, "2"),
+    ("negative_interval_tie", -27, "2"),
+    ("negative_number_tie", 27, "-2"),
+    ("negative_both_tie", -27, "-2"),
+    ("below_tie", 25, "4"),
+    ("above_tie", 27, "4"),
+    ("negative_above_tie", -27, "4"),
+    ("tinyint", 27, "CAST(-2 AS TINYINT)"),
+    ("smallint", 27, "CAST(4 AS SMALLINT)"),
+    ("bigint", -27, "CAST(4 AS BIGINT)"),
+    ("decimal_half", 3, "0.5"),
+    ("decimal_negative_half", -3, "0.5"),
+    ("double_half", 3, "CAST(0.5 AS DOUBLE)"),
+    ("double_negative_half", -3, "CAST(0.5 AS DOUBLE)"),
+    ("float_inexact", 5, "CAST(0.3 AS FLOAT)"),
+    # FLOAT 0.7 widens to 0.699999988..., so 5 * 0.7 rounds to 3, not to the tie's 4.
+    ("float_widened_tie", 5, "CAST(0.7 AS FLOAT)"),
+    ("decimal_above_tie", 1, "CAST(0.50000000000000000000000000000000000001 AS DECIMAL(38,38))"),
+    ("decimal_below_tie", 1, "CAST(0.49999999999999999999999999999999999999 AS DECIMAL(38,38))"),
+    ("decimal_wide_product", 9223372036854775807,
+     "CAST(0.99999999999999999999999999999999999999 AS DECIMAL(38,38))"),
+    ("decimal_tiny", 1, "CAST(0.00000000000000000000000000000000000001 AS DECIMAL(38,38))"),
+    ("maximum", 9223372036854775807, "1"),
+    ("minimum", -9223372036854775808, "1"),
+    ("long_overflow", 9223372036854775807, "2"),
+    ("tinyint_overflow", -9223372036854775808, "CAST(2 AS TINYINT)"),
+    ("double_overflow", 9223372036854775807, "CAST(2 AS DOUBLE)"),
+    ("double_maximum", 9223372036854775807, "CAST(1 AS DOUBLE)"),
+    ("decimal_overflow", 9223372036854775807, "2.0"),
+    ("minimum_negative_one", -9223372036854775808, "-1"),
+    ("minimum_negative_one_tinyint", -9223372036854775808, "CAST(-1 AS TINYINT)"),
+    ("minimum_negative_one_decimal", -9223372036854775808, "CAST(-1 AS DECIMAL(2,0))"),
+    ("minimum_negative_one_double", -9223372036854775808, "CAST(-1 AS DOUBLE)"),
+    ("zero", 27, "0"),
+    ("zero_decimal", 27, "CAST(0 AS DECIMAL(2,1))"),
+    ("zero_double", 27, "CAST(0 AS DOUBLE)"),
+    ("negative_zero_double", 27, "CAST('-0.0' AS DOUBLE)"),
+    ("nan", 1, "CAST('NaN' AS DOUBLE)"),
+    ("infinity", 1, "CAST('Infinity' AS DOUBLE)"),
+    ("negative_infinity", 1, "CAST('-Infinity' AS DOUBLE)"),
+    ("negative_zero_float", 27, "CAST('-0.0' AS FLOAT)"),
+    ("typed_null", 27, "CAST(NULL AS INT)"),
+    ("untyped_null", 27, "NULL"),
+    ("day_qualifier", 93784000005, "2"),
+]
+
+DT_SCALING_NULL_PROBES = [
+    ("null_interval_multiply", "CAST(NULL AS INTERVAL DAY TO SECOND) * 2"),
+    ("null_interval_divide_zero", "CAST(NULL AS INTERVAL DAY) / 0"),
+    ("null_interval_divide_error", "CAST(NULL AS INTERVAL HOUR) / (1 / 0)"),
+    ("null_interval_multiply_error", "(1 / 0) * CAST(NULL AS INTERVAL SECOND)"),
+    ("null_number_interval_error", "(INTERVAL '1' DAY / 0) * CAST(NULL AS INT)"),
+]
+
+DT_SCALING_ERRORS = [
+    ("divide_zero", "INTERVAL '1' DAY / 0"),
+    ("multiply_overflow", "INTERVAL '9223372036854.775807' SECOND * 2"),
+    ("divide_minimum", "INTERVAL '-9223372036854.775808' SECOND / -1"),
+]
+DT_SCALING_ERROR_CONTEXTS = [(name, sql.replace("INTERVAL '1' MONTH", "INTERVAL '1' DAY"))
+                             for name, sql in SCALING_ERROR_CONTEXTS]
+
+DT_SCALING_COLUMN_PROBES = [
+    (f"{column}_{operation}", sql.format(n=column))
+    for column in ["i", "b", "s", "l", "f", "d", "x", "w"]
+    for operation, sql in [("left_multiply", "SELECT {n} * t AS r FROM dt_scale_inputs"),
+                           ("right_multiply", "SELECT t * {n} AS r FROM dt_scale_inputs"),
+                           ("divide", "SELECT t / {n} AS r FROM dt_scale_inputs")]
+] + [
+    ("constant_number", "SELECT t * 2, t / 2, 2 * t FROM dt_scale_inputs"),
+    ("untyped_null_left", "SELECT NULL * t AS r FROM dt_scale_inputs"),
+    ("untyped_null_right", "SELECT t * NULL AS r FROM dt_scale_inputs"),
+    ("untyped_null_divide", "SELECT t / NULL AS r FROM dt_scale_inputs"),
+    ("constant_interval",
+     "SELECT INTERVAL '1 02:03:04.000005' DAY TO SECOND / b AS r FROM dt_scale_inputs"),
+    ("unaliased", "SELECT t * i, i * t, t / i FROM dt_scale_inputs"),
+    ("timestamp",
+     "SELECT TIMESTAMP '2020-01-01 00:00:00.123456' + t * i AS r FROM dt_scale_inputs"),
+    ("multiply_overflow", "SELECT high * two AS r FROM dt_scale_limits"),
+    ("long_overflow", "SELECT high * long_max AS r FROM dt_scale_limits"),
+    ("double_maximum", "SELECT high * double_one AS r FROM dt_scale_limits"),
+    ("divide_zero", "SELECT high / zero AS r FROM dt_scale_limits"),
+    ("divide_double_zero", "SELECT high / double_zero AS r FROM dt_scale_limits"),
+    ("divide_negative_zero", "SELECT high / negative_zero AS r FROM dt_scale_limits"),
+    ("divide_decimal_zero", "SELECT high / decimal_zero AS r FROM dt_scale_limits"),
+    ("divide_minimum", "SELECT low / minus_one AS r FROM dt_scale_limits"),
+    ("divide_minimum_long", "SELECT low / long_minus_one AS r FROM dt_scale_limits"),
+    ("multiply_minimum", "SELECT low * minus_one AS r FROM dt_scale_limits"),
+    ("multiply_nan", "SELECT high * nan AS r FROM dt_scale_limits"),
+    ("filtered_divide_zero", "SELECT high / zero AS r FROM dt_scale_limits WHERE false"),
+    ("unused_divide_zero",
+     "SELECT 1 AS r FROM (SELECT high / zero AS x FROM dt_scale_limits) t"),
+]
+
+DT_SCALING_OPERAND_PROBES = [
+    (f"{name}_{operation}{suffix}", f"SELECT {sql} AS r FROM dt_scale_inputs{where}")
+    for name, interval in [("divide_minimum", "(INTERVAL '-9223372036854.775808' SECOND / -1)"),
+                           ("multiply_overflow", "(INTERVAL '9223372036854.775807' SECOND * 2)"),
+                           ("divide_zero", "(INTERVAL '1' DAY / 0)")]
+    for operation, sql in [("left_multiply", f"i * {interval}"),
+                           ("right_multiply", f"{interval} * i"),
+                           ("divide", f"{interval} / b")]
+    for suffix, where in [("", ""), ("_filtered", " WHERE false")]
+] + [
+    (f"number_divide_zero_{operation}{suffix}", f"SELECT {sql} AS r FROM dt_scale_inputs{where}")
+    for operation, sql in [("left_multiply", "(1 / 0) * t"), ("right_multiply", "t * (1 / 0)"),
+                           ("divide", "t / (1 / 0)")]
+    for suffix, where in [("", ""), ("_filtered", " WHERE false")]
+] + [
+    ("null_skips_divide", "SELECT t / (10 / i) AS r FROM dt_scale_inputs"),
+    ("null_skips_multiply", "SELECT (10 / i) * t AS r FROM dt_scale_inputs"),
+]
+
+
+def dt_scaling_definitions():
+    for name, micros, number in DT_SCALING_PROBES:
+        interval = (seconds_literal(micros) if name != "day_qualifier"
+                    else "INTERVAL '1 02:03:04.000005' DAY TO SECOND")
+        for operation, expression in [("left_multiply", f"({number}) * ({interval})"),
+                                      ("right_multiply", f"({interval}) * ({number})"),
+                                      ("divide", f"({interval}) / ({number})")]:
+            yield f"dt_scaling_{name}_{operation}", "dt_scaling", f"SELECT {expression} AS r"
+    for name, expression in DT_SCALING_NULL_PROBES:
+        yield f"dt_scaling_{name}", "dt_scaling", f"SELECT {expression} AS r"
+    for name, expression in DT_SCALING_ERRORS:
+        for context, sql in DT_SCALING_ERROR_CONTEXTS:
+            yield f"dt_scaling_{name}_{context}", "dt_scaling_error", sql.format(e=expression)
+    for name, sql in DT_SCALING_COLUMN_PROBES:
+        yield f"dt_scaling_column_{name}", "dt_scaling_column", sql
+    for name, sql in DT_SCALING_OPERAND_PROBES:
+        yield f"dt_scaling_operand_{name}", "dt_scaling_operand", sql
+
+
 def scaling_definitions():
     for name, months, number in SCALING_PROBES:
         interval = f"INTERVAL '{months}' MONTH"
@@ -419,6 +588,7 @@ def definitions():
     for name, interval in LIMIT_PROBES:
         yield f"limit_{name}", "limit", f"SELECT {interval}"
     yield from scaling_definitions()
+    yield from dt_scaling_definitions()
 
 
 def encode_input(value, spark_type):
@@ -440,7 +610,12 @@ def register_scaling_inputs(spark, types, functions):
     for name, columns, rows in SCALING_INPUTS:
         fields, projections = [], []
         for column, spark_type, nullable in columns:
-            if spark_type.startswith("interval "):
+            if spark_type == "interval day to second":
+                # Subtracting the epoch types the exact microsecond count as an interval.
+                source_type = types.LongType()
+                projection = f"timestamp_micros({column}) - TIMESTAMP '1970-01-01 00:00:00'"
+                projections.append(functions.expr(projection).alias(column))
+            elif spark_type.startswith("interval "):
                 source_type = types.IntegerType()
                 # make_ym_interval types the month count as INTERVAL YEAR TO MONTH.
                 projection = (f"make_ym_interval(0, {column})"
