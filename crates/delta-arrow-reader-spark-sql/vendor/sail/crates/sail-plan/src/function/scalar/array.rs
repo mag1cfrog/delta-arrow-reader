@@ -32,6 +32,7 @@ use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::array::spark_array_compact::SparkArrayCompact;
 use sail_function::scalar::array::spark_array_min_max::{ArrayMax, ArrayMin};
 use sail_function::scalar::array::spark_sequence::{SparkSequence, SparkSequenceLazy};
+use sail_function::scalar::collection::spark_collection_length::SparkCollectionLength;
 use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
 use sail_function::scalar::misc::raise_error::RaiseError;
@@ -55,7 +56,7 @@ fn array_size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let length = if value.get_type(input.function_context.schema)? == DataType::Null {
         value
     } else {
-        expr_fn::array_length(value)
+        ScalarUDF::from(SparkCollectionLength::Array(Default::default())).call(vec![value])
     };
     Ok(cast(length, DataType::Int32))
 }

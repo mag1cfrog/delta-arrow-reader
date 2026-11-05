@@ -8,6 +8,7 @@ use datafusion_expr::{ExprSchemable, HigherOrderUDF, ScalarUDF, cast, expr, lit,
 use datafusion_functions::math::expr_fn::abs;
 use datafusion_functions_nested::expr_fn;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::collection::spark_collection_length::SparkCollectionLength;
 use sail_function::scalar::collection::spark_concat::SparkConcat;
 use sail_function::scalar::collection::spark_concat_runtime::SparkConcatRuntime;
 use sail_function::scalar::collection::spark_reverse::SparkReverse;
@@ -69,8 +70,14 @@ fn size(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
         | DataType::ListView(_)
         | DataType::FixedSizeList(..)
         | DataType::LargeList(_)
-        | DataType::LargeListView(_) => cast(expr_fn::array_length(value), DataType::Int32),
-        DataType::Map(..) => cast(expr_fn::cardinality(value), DataType::Int32),
+        | DataType::LargeListView(_) => cast(
+            ScalarUDF::from(SparkCollectionLength::Array(Default::default())).call(vec![value]),
+            DataType::Int32,
+        ),
+        DataType::Map(..) => cast(
+            ScalarUDF::from(SparkCollectionLength::Map(Default::default())).call(vec![value]),
+            DataType::Int32,
+        ),
         DataType::Null => cast(value, DataType::Int32),
         wrong_type => {
             return Err(PlanError::InvalidArgument(format!(

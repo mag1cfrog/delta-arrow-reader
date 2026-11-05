@@ -1,0 +1,42 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "case_sensitive": false,
+  "reference_observations": 144,
+  "capture_source_commit": "ebd743b3cd9b41e68605068a137ca8aaf948ea4a",
+  "historical_candidate_commit": "2c44e160a89286650dc029d096736b5cce28f2b5",
+  "reference_is_unchanged": true,
+  "capture_encodings": {
+    "map": "sorted entry pairs",
+    "integer": "decimal strings"
+  },
+  "files": [
+    {
+      "path": "collection-length-fields/spark-reference.jsonl",
+      "sha256": "3d4f384bef83fad9aaaac8e9d6c2044bd2943801ec17c0084475b53155c049b6",
+      "bytes": 165601
+    },
+    {
+      "path": "collection-length-fields/capture_size_result_nullability_spark.py",
+      "sha256": "7d11a1ac640afd993ce84fe4f808e485fdeaa9aeeb3ff795e44bbf9e05597231",
+      "bytes": 7065
+    },
+    {
+      "path": "capture_floating_group_keys_spark.py",
+      "sha256": "273495f1945d74dd8a36719ebc40fc01b35cc93cac85d8993cfdeff865261911",
+      "bytes": 9736
+    },
+    {
+      "path": "capture_struct_field_resolution_spark.py",
+      "sha256": "fee26bb8f14e6dae574572464b7b6d53969de2d35d5b860154fac7670ecadb3f",
+      "bytes": 7175
+    },
+    {
+      "path": "nested-lambda-captures-original-spark.jsonl",
+      "sha256": "5062ca7347936534b7a1b5732327ba4c7752a97436ef8b51495d5029828136ae",
+      "bytes": 98114
+    }
+  ],
+  "capture_source_path": "crates/delta-arrow-reader-spark-sql/tests/fixtures/capture_size_result_nullability_spark.py"
+}
