@@ -113,7 +113,26 @@ impl From<IntervalValue> for spec::Literal {
     }
 }
 
+/// Chooses between the year-month and day-time families for a multi-unit interval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MultiUnitFamilyRule {
+    /// Spark SQL interval literals: the written units decide, so `INTERVAL 0 MONTHS` stays
+    /// year-month and `INTERVAL 0 MONTHS 5 DAYS` mixes both families.
+    WrittenUnits,
+    /// Interval strings converted at run time, such as string casts and `window` durations:
+    /// the non-zero values decide, so `'0 months 5 days'` is a day-time interval.
+    NonZeroValues,
+}
+
+/// Converts a Spark SQL interval literal, choosing a multi-unit family by its written units.
 pub fn from_ast_signed_interval(value: Signed<IntervalExpr>) -> SqlResult<IntervalValue> {
+    from_ast_signed_interval_with_rule(value, MultiUnitFamilyRule::WrittenUnits)
+}
+
+fn from_ast_signed_interval_with_rule(
+    value: Signed<IntervalExpr>,
+    rule: MultiUnitFamilyRule,
+) -> SqlResult<IntervalValue> {
     // TODO: support the legacy calendar interval when `spark.sql.legacy.interval.enabled` is `true`
     let negated = value.is_negative();
     let interval = value.into_inner();
@@ -151,15 +170,15 @@ pub fn from_ast_signed_interval(value: Signed<IntervalExpr>) -> SqlResult<Interv
                             negated,
                         )
                     }
-                    _ => from_ast_multi_unit_interval(vec![head], negated),
+                    _ => from_ast_multi_unit_interval(vec![head], negated, rule),
                 }
             } else {
                 let values = once(head).chain(tail).collect();
-                from_ast_multi_unit_interval(values, negated)
+                from_ast_multi_unit_interval(values, negated, rule)
             }
         }
         IntervalExpr::Literal(value) => {
-            parse_unqualified_interval_string(&from_ast_string(value)?, negated)
+            parse_interval_string(&from_ast_string(value)?, negated, rule)
         }
     }
 }
@@ -360,13 +379,15 @@ fn from_ast_standard_interval(
 fn from_ast_multi_unit_interval(
     values: Vec<IntervalValueWithUnit>,
     negated: bool,
+    rule: MultiUnitFamilyRule,
 ) -> SqlResult<IntervalValue> {
     use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
     let error = || SqlError::invalid("multi-unit interval");
     let mut months = 0i32;
     let mut delta = TimeDelta::zero();
-    let mut start_field = Second;
-    let mut end_field = Year;
+    // The first and last written field of each family, if any unit of that family was written.
+    let mut year_month_fields: Option<(spec::IntervalFieldType, spec::IntervalFieldType)> = None;
+    let mut day_time_fields: Option<(spec::IntervalFieldType, spec::IntervalFieldType)> = None;
     for value in values {
         let IntervalValueWithUnit { value, unit } = value;
         let field = match &unit {
@@ -380,8 +401,15 @@ fn from_ast_multi_unit_interval(
             IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => Minute,
             _ => Second,
         };
-        start_field = start_field.min(field);
-        end_field = end_field.max(field);
+        let family_fields = if field <= Month {
+            &mut year_month_fields
+        } else {
+            &mut day_time_fields
+        };
+        *family_fields = Some(match *family_fields {
+            Some((start, end)) => (start.min(field), end.max(field)),
+            None => (field, field),
+        });
 
         match unit {
             IntervalUnit::Year(_) | IntervalUnit::Years(_) => {
@@ -439,14 +467,22 @@ fn from_ast_multi_unit_interval(
             }
         }
     }
-    // Unit presence preserves the family even when values are zero or cancel.
-    match (start_field <= Month, end_field >= Day) {
+    let (is_year_month, is_day_time) = match rule {
+        // Unit presence preserves the family even when values are zero or cancel.
+        MultiUnitFamilyRule::WrittenUnits => {
+            (year_month_fields.is_some(), day_time_fields.is_some())
+        }
+        MultiUnitFamilyRule::NonZeroValues => (months != 0, delta != TimeDelta::zero()),
+    };
+    match (is_year_month, is_day_time) {
         (true, false) => {
             let n = if negated {
                 months.checked_mul(-1).ok_or_else(error)?
             } else {
                 months
             };
+            // Both rules report a year-month interval only when a year or month unit was written.
+            let (start_field, end_field) = year_month_fields.ok_or_else(error)?;
             Ok(IntervalValue::YearMonth {
                 months: n,
                 start_field,
@@ -491,6 +527,9 @@ fn from_ast_multi_unit_interval(
             } else {
                 microseconds
             };
+            // With non-zero values deciding, only zero year-month units may have been written,
+            // as in `'0 years'`. That zero day-time value covers the full day-time range.
+            let (start_field, end_field) = day_time_fields.unwrap_or((Day, Second));
             Ok(IntervalValue::Microsecond {
                 microseconds: n,
                 start_field,
@@ -500,9 +539,19 @@ fn from_ast_multi_unit_interval(
     }
 }
 
+/// Parses an interval string converted at run time, such as a string cast or a `window`
+/// duration. Unlike a SQL literal, a multi-unit string chooses its family by non-zero values.
 pub(crate) fn parse_unqualified_interval_string(
     s: &str,
     negated: bool,
+) -> SqlResult<IntervalValue> {
+    parse_interval_string(s, negated, MultiUnitFamilyRule::NonZeroValues)
+}
+
+fn parse_interval_string(
+    s: &str,
+    negated: bool,
+    rule: MultiUnitFamilyRule,
 ) -> SqlResult<IntervalValue> {
     let IntervalLiteral {
         interval: _,
@@ -513,30 +562,67 @@ pub(crate) fn parse_unqualified_interval_string(
     } else {
         Signed::Positive(interval)
     };
-    from_ast_signed_interval(value)
+    from_ast_signed_interval_with_rule(value, rule)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Parses an interval the way a SQL literal does, choosing its family by written units.
+    fn parse_sql_interval_literal(s: &str) -> SqlResult<IntervalValue> {
+        parse_interval_string(s, false, MultiUnitFamilyRule::WrittenUnits)
+    }
+
     #[test]
-    fn sql_literals_reject_mixed_families_without_changing_calendar_string_casts() -> SqlResult<()>
+    fn sql_literals_reject_mixed_units_while_run_time_strings_use_non_zero_values() -> SqlResult<()>
     {
-        for (sql, months, days, nanoseconds) in [
-            ("1 MONTH 1 DAY", 1, 1, 0),
-            ("0 MONTHS 0 DAYS", 0, 0, 0),
-            ("1 YEAR -12 MONTHS 0 HOURS", 0, 0, 0),
-        ] {
-            assert_eq!(
-                parse_unqualified_interval_string(sql, false)?,
-                IntervalValue::MonthDayNanosecond {
-                    months,
-                    days,
-                    nanoseconds
+        use spec::IntervalFieldType::{Day, Hour, Month, Second};
+        const DAY: i64 = 86_400_000_000;
+        const HOUR: i64 = 3_600_000_000;
+        let calendar = |months, days, nanoseconds| IntervalValue::MonthDayNanosecond {
+            months,
+            days,
+            nanoseconds,
+        };
+        let day_time = |microseconds, start_field, end_field| IntervalValue::Microsecond {
+            microseconds,
+            start_field,
+            end_field,
+        };
+        // Run-time strings, as used by string casts and `window` durations, keep the family of
+        // their non-zero values. Written units from both families make a SQL literal a
+        // calendar interval, which the SQL expression rejects, as Spark does.
+        for (sql, run_time, written_units) in [
+            ("1 MONTH 1 DAY", calendar(1, 1, 0), calendar(1, 1, 0)),
+            ("0 MONTHS 0 DAYS", day_time(0, Day, Day), calendar(0, 0, 0)),
+            (
+                "1 YEAR -12 MONTHS 0 HOURS",
+                day_time(0, Hour, Hour),
+                calendar(0, 0, 0),
+            ),
+            (
+                "0 MONTHS 5 DAYS",
+                day_time(5 * DAY, Day, Day),
+                calendar(0, 5, 0),
+            ),
+            (
+                "0 MONTHS 1 HOUR",
+                day_time(HOUR, Hour, Hour),
+                calendar(0, 0, HOUR * 1_000),
+            ),
+            (
+                "1 MONTH 0 DAYS",
+                IntervalValue::YearMonth {
+                    months: 1,
+                    start_field: Month,
+                    end_field: Month,
                 },
-                "{sql}"
-            );
+                calendar(1, 0, 0),
+            ),
+        ] {
+            assert_eq!(crate::parser::parse_interval(sql)?, run_time, "{sql}");
+            assert_eq!(parse_sql_interval_literal(sql)?, written_units, "{sql}");
             let statement = crate::parser::parse_one_statement(&format!("SELECT INTERVAL {sql}"))?;
             let result = crate::statement::from_ast_statement(statement);
             assert!(
@@ -544,11 +630,20 @@ mod tests {
                 "{sql}"
             );
         }
+        // Zero or cancelled year-month units leave a run-time string with no non-zero value, so
+        // it stays the zero day-time interval it was before written units were tracked.
+        for sql in ["0 YEARS 0 MONTHS", "1 YEAR -12 MONTHS"] {
+            assert_eq!(
+                crate::parser::parse_interval(sql)?,
+                day_time(0, Day, Second),
+                "{sql}"
+            );
+        }
         Ok(())
     }
 
     #[test]
-    fn interval_literals_preserve_fields_when_zero_or_cancelled() -> SqlResult<()> {
+    fn sql_interval_literals_preserve_fields_when_zero_or_cancelled() -> SqlResult<()> {
         use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
         for (sql, expected_start, expected_end) in [
             ("'0' YEAR", Year, Year),
@@ -573,7 +668,7 @@ mod tests {
             ("0 MILLISECONDS", Second, Second),
             ("0 MICROSECONDS", Second, Second),
         ] {
-            let literal: spec::Literal = parse_unqualified_interval_string(sql, false)?.into();
+            let literal: spec::Literal = parse_sql_interval_literal(sql)?.into();
             match literal {
                 spec::Literal::IntervalYearMonth {
                     months,

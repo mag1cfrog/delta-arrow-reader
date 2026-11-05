@@ -175,12 +175,14 @@ cover returned bits, schemas, filters, DISTINCT and native controls.
 ### Interval expression names
 
 The SQL analyzer keeps interval start and end fields with month or microsecond
-literal values. Unit presence decides the family even when a unit-syntax
-literal is zero or cancels, and SQL literals that mix year-month and day-time
-units are rejected as in Spark. Calendar interval string casts keep the shared
-parser's calendar representation.
+literal values. In a SQL literal, unit presence decides the family even when a
+unit-syntax literal is zero or cancels, and SQL literals that mix year-month and
+day-time units are rejected as in Spark. Interval strings converted at run time,
+by string casts and `window` durations, keep choosing the family by non-zero
+values.
 
-The existing Spark formatter uses those fields for literal and CAST names.
+The existing Spark formatter uses those fields for literal and CAST names, and
+unqualified interval literals use its full-range form.
 Resolved operand types choose Spark's display order for interval
 multiplication and timestamp addition or subtraction, and `TIMESTAMP + NULL`
 is planned as timestamp arithmetic. Execution keeps the existing Arrow interval

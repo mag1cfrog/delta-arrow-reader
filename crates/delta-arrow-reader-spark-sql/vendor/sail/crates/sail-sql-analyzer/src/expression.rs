@@ -1074,6 +1074,8 @@ fn from_ast_atom_expression(atom: AtomExpr) -> SqlResult<spec::Expr> {
         AtomExpr::Null(_) => Ok(spec::Expr::Literal(spec::Literal::Null)),
         AtomExpr::Interval(_, value) => {
             let interval = from_ast_signed_interval(Signed::Positive(*value))?;
+            // A SQL literal chooses its family by written units, so a calendar interval here
+            // means units from both the year-month and day-time families were written.
             if matches!(interval, IntervalValue::MonthDayNanosecond { .. }) {
                 return Err(SqlError::invalid(
                     "[_LEGACY_ERROR_TEMP_0029] cannot mix year-month and day-time interval units",
