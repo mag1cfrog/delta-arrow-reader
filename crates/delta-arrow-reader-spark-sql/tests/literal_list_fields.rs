@@ -5,6 +5,7 @@ use std::sync::Arc;
 use arrow::array::{Array, ArrayRef, AsArray, Int32Array, LargeListArray, ListArray, StructArray};
 use arrow::buffer::{NullBuffer, OffsetBuffer};
 use arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::common::utils::SingleRowListArrayBuilder;
 use datafusion::common::{DFSchema, Result, ScalarValue};
 use datafusion::logical_expr::simplify::SimplifyContext;
 use datafusion::logical_expr::{Expr, ExprSchemable, cast, lit};
@@ -216,4 +217,79 @@ fn typed_list_literal_cast_folding_keeps_fields_and_native_rejections() -> Resul
         input.to_data().validate_full()?;
     }
     Ok(())
+}
+
+#[test]
+fn single_row_list_builder_preserves_complete_field_and_last_setter_wins() -> Result<()> {
+    let values = Arc::new(Int32Array::from(vec![1, 2]));
+    assert_eq!(
+        SingleRowListArrayBuilder::new(values.clone())
+            .build_list_array()
+            .data_type(),
+        &DataType::List(Arc::new(Field::new_list_field(DataType::Int32, true))),
+    );
+    let field = Field::new("kept_element", DataType::Int32, false)
+        .with_metadata([("source".into(), "single-row-builder-test".into())].into());
+    let builder = SingleRowListArrayBuilder::new(values).with_field(&field);
+    for (array, expected_type) in [
+        (
+            Arc::new(builder.clone().build_list_array()) as ArrayRef,
+            DataType::List(Arc::new(field.clone())),
+        ),
+        (
+            Arc::new(builder.clone().build_large_list_array()),
+            DataType::LargeList(Arc::new(field.clone())),
+        ),
+        (
+            Arc::new(builder.clone().build_fixed_size_list_array(2)),
+            DataType::FixedSizeList(Arc::new(field.clone()), 2),
+        ),
+        (
+            Arc::new(builder.clone().build_list_view_array()),
+            DataType::ListView(Arc::new(field.clone())),
+        ),
+        (
+            Arc::new(builder.clone().build_large_list_view_array()),
+            DataType::LargeListView(Arc::new(field.clone())),
+        ),
+    ] {
+        assert_eq!(array.data_type(), &expected_type);
+        assert_eq!(array.len(), 1);
+        array.to_data().validate_full()?;
+    }
+    let renamed = builder
+        .clone()
+        .with_field_name(Some("renamed".into()))
+        .with_nullable(true)
+        .build_list_array();
+    assert_eq!(
+        renamed.data_type(),
+        &DataType::List(Arc::new(
+            field.clone().with_name("renamed").with_nullable(true)
+        )),
+    );
+    let replaced = builder
+        .clone()
+        .with_nullable(true)
+        .with_field_name(Some("replaced".into()))
+        .with_field(&field)
+        .build_list_array();
+    assert_eq!(
+        replaced.data_type(),
+        &DataType::List(Arc::new(field.clone()))
+    );
+    let default_name = builder.with_field_name(None).build_list_array();
+    assert_eq!(
+        default_name.data_type(),
+        &DataType::List(Arc::new(field.with_name(Field::LIST_FIELD_DEFAULT_NAME))),
+    );
+    Ok(())
+}
+
+#[test]
+#[should_panic(expected = "ListArray expected data type Int64 got Int32")]
+fn single_row_list_builder_rejects_incompatible_element_field() {
+    SingleRowListArrayBuilder::new(Arc::new(Int32Array::from(vec![1])))
+        .with_field(&Field::new("wrong_type", DataType::Int64, false))
+        .build_list_array();
 }
