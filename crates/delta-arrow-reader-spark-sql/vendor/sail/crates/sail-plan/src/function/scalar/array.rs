@@ -281,7 +281,25 @@ impl SparkArraySlice {
         };
         args.args[1] = coordinate(native_starts.finish());
         args.args[2] = coordinate(native_ends.finish());
-        let required_output_type = self.required_elements.then(|| args.return_type().clone());
+        let required_output_type = if self.required_elements {
+            let output_type = args.return_type().clone();
+            let scalar_arguments = args
+                .args
+                .iter()
+                .map(|value| match value {
+                    ColumnarValue::Scalar(value) => Some(value),
+                    ColumnarValue::Array(_) => None,
+                })
+                .collect::<Vec<_>>();
+            // Native slicing promises nullable elements; the wrapper restores the input guarantee.
+            args.return_field = self.native.return_field_from_args(ReturnFieldArgs {
+                arg_fields: &args.arg_fields,
+                scalar_arguments: &scalar_arguments,
+            })?;
+            Some(output_type)
+        } else {
+            None
+        };
         let values = match (required_output_type, self.native.invoke_with_args(args)?) {
             (Some(output_type), ColumnarValue::Array(array)) => {
                 let array = if matches!(
@@ -2462,6 +2480,7 @@ mod tests {
     fn slice_required_elements_reject_null_struct_results() -> PlanResult<()> {
         use arrow::array::{ArrayRef, Int32Array, LargeListArray, StructArray};
         use arrow::buffer::{NullBuffer, OffsetBuffer};
+        use arrow::error::ArrowError;
         use datafusion_common::config::ConfigOptions;
 
         let values: ArrayRef = Arc::new(StructArray::try_new(
@@ -2469,8 +2488,8 @@ mod tests {
             vec![Arc::new(Int32Array::from(vec![1]))],
             Some(NullBuffer::from(vec![false])),
         )?);
-        let element = Field::new("kept_element", values.data_type().clone(), true)
-            .with_metadata([("tag".into(), "kept".into())].into());
+        // Match signature coercion so rejection reaches the checked result cast.
+        let element = Field::new_list_field(values.data_type().clone(), true);
         for large in [false, true] {
             let input: ArrayRef = if large {
                 Arc::new(LargeListArray::try_new(
@@ -2527,7 +2546,10 @@ mod tests {
                     return_field: return_field.clone(),
                     config_options: Arc::new(ConfigOptions::default()),
                 });
-                assert!(result.is_err());
+                assert!(result.is_err_and(|error| {
+                    matches!(error.find_root(), DataFusionError::ArrowError(cause, _)
+                        if matches!(cause.as_ref(), ArrowError::InvalidArgumentError(_)))
+                }));
             }
         }
         Ok(())
