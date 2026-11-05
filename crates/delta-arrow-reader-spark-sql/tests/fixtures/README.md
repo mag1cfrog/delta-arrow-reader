@@ -3624,8 +3624,8 @@ claiming parity for the missing Spark condition identifiers. The provenance file
 records the accepted parent, observer head and unchanged control-file hash.
 
 Native expression tests cover reconstruction, full source widths, file-source
-fallback, partition injection and strict malformed bindings. Connected runtime
-CONCAT tests use `nested-lambda-concat-consumer-spark.jsonl`, a fresh six-record
+fallback, full file-plus-partition schema widths and strict malformed bindings.
+Connected runtime CONCAT tests use `nested-lambda-concat-consumer-spark.jsonl`, a fresh six-record
 independent capture of the exact issue 906 SQL and wrapper-isolation controls.
 They replay its original SQL at all 36 payload-representation/batch/ANSI
 contexts and retain raw Arrow schema evidence. Its explicit ORDER BY k keeps an
