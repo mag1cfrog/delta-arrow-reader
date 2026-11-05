@@ -44,6 +44,7 @@ use sail_function::scalar::math::spark_try_mult::SparkTryMult;
 use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
+use sail_function::scalar::math::spark_year_month_interval_scale::SparkYearMonthIntervalScale;
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
@@ -435,6 +436,19 @@ fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
         right.get_type(function_context.schema),
     );
     Ok(match (left_type, right_type) {
+        (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(number))
+            if SparkYearMonthIntervalScale::accepts_number(&number) =>
+        {
+            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Multiply))
+                .call(vec![left, right])
+        }
+        // Spark evaluates the interval first whatever the operand order.
+        (Ok(number), Ok(DataType::Interval(IntervalUnit::YearMonth)))
+            if SparkYearMonthIntervalScale::accepts_number(&number) =>
+        {
+            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Multiply))
+                .call(vec![right, left])
+        }
         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
         //  Seems to be a bug in DataFusion.
         (Ok(DataType::Duration(TimeUnit::Microsecond)), Ok(_)) => {
@@ -1325,6 +1339,17 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
         coerce_decimal_divide_operands(dividend, divisor, function_context.schema, ansi_mode);
     let dividend_type = dividend.get_type(function_context.schema);
     let divisor_type = divisor.get_type(function_context.schema);
+
+    // Spark rejects a zero divisor of a year-month interval in both ANSI modes.
+    if let (Ok(DataType::Interval(IntervalUnit::YearMonth)), Ok(number)) =
+        (&dividend_type, &divisor_type)
+        && SparkYearMonthIntervalScale::accepts_number(number)
+    {
+        return Ok(
+            ScalarUDF::from(SparkYearMonthIntervalScale::new(Operator::Divide))
+                .call(vec![dividend, divisor]),
+        );
+    }
 
     if let (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) =
         (&dividend_type, &divisor_type)
