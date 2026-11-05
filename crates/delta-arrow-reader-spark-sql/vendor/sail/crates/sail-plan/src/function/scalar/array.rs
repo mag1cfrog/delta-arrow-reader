@@ -132,7 +132,10 @@ fn slice_expr(
     let output_type = array.get_type(schema.as_ref())?;
     let required_elements =
         array_element_field(&output_type).is_some_and(|field| !field.is_nullable());
-    let array = array.cast_to(&nullable_array_input_type(&output_type), schema.as_ref())?;
+    let array = array.cast_to(
+        &normalize_array_input_type_with_nullable_elements(&output_type),
+        schema.as_ref(),
+    )?;
     let start = cast(start, DataType::Int64);
     let length = cast(length, DataType::Int64);
     Ok(cast(
@@ -879,7 +882,7 @@ fn flatten(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     }
 
     // The NULL probe only needs nullable inner arrays, not nullable output elements.
-    let nullable_array_type = nullable_array_input_type(&array_type);
+    let nullable_array_type = normalize_array_input_type_with_nullable_elements(&array_type);
     let nullable_array = cast(array.clone(), nullable_array_type.clone());
 
     // Cast the null-only array to the nullable type to match
@@ -908,7 +911,9 @@ fn array_element_field(data_type: &DataType) -> Option<&FieldRef> {
     }
 }
 
-fn nullable_array_input_type(data_type: &DataType) -> DataType {
+/// Normalize list inputs to `List`/`LargeList` with nullable immediate elements.
+/// Nested child fields are preserved; other types pass through unchanged.
+fn normalize_array_input_type_with_nullable_elements(data_type: &DataType) -> DataType {
     let Some(field) = array_element_field(data_type) else {
         return data_type.clone();
     };
