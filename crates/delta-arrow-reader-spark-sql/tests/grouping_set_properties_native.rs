@@ -94,7 +94,7 @@ fn aggregate(
     )?))
 }
 
-fn properties(id: &str, plan: &Arc<AggregateExec>) {
+fn log_aggregate_properties(id: &str, plan: &Arc<AggregateExec>) {
     eprintln!(
         "GROUPING_SET_NATIVE {}",
         json!({
@@ -108,7 +108,7 @@ fn properties(id: &str, plan: &Arc<AggregateExec>) {
     );
 }
 
-async fn rows(plan: Arc<dyn ExecutionPlan>) -> TestResult<Value> {
+async fn collect_encoded_rows(plan: Arc<dyn ExecutionPlan>) -> TestResult<Value> {
     let schema = plan.schema();
     let batches = collect(plan, SessionContext::new().task_ctx()).await?;
     let mut rows = Vec::new();
@@ -145,8 +145,8 @@ fn masked_constants_do_not_choose_a_final_sorted_prefix() -> TestResult {
         groups.as_final(),
         repartition,
     )?;
-    properties("masked_constant_partial", &partial);
-    properties("masked_constant_final", &final_aggregate);
+    log_aggregate_properties("masked_constant_partial", &partial);
+    log_aggregate_properties("masked_constant_final", &final_aggregate);
     assert!(
         partial
             .properties()
@@ -162,6 +162,13 @@ fn masked_constants_do_not_choose_a_final_sorted_prefix() -> TestResult {
             .is_none()
     );
     assert_eq!(final_aggregate.input_order_mode(), &InputOrderMode::Linear);
+    assert!(
+        partial
+            .properties()
+            .equivalence_properties()
+            .constraints()
+            .is_empty()
+    );
     Ok(())
 }
 
@@ -176,7 +183,7 @@ fn mask_filtering_keeps_original_alias_indexes_and_unmasked_equalities() -> Test
         vec![vec![false, false, false], vec![true, false, false]],
     );
     let aggregate = aggregate(AggregateMode::Partial, groups, input)?;
-    properties("shared_constant_source", &aggregate);
+    log_aggregate_properties("shared_constant_source", &aggregate);
     let eq = aggregate.properties().equivalence_properties();
     let masked = column("masked", 0);
     let kept = column("kept", 1);
@@ -207,7 +214,7 @@ fn masks_invalidate_hash_keys_only_when_their_values_change() -> TestResult {
             vec![vec![false, false], vec![true, false]],
         );
         let aggregate = aggregate(AggregateMode::Partial, groups, input)?;
-        properties(&format!("input_hash_{name}"), &aggregate);
+        log_aggregate_properties(&format!("input_hash_{name}"), &aggregate);
         let satisfies = aggregate
             .properties()
             .output_partitioning()
@@ -251,8 +258,8 @@ async fn duplicate_sets_drop_input_key_uniqueness_and_keep_packed_ids() -> TestR
         vec![vec![false], vec![false]],
     );
     let grouped = aggregate(AggregateMode::Single, groups, distinct)?;
-    properties("duplicate_sets_on_unique_input", &grouped);
-    let actual = rows(grouped.clone()).await?;
+    log_aggregate_properties("duplicate_sets_on_unique_input", &grouped);
+    let actual = collect_encoded_rows(grouped.clone()).await?;
     eprintln!(
         "GROUPING_SET_NATIVE_ROWS {}",
         json!({"id":"packed_duplicate_ids","actual":actual})
@@ -282,8 +289,8 @@ async fn sorted_multiple_sets_keep_counts_when_a_prefix_reappears_next_batch() -
         vec![vec![false, false], vec![false, true]],
     );
     let grouped = aggregate(AggregateMode::Single, groups, input)?;
-    properties("sorted_multi_set_boundary_revisit", &grouped);
-    let actual = rows(grouped).await?;
+    log_aggregate_properties("sorted_multi_set_boundary_revisit", &grouped);
+    let actual = collect_encoded_rows(grouped).await?;
     eprintln!(
         "GROUPING_SET_NATIVE_ROWS {}",
         json!({"id":"sorted_multi_set_boundary_revisit","actual":actual})
@@ -312,8 +319,8 @@ async fn masked_leading_sort_key_does_not_leave_a_dependent_sorted_suffix() -> T
         vec![vec![false, false], vec![true, false]],
     );
     let grouped = aggregate(AggregateMode::Single, groups, input)?;
-    properties("masked_leading_sort_key", &grouped);
-    let actual = rows(grouped.clone()).await?;
+    log_aggregate_properties("masked_leading_sort_key", &grouped);
+    let actual = collect_encoded_rows(grouped.clone()).await?;
     eprintln!(
         "GROUPING_SET_NATIVE_ROWS {}",
         json!({"id":"masked_leading_sort_key","actual":actual})
@@ -348,11 +355,11 @@ async fn ordinary_single_set_and_final_ordering_remain_valid() -> TestResult {
         };
         let partial = aggregate(AggregateMode::Partial, groups.clone(), input)?;
         let final_aggregate = aggregate(AggregateMode::Final, groups.as_final(), partial.clone())?;
-        properties(
+        log_aggregate_properties(
             &format!("valid_partial_grouping_set_{grouping_set}"),
             &partial,
         );
-        properties(
+        log_aggregate_properties(
             &format!("valid_final_grouping_set_{grouping_set}"),
             &final_aggregate,
         );
@@ -360,7 +367,7 @@ async fn ordinary_single_set_and_final_ordering_remain_valid() -> TestResult {
         assert_ne!(final_aggregate.input_order_mode(), &InputOrderMode::Linear);
         assert!(partial.properties().output_ordering().is_some());
         assert!(final_aggregate.properties().output_ordering().is_some());
-        let actual = rows(final_aggregate).await?;
+        let actual = collect_encoded_rows(final_aggregate).await?;
         assert_eq!(
             actual,
             if grouping_set {
@@ -387,7 +394,7 @@ async fn empty_group_key_lists_do_not_make_duplicate_ids_constant() -> TestResul
     )?;
     let groups = PhysicalGroupBy::new(vec![], vec![], vec![vec![], vec![], vec![]], true);
     let grouped = aggregate(AggregateMode::Single, groups, input)?;
-    properties("duplicate_empty_group_key_lists", &grouped);
+    log_aggregate_properties("duplicate_empty_group_key_lists", &grouped);
     assert!(
         ordinary
             .properties()
@@ -395,7 +402,7 @@ async fn empty_group_key_lists_do_not_make_duplicate_ids_constant() -> TestResul
             .is_expr_constant(&column("n", 0))
             .is_some()
     );
-    let actual = rows(grouped.clone()).await?;
+    let actual = collect_encoded_rows(grouped.clone()).await?;
     eprintln!(
         "GROUPING_SET_NATIVE_ROWS {}",
         json!({"id":"duplicate_empty_group_key_lists","actual":actual})
