@@ -84,11 +84,14 @@ impl PlanResolver<'_> {
         };
 
         let has_lambda_argument = arguments.iter().any(|x| matches!(x, expr::Expr::Lambda(_)));
+        // Operand types only choose Spark's display order for interval and
+        // timestamp arithmetic. If a type is not resolvable yet, keep the
+        // generic operator name; the call itself still reports type errors.
         let argument_types = if matches!(canonical_function_name.as_str(), "+" | "-" | "*") {
             arguments
                 .iter()
-                .map(|arg| arg.get_type(schema))
-                .collect::<datafusion_common::Result<Vec<_>>>()
+                .map(|arg| arg.get_type(schema).ok())
+                .collect::<Option<Vec<_>>>()
                 .unwrap_or_default()
         } else {
             vec![]
