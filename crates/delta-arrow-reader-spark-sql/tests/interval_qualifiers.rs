@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 472);
+    assert_eq!(records.len() - 1, 480);
     Ok(records)
 }
 
@@ -453,10 +453,9 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     Ok(())
 }
 
-/// Spark configuration must not change interval SQL planned by native DataFusion.
 /// Interval strings converted at run time choose their family by non-zero values, so a
-/// zero-month `window` duration stays a day-time interval. Spark returns the window
-/// [2020-01-01 00:00:00, 01:00:00) for both durations.
+/// zero-month `window` duration is the same one-hour day-time duration as `'1 hour'`, and
+/// both place the timestamp in the window from 00:00 to 01:00.
 #[tokio::test]
 async fn window_durations_accept_zero_month_interval_strings() -> TestResult {
     let session = SessionContext::new_with_state(
@@ -483,6 +482,7 @@ async fn window_durations_accept_zero_month_interval_strings() -> TestResult {
     Ok(())
 }
 
+/// Spark configuration must not change interval SQL planned by native DataFusion.
 #[tokio::test]
 async fn native_interval_sql_is_unchanged_by_spark_configuration() -> TestResult {
     let sql = "SELECT INTERVAL '2' YEAR AS a, INTERVAL '51' HOUR AS b, \

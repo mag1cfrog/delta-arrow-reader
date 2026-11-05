@@ -1,24 +1,26 @@
 # Interval qualifiers and generated names
 
-`interval-qualifiers-spark.jsonl` records 472 observations from Spark 4.2.0,
+`interval-qualifiers-spark.jsonl` records 480 observations from Spark 4.2.0,
 revision `32f7299601108917fb01920a54e084595b7b3bf8`, in UTC and both ANSI
 modes. The header stores the build properties, Java and Python versions,
 capture script hash, settings and the registered `inputs` table.
 
 The query corpus is the original #749 capture from candidate commit `c54d99c3`
-(script SHA256 `12cc8fd6...`, 432 observations) plus 20 review probes: eleven
-NULL operands of interval multiplication and TIMESTAMP, TIMESTAMP_NTZ and
-interval addition or subtraction, and nine signs and boundaries written inside
-literals. It covers all 13 year-month and day-time field ranges, zero, negated
-and signed literals, unit-syntax and cancelled literals, arithmetic, timestamp
-operand order, interval CASTs and TIMESTAMP/DATE RANGE offsets. Every original
-record matches the original capture's SQL, public schema, error condition and
-row count. The original capture read values through string casts. This capture
-reads them from Spark's internal rows: YEAR-MONTH months, DAY-TIME
-microseconds, TIMESTAMP UTC microseconds and calendar intervals as months,
-days and microseconds. `ConvertToLocalRelation` is excluded, so registered-input
-expressions run during execution. Each record keeps the analyzed, optimized and
-executed schemas, or the error condition, first message line and failing stage.
+(script SHA256 `12cc8fd6...`, 432 observations) plus 24 review probes, 48
+observations in both ANSI modes: eleven NULL operands of interval multiplication
+and TIMESTAMP, TIMESTAMP_NTZ and interval addition or subtraction, nine signs
+and boundaries written inside literals, and four quoted unit strings with zero,
+cancelled or mixed units. It covers all 13 year-month and day-time field ranges,
+zero, negated and signed literals, unit-syntax and cancelled literals,
+arithmetic, timestamp operand order, interval CASTs and TIMESTAMP/DATE RANGE
+offsets. Every original record matches the original capture's SQL, public
+schema, error condition and row count. The original capture read values through
+string casts. This capture reads them from Spark's internal rows: YEAR-MONTH
+months, DAY-TIME microseconds, TIMESTAMP UTC microseconds and calendar intervals
+as months, days and microseconds. `ConvertToLocalRelation` is excluded, so
+registered-input expressions run during execution. Each record keeps the
+analyzed, optimized and executed schemas, or the error condition, first message
+line and failing stage.
 
 `interval_qualifiers.rs` compares names, nullability, metadata, typed rows and
 errors at batch sizes 1 and 32. Spark's own Arrow conversion maps every
