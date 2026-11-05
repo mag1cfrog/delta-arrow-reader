@@ -370,7 +370,9 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
             .ok_or("missing facet owners")?;
         assert_eq!(
             owners.keys().cloned().collect::<BTreeSet<_>>(),
-            false_facets(&comparison)?.into_iter().collect::<BTreeSet<_>>()
+            false_facets(&comparison)?
+                .into_iter()
+                .collect::<BTreeSet<_>>()
         );
         for owner in owners.values() {
             let owner = owner.as_str().ok_or("malformed facet owner")?;
