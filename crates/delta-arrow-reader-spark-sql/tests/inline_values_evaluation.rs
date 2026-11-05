@@ -243,6 +243,7 @@ async fn inline_validation_does_not_invoke_nonfoldable_functions() -> TestResult
                 format!("SELECT x AS r FROM VALUES ({function}(1)) t(x)"),
                 format!("SELECT x AS r FROM VALUES ({function}(1)) t(x) WHERE false"),
                 format!("SELECT 1 AS r FROM VALUES ({function}(1)) t(x) LIMIT 0"),
+                format!("SELECT x AS r FROM VALUES ({function}(1)+1) t(x)"),
             ] {
                 calls.store(0, Ordering::SeqCst);
                 let resolved = plan_query(
@@ -297,7 +298,7 @@ async fn inline_validation_does_not_invoke_nonfoldable_functions() -> TestResult
             ));
         }
     }
-    assert_eq!(observation_count, 18);
+    assert_eq!(observation_count, 24);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
