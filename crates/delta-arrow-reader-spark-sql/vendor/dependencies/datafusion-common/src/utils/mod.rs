@@ -1256,7 +1256,7 @@ mod tests {
     use sqlparser::ast::Ident;
 
     #[test]
-    fn single_row_list_builder_preserves_complete_field_and_setter_order() {
+    fn single_row_list_builder_preserves_complete_field_and_last_setter_wins() {
         let values = Arc::new(Int32Array::from(vec![1, 2]));
         assert_eq!(
             SingleRowListArrayBuilder::new(values.clone())
