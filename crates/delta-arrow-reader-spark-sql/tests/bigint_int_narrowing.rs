@@ -1,4 +1,4 @@
-//! Spark's BIGINT-to-INT contract, complete fields, and native SQL controls.
+//! BIGINT-to-INT conversions, complete fields, and exactly tracked adapter followups.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -26,6 +26,8 @@ use spark_results::TestResult;
 const MANIFEST: &str = include_str!("fixtures/bigint-int-narrowing/manifest.json");
 const ORIGINAL: &str =
     include_str!("fixtures/bigint-int-narrowing/original-cast-controls-spark.jsonl");
+const TRACKED_FACETS: &str =
+    include_str!("fixtures/bigint-int-narrowing/tracked-adapter-facets.json");
 
 fn records(text: &str) -> TestResult<Vec<Value>> {
     Ok(text
@@ -148,8 +150,19 @@ fn register_inputs(session: &SessionContext, manifest: &Value, batch_size: usize
     Ok(())
 }
 
-fn exact_conversion_cause(case: &Value, error: &str) -> bool {
+fn matches_expected_error_cause(case: &Value, error: &str) -> bool {
     let parameters = &case["spark_error_details"]["parameters"];
+    if case["expected"]["condition"] == "DATETIME_OVERFLOW" {
+        let Some(operation) = parameters["operation"].as_str() else {
+            return false;
+        };
+        let cause = format!(
+            "[DATETIME_OVERFLOW] Datetime operation overflow: {operation}. SQLSTATE: 22008"
+        );
+        return error
+            .lines()
+            .any(|line| line.strip_prefix("Execution error: ").unwrap_or(line) == cause);
+    }
     let Some(target) = parameters["targetType"].as_str() else {
         return false;
     };
@@ -179,14 +192,20 @@ fn exact_conversion_cause(case: &Value, error: &str) -> bool {
         }
         _ => return false,
     };
-    error
-        .lines()
-        .any(|line| line == format!("Arrow error: Cast error: {cause}"))
+    error.lines().any(|line| {
+        line.strip_prefix("External error: error in DataFusion: ")
+            .unwrap_or(line)
+            == format!("Arrow error: Cast error: {cause}")
+    })
 }
 
 fn required_contract_matches(case: &Value, observation: &Value) -> bool {
+    observation["public_schema"] == case["schema_stages"]["analyzed"]
+        && values_and_other_stages_match(case, observation)
+}
+
+fn values_and_other_stages_match(case: &Value, observation: &Value) -> bool {
     let fields_match = [
-        ("analyzed", "public_schema"),
         ("executed_before_collect", "before_collect"),
         ("executed", "physical_schema"),
     ]
@@ -198,7 +217,9 @@ fn required_contract_matches(case: &Value, observation: &Value) -> bool {
     });
     if case["expected"]["condition"].is_null() {
         return fields_match
-            && observation["matches"] == true
+            && observation["error"].is_null()
+            && observation["rows_match"] == true
+            && observation["ordered_rows_match"] == true
             && observation["optimized_matches"] == true;
     }
     let expected_phase = match case["spark_error_phase"].as_str() {
@@ -219,13 +240,129 @@ fn required_contract_matches(case: &Value, observation: &Value) -> bool {
     fields_match
         && optimized_matches
         && observation["native_phase"] == expected_phase
-        && exact_conversion_cause(case, error)
+        && matches_expected_error_cause(case, error)
+}
+
+fn tracked_facets() -> TestResult<Value> {
+    let baseline: Value = serde_json::from_str(TRACKED_FACETS)?;
+    assert_eq!(
+        baseline["source"],
+        "3853bd37067e7f194f99615373f51130742f56e7"
+    );
+    assert_eq!(
+        baseline["source_observations_sha256"],
+        "2e14c519637733f83186a1b6ec2db0d4aacf4eb9adff3dfa1f15100713bb39d8"
+    );
+    assert_eq!(
+        baseline["source_test_sha256"],
+        "e1547e455803fe6a4337208cb5469a66fcf7699130822f08bae59d409625979d"
+    );
+    let facets = baseline["facets"]
+        .as_array()
+        .ok_or("missing tracked facets")?;
+    assert_eq!(facets.len(), 24);
+    let mut identities = BTreeSet::new();
+    for facet in facets {
+        let id = facet["id"].as_str().ok_or("missing tracked ID")?;
+        let ansi = facet["ansi"].as_bool().ok_or("missing tracked ANSI")?;
+        let batch = facet["batch"].as_u64().ok_or("missing tracked batch")?;
+        let (kind, owners) = match (id, ansi) {
+            ("c06_substring_implicit" | "c06_substring_explicit", true) => {
+                ("observation", json!([778]))
+            }
+            ("c06_extract_implicit", _) => ("observation", json!([788])),
+            ("c07_timestampadd_implicit", _) => ("observation", json!([981, 982])),
+            (
+                "c07_timestampadd_explicit" | "c07_yearmonth_implicit" | "c07_yearmonth_explicit",
+                _,
+            ) => ("public_schema", json!([982])),
+            _ => return Err(format!("unexpected tracked facet: {facet}").into()),
+        };
+        assert!(matches!(batch, 1 | 32));
+        assert!(identities.insert((id, ansi, batch)));
+        assert_eq!(facet["kind"], kind);
+        assert_eq!(facet["owners"], owners);
+        assert_eq!(facet["source_required_contract_matches"], false);
+        assert_eq!(facet["source_full_diagnostic_parity"], false);
+    }
+    Ok(baseline)
+}
+
+fn contract_and_tracked_facets_match(
+    case: &Value,
+    observation: &Value,
+    batch_size: usize,
+    baseline: &Value,
+) -> TestResult<(bool, Value)> {
+    let facet = baseline["facets"]
+        .as_array()
+        .ok_or("missing tracked facets")?
+        .iter()
+        .find(|facet| {
+            facet["id"] == case["id"]
+                && facet["ansi"] == case["ansi"]
+                && facet["batch"] == batch_size
+        });
+    let Some(facet) = facet else {
+        return Ok((required_contract_matches(case, observation), Value::Null));
+    };
+    assert_eq!(facet["reference"], *case);
+    let spark_matches = required_contract_matches(case, observation);
+    let public_matches = observation["public_schema"] == case["schema_stages"]["analyzed"];
+    let public_preserved = observation["public_schema"] == facet["observation"]["public_schema"];
+    let public_allowed = public_matches
+        || (facet["owners"]
+            .as_array()
+            .is_some_and(|owners| owners.contains(&json!(982)))
+            && public_preserved);
+    // Accept a real Spark improvement, or only these exact inherited stage/error facets.
+    let tracked_matches = if facet["kind"] == "observation" {
+        let stages_preserved = [
+            "before_collect",
+            "physical_schema",
+            "rows",
+            "rows_raw",
+            "native_phase",
+            "optimized_schema",
+            "optimized_observation",
+            "optimized_error",
+        ]
+        .iter()
+        .all(|key| observation[*key] == facet["observation"][*key]);
+        let error_allowed = observation["error"] == facet["observation"]["error"]
+            || observation["error"]
+                .as_str()
+                .is_some_and(|error| matches_expected_error_cause(case, error));
+        public_allowed
+            && (values_and_other_stages_match(case, observation)
+                || (stages_preserved && error_allowed))
+    } else {
+        public_allowed && values_and_other_stages_match(case, observation)
+    };
+    Ok((
+        spark_matches || tracked_matches,
+        json!({
+            "owners":facet["owners"],"kind":facet["kind"],
+            "source":baseline["source"],
+            "source_observations_sha256":baseline["source_observations_sha256"],
+            "source_log_line":facet["source_log_line"],
+            "source_record_sha256":facet["source_record_sha256"],
+            "public_schema_matches_spark":public_matches,
+            "public_schema_matches_baseline":public_preserved,
+            "exact_observation_preserved":observation == &facet["observation"],
+            "bounded_spark_contract_matches":spark_matches,
+            "tracked_facets_satisfied":tracked_matches,
+            "source_profile_is_spark_compatibility_credit":false,
+        }),
+    ))
 }
 
 async fn compare_domain(adapter: bool) -> TestResult {
     let (manifest, cases) = references()?;
+    let baseline = tracked_facets()?;
     let mut failures = Vec::new();
     let mut count = 0;
+    let mut profiled_count = 0;
     for batch_size in [1, 32] {
         let session = session(batch_size, true);
         register_inputs(&session, &manifest, batch_size)?;
@@ -247,6 +384,7 @@ async fn compare_domain(adapter: bool) -> TestResult {
                             "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
                             "domain":case["domain"],"reference":case,"capture_error":error.to_string(),
                             "required_contract_matches":false,"full_diagnostic_parity":false,
+                            "owned_contract_and_tracked_facets_match":false,
                         })
                     );
                     failures.push(format!("capture failed for {case}: {error}"));
@@ -254,21 +392,27 @@ async fn compare_domain(adapter: bool) -> TestResult {
                 }
             };
             let contract_matches = required_contract_matches(case, &observation);
+            let (gate_matches, preservation) =
+                contract_and_tracked_facets_match(case, &observation, batch_size, &baseline)?;
+            profiled_count += usize::from(!preservation.is_null());
             eprintln!(
                 "BIGINT_INT_OBSERVATION {}",
                 json!({
                     "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
                     "domain":case["domain"], "reference":case, "observation":observation,
                     "required_contract_matches":contract_matches,
+                    "owned_contract_and_tracked_facets_match":gate_matches,
+                    "tracked_facets":preservation,
                     "full_diagnostic_parity":false,
                 })
             );
-            if !contract_matches {
+            if !gate_matches {
                 failures.push(format!("{case}: {observation}"));
             }
         }
     }
     assert_eq!(count, if adapter { 40 } else { 344 });
+    assert_eq!(profiled_count, if adapter { 24 } else { 0 });
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
@@ -279,7 +423,7 @@ async fn bigint_int_narrowing_matches_spark_contract() -> TestResult {
 }
 
 #[tokio::test]
-async fn bigint_int_argument_adapters_match_spark_contract() -> TestResult {
+async fn bigint_int_argument_conversions_and_tracked_followups_are_preserved() -> TestResult {
     compare_domain(true).await
 }
 
@@ -386,13 +530,14 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 Ok(value.clone())
             }),
         ));
-        for (ansi, expression, table, predicate, expected) in [
+        for (ansi, expression, table, predicate, expected, expected_error) in [
             (
                 false,
                 "CAST(count_bigint_input(id,v) AS INT)",
                 "narrow_required",
                 "",
                 (0..14).collect::<Vec<_>>(),
+                None,
             ),
             (
                 false,
@@ -400,6 +545,7 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 "narrow_required",
                 "",
                 (0..14).collect(),
+                None,
             ),
             (
                 true,
@@ -407,6 +553,7 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 "narrow_required",
                 "",
                 (0..14).collect(),
+                None,
             ),
             (
                 true,
@@ -414,6 +561,15 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 "narrow_required",
                 "WHERE id=6",
                 vec![6],
+                None,
+            ),
+            (
+                true,
+                "CAST(count_bigint_input(id,v) AS INT)",
+                "narrow_required",
+                "WHERE id=11",
+                vec![11],
+                Some("Arrow error: Cast error: Can't cast value 4294967296 to type Int32"),
             ),
             (
                 false,
@@ -421,6 +577,7 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 "narrow_empty_required",
                 "",
                 vec![],
+                None,
             ),
             (
                 false,
@@ -428,6 +585,7 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 "narrow_required",
                 "",
                 vec![],
+                None,
             ),
         ] {
             invocations.store(0, Ordering::SeqCst);
@@ -484,6 +642,7 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
             if let Some(actual) = &mut actual {
                 actual.sort_unstable();
             }
+            let final_invocations = invocations.load(Ordering::SeqCst);
             eprintln!(
                 "BIGINT_INT_INPUT_EVALUATION {}",
                 json!({
@@ -492,11 +651,12 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                     "recorder_error":visited_ids_raw.as_ref().err(),
                     "native_phase":phase,"after_resolve":after_resolve,"after_physical":after_physical,
                     "callback_counts":{"after_resolve":resolve_invocations,
-                        "after_physical":physical_invocations,"final":invocations.load(Ordering::SeqCst)},
+                        "after_physical":physical_invocations,"final":final_invocations},
                     "error":result.as_ref().err().map(ToString::to_string),
                     "error_debug":result.as_ref().err().map(|error| format!("{error:?}")),
                     "rows":result.as_ref().ok().map(|batches| batches.iter().map(|batch| batch.num_rows()).sum::<usize>()),
-                    "expected_visited_ids":expected,"spark_oracle_credit":false,
+                    "expected_visited_ids":expected,"expected_error":expected_error,
+                    "spark_oracle_credit":false,
                 })
             );
             observations.push((
@@ -506,11 +666,29 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 after_physical,
                 actual,
                 result.map(|_| ()),
+                phase,
+                expected_error,
+                resolve_invocations,
+                physical_invocations,
+                final_invocations,
             ));
         }
     }
-    assert_eq!(observations.len(), 12);
-    for (sql, expected, after_resolve, after_physical, actual, result) in observations {
+    assert_eq!(observations.len(), 14);
+    for (
+        sql,
+        expected,
+        after_resolve,
+        after_physical,
+        actual,
+        result,
+        phase,
+        expected_error,
+        resolve_invocations,
+        physical_invocations,
+        final_invocations,
+    ) in observations
+    {
         assert!(
             after_resolve.is_some_and(|rows| rows.is_empty()),
             "resolve: {sql}"
@@ -519,7 +697,19 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
             after_physical.is_some_and(|rows| rows.is_empty()),
             "physical planning: {sql}"
         );
-        result?;
+        assert_eq!(resolve_invocations, Some(0), "resolve: {sql}");
+        assert_eq!(physical_invocations, Some(0), "physical planning: {sql}");
+        if let Some(expected_error) = expected_error {
+            assert_eq!(phase, "collect", "{sql}");
+            let error = result.err().ok_or("ANSI singleton must overflow")?;
+            assert!(
+                error.to_string().lines().any(|line| line == expected_error),
+                "{sql}: {error}"
+            );
+            assert_eq!(final_invocations, 1, "{sql}");
+        } else {
+            result?;
+        }
         assert_eq!(actual.ok_or("poisoned BIGINT recorder")?, expected, "{sql}");
     }
     Ok(())
@@ -531,14 +721,123 @@ fn overflow_comparison_requires_the_exact_input_and_target() -> TestResult {
     let mut case = original[1].clone();
     case["spark_error_details"] = case["expected"].clone();
     let exact = "Arrow error: Cast error: Can't cast value 4294967296 to type Int32";
-    assert!(exact_conversion_cause(&case, exact));
+    assert!(matches_expected_error_cause(&case, exact));
+    assert!(matches_expected_error_cause(
+        &case,
+        &format!("External error: error in DataFusion: {exact}")
+    ));
     for wrong in [
         "Arrow error: Cast error: Can't cast value 2147483648 to type Int32",
         "Arrow error: Cast error: Can't cast value 4294967296 to type Int64",
         "Arrow error: Cast error: Can't cast value 4294967296 to type Int32 (different cause)",
         "Execution error: Invalid regular expression group index 4294967296",
+        "External error: error in DataFusion: Arrow error: Cast error: Can't cast value 2147483648 to type Int32",
+        "External error: error in DataFusion: Arrow error: Cast error: Can't cast value 4294967296 to type Int64",
+        "External error: error in DataFusion: Arrow error: Cast error: Can't cast value 4294967296 to type Int32 (different cause)",
+        "Other wrapper: Arrow error: Cast error: Can't cast value 4294967296 to type Int32",
     ] {
-        assert!(!exact_conversion_cause(&case, wrong));
+        assert!(!matches_expected_error_cause(&case, wrong));
     }
+    Ok(())
+}
+
+#[test]
+fn datetime_overflow_comparison_requires_the_exact_operation() {
+    let operation = "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'";
+    let case = json!({
+        "expected":{"condition":"DATETIME_OVERFLOW"},
+        "spark_error_details":{"parameters":{"operation":operation}},
+    });
+    let exact =
+        format!("[DATETIME_OVERFLOW] Datetime operation overflow: {operation}. SQLSTATE: 22008");
+    assert!(matches_expected_error_cause(&case, &exact));
+    assert!(matches_expected_error_cause(
+        &case,
+        &format!("Execution error: {exact}")
+    ));
+    for wrong in [
+        exact.replace("4294967296L", "2147483648L"),
+        exact.replace("MONTH", "DAY"),
+        exact.replace("2020-01-01", "2021-01-01"),
+        format!("{exact} (different cause)"),
+        "Execution error: [DATETIME_OVERFLOW] unrelated temporal failure".into(),
+        "Arrow error: Cast error: Can't cast value 4294967296 to type Int32".into(),
+    ] {
+        assert!(!matches_expected_error_cause(&case, &wrong));
+    }
+}
+
+#[test]
+fn tracked_facets_keep_conversion_and_unlisted_differences_required() -> TestResult {
+    let baseline = tracked_facets()?;
+    let facets = baseline["facets"]
+        .as_array()
+        .ok_or("missing tracked facets")?;
+    let whole = facets
+        .iter()
+        .find(|facet| {
+            facet["id"] == "c06_extract_implicit" && facet["ansi"] == false && facet["batch"] == 1
+        })
+        .ok_or("missing extraction profile")?;
+    let case = &whole["reference"];
+    let actual = &whole["observation"];
+    assert!(contract_and_tracked_facets_match(case, actual, 1, &baseline)?.0);
+    assert!(!required_contract_matches(case, actual));
+    let mut changed = actual.clone();
+    changed["error"] = json!("Execution error: a different failure");
+    assert!(!contract_and_tracked_facets_match(case, &changed, 1, &baseline)?.0);
+
+    let declaration = facets
+        .iter()
+        .find(|facet| {
+            facet["id"] == "c07_yearmonth_implicit" && facet["ansi"] == false && facet["batch"] == 1
+        })
+        .ok_or("missing year-month declaration")?;
+    let case = &declaration["reference"];
+    let mut repaired = declaration["observation"].clone();
+    assert!(!contract_and_tracked_facets_match(case, &repaired, 1, &baseline)?.0);
+    for (stage, key) in [
+        ("optimized", "optimized_schema"),
+        ("executed_before_collect", "before_collect"),
+        ("executed", "physical_schema"),
+    ] {
+        repaired[key] = case["schema_stages"][stage].clone();
+    }
+    repaired["rows"] = case["expected"]["rows"].clone();
+    repaired["rows_raw"] = case["expected"]["rows"].clone();
+    repaired["native_phase"] = json!("encode");
+    repaired["error"] = Value::Null;
+    repaired["optimized_error"] = Value::Null;
+    for key in ["rows_match", "ordered_rows_match", "optimized_matches"] {
+        repaired[key] = json!(true);
+    }
+    assert!(contract_and_tracked_facets_match(case, &repaired, 1, &baseline)?.0);
+    assert!(!required_contract_matches(case, &repaired));
+    let mut changed = repaired.clone();
+    changed["public_schema"]["fields"][0]["metadata"] = json!({"unexpected":"value"});
+    assert!(!contract_and_tracked_facets_match(case, &changed, 1, &baseline)?.0);
+    repaired["rows_match"] = json!(false);
+    repaired["rows"] = json!([["wrong interval"]]);
+    assert!(!contract_and_tracked_facets_match(case, &repaired, 1, &baseline)?.0);
+
+    let temporal = facets
+        .iter()
+        .find(|facet| {
+            facet["id"] == "c07_timestampadd_implicit"
+                && facet["ansi"] == true
+                && facet["batch"] == 1
+        })
+        .ok_or("missing timestampadd profile")?;
+    let case = &temporal["reference"];
+    let mut improved = temporal["observation"].clone();
+    improved["error"] = json!(format!(
+        "Execution error: [DATETIME_OVERFLOW] Datetime operation overflow: {}. SQLSTATE: 22008",
+        case["spark_error_details"]["parameters"]["operation"]
+            .as_str()
+            .ok_or("missing temporal operation")?
+    ));
+    improved["optimized_error"] = improved["error"].clone();
+    assert!(contract_and_tracked_facets_match(case, &improved, 1, &baseline)?.0);
+    assert!(!required_contract_matches(case, &improved));
     Ok(())
 }
