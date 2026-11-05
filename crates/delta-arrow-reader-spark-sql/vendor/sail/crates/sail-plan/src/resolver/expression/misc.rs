@@ -248,12 +248,14 @@ impl PlanResolver<'_> {
             }
         };
         if let ScalarValue::Utf8(Some(field_name)) = &extraction {
-            let (expr, _display_suffix) = Self::resolve_nested_field_and_display_suffix(
+            let mut discarded_display = String::new();
+            let expr = Self::resolve_nested_field_and_append_display(
                 expr,
                 &data_type,
                 std::slice::from_ref(field_name),
                 schema,
                 true,
+                &mut discarded_display,
             )?;
             return Ok(NamedExpr::new(vec![name], expr));
         }
