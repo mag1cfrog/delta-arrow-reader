@@ -94,6 +94,30 @@ fn null_literal(expr: &Expr) -> bool {
     }
 }
 
+/// Local division and remainder inspect a NULL divisor before their dividend.
+pub(crate) fn prune_null_divisor(expr: Expr, schema: &DFSchemaRef) -> Result<Transformed<Expr>> {
+    let right = match &expr {
+        Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
+            Some(binary.right.as_ref())
+        }
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<SparkCheckedDivide>()
+                || f.func.inner().is::<SparkCheckedModulo>()
+                || f.func.inner().is::<FusedDecimalDivide>() =>
+        {
+            Some(&f.args[1])
+        }
+        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
+    };
+    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
+        Ok(Transformed::yes(lit(ScalarValue::try_new_null(
+            &expr.get_type(schema)?,
+        )?)))
+    } else {
+        Ok(Transformed::no(expr))
+    }
+}
+
 fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
     let expr = without_metadata_annotations(expr);
     match expr {
@@ -2237,27 +2261,11 @@ impl Prepare {
         Ok(expr
             .transform_down(|expr| {
                 let expr = if local {
-                    let right = match &expr {
-                        Expr::BinaryExpr(binary)
-                            if matches!(binary.op, Operator::Divide | Operator::Modulo) =>
-                        {
-                            Some(binary.right.as_ref())
-                        }
-                        Expr::ScalarFunction(f)
-                            if f.func.inner().is::<SparkCheckedDivide>()
-                                || f.func.inner().is::<SparkCheckedModulo>()
-                                || f.func.inner().is::<FusedDecimalDivide>() =>
-                        {
-                            Some(&f.args[1])
-                        }
-                        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
-                    };
-                    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
-                        return Ok(Transformed::yes(lit(ScalarValue::try_new_null(
-                            &expr.get_type(schema)?,
-                        )?)));
+                    let pruned = prune_null_divisor(expr, schema)?;
+                    if pruned.transformed {
+                        return Ok(pruned);
                     }
-                    expr
+                    pruned.data
                 } else if null_round(&expr) && !expr.contains_scalar_subquery() {
                     lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?)
                 } else {

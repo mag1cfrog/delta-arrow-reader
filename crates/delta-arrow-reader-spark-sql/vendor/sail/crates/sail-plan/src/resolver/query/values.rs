@@ -14,7 +14,7 @@ use sail_common::spec;
 use sail_common_datafusion::literal::LiteralEvaluator;
 
 use crate::error::{PlanError, PlanResult};
-use crate::expression_errors::row_expression;
+use crate::expression_errors::{prune_null_divisor, row_expression};
 use crate::function::common::without_metadata_annotations;
 use crate::function::numeric_coercion::common_numeric_type;
 use crate::resolver::PlanResolver;
@@ -78,11 +78,14 @@ impl PlanResolver<'_> {
                     continue;
                 }
                 let coerced = simplifier.coerce(expr.clone(), &schema)?;
-                prepared_constants.push(create_physical_expr(
-                    &coerced,
-                    &schema,
-                    session.execution_props(),
-                )?);
+                // Validate input types before a NULL divisor can discard a fallible cast.
+                let original = create_physical_expr(&coerced, &schema, session.execution_props())?;
+                let pruned = coerced.transform_down(|expr| prune_null_divisor(expr, &schema))?;
+                prepared_constants.push(if pruned.transformed {
+                    create_physical_expr(&pruned.data, &schema, session.execution_props())?
+                } else {
+                    original
+                });
             }
             let evaluator = LiteralEvaluator::new();
             // Inline constants fail during analysis even when outer operators discard their rows.

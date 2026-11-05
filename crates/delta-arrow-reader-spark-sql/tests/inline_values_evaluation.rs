@@ -174,18 +174,37 @@ async fn inline_values_match_spark_stages_rows_and_causes() -> TestResult {
 
 #[tokio::test]
 async fn inline_values_null_boundaries_match_spark() -> TestResult {
-    let records = include_str!("fixtures/inline-values-evaluation/null-boundaries-spark.jsonl")
+    check_inline_null_reference(
+        include_str!("fixtures/inline-values-evaluation/null-boundaries-spark.jsonl"),
+        8,
+        "inline_values_null_boundary_observation",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn inline_values_null_divisors_match_spark() -> TestResult {
+    check_inline_null_reference(
+        include_str!("fixtures/inline-values-evaluation/null-divisors-spark.jsonl"),
+        10,
+        "inline_values_null_divisor_observation",
+    )
+    .await
+}
+
+async fn check_inline_null_reference(fixture: &str, case_count: usize, tag: &str) -> TestResult {
+    let records = fixture
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(records.len(), 9);
+    assert_eq!(records.len(), case_count + 1);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records[0]["spark_revision"],
         "32f7299601108917fb01920a54e084595b7b3bf8"
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records[0]["observations"], 8);
+    assert_eq!(records[0]["observations"], json!(case_count));
     assert_eq!(
         json!(
             records[1..]
@@ -198,7 +217,7 @@ async fn inline_values_null_boundaries_match_spark() -> TestResult {
     let cases = records[0]["cases"]
         .as_array()
         .ok_or("missing NULL-boundary SQL seeds")?;
-    assert_eq!(cases.len(), 4);
+    assert_eq!(cases.len() * 2, case_count);
     for (case, seed) in records[1..].iter().zip(cases.iter().cycle()) {
         for key in ["id", "sql", "ordered", "group"] {
             assert_eq!(case[key], seed[key]);
@@ -245,7 +264,7 @@ async fn inline_values_null_boundaries_match_spark() -> TestResult {
                 matches &= cause_matches == Some(true);
             }
             println!(
-                "inline_values_null_boundary_observation={}",
+                "{tag}={}",
                 json!({
                 "id":case["id"], "ansi":case["ansi"], "sql":case["sql"],
                 "batch_size":batch_size, "observation":actual, "cause_matches":cause_matches,
@@ -260,7 +279,7 @@ async fn inline_values_null_boundaries_match_spark() -> TestResult {
             }
         }
     }
-    assert_eq!(observation_count, 16);
+    assert_eq!(observation_count, case_count * 2);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }
