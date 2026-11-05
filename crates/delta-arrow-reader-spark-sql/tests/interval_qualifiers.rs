@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 480);
+    assert_eq!(records.len() - 1, 614);
     Ok(records)
 }
 
@@ -263,6 +263,61 @@ const DAY_TIME_QUALIFIERS: [&str; 10] = [
 ];
 /// DAR's current rows for the RANGE offsets retained under #947: a running sum.
 const CUMULATIVE_WINDOW_ROWS: [[&str; 2]; 4] = [["0", "2"], ["1", "5"], ["2", "5"], ["3", "10"]];
+/// DAR's current error for each literal that Spark rejects at or past a storage limit,
+/// retained under #955. Spark fails at the same stage but names a condition that depends on
+/// the literal form, or raises a plain `java.lang.ArithmeticException` for multi-field
+/// day-time literals. Unit syntax reads the magnitude before the sign, so Spark also rejects
+/// the minimum `INTERVAL -9223372036854775808 MICROSECONDS`.
+const LIMIT_ERRORS: [(&str, &str); 27] = [
+    ("limit_year_below_min", "interval: -178956971"),
+    ("limit_year_above_max", "interval: 178956971"),
+    ("limit_year_month_below_min", "interval: -178956970-9"),
+    ("limit_year_month_above_max", "interval: 178956970-8"),
+    ("limit_month_below_min", "interval: -2147483649"),
+    ("limit_month_above_max", "interval: 2147483648"),
+    ("limit_day_below_min", "interval: -106751992"),
+    ("limit_day_above_max", "interval: 106751992"),
+    ("limit_day_hour_below_min", "interval: -106751991 05"),
+    ("limit_day_hour_above_max", "interval: 106751991 05"),
+    ("limit_day_minute_below_min", "interval: -106751991 04:01"),
+    ("limit_day_minute_above_max", "interval: 106751991 04:01"),
+    (
+        "limit_day_second_below_min",
+        "interval: -106751991 04:00:54.775809",
+    ),
+    (
+        "limit_day_second_above_max",
+        "interval: 106751991 04:00:54.775808",
+    ),
+    ("limit_hour_below_min", "interval: -2562047789"),
+    ("limit_hour_above_max", "interval: 2562047789"),
+    ("limit_hour_minute_below_min", "interval: -2562047788:01"),
+    ("limit_hour_minute_above_max", "interval: 2562047788:01"),
+    (
+        "limit_hour_second_below_min",
+        "interval: -2562047788:00:54.775809",
+    ),
+    (
+        "limit_hour_second_above_max",
+        "interval: 2562047788:00:54.775808",
+    ),
+    ("limit_minute_below_min", "interval: -153722867281"),
+    ("limit_minute_above_max", "interval: 153722867281"),
+    (
+        "limit_minute_second_below_min",
+        "interval: -153722867280:54.775809",
+    ),
+    (
+        "limit_minute_second_above_max",
+        "interval: 153722867280:54.775808",
+    ),
+    ("limit_second_below_min", "interval: -9223372036854.775809"),
+    ("limit_second_above_max", "interval: 9223372036854.775808"),
+    (
+        "limit_microseconds_min_units",
+        "literal: 9223372036854775808",
+    ),
+];
 
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -277,6 +332,8 @@ enum RetainedDifference {
     WindowName,
     /// #947: RANGE offsets are not typed against the ORDER BY key.
     RangeOffsetTyping,
+    /// #955: a literal at or past a storage limit fails without Spark's error condition.
+    LimitErrorCondition,
 }
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
@@ -343,6 +400,9 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         {
             Some(RetainedDifference::RangeOffsetTyping)
         }
+        "limit" if LIMIT_ERRORS.iter().any(|(limit, _)| id == *limit) => {
+            Some(RetainedDifference::LimitErrorCondition)
+        }
         _ => None,
     }
 }
@@ -385,6 +445,17 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
                 .remove("spark_error_phase");
             current["expected"] = json!({"status": "ok", "rows": CUMULATIVE_WINDOW_ROWS});
         }
+        RetainedDifference::LimitErrorCondition => {
+            let (_, error) = LIMIT_ERRORS
+                .iter()
+                .find(|(limit, _)| case["id"] == *limit)
+                .ok_or("expected a pinned limit error")?;
+            if case["expected"]["status"] != "error" {
+                return Err(format!("expected a Spark error: {case}").into());
+            }
+            current["expected"]["condition"] =
+                json!(format!("External error: invalid argument: {error}"));
+        }
     }
     Ok(current)
 }
@@ -406,6 +477,7 @@ async fn interval_qualifiers_match_spark() -> TestResult {
             (RetainedDifference::CastTruncation, 14),
             (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
+            (RetainedDifference::LimitErrorCondition, 54),
         ]
     );
     let mut differences = Vec::new();
