@@ -99,7 +99,49 @@ mod tests {
     use sail_sql_parser::ast::statement::Statement;
 
     use crate::error::SqlResult;
-    use crate::parser::{parse_one_statement, parse_statements};
+    use crate::parser::{parse_one_statement, parse_statements, parse_timestamp};
+
+    #[test]
+    fn test_timestamp_date_time_separators() -> SqlResult<()> {
+        // Spark accepts one space or uppercase T, and only after a complete date.
+        for (text, (month, day), hour, timezone) in [
+            ("2026-01-02T01:02:03Z", (1, 2), 1, "UTC"),
+            (
+                "2026-01-02 01:02:03 America/New_York",
+                (1, 2),
+                1,
+                "America/New_York",
+            ),
+            ("2026-01-02T01", (1, 2), 1, ""),
+            ("2026-01-02 ", (1, 2), 0, ""),
+            ("2026-01", (1, 1), 0, ""),
+        ] {
+            let value = parse_timestamp(text)?;
+            assert_eq!(
+                (
+                    value.date.month,
+                    value.date.day,
+                    value.time.hour,
+                    value.timezone
+                ),
+                (month, day, hour, timezone),
+                "{text}"
+            );
+        }
+        for text in [
+            "2026-01-02t01:02:03",
+            "2026-01-02  01:02:03",
+            "2026-01-02 T01:02:03",
+            "2026-01-02T 01:02:03",
+            "2026-01-02\t01:02:03",
+            "2026-01 01:02:03",
+            "2026T01:02:03",
+            "2026-01-02T",
+        ] {
+            assert!(parse_timestamp(text).is_err(), "{text:?}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_parse() -> SqlResult<()> {
