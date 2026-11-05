@@ -16,8 +16,9 @@ Each string is converted by CAST and TRY_CAST to TIMESTAMP and TIMESTAMP_NTZ,
 TO_TIMESTAMP, TO_TIMESTAMP_NTZ, DATE_FORMAT, comparison with a TIMESTAMP literal
 and CAST to DATE. Functions that convert STRING arguments with DataFusion's
 native cast (#942) and mixed STRING/TIMESTAMP IN or GREATEST operands (#944)
-do not use this parser and are outside these references. Constant inputs use
-`decode(unhex(...))`; column inputs read
+do not use this parser and are outside these references.
+
+Constant inputs use `decode(unhex(...))`; column inputs read
 the registered table with a NULL row. Printable strings are also used as
 TIMESTAMP, TIMESTAMP_NTZ and TIMESTAMP_LTZ typed literals. Every query runs in
 both ANSI modes with UTC and `America/New_York` session zones.
@@ -44,8 +45,8 @@ expectations in the fixture. The test checks the current DAR result for each:
 - #939: 8 DATE_FORMAT calls print year -1 as `0002` instead of `-0001`.
 
 At the staging base, 136 of the #937 conversions and 68 of the #938 calls
-returned a wrong timestamp because their separator was accepted. They now fail
-or return NULL; only the stage or ANSI error remains different from Spark.
+returned a wrong value because their separator was accepted. They now fail or
+return NULL; only the stage or ANSI error remains different from Spark.
 
 Recapture from the crate root:
 
