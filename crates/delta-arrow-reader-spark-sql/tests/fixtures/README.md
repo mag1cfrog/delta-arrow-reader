@@ -2189,6 +2189,34 @@ matches; they do not claim identical Spark diagnostics and do not accept #795's
 distinct zero-TRIM formatter failure. These tests add durable original coverage;
 they do not close #151 or #174, or the named dependencies.
 
+## Native STRING/BINARY capability boundary
+
+`binary-string-capability/boundary-spark.jsonl` and
+`binary-string-capability/controls-spark.jsonl` preserve the independent raw
+Spark captures, including their full build/settings/input headers. Their
+STRING bytes come from detached `executeCollect()` InternalRows through
+`getUTF8String(i).getBytes()`; BINARY bytes use `getBinary(i)`. Displayed
+replacement characters are retained separately. The
+[manifest](binary-string-capability/manifest.json) pins the Spark collector,
+exact source receipts and measured native source. The
+[reference locators and byte receipts](binary-string-capability/references.json)
+reuse the original CAST, cross-family and CONCAT_WS fixture homes above.
+
+`binary_casts.rs` compares complete actual analyzed and physical fields,
+availability, ordered rows, bytes and exact error stages/causes against the
+[native profiles](binary-string-capability/native-profiles.jsonl). Independent
+optimized fields remain diagnostic. Only metadata map ordering in raw Arrow
+Debug text is canonicalized. The guarded visible-value cast is a strict positive
+control, together with pure BINARY, valid Unicode/NUL, empty providers, NULL-first
+CONCAT, NULL-separator CONCAT_WS and skipped casts. The explicit evaluated CAST
+before a trailing NULL has its own bounded profile; it does not exempt other
+NULL cases. Malformed STRING conversion errors and TRY_CAST NULL results keep
+strict compatibility false. Profiles and the capability decision remain
+provisional until final current-source replay and independent complete-diff
+review. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
+and [#928 visible-slice repair](https://github.com/mag1cfrog/delta-arrow-reader/issues/928)
+retain their separate contracts.
+
 ## Named struct declarations
 
 `named-struct-fields-spark.jsonl` retains the complete independent Spark 4.2.0

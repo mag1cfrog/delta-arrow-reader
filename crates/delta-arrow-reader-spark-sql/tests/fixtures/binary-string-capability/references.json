@@ -1,0 +1,3668 @@
+[
+  {
+    "family": "frozen-strings",
+    "id": "concat_binary_string",
+    "ansi": true,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 9,
+    "spark_string_binary_byte_rows": [
+      [
+        "ff61c3a9"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "concat_string_binary",
+    "ansi": true,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 10,
+    "spark_string_binary_byte_rows": [
+      [
+        "c3a9ff61"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_empty",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 2,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_empty",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 3,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_ascii",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 4,
+    "spark_string_binary_byte_rows": [
+      [
+        "616263646566"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_ascii",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 5,
+    "spark_string_binary_byte_rows": [
+      [
+        "616263646566"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_unicode",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 6,
+    "spark_string_binary_byte_rows": [
+      [
+        "41c3a9f09f9880e4b8ad"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_unicode",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 7,
+    "spark_string_binary_byte_rows": [
+      [
+        "41c3a9f09f9880e4b8ad"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_combining",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 8,
+    "spark_string_binary_byte_rows": [
+      [
+        "65cc81"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_combining",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 9,
+    "spark_string_binary_byte_rows": [
+      [
+        "65cc81"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_nul",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 10,
+    "spark_string_binary_byte_rows": [
+      [
+        "610062"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_nul",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 11,
+    "spark_string_binary_byte_rows": [
+      [
+        "610062"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_null",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 12,
+    "spark_string_binary_byte_rows": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_null",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 13,
+    "spark_string_binary_byte_rows": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_quote_slash",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 14,
+    "spark_string_binary_byte_rows": [
+      [
+        "6127625c63"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_quote_slash",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 15,
+    "spark_string_binary_byte_rows": [
+      [
+        "6127625c63"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_empty",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 16,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_nul_ff_a",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 17,
+    "spark_string_binary_byte_rows": [
+      [
+        "00ff61"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_utf8",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 18,
+    "spark_string_binary_byte_rows": [
+      [
+        "c3a9f09f9880"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_continuation",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 19,
+    "spark_string_binary_byte_rows": [
+      [
+        "80"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_truncated",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 20,
+    "spark_string_binary_byte_rows": [
+      [
+        "e282"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_null",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 21,
+    "spark_string_binary_byte_rows": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_bad_second_byte",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 22,
+    "spark_string_binary_byte_rows": [
+      [
+        "c328"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_surrogate",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 23,
+    "spark_string_binary_byte_rows": [
+      [
+        "eda080"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_too_large",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 24,
+    "spark_string_binary_byte_rows": [
+      [
+        "f4908080"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_required",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 25,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "615f6225635c64"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "616263646566"
+      ],
+      [
+        "616263646566"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_required",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 26,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "80ff61"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "00ff61"
+      ],
+      [
+        "00ff61"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_nullable",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 27,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "615f6225635c64"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "616263646566"
+      ],
+      [
+        "616263646566"
+      ],
+      [
+        null
+      ],
+      [
+        "61"
+      ],
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_nullable",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 28,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "80ff61"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "00ff61"
+      ],
+      [
+        "00ff61"
+      ],
+      [
+        null
+      ],
+      [
+        "61"
+      ],
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_empty_required",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 29,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_empty_required",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 30,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_empty_nullable",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 31,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_empty_nullable",
+    "ansi": true,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 32,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "invalid_utf8_binary_roundtrip_literal",
+    "ansi": true,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 17,
+    "spark_string_binary_byte_rows": [
+      [
+        "303046463631"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "invalid_utf8_binary_roundtrip_column",
+    "ansi": true,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 18,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "353337303631373236423230353335313443"
+      ],
+      [
+        "3431433341394630394639383830453442384144"
+      ],
+      [
+        "3230303934313632343332303039"
+      ],
+      [
+        "383046463631"
+      ],
+      [
+        "363543433831"
+      ],
+      [
+        "303046463631"
+      ],
+      [
+        "303046463631"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "unaliased_binary_names",
+    "ansi": true,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 19,
+    "spark_string_binary_byte_rows": [
+      [
+        "00ff61",
+        "00ff61",
+        "c3a9",
+        "ff"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "concat_binary_string",
+    "ansi": false,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 42,
+    "spark_string_binary_byte_rows": [
+      [
+        "ff61c3a9"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "concat_string_binary",
+    "ansi": false,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 43,
+    "spark_string_binary_byte_rows": [
+      [
+        "c3a9ff61"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_empty",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 33,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_empty",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 34,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_ascii",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 35,
+    "spark_string_binary_byte_rows": [
+      [
+        "616263646566"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_ascii",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 36,
+    "spark_string_binary_byte_rows": [
+      [
+        "616263646566"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_unicode",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 37,
+    "spark_string_binary_byte_rows": [
+      [
+        "41c3a9f09f9880e4b8ad"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_unicode",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 38,
+    "spark_string_binary_byte_rows": [
+      [
+        "41c3a9f09f9880e4b8ad"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_combining",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 39,
+    "spark_string_binary_byte_rows": [
+      [
+        "65cc81"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_combining",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 40,
+    "spark_string_binary_byte_rows": [
+      [
+        "65cc81"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_nul",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 41,
+    "spark_string_binary_byte_rows": [
+      [
+        "610062"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_nul",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 42,
+    "spark_string_binary_byte_rows": [
+      [
+        "610062"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_null",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 43,
+    "spark_string_binary_byte_rows": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_null",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 44,
+    "spark_string_binary_byte_rows": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_quote_slash",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 45,
+    "spark_string_binary_byte_rows": [
+      [
+        "6127625c63"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_roundtrip_quote_slash",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 46,
+    "spark_string_binary_byte_rows": [
+      [
+        "6127625c63"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_empty",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 47,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_nul_ff_a",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 48,
+    "spark_string_binary_byte_rows": [
+      [
+        "00ff61"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_utf8",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 49,
+    "spark_string_binary_byte_rows": [
+      [
+        "c3a9f09f9880"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_continuation",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 50,
+    "spark_string_binary_byte_rows": [
+      [
+        "80"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_truncated",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 51,
+    "spark_string_binary_byte_rows": [
+      [
+        "e282"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_null",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 52,
+    "spark_string_binary_byte_rows": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_bad_second_byte",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 53,
+    "spark_string_binary_byte_rows": [
+      [
+        "c328"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_surrogate",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 54,
+    "spark_string_binary_byte_rows": [
+      [
+        "eda080"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_too_large",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 55,
+    "spark_string_binary_byte_rows": [
+      [
+        "f4908080"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_required",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 56,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "615f6225635c64"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "616263646566"
+      ],
+      [
+        "616263646566"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_required",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 57,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "80ff61"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "00ff61"
+      ],
+      [
+        "00ff61"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_nullable",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 58,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "615f6225635c64"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "616263646566"
+      ],
+      [
+        "616263646566"
+      ],
+      [
+        null
+      ],
+      [
+        "61"
+      ],
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_nullable",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 59,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "537061726b2053514c"
+      ],
+      [
+        "41c3a9f09f9880e4b8ad"
+      ],
+      [
+        "20094162432009"
+      ],
+      [
+        "80ff61"
+      ],
+      [
+        "65cc81"
+      ],
+      [
+        "00ff61"
+      ],
+      [
+        "00ff61"
+      ],
+      [
+        null
+      ],
+      [
+        "61"
+      ],
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_empty_required",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 60,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_empty_required",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 61,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_string_binary_c06_strings_empty_nullable",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 62,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "cast_binary_string_c06_strings_empty_nullable",
+    "ansi": false,
+    "fixture": "binary-casts-spark.jsonl",
+    "line": 63,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "frozen-strings",
+    "id": "invalid_utf8_binary_roundtrip_literal",
+    "ansi": false,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 50,
+    "spark_string_binary_byte_rows": [
+      [
+        "303046463631"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "invalid_utf8_binary_roundtrip_column",
+    "ansi": false,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 51,
+    "spark_string_binary_byte_rows": [
+      [
+        ""
+      ],
+      [
+        "353337303631373236423230353335313443"
+      ],
+      [
+        "3431433341394630394639383830453442384144"
+      ],
+      [
+        "3230303934313632343332303039"
+      ],
+      [
+        "383046463631"
+      ],
+      [
+        "363543433831"
+      ],
+      [
+        "303046463631"
+      ],
+      [
+        "303046463631"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-strings",
+    "id": "unaliased_binary_names",
+    "ansi": false,
+    "fixture": "string-binary-contracts-spark.jsonl",
+    "line": 52,
+    "spark_string_binary_byte_rows": [
+      [
+        "00ff61",
+        "00ff61",
+        "c3a9",
+        "ff"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-ws",
+    "id": "c06_remaining_ws_invalid_binary_value",
+    "ansi": true,
+    "fixture": "binary-concat-null-spark.jsonl",
+    "line": 22,
+    "spark_string_binary_byte_rows": [
+      [
+        "ff"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-ws",
+    "id": "c06_remaining_ws_invalid_binary_byte_roundtrip",
+    "ansi": true,
+    "fixture": "binary-concat-null-spark.jsonl",
+    "line": 23,
+    "spark_string_binary_byte_rows": [
+      [
+        "4646"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-ws",
+    "id": "c06_remaining_ws_invalid_binary_value",
+    "ansi": false,
+    "fixture": "binary-concat-null-spark.jsonl",
+    "line": 44,
+    "spark_string_binary_byte_rows": [
+      [
+        "ff"
+      ]
+    ]
+  },
+  {
+    "family": "frozen-ws",
+    "id": "c06_remaining_ws_invalid_binary_byte_roundtrip",
+    "ansi": false,
+    "fixture": "binary-concat-null-spark.jsonl",
+    "line": 45,
+    "spark_string_binary_byte_rows": [
+      [
+        "4646"
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_cast_display",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 2,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "61"
+      ],
+      [
+        null,
+        "c3a9f09f9880"
+      ],
+      [
+        null,
+        "ff"
+      ],
+      [
+        null,
+        "80"
+      ],
+      [
+        null,
+        "c328"
+      ],
+      [
+        null,
+        "e282"
+      ],
+      [
+        null,
+        "eda080"
+      ],
+      [
+        null,
+        "f4908080"
+      ],
+      [
+        null,
+        "00ff61"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_cast_display",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 3,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "61"
+      ],
+      [
+        null,
+        "c3a9f09f9880"
+      ],
+      [
+        null,
+        "ff"
+      ],
+      [
+        null,
+        "80"
+      ],
+      [
+        null,
+        "c328"
+      ],
+      [
+        null,
+        "e282"
+      ],
+      [
+        null,
+        "eda080"
+      ],
+      [
+        null,
+        "f4908080"
+      ],
+      [
+        null,
+        "00ff61"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_cast_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 4,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "45323832"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "303046463631"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_cast_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 5,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "45323832"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "303046463631"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_concat_left_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 6,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "43334139"
+      ],
+      [
+        null,
+        "363143334139"
+      ],
+      [
+        null,
+        "43334139463039463938383043334139"
+      ],
+      [
+        null,
+        "464643334139"
+      ],
+      [
+        null,
+        "383043334139"
+      ],
+      [
+        null,
+        "4333323843334139"
+      ],
+      [
+        null,
+        "4532383243334139"
+      ],
+      [
+        null,
+        "45444130383043334139"
+      ],
+      [
+        null,
+        "463439303830383043334139"
+      ],
+      [
+        null,
+        "30304646363143334139"
+      ],
+      [
+        null,
+        "3631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236334646373436313639364343334139"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_concat_left_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 7,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "43334139"
+      ],
+      [
+        null,
+        "363143334139"
+      ],
+      [
+        null,
+        "43334139463039463938383043334139"
+      ],
+      [
+        null,
+        "464643334139"
+      ],
+      [
+        null,
+        "383043334139"
+      ],
+      [
+        null,
+        "4333323843334139"
+      ],
+      [
+        null,
+        "4532383243334139"
+      ],
+      [
+        null,
+        "45444130383043334139"
+      ],
+      [
+        null,
+        "463439303830383043334139"
+      ],
+      [
+        null,
+        "30304646363143334139"
+      ],
+      [
+        null,
+        "3631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236333631363236334646373436313639364343334139"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_concat_right_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 8,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "43334139"
+      ],
+      [
+        null,
+        "433341393631"
+      ],
+      [
+        null,
+        "43334139433341394630394639383830"
+      ],
+      [
+        null,
+        "433341394646"
+      ],
+      [
+        null,
+        "433341393830"
+      ],
+      [
+        null,
+        "4333413943333238"
+      ],
+      [
+        null,
+        "4333413945323832"
+      ],
+      [
+        null,
+        "43334139454441303830"
+      ],
+      [
+        null,
+        "433341394634393038303830"
+      ],
+      [
+        null,
+        "43334139303046463631"
+      ],
+      [
+        null,
+        "4333413936313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_concat_right_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 9,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "43334139"
+      ],
+      [
+        null,
+        "433341393631"
+      ],
+      [
+        null,
+        "43334139433341394630394639383830"
+      ],
+      [
+        null,
+        "433341394646"
+      ],
+      [
+        null,
+        "433341393830"
+      ],
+      [
+        null,
+        "4333413943333238"
+      ],
+      [
+        null,
+        "4333413945323832"
+      ],
+      [
+        null,
+        "43334139454441303830"
+      ],
+      [
+        null,
+        "433341394634393038303830"
+      ],
+      [
+        null,
+        "43334139303046463631"
+      ],
+      [
+        null,
+        "4333413936313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_value_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 10,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "324343334139"
+      ],
+      [
+        null,
+        "3631324343334139"
+      ],
+      [
+        null,
+        "433341394630394639383830324343334139"
+      ],
+      [
+        null,
+        "4646324343334139"
+      ],
+      [
+        null,
+        "3830324343334139"
+      ],
+      [
+        null,
+        "43333238324343334139"
+      ],
+      [
+        null,
+        "45323832324343334139"
+      ],
+      [
+        null,
+        "454441303830324343334139"
+      ],
+      [
+        null,
+        "4634393038303830324343334139"
+      ],
+      [
+        null,
+        "303046463631324343334139"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643324343334139"
+      ],
+      [
+        null,
+        "43334139"
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_value_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 11,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "324343334139"
+      ],
+      [
+        null,
+        "3631324343334139"
+      ],
+      [
+        null,
+        "433341394630394639383830324343334139"
+      ],
+      [
+        null,
+        "4646324343334139"
+      ],
+      [
+        null,
+        "3830324343334139"
+      ],
+      [
+        null,
+        "43333238324343334139"
+      ],
+      [
+        null,
+        "45323832324343334139"
+      ],
+      [
+        null,
+        "454441303830324343334139"
+      ],
+      [
+        null,
+        "4634393038303830324343334139"
+      ],
+      [
+        null,
+        "303046463631324343334139"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643324343334139"
+      ],
+      [
+        null,
+        "43334139"
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_separator_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 12,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "36313632"
+      ],
+      [
+        null,
+        "363136313632"
+      ],
+      [
+        null,
+        "36314333413946303946393838303632"
+      ],
+      [
+        null,
+        "363146463632"
+      ],
+      [
+        null,
+        "363138303632"
+      ],
+      [
+        null,
+        "3631433332383632"
+      ],
+      [
+        null,
+        "3631453238323632"
+      ],
+      [
+        null,
+        "36314544413038303632"
+      ],
+      [
+        null,
+        "363146343930383038303632"
+      ],
+      [
+        null,
+        "36313030464636313632"
+      ],
+      [
+        null,
+        "3631363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633464637343631363936433632"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_separator_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 13,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "36313632"
+      ],
+      [
+        null,
+        "363136313632"
+      ],
+      [
+        null,
+        "36314333413946303946393838303632"
+      ],
+      [
+        null,
+        "363146463632"
+      ],
+      [
+        null,
+        "363138303632"
+      ],
+      [
+        null,
+        "3631433332383632"
+      ],
+      [
+        null,
+        "3631453238323632"
+      ],
+      [
+        null,
+        "36314544413038303632"
+      ],
+      [
+        null,
+        "363146343930383038303632"
+      ],
+      [
+        null,
+        "36313030464636313632"
+      ],
+      [
+        null,
+        "3631363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633363136323633464637343631363936433632"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_null_separator",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 14,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_null_separator",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 15,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_null_value_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 16,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "45323832"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "303046463631"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_ws_null_value_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 17,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "45323832"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "303046463631"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_alias_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 18,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "45323832"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "303046463631"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_alias_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 19,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "45323832"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "303046463631"
+      ],
+      [
+        null,
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_alias_display_and_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 20,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        ""
+      ],
+      [
+        null,
+        "61",
+        "3631"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "ff",
+        "4646"
+      ],
+      [
+        null,
+        "80",
+        "3830"
+      ],
+      [
+        null,
+        "c328",
+        "43333238"
+      ],
+      [
+        null,
+        "e282",
+        "45323832"
+      ],
+      [
+        null,
+        "eda080",
+        "454441303830"
+      ],
+      [
+        null,
+        "f4908080",
+        "4634393038303830"
+      ],
+      [
+        null,
+        "00ff61",
+        "303046463631"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c",
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_alias_display_and_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 21,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        ""
+      ],
+      [
+        null,
+        "61",
+        "3631"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "ff",
+        "4646"
+      ],
+      [
+        null,
+        "80",
+        "3830"
+      ],
+      [
+        null,
+        "c328",
+        "43333238"
+      ],
+      [
+        null,
+        "e282",
+        "45323832"
+      ],
+      [
+        null,
+        "eda080",
+        "454441303830"
+      ],
+      [
+        null,
+        "f4908080",
+        "4634393038303830"
+      ],
+      [
+        null,
+        "00ff61",
+        "303046463631"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c",
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_substring_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 22,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "453238323030"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "30304646"
+      ],
+      [
+        null,
+        "36313632"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_substring_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 23,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "3631"
+      ],
+      [
+        null,
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "4646"
+      ],
+      [
+        null,
+        "3830"
+      ],
+      [
+        null,
+        "43333238"
+      ],
+      [
+        null,
+        "453238323030"
+      ],
+      [
+        null,
+        "454441303830"
+      ],
+      [
+        null,
+        "4634393038303830"
+      ],
+      [
+        null,
+        "30304646"
+      ],
+      [
+        null,
+        "36313632"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_length",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 24,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_length",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 25,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_octet_length",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 26,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_octet_length",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 27,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_surrogate_display_and_roundtrip",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 28,
+    "spark_string_binary_byte_rows": [
+      [
+        "eda080",
+        "454441303830"
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_surrogate_display_and_roundtrip",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 29,
+    "spark_string_binary_byte_rows": [
+      [
+        "eda080",
+        "454441303830"
+      ]
+    ]
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_empty_required",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 30,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_empty_required",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 31,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_empty_nullable",
+    "ansi": true,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 32,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "boundary",
+    "id": "c06_780_empty_nullable",
+    "ansi": false,
+    "fixture": "binary-string-capability/boundary-spark.jsonl",
+    "line": 33,
+    "spark_string_binary_byte_rows": []
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_pure_binary",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 2,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        "ff",
+        null,
+        ""
+      ],
+      [
+        null,
+        "61",
+        "61ff",
+        null,
+        "61"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "c3a9f09f9880ff",
+        null,
+        "c3a9"
+      ],
+      [
+        null,
+        "ff",
+        "ffff",
+        null,
+        "ff"
+      ],
+      [
+        null,
+        "80",
+        "80ff",
+        null,
+        "80"
+      ],
+      [
+        null,
+        "c328",
+        "c328ff",
+        null,
+        "c328"
+      ],
+      [
+        null,
+        "e282",
+        "e282ff",
+        null,
+        "e282"
+      ],
+      [
+        null,
+        "eda080",
+        "eda080ff",
+        null,
+        "eda0"
+      ],
+      [
+        null,
+        "f4908080",
+        "f4908080ff",
+        null,
+        "f490"
+      ],
+      [
+        null,
+        "00ff61",
+        "00ff61ff",
+        null,
+        "00ff"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c",
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696cff",
+        null,
+        "6162"
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_pure_binary",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 3,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        "ff",
+        null,
+        ""
+      ],
+      [
+        null,
+        "61",
+        "61ff",
+        null,
+        "61"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "c3a9f09f9880ff",
+        null,
+        "c3a9"
+      ],
+      [
+        null,
+        "ff",
+        "ffff",
+        null,
+        "ff"
+      ],
+      [
+        null,
+        "80",
+        "80ff",
+        null,
+        "80"
+      ],
+      [
+        null,
+        "c328",
+        "c328ff",
+        null,
+        "c328"
+      ],
+      [
+        null,
+        "e282",
+        "e282ff",
+        null,
+        "e282"
+      ],
+      [
+        null,
+        "eda080",
+        "eda080ff",
+        null,
+        "eda0"
+      ],
+      [
+        null,
+        "f4908080",
+        "f4908080ff",
+        null,
+        "f490"
+      ],
+      [
+        null,
+        "00ff61",
+        "00ff61ff",
+        null,
+        "00ff"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c",
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696cff",
+        null,
+        "6162"
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_valid_string_binary",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 4,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        "",
+        "",
+        "2c"
+      ],
+      [
+        null,
+        "61",
+        "61",
+        "6161",
+        "612c61"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "c3a9f09f9880",
+        "c3a9f09f9880c3a9f09f9880",
+        "c3a9f09f98802cc3a9f09f9880"
+      ],
+      [
+        null,
+        "0061",
+        "0061",
+        "00610061",
+        "00612c0061"
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_valid_string_binary",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 5,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        "",
+        "",
+        "2c"
+      ],
+      [
+        null,
+        "61",
+        "61",
+        "6161",
+        "612c61"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "c3a9f09f9880",
+        "c3a9f09f9880c3a9f09f9880",
+        "c3a9f09f98802cc3a9f09f9880"
+      ],
+      [
+        null,
+        "0061",
+        "0061",
+        "00610061",
+        "00612c0061"
+      ],
+      [
+        null,
+        null,
+        null,
+        null,
+        ""
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_guarded_column_cast",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 6,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "61"
+      ],
+      [
+        null,
+        "c3a9f09f9880"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_guarded_column_cast",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 7,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        ""
+      ],
+      [
+        null,
+        "61"
+      ],
+      [
+        null,
+        "c3a9f09f9880"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ],
+      [
+        null,
+        "67756172646564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_unused_column_cast",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 8,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_unused_column_cast",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 9,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ],
+      [
+        null,
+        "756e75736564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_concat_null_first",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 10,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_concat_null_first",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 11,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_concat_null_last",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 12,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_concat_null_last",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 13,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_try_cast",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 14,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        ""
+      ],
+      [
+        null,
+        "61",
+        "3631"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "ff",
+        "4646"
+      ],
+      [
+        null,
+        "80",
+        "3830"
+      ],
+      [
+        null,
+        "c328",
+        "43333238"
+      ],
+      [
+        null,
+        "e282",
+        "45323832"
+      ],
+      [
+        null,
+        "eda080",
+        "454441303830"
+      ],
+      [
+        null,
+        "f4908080",
+        "4634393038303830"
+      ],
+      [
+        null,
+        "00ff61",
+        "303046463631"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c",
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_try_cast",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 15,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "",
+        ""
+      ],
+      [
+        null,
+        "61",
+        "3631"
+      ],
+      [
+        null,
+        "c3a9f09f9880",
+        "433341394630394639383830"
+      ],
+      [
+        null,
+        "ff",
+        "4646"
+      ],
+      [
+        null,
+        "80",
+        "3830"
+      ],
+      [
+        null,
+        "c328",
+        "43333238"
+      ],
+      [
+        null,
+        "e282",
+        "45323832"
+      ],
+      [
+        null,
+        "eda080",
+        "454441303830"
+      ],
+      [
+        null,
+        "f4908080",
+        "4634393038303830"
+      ],
+      [
+        null,
+        "00ff61",
+        "303046463631"
+      ],
+      [
+        null,
+        "616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263616263ff7461696c",
+        "36313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363336313632363346463734363136393643"
+      ],
+      [
+        null,
+        null,
+        null
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_overlong_literal",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 16,
+    "spark_string_binary_byte_rows": [
+      [
+        "c080",
+        "43303830"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_overlong_literal",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 17,
+    "spark_string_binary_byte_rows": [
+      [
+        "c080",
+        "43303830"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_overlong_column",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 18,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "c080",
+        "43303830"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_overlong_column",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 19,
+    "spark_string_binary_byte_rows": [
+      [
+        null,
+        "c080",
+        "43303830"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_unused_literal_cast",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 20,
+    "spark_string_binary_byte_rows": [
+      [
+        "756e75736564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_unused_literal_cast",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 21,
+    "spark_string_binary_byte_rows": [
+      [
+        "756e75736564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_guarded_literal_cast",
+    "ansi": true,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 22,
+    "spark_string_binary_byte_rows": [
+      [
+        "67756172646564"
+      ]
+    ]
+  },
+  {
+    "family": "controls",
+    "id": "c06_780_control_guarded_literal_cast",
+    "ansi": false,
+    "fixture": "binary-string-capability/controls-spark.jsonl",
+    "line": 23,
+    "spark_string_binary_byte_rows": [
+      [
+        "67756172646564"
+      ]
+    ]
+  }
+]
