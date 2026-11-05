@@ -3022,24 +3022,38 @@ pass safe construction with required elements.
 
 `array-compact-inherited-controls.jsonl` preserves three complete DAR observation
 objects from baseline `87384089cc4d902a70a9a984b7782abe7ddb357c`, paired with the
-full independent Spark records. #890 owns the ANSI constant bad-cast IS NULL
-result; #891 owns the non-array error category in both modes. Replaying those
-three identities at both batch sizes gives six inherited comparisons. The other
-142 comparisons require strict Spark fields, rows and errors. The summary
-reports strict matches separately from the issue contract.
+full independent Spark records. Only the ANSI constant bad-cast IS NULL result
+under #890 permits an inherited observation, giving two comparisons across the
+batch sizes. The other 146 comparisons require strict Spark fields, rows and
+errors, including the `invalid_non_array` references in both ANSI modes. The
+historical #891 controls remain frozen and must fail the inherited guard. The
+summary reports strict matches separately from the issue contract.
 
-The inherited guard requires the same identity, complete reference and complete
-baseline observation, normalizing only batch 1 versus 32. It preserves every
+The #890 inherited guard requires the same identity, complete reference and
+complete baseline observation, normalizing only batch 1 versus 32. It preserves every
 canonical comparison flag. A full strict success also passes, so a later fix can
 resolve an inherited gap. Adversarial checks reject changed queries, conditions,
 phases, causes, fields, metadata, rows, flags, missing/extra keys, unsupported
 batches, ANSI modes and panics. These controls do not establish full
 ARRAY_COMPACT compatibility.
 
+`array-compact-input-types/` contains 14 supplemental Spark observations for
+integer, STRING, STRUCT, MAP and typed NULL integer inputs, plus valid ARRAY and
+untyped NULL controls in both ANSI modes. Its input-only manifest and capture
+source are pinned alongside the raw reference in `SHA256SUMS`. All ten invalid
+inputs report `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE` during SQL analysis. The
+strict replay checks all 14 records at both batch sizes, for 28 comparisons,
+including every available field stage and successful value. Separate checks
+retain structured resolver errors for invalid types and wrong arity. Native
+DataFusion controls compare complete successful and rejected observations before
+and after Spark execution. The builder unit test preserves original arguments
+for NULL, all five list representations and dictionary children.
+
 From this crate, replay the references and focused kernel checks with:
 
 ```sh
 cargo test --locked --workspace --test compact_result_fields -- --nocapture
+cargo test --locked --workspace -p sail-plan --lib array_compact_validation -- --nocapture
 cargo test --locked --workspace -p sail-function --lib spark_array_compact -- --nocapture
 cargo test --locked --workspace -p sail-function --lib scalar_adapter -- --nocapture
 ```
