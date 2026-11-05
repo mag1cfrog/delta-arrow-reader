@@ -2230,9 +2230,7 @@ control, together with pure BINARY, valid Unicode/NUL, empty providers, NULL-fir
 CONCAT, NULL-separator CONCAT_WS and skipped casts. The explicit evaluated CAST
 before a trailing NULL has its own bounded profile; it does not exempt other
 NULL cases. Malformed STRING conversion errors and TRY_CAST NULL results keep
-strict compatibility false. Profiles and the capability decision remain
-provisional until final current-source replay and independent complete-diff
-review. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
+strict compatibility false. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
 and [#928 visible-slice repair](https://github.com/mag1cfrog/delta-arrow-reader/issues/928)
 retain their separate contracts.
 
