@@ -14,8 +14,7 @@ use datafusion::physical_plan::aggregates::{AggregateExec, AggregateMode, Physic
 use datafusion::physical_plan::repartition::RepartitionExec;
 use datafusion::physical_plan::test::TestMemoryExec;
 use datafusion::physical_plan::{
-    Distribution, ExecutionPlan, ExecutionPlanProperties, InputOrderMode, Partitioning,
-    PhysicalExpr, collect, displayable,
+    Distribution, ExecutionPlan, InputOrderMode, Partitioning, PhysicalExpr, collect, displayable,
 };
 use datafusion::prelude::SessionContext;
 use serde_json::{Value, json};
@@ -101,9 +100,9 @@ fn properties(id: &str, plan: &Arc<AggregateExec>) {
         json!({
             "id":id,"plan":displayable(plan.as_ref()).indent(true).to_string(),
             "schema":format!("{:?}",plan.schema()),
-            "equivalence_properties":plan.equivalence_properties().to_string(),
-            "constraints":format!("{:?}",plan.equivalence_properties().constraints()),
-            "partitioning":format!("{:?}",plan.output_partitioning()),
+            "equivalence_properties":plan.properties().equivalence_properties().to_string(),
+            "constraints":format!("{:?}",plan.properties().equivalence_properties().constraints()),
+            "partitioning":format!("{:?}",plan.properties().output_partitioning()),
             "input_order_mode":format!("{:?}",plan.input_order_mode()),
         })
     );
@@ -150,12 +149,14 @@ fn masked_constants_do_not_choose_a_final_sorted_prefix() -> TestResult {
     properties("masked_constant_final", &final_aggregate);
     assert!(
         partial
+            .properties()
             .equivalence_properties()
             .is_expr_constant(&column("key", 0))
             .is_none()
     );
     assert!(
         final_aggregate
+            .properties()
             .equivalence_properties()
             .is_expr_constant(&column("key", 0))
             .is_none()
@@ -176,7 +177,7 @@ fn mask_filtering_keeps_original_alias_indexes_and_unmasked_equalities() -> Test
     );
     let aggregate = aggregate(AggregateMode::Partial, groups, input)?;
     properties("shared_constant_source", &aggregate);
-    let eq = aggregate.equivalence_properties();
+    let eq = aggregate.properties().equivalence_properties();
     let masked = column("masked", 0);
     let kept = column("kept", 1);
     let also_kept = column("also_kept", 2);
@@ -211,10 +212,11 @@ fn masks_invalidate_hash_keys_only_when_their_values_change() -> TestResult {
         let aggregate = aggregate(AggregateMode::Partial, groups, input)?;
         properties(&format!("input_hash_{name}"), &aggregate);
         let satisfies = aggregate
+            .properties()
             .output_partitioning()
             .satisfaction(
                 &Distribution::HashPartitioned(vec![column(name, index)]),
-                aggregate.equivalence_properties(),
+                aggregate.properties().equivalence_properties(),
                 false,
             )
             .is_satisfied();
@@ -241,6 +243,7 @@ async fn duplicate_sets_drop_input_key_uniqueness_and_keep_packed_ids() -> TestR
     )?;
     assert!(
         distinct
+            .properties()
             .equivalence_properties()
             .constraints()
             .iter()
@@ -268,7 +271,7 @@ async fn duplicate_sets_drop_input_key_uniqueness_and_keep_packed_ids() -> TestR
             ["3", "2", "1"],
         ])
     );
-    assert!(grouped.equivalence_properties().constraints().iter().all(|constraint|
+    assert!(grouped.properties().equivalence_properties().constraints().iter().all(|constraint|
         !matches!(constraint, Constraint::Unique(indices) | Constraint::PrimaryKey(indices)
             if !indices.contains(&1))));
     Ok(())
@@ -390,6 +393,7 @@ async fn empty_group_key_lists_do_not_make_duplicate_ids_constant() -> TestResul
     properties("duplicate_empty_group_key_lists", &grouped);
     assert!(
         ordinary
+            .properties()
             .equivalence_properties()
             .is_expr_constant(&column("n", 0))
             .is_some()
@@ -402,6 +406,7 @@ async fn empty_group_key_lists_do_not_make_duplicate_ids_constant() -> TestResul
     assert_eq!(actual, json!([["0", "2"], ["1", "2"], ["2", "2"]]));
     assert!(
         grouped
+            .properties()
             .equivalence_properties()
             .is_expr_constant(&column("__grouping_id", 0))
             .is_none()
