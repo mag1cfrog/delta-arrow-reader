@@ -116,8 +116,8 @@ impl From<IntervalValue> for spec::Literal {
 /// Chooses between the year-month and day-time families for a multi-unit interval.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MultiUnitFamilyRule {
-    /// Spark SQL interval literals: the written units decide, so `INTERVAL 0 MONTHS` stays
-    /// year-month and `INTERVAL 0 MONTHS 5 DAYS` mixes both families.
+    /// Spark SQL interval literals: the written units decide, so `INTERVAL 0 YEARS 0 MONTHS`
+    /// stays year-month and `INTERVAL 0 MONTHS 5 DAYS` mixes both families.
     WrittenUnits,
     /// Interval strings converted at run time, such as string casts and `window` durations:
     /// the non-zero values decide, so `'0 months 5 days'` is a day-time interval.
@@ -399,7 +399,12 @@ fn from_ast_multi_unit_interval(
             | IntervalUnit::Days(_) => Day,
             IntervalUnit::Hour(_) | IntervalUnit::Hours(_) => Hour,
             IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => Minute,
-            _ => Second,
+            IntervalUnit::Second(_)
+            | IntervalUnit::Seconds(_)
+            | IntervalUnit::Millisecond(_)
+            | IntervalUnit::Milliseconds(_)
+            | IntervalUnit::Microsecond(_)
+            | IntervalUnit::Microseconds(_) => Second,
         };
         let family_fields = if field <= Month {
             &mut year_month_fields
@@ -527,8 +532,9 @@ fn from_ast_multi_unit_interval(
             } else {
                 microseconds
             };
-            // With non-zero values deciding, only zero year-month units may have been written,
-            // as in `'0 years'`. That zero day-time value covers the full day-time range.
+            // With non-zero values deciding, only zero year-month units may have been
+            // written, as in `'0 years 0 months'`. That zero day-time value covers the full
+            // day-time range.
             let (start_field, end_field) = day_time_fields.unwrap_or((Day, Second));
             Ok(IntervalValue::Microsecond {
                 microseconds: n,

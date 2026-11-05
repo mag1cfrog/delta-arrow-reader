@@ -76,6 +76,8 @@ pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
     parse!(s, create_interval_literal_parser)
 }
 
+/// Parses an interval string converted at run time, such as a string cast or a `window`
+/// duration. A multi-unit string chooses its family by non-zero values, unlike a SQL literal.
 pub fn parse_interval(s: &str) -> SqlResult<IntervalValue> {
     parse_unqualified_interval_string(s, false)
 }
