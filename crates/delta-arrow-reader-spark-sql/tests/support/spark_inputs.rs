@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use arrow::array::{ArrayRef, AsArray, MapArray, StructArray, new_empty_array};
 use arrow::buffer::OffsetBuffer;
-use arrow::datatypes::{DataType, Decimal128Type, Field, Schema};
+use arrow::datatypes::{DataType, Decimal128Type, Field, IntervalUnit, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::common::ScalarValue;
 use datafusion::datasource::MemTable;
@@ -24,6 +24,10 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
         Some("long") => DataType::Int64,
         Some("string") => DataType::Utf8,
         Some("binary") => DataType::Binary,
+        // Spark exports every year-month qualifier as one Arrow month count.
+        Some("interval year" | "interval year to month" | "interval month") => {
+            DataType::Interval(IntervalUnit::YearMonth)
+        }
         Some(decimal) if decimal.starts_with("decimal(") && decimal.ends_with(')') => {
             let (precision, scale) = decimal[8..decimal.len() - 1]
                 .split_once(',')
@@ -117,6 +121,9 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
             ScalarValue::Int16(Some(value.as_str().ok_or("missing short")?.parse()?))
         }
         DataType::Int64 => ScalarValue::Int64(Some(value.as_str().ok_or("missing long")?.parse()?)),
+        DataType::Interval(IntervalUnit::YearMonth) => ScalarValue::IntervalYearMonth(Some(
+            value.as_str().ok_or("missing month count")?.parse()?,
+        )),
         DataType::Decimal128(precision, scale) => ScalarValue::Decimal128(
             Some(arrow::compute::kernels::cast_utils::parse_decimal::<
                 Decimal128Type,

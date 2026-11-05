@@ -22,6 +22,7 @@ pub mod spark_try_mult;
 pub mod spark_try_subtract;
 pub mod spark_unhex;
 pub mod spark_uniform;
+pub mod spark_year_month_interval_scale;
 mod utils;
 pub mod xorshift;
 
