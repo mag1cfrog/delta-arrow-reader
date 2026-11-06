@@ -1821,6 +1821,147 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
+    // Cache arguments after input checks, before current-expression previews can replay producers.
+    fn prepare_array_errors_in_string_calls(
+        &self,
+        node: LogicalPlan,
+    ) -> Result<Transformed<LogicalPlan>> {
+        if known_empty(&node)
+            || !node.inputs().iter().try_fold(true, |allowed, input| {
+                Ok::<_, datafusion_common::DataFusionError>(
+                    allowed && input_permits_array_index_preparation(input)?,
+                )
+            })?
+        {
+            return Ok(Transformed::no(node));
+        }
+        let schema = datafusion_expr::utils::merge_schema(&node.inputs());
+        let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+        node.map_expressions(|expr| {
+            let name = names.save(&expr);
+            self.prepare_array_errors_in_string_expression(expr, &schema)
+                .map(|prepared| prepared.update_data(|expr| name.restore(expr)))
+        })
+    }
+
+    fn prepare_array_errors_in_string_expression(
+        &self,
+        expr: Expr,
+        schema: &DFSchema,
+    ) -> Result<Transformed<Expr>> {
+        expr.transform_down(|expr| {
+            let string_call = substring_argument_bodies(&expr)?.is_some();
+            if null_discarded(&expr) || (expr.short_circuits() && !string_call) {
+                return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
+            }
+            if !string_call
+                || !array_index_error_candidate(&expr)?
+                || expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                    if !function.func.inner().supports_constant_folding()))
+                })?
+            {
+                return Ok(Transformed::no(expr));
+            }
+            let Expr::HigherOrderFunction(mut function) = expr else {
+                return Ok(Transformed::no(expr));
+            };
+            let mut changed = false;
+            for argument in &mut function.args {
+                let Expr::Lambda(lambda) = argument else {
+                    continue;
+                };
+                if null_literal(&lambda.body) {
+                    break;
+                }
+                let prepared = self.prepare_array_errors_in_string_expression(
+                    *std::mem::take(&mut lambda.body),
+                    schema,
+                )?;
+                changed |= prepared.transformed;
+                lambda.body = Box::new(prepared.data);
+                if !row_expression(&lambda.body, false)?
+                    || !permits_constant_preparation(&lambda.body)?
+                {
+                    if self.string_result_is_null_on_success(&lambda.body, schema)? {
+                        break;
+                    }
+                    continue;
+                }
+                let (_, field) = lambda.body.to_field(schema)?;
+                let value = match self.eval_constant(&lambda.body)? {
+                    ColumnarValue::Scalar(value) => value,
+                    ColumnarValue::Array(array) if array.len() == 1 => {
+                        ScalarValue::try_from_array(array.as_ref(), 0)?
+                    }
+                    _ => {
+                        return datafusion_common::internal_err!(
+                            "closed string argument returned a result other than one row"
+                        );
+                    }
+                };
+                let is_null = value.is_null();
+                let metadata = (!field.metadata().is_empty())
+                    .then(|| datafusion_common::metadata::FieldMetadata::from(field.as_ref()));
+                let prepared = Expr::Literal(value, metadata);
+                changed |= prepared != *lambda.body;
+                lambda.body = Box::new(prepared);
+                if is_null {
+                    break;
+                }
+            }
+            Ok(Transformed::new(
+                Expr::HigherOrderFunction(function),
+                changed,
+                TreeNodeRecursion::Jump,
+            ))
+        })
+    }
+
+    // NULL on successful completion does not permit dropping earlier fallible or volatile work.
+    fn string_result_is_null_on_success(&self, expr: &Expr, schema: &DFSchema) -> Result<bool> {
+        let expr = without_metadata_annotations(expr);
+        if null_literal(expr) {
+            return Ok(true);
+        }
+        match expr {
+            Expr::Alias(alias) => self.string_result_is_null_on_success(&alias.expr, schema),
+            Expr::Cast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
+            Expr::TryCast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
+            Expr::ScalarFunction(function)
+                if function.func.inner().is::<SparkCastStringToInteger>()
+                    || function.func.inner().is::<SparkCastNumericToInteger>() =>
+            {
+                match function.args.as_slice() {
+                    [input] => self.string_result_is_null_on_success(input, schema),
+                    _ => Ok(false),
+                }
+            }
+            Expr::Case(_) => {
+                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                    .with_schema(Arc::new(schema.clone()))
+                    .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                    .build();
+                let prepared = ExprSimplifier::new(info).simplify_algebraic_once(expr.clone())?;
+                if prepared.transformed {
+                    self.string_result_is_null_on_success(&prepared.data, schema)
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => {
+                if let Some(bodies) = substring_argument_bodies(expr)? {
+                    for body in bodies {
+                        if self.string_result_is_null_on_success(body, schema)? {
+                            return Ok(true);
+                        }
+                    }
+                }
+                Ok(false)
+            }
+        }
+    }
+
     fn simplify_projected_null_comparisons(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         // Expose only known NULLs across aliases; leave other expressions in place
         // so pruning cannot duplicate them or change their evaluation order.
@@ -2155,6 +2296,39 @@ impl Prepare {
         Ok(Transformed::no(node))
     }
 
+    // Keep input folds and their expression-derived declarations before converting local rows.
+    fn simplify_local_input_expressions(
+        &self,
+        input: LogicalPlan,
+    ) -> Result<Transformed<LogicalPlan>> {
+        input.transform_up(|node| {
+            let schema = match &node {
+                LogicalPlan::TableScan(scan) => Arc::new(DFSchema::try_from_qualified_schema(
+                    scan.table_name.clone(),
+                    &scan.source.schema(),
+                )?),
+                _ => Arc::new(datafusion_expr::utils::merge_schema(&node.inputs())),
+            };
+            let info = datafusion_expr::simplify::SimplifyContext::builder()
+                .with_schema(schema)
+                .with_query_execution_start_time(self.props.query_execution_start_time)
+                .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                .build();
+            let simplifier = ExprSimplifier::new(info).with_local_input_errors();
+            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+            let prepared = node.map_expressions(|expr| {
+                let name = names.save(&expr);
+                simplifier
+                    .simplify_with_cycle_count_transformed(expr)
+                    .map(|(prepared, _)| prepared.update_data(|expr| name.restore(expr)))
+            })?;
+            Ok(Transformed::new_transformed(
+                prepared.data.recompute_schema()?,
+                prepared.transformed,
+            ))
+        })
+    }
+
     fn cast_reachability(
         &self,
         plan: LogicalPlan,
@@ -2169,18 +2343,40 @@ impl Prepare {
         // Local VALUES conversion precedes pruning. Empty local inputs never
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
-            .transform_up(|node| {
-                if let LogicalPlan::Projection(project) = &node {
-                    let mut casts = false;
-                    let mut evaluable = true;
+            .transform_up(|mut node| {
+                let mut input_batch = None;
+                let mut casts = false;
+                let mut evaluable = true;
+                let mut retain_input = false;
+                let mut simplified_input = false;
+                if let LogicalPlan::Projection(project) = &mut node {
                     for expr in &project.expr {
                         casts |= early_cast(expr, project.input.schema(), is_spark_query)?;
                         evaluable &= row_expression(expr, true)?;
                     }
-                    if casts
-                        && (evaluable || is_spark_query)
-                        && let Some(batch) = self.local_batch(&project.input)?
-                    {
+                    retain_input = is_spark_query
+                        && self.spark_array_index_errors
+                        && input_permits_array_index_preparation(&project.input)?
+                        && project.expr.iter().try_fold(false, |found, expr| {
+                            Ok::<_, datafusion_common::DataFusionError>(
+                                found
+                                    || expr.exists(|expr| {
+                                        Ok(substring_argument_bodies(expr)?.is_some()
+                                            && array_index_error_candidate(expr)?)
+                                    })?,
+                            )
+                        })?;
+                    if retain_input {
+                        let prepared = self.simplify_local_input_expressions(
+                            Arc::unwrap_or_clone(Arc::clone(&project.input)),
+                        )?;
+                        simplified_input = prepared.transformed;
+                        project.input = Arc::new(prepared.data);
+                    }
+                    if (casts && (evaluable || is_spark_query)) || retain_input {
+                        input_batch = self.local_batch(&project.input)?;
+                    }
+                    if let Some(batch) = &input_batch {
                         if batch.num_rows() == 0 {
                             return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
                                 EmptyRelation {
@@ -2189,6 +2385,70 @@ impl Prepare {
                                 },
                             )));
                         }
+                    }
+                }
+                let mut retained = false;
+                if retain_input
+                    && let Some(batch) = &input_batch
+                    && let LogicalPlan::Projection(project) = &mut node
+                {
+                    let schema = Arc::clone(project.input.schema());
+                    // Consume local conversion once; later previews and execution use inert values.
+                    let input = if schema.fields().is_empty() {
+                        // Values requires a column; an empty projection preserves only row count.
+                        let carrier_schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+                            datafusion::arrow::datatypes::Field::new(
+                                "__spark_input_row",
+                                DataType::Int32,
+                                false,
+                            ),
+                        ]))?);
+                        let carrier = LogicalPlan::Values(datafusion_expr::Values {
+                            schema: carrier_schema,
+                            values: (0..batch.num_rows()).map(|_| vec![lit(0_i32)]).collect(),
+                        });
+                        LogicalPlan::Projection(
+                            datafusion_expr::logical_plan::Projection::try_new_with_schema(
+                                vec![],
+                                Arc::new(carrier),
+                                schema,
+                            )?,
+                        )
+                    } else {
+                        let values =
+                            (0..batch.num_rows())
+                                .map(|row| {
+                                    batch
+                                        .columns()
+                                        .iter()
+                                        .zip(schema.fields())
+                                        .map(|(column, field)| {
+                                            let value =
+                                                ScalarValue::try_from_array(column.as_ref(), row)?;
+                                            let metadata = (!field.metadata().is_empty()).then(|| {
+                                    datafusion_common::metadata::FieldMetadata::from(field.as_ref())
+                                });
+                                            Ok(Expr::Literal(value, metadata))
+                                        })
+                                        .collect::<Result<Vec<_>>>()
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+                        LogicalPlan::Values(datafusion_expr::Values { schema, values })
+                    };
+                    project.input = Arc::new(input);
+                    retained = true;
+                }
+                let prepared = if is_spark_query && self.spark_array_index_errors {
+                    self.prepare_array_errors_in_string_calls(node)?
+                } else {
+                    Transformed::no(node)
+                };
+                let node = prepared.data;
+                if let LogicalPlan::Projection(project) = &node {
+                    if casts
+                        && (evaluable || is_spark_query)
+                        && let Some(batch) = &input_batch
+                    {
                         let info = datafusion_expr::simplify::SimplifyContext::builder()
                             .with_schema(Arc::clone(project.input.schema()))
                             .with_config_options(Arc::new(options.clone()))
@@ -2224,7 +2484,10 @@ impl Prepare {
                         }
                     }
                 }
-                Ok(Transformed::no(node))
+                Ok(Transformed::new_transformed(
+                    node,
+                    prepared.transformed || retained || simplified_input,
+                ))
             })?
             .data;
         let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
