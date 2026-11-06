@@ -581,7 +581,7 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                 .unwrap_or(false)
                 || (spark_query
                     && expr.short_circuits()
-                    && !matches!(&expr, Expr::BinaryExpr(_))
+                    && !matches!(&expr, Expr::BinaryExpr(_) | Expr::HigherOrderFunction(_))
                     && expr.exists(|expr| Ok(!Self::can_evaluate(expr)))?),
         );
         self.conditional.push(
