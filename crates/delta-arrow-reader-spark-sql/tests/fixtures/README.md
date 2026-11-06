@@ -172,7 +172,7 @@ The Rust test continues to replay the committed fixtures.
 ## DATE arithmetic with closed lambda day operands
 
 `date-day-closed-lambda-fields/date-day-closed-lambda-fields-spark.jsonl` contains
-362 Spark 4.2.0 observations of DATE_ADD, DATEADD and DATE_SUB whose day operand is
+366 Spark 4.2.0 observations of DATE_ADD, DATEADD and DATE_SUB whose day operand is
 a closed higher-order expression (#831), with literal, NULL, registered-column,
 empty-table and near-maximum starts, literal-day controls and plain higher-order
 results, including constant lambda bodies, in both ANSI modes.

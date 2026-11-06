@@ -1,22 +1,22 @@
 # DATE arithmetic with closed lambda day operands
 
-`date-day-closed-lambda-fields-spark.jsonl` records 362 observations from Spark
+`date-day-closed-lambda-fields-spark.jsonl` records 366 observations from Spark
 4.2.0, revision `32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1 and
 Python 3.12.14 (#831). The header stores the build properties, capture script hash,
 settings and the registered `day_inputs` and `empty_days` tables. Two captures were
 byte-identical.
 
-The 181 queries run in both ANSI modes in UTC. DATE_ADD, DATEADD and DATE_SUB take
+The 183 queries run in both ANSI modes in UTC. DATE_ADD, DATEADD and DATE_SUB take
 eleven day operands: closed higher-order STRING expressions (`element_at` over
 `transform`, `filter` and comparator `array_sort`, a cast INT result, a NULL, an
 invalid string and a missing index), closed INT results from `transform` and
 `aggregate`, and STRING and INT literal controls. Each runs with a literal start, a
 NULL start, the registered nullable DATE column, an empty table and the day before
 the DATE maximum. Controls add closed higher-order results outside DATE arithmetic
-(including `exists`, `forall`, comparator `array_sort` and `slice` over a lambda),
-lambdas whose body ignores their parameter, failing constant lambda bodies, the
-issue's reproduction verbatim, `array_sort` without a comparator and a LIMIT over a
-lambda.
+(including `exists` and `forall` with TRUE, FALSE and NULL results, comparator
+`array_sort` and `slice` over a lambda), lambdas whose body ignores their parameter,
+failing constant lambda bodies, the issue's reproduction verbatim, `array_sort`
+without a comparator and a LIMIT over a lambda.
 
 Spark never folds a lambda function call, even over constant arrays or with a
 constant body: these results keep their analyzed nullability through optimization

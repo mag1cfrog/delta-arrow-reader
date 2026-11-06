@@ -62,6 +62,9 @@ CONTROLS = [
                            "                element_at(transform(array('1'), x -> x), 1)) AS r"),
     ("exists_nullable", "SELECT exists(array(1, NULL), x -> x > 1) AS r"),
     ("forall_nullable", "SELECT forall(array(1, NULL), x -> x > 0) AS r"),
+    # Definite results over a NULL element keep the nullable field.
+    ("exists_true", "SELECT exists(array(1, NULL), x -> x > 0) AS r"),
+    ("forall_false", "SELECT forall(array(1, NULL), x -> x > 1) AS r"),
     ("sort_comparator", "SELECT array_sort(array(2, 1), "
                         "(l, r) -> CASE WHEN l < r THEN -1 WHEN l > r THEN 1 ELSE 0 END) AS r"),
     # Spark plans ARRAY_SORT without a comparator as a lambda over a default comparator.
