@@ -970,11 +970,7 @@ mod tests {
             ("like", vec!["a", "%"], "a LIKE %"),
             ("LIKE", vec!["s", "pattern"], "s LIKE pattern"),
             ("like", vec!["a%b", "a\\%b", "\\"], "a%b LIKE a\\%b"),
-            (
-                "like",
-                vec!["s", "a!%b", "!"],
-                "s LIKE a!%b ESCAPE '!'",
-            ),
+            ("like", vec!["s", "a!%b", "!"], "s LIKE a!%b ESCAPE '!'"),
             (
                 "like",
                 vec!["a%b", "a'%b", "'"],

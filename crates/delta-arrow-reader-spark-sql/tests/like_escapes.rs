@@ -200,8 +200,9 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                         profile["sql"] == case["sql"]
                             && like_profiles::retained_matches(profile, &observed, &comparison)
                     });
-                    let historical_repaired_preserved =
-                        profile.filter(|_| historical_repaired).is_some_and(|profile| {
+                    let historical_repaired_preserved = profile
+                        .filter(|_| historical_repaired)
+                        .is_some_and(|profile| {
                             let historical_comparison =
                                 like_profiles::compare_spark(case, &profile["actual"]);
                             profile["sql"] == case["sql"]
@@ -215,7 +216,8 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                         historical_repaired && comparison["full_compatibility"] == true;
                     historical_repaired_profiles += usize::from(historical_repaired);
                     strict_arity_matches += usize::from(historical_arity && strict_repaired);
-                    strict_like_name_matches += usize::from(historical_like_name && strict_repaired);
+                    strict_like_name_matches +=
+                        usize::from(historical_like_name && strict_repaired);
                     let matches = if historical_repaired {
                         historical_repaired_preserved && strict_repaired
                     } else if profile.is_some() {
