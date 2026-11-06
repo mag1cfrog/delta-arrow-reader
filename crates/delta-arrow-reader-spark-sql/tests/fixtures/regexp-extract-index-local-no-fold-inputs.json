@@ -1,0 +1,264 @@
+{
+  "native_extension_only": true,
+  "spark_oracle_credit": false,
+  "cases": [
+    {
+      "id": "index_limit_zero",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a','(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_limit_zero",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a','(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_live",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a','(a)','1') AS t(s,p,i)",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_live",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a','(a)','1') AS t(s,p,i)",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_null_source_limit_zero",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES(CAST(NULL AS STRING),'(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_null_source_limit_zero",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES(CAST(NULL AS STRING),'(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_null_pattern_limit_zero",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a',CAST(NULL AS STRING),'1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_null_pattern_limit_zero",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a',CAST(NULL AS STRING),'1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_filter_false",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a','(a)','1') AS t(s,p,i) WHERE false",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "index_filter_false",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS r FROM VALUES('a','(a)','1') AS t(s,p,i) WHERE false",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "mixed_nofold_then_required",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS deferred, regexp_extract(s,p,4294967296L) AS required FROM VALUES('a','(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "mixed_nofold_then_required",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,index_callback(i)) AS deferred, regexp_extract(s,p,4294967296L) AS required FROM VALUES('a','(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "mixed_required_then_nofold",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,4294967296L) AS required, regexp_extract(s,p,index_callback(i)) AS deferred FROM VALUES('a','(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "mixed_required_then_nofold",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,4294967296L) AS required, regexp_extract(s,p,index_callback(i)) AS deferred FROM VALUES('a','(a)','1') AS t(s,p,i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "producer_limit_zero",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,i) AS r FROM (SELECT producer_callback(s) AS s,p,i FROM VALUES('a','(a)','1') AS t(s,p,i)) AS q LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "producer_limit_zero",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,i) AS r FROM (SELECT producer_callback(s) AS s,p,i FROM VALUES('a','(a)','1') AS t(s,p,i)) AS q LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "producer_live",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,i) AS r FROM (SELECT producer_callback(s) AS s,p,i FROM VALUES('a','(a)','1') AS t(s,p,i)) AS q",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "producer_live",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,i) AS r FROM (SELECT producer_callback(s) AS s,p,i FROM VALUES('a','(a)','1') AS t(s,p,i)) AS q",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "producer_filter_false",
+      "surface": "spark_sql",
+      "ansi": false,
+      "sql": "SELECT regexp_extract(s,p,i) AS r FROM (SELECT producer_callback(s) AS s,p,i FROM VALUES('a','(a)','1') AS t(s,p,i)) AS q WHERE false",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "producer_filter_false",
+      "surface": "spark_sql",
+      "ansi": true,
+      "sql": "SELECT regexp_extract(s,p,i) AS r FROM (SELECT producer_callback(s) AS s,p,i FROM VALUES('a','(a)','1') AS t(s,p,i)) AS q WHERE false",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": true
+    },
+    {
+      "id": "standalone_limit_zero",
+      "surface": "standalone_native",
+      "ansi": false,
+      "sql": "SELECT index_callback(i) AS r FROM (VALUES('1')) AS t(i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": false
+    },
+    {
+      "id": "standalone_limit_zero",
+      "surface": "standalone_native",
+      "ansi": true,
+      "sql": "SELECT index_callback(i) AS r FROM (VALUES('1')) AS t(i) LIMIT 0",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": false
+    },
+    {
+      "id": "standalone_live",
+      "surface": "standalone_native",
+      "ansi": false,
+      "sql": "SELECT index_callback(i) AS r FROM (VALUES('1')) AS t(i)",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": false
+    },
+    {
+      "id": "standalone_live",
+      "surface": "standalone_native",
+      "ansi": true,
+      "sql": "SELECT index_callback(i) AS r FROM (VALUES('1')) AS t(i)",
+      "folding": false,
+      "spark_oracle_credit": false,
+      "compatibility_evaluated": false,
+      "ansi_option_applied": false
+    }
+  ],
+  "settings": {
+    "batch_size": 32,
+    "target_partitions": 1
+  },
+  "callbacks": [
+    {
+      "name": "index_callback",
+      "supports_constant_folding": false,
+      "volatility": "Immutable",
+      "type_and_field_policy": "identity"
+    },
+    {
+      "name": "producer_callback",
+      "supports_constant_folding": false,
+      "volatility": "Immutable",
+      "type_and_field_policy": "identity"
+    }
+  ]
+}

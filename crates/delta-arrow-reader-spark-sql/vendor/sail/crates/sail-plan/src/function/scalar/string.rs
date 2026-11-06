@@ -61,6 +61,65 @@ use crate::function::common::{
 use crate::function::scalar::datetime::date_format;
 use crate::function::scalar::lambda::lambda_with_fresh_parameter;
 
+fn regexp_extract(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+    let ScalarFunctionInput {
+        mut arguments,
+        function_context,
+    } = input;
+    if arguments.len() != 3 {
+        return Ok(ScalarUDF::from(SparkRegexpExtract::new()).call(arguments));
+    }
+    let asynchronous = arguments.iter().try_fold(false, |found, argument| {
+        Ok::<_, datafusion_common::DataFusionError>(
+            found
+                || argument.exists(|expression| {
+                    Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                    if function.func.as_async().is_some()))
+                })?,
+        )
+    })?;
+    if asynchronous
+        || !matches!(
+            arguments[2].get_type(function_context.schema)?,
+            DataType::Null
+                | DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::Decimal128(..)
+                | DataType::Decimal256(..)
+                | DataType::Utf8
+                | DataType::LargeUtf8
+                | DataType::Utf8View
+        )
+    {
+        // Preserve the existing native validation/extraction path for other types.
+        return Ok(ScalarUDF::from(SparkRegexpExtract::new()).call(arguments));
+    }
+    let known_null = arguments.iter().any(|argument| {
+        literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
+    });
+    let index = arguments
+        .pop()
+        .ok_or_else(|| PlanError::internal("missing regexp_extract index"))?;
+    let index = cast_string_function_int(
+        index,
+        function_context.schema,
+        function_context.plan_config.ansi_mode,
+        "regexp_extract index",
+    )?;
+    // The existing value kernel consumes Int64 after Spark's INT conversion.
+    arguments.push(cast(index, DataType::Int64));
+    Ok(ScalarUDF::from(
+        SparkRegexpExtract::new()
+            .with_null_short_circuit(known_null)
+            .with_local_index_check(function_context.plan_config.ansi_mode),
+    )
+    .call(arguments))
+}
+
 fn regexp_replace(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     let ScalarFunctionInput {
         mut arguments,
@@ -354,6 +413,77 @@ pub(crate) fn lower_runtime_substring(
     expression: expr::Expr,
 ) -> PlanResult<Transformed<expr::Expr>> {
     substring_lambdas(expression)
+}
+
+pub(crate) fn lower_runtime_regexp_extract(
+    expression: expr::Expr,
+    local_values: bool,
+) -> PlanResult<Transformed<expr::Expr>> {
+    let expr::Expr::ScalarFunction(function) = &expression else {
+        return Ok(Transformed::no(expression));
+    };
+    // Bare calls retain scalar NULL pruning; local VALUES preserve reached arguments.
+    let Some(extract) = function
+        .func
+        .inner()
+        .downcast_ref::<SparkRegexpExtract>()
+        .filter(|extract| {
+            extract.has_null_short_circuit() && (local_values || !extract.has_known_null_argument())
+        })
+    else {
+        return Ok(Transformed::no(expression));
+    };
+    if function.args.len() != 3 {
+        return Ok(Transformed::no(expression));
+    }
+    let literal_int_cast = match &function.args[2] {
+        expr::Expr::Cast(index) if index.field.data_type() == &DataType::Int64 => {
+            let index = without_metadata_annotations(&index.expr);
+            let index = match index {
+                expr::Expr::Cast(identity) if identity.field.data_type() == &DataType::Int32 => {
+                    without_metadata_annotations(&identity.expr)
+                }
+                _ => index,
+            };
+            matches!(index, expr::Expr::ScalarFunction(conversion)
+            if conversion.func.inner().downcast_ref::<SparkCastNumericToInteger>()
+                .is_some_and(|conversion| {
+                    conversion.target_type() == &DataType::Int32 && !conversion.is_try()
+                })
+            && matches!(conversion.args.as_slice(), [expr::Expr::Literal(ScalarValue::Int64(Some(_)), _)]))
+        }
+        _ => false,
+    };
+    if !local_values
+        && extract.requires_local_index_check()
+        && literal_int_cast
+        && function.args[..2].iter().all(|argument| {
+            matches!(
+                literal_value_without_evaluation(argument),
+                Some(
+                    ScalarValue::Utf8(Some(_))
+                        | ScalarValue::LargeUtf8(Some(_))
+                        | ScalarValue::Utf8View(Some(_))
+                )
+            )
+        })
+    {
+        // These non-NULL literals cannot discard the index. Keep the shared cast's
+        // planning failure outside the conditional argument lambda.
+        return Ok(Transformed::no(expression));
+    }
+    let arguments = function
+        .args
+        .iter()
+        .cloned()
+        .map(|argument| lambda_with_fresh_parameter(argument, "_regexp_extract"))
+        .collect::<PlanResult<Vec<_>>>()?;
+    Ok(Transformed::yes(expr::Expr::HigherOrderFunction(
+        expr::HigherOrderFunction::new(
+            Arc::new(HigherOrderUDF::new_from_impl(extract.clone())),
+            arguments,
+        ),
+    )))
 }
 
 fn overlay(mut args: Vec<expr::Expr>) -> PlanResult<expr::Expr> {
@@ -939,7 +1069,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("quote", F::udf(SparkQuote::new())),
         ("randstr", F::udf(Randstr::new())),
         ("regexp_count", F::udf(RegexpCountFunc::new())),
-        ("regexp_extract", F::udf(SparkRegexpExtract::new())),
+        ("regexp_extract", F::custom(regexp_extract)),
         ("regexp_extract_all", F::udf(SparkRegexpExtractAll::new())),
         ("regexp_instr", F::udf(RegexpInstrFunc::new())),
         ("regexp_replace", F::custom(regexp_replace)),
@@ -983,6 +1113,162 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("validate_utf8", F::custom(validate_utf8)),
         ("strpos", F::binary(expr_fn::strpos)),
     ]
+}
+
+#[test]
+fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanResult<()> {
+    for explicit in [true, false] {
+        let index = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+            DataType::Int32,
+            true,
+            false,
+        )?)
+        .call(vec![lit(4294967296_i64)]);
+        let index = cast(
+            if explicit {
+                cast(index, DataType::Int32)
+            } else {
+                index
+            },
+            DataType::Int64,
+        );
+        let extract = SparkRegexpExtract::new()
+            .with_null_short_circuit(false)
+            .with_local_index_check(true);
+        let expression =
+            ScalarUDF::from(extract.clone()).call(vec![lit("ab"), lit("(a)"), index.clone()]);
+        let bare = lower_runtime_regexp_extract(expression.clone(), false)?;
+        assert!(!bare.transformed);
+        let info = SimplifyContext::builder()
+            .with_schema(Arc::new(DFSchema::empty()))
+            .build();
+        let error = ExprSimplifier::new(info)
+            .simplify(bare.data)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.ends_with("Arrow error: Cast error: Can't cast value 4294967296 to type Int32"),
+            "{error}"
+        );
+        assert!(lower_runtime_regexp_extract(expression, true)?.transformed);
+        for (target, value) in [
+            (DataType::Int32, ScalarValue::Float32(Some(f32::NAN))),
+            (DataType::Int32, ScalarValue::Float64(Some(f64::NAN))),
+            (DataType::Int8, ScalarValue::Float64(Some(f64::NAN))),
+            (DataType::Int16, ScalarValue::Float64(Some(f64::NAN))),
+            (DataType::Int64, ScalarValue::Float64(Some(f64::NAN))),
+        ] {
+            let index = ScalarUDF::from(SparkCastNumericToInteger::try_new(target, true, false)?)
+                .call(vec![lit(value)]);
+            let expression = ScalarUDF::from(extract.clone()).call(vec![
+                lit("ab"),
+                lit("(a)"),
+                cast(index, DataType::Int64),
+            ]);
+            assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
+        }
+        for arguments in [
+            vec![datafusion_expr::col("s"), lit("(a)"), index],
+            vec![lit("ab"), lit("(a)"), cast(lit(f64::NAN), DataType::Int64)],
+            vec![
+                lit("ab"),
+                lit("(a)"),
+                cast(
+                    ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                        DataType::Int32,
+                        true,
+                        true,
+                    )?)
+                    .call(vec![lit(4294967296_i64)]),
+                    DataType::Int64,
+                ),
+            ],
+            vec![
+                lit("ab"),
+                lit("(a)"),
+                cast(
+                    ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                        DataType::Int32,
+                        true,
+                        false,
+                    )?)
+                    .call(vec![datafusion_expr::col("i")]),
+                    DataType::Int64,
+                ),
+            ],
+        ] {
+            let expression = ScalarUDF::from(extract.clone()).call(arguments);
+            assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn regexp_extract_known_null_pruning_keeps_local_order_and_type_validation() -> PlanResult<()> {
+    use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
+    use datafusion::physical_expr::create_physical_expr;
+    use datafusion_expr::execution_props::ExecutionProps;
+
+    let schema = Arc::new(DFSchema::empty());
+    let info = SimplifyContext::builder()
+        .with_schema(Arc::clone(&schema))
+        .build();
+    let batch = RecordBatch::try_new_with_options(
+        Arc::clone(schema.inner()),
+        vec![],
+        &RecordBatchOptions::new().with_row_count(Some(1)),
+    )?;
+    for null_index in [true, false] {
+        let extract = SparkRegexpExtract::new()
+            .with_null_short_circuit(true)
+            .with_local_index_check(true);
+        let source = cast(cast(lit("bad"), DataType::Int32), DataType::Utf8);
+        let arguments = vec![
+            source,
+            if null_index {
+                lit("(a)")
+            } else {
+                lit(ScalarValue::Utf8(None))
+            },
+            if null_index {
+                lit(ScalarValue::Int64(None))
+            } else {
+                lit(1_i64)
+            },
+        ];
+        let expression = ScalarUDF::from(extract.clone()).call(arguments);
+        let local = lower_runtime_regexp_extract(expression.clone(), true)?;
+        assert!(local.transformed);
+        let error = ExprSimplifier::new(info.clone())
+            .simplify(local.data)
+            .and_then(|expr| create_physical_expr(&expr, &schema, &ExecutionProps::new()))
+            .and_then(|expr| expr.evaluate(&batch))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.ends_with(
+                "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"
+            ),
+            "{error}"
+        );
+        let lowered = lower_runtime_regexp_extract(expression, false)?;
+        assert!(!lowered.transformed);
+        let simplified = ExprSimplifier::new(info.clone()).simplify(lowered.data)?;
+        assert!(matches!(
+            simplified,
+            expr::Expr::Literal(ScalarValue::Utf8(None), _)
+        ));
+        assert!(
+            extract
+                .simplify(
+                    vec![lit(1_i32), lit("(a)"), lit(ScalarValue::Int64(None))],
+                    &info
+                )
+                .is_err()
+        );
+    }
+    Ok(())
 }
 
 #[test]

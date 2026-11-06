@@ -3,12 +3,16 @@ use std::cmp::Ordering;
 
 use arrow::datatypes::DataType;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
-use datafusion_expr::{ExprSchemable, WindowFrame, WindowFrameBound, WindowFrameUnits, expr};
+use datafusion_expr::{
+    ExprSchemable, ScalarUDF, WindowFrame, WindowFrameBound, WindowFrameUnits, expr,
+};
 use sail_common::spec::{self};
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::math::spark_negative::SparkNegative;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
@@ -16,6 +20,7 @@ use crate::function::common::{FunctionContextInput, WinFunctionInput};
 use crate::function::{get_built_in_window_function, require_deterministic_scalar_expression};
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
+use crate::resolver::expression::sort::sort_order_options;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -48,14 +53,25 @@ impl PlanResolver<'_> {
                 "CLUSTER BY clause in window expression",
             ));
         }
-        let partition_by = self
-            .resolve_expressions(partition_by, schema, state)
+        let (partition_display, partition_by) = self
+            .resolve_expression_arguments(partition_by, schema, state)
             .await?;
         // Spark treats literals as constants in ORDER BY window definition
-        let sorts = self
-            .resolve_sort_orders(order_by, false, schema, state)
-            .await?;
-        let (window, function_name, argument_display_names, is_distinct) = match window_function {
+        let mut order_display_names = Vec::with_capacity(order_by.len());
+        let mut sorts = Vec::with_capacity(order_by.len());
+        for sort in order_by {
+            let (names, expressions) = self
+                .resolve_expression_arguments(vec![*sort.child], schema, state)
+                .await?;
+            let (asc, nulls_first) = sort_order_options(sort.direction, sort.null_ordering);
+            order_display_names.push(names.one()?);
+            sorts.push(expr::Sort {
+                expr: expressions.one()?,
+                asc,
+                nulls_first,
+            });
+        }
+        let (name, window) = match window_function {
             spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
                 function_name,
                 arguments,
@@ -81,7 +97,7 @@ impl PlanResolver<'_> {
                     ));
                 }
                 let canonical_function_name = function_name.to_ascii_lowercase();
-                let (argument_display_names, arguments) = self
+                let (argument_display_names, mut arguments) = self
                     .resolve_expression_arguments(arguments, schema, state)
                     .await?;
                 let function = get_built_in_window_function(&canonical_function_name)?;
@@ -108,16 +124,20 @@ impl PlanResolver<'_> {
                     }
                 }
                 let offset_function = matches!(canonical_function_name.as_str(), "lag" | "lead");
-                if offset_function && let Some(frame) = frame.as_ref() {
-                    self.validate_offset_window_frame(
-                        &canonical_function_name,
-                        &arguments,
-                        frame,
-                        schema,
-                        state,
+                let required_offset = if offset_function && let Some(frame) = frame.as_ref() {
+                    Some(
+                        self.validate_offset_window_frame(
+                            &canonical_function_name,
+                            &arguments,
+                            frame,
+                            schema,
+                            state,
+                        )
+                        .await?,
                     )
-                    .await?;
-                }
+                } else {
+                    None
+                };
                 if sorts.is_empty()
                     && (required_units.is_some()
                         || offset_function
@@ -127,29 +147,131 @@ impl PlanResolver<'_> {
                         "[WINDOW_FUNCTION_FRAME_NOT_ORDERED] {function_name} requires ORDER BY in the window definition"
                     )));
                 }
-                let window_frame = if let Some(frame) = frame {
+                let (mut frame_display, window_frame) = if let Some(frame) = frame {
                     self.resolve_window_frame(frame, &sorts, schema, state)
                         .await?
                 } else if let Some(units) = required_units {
-                    WindowFrame::new_bounds(
+                    let frame = WindowFrame::new_bounds(
                         units,
                         WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
                         WindowFrameBound::CurrentRow,
-                    )
+                    );
+                    (frame.to_string(), frame)
                 } else {
-                    WindowFrame::new((!sorts.is_empty()).then_some(false))
+                    let frame = WindowFrame::new((!sorts.is_empty()).then_some(false));
+                    (frame.to_string(), frame)
                 };
-                let filter = match filter {
+                let (filter_display, filter) = match filter {
                     Some(filter) => {
-                        let filter = self.resolve_expression(*filter, schema, state).await?;
+                        let (names, filters) = self
+                            .resolve_expression_arguments(vec![*filter], schema, state)
+                            .await?;
+                        let filter = filters.one()?;
                         if filter.get_type(schema)? != DataType::Boolean {
                             return Err(PlanError::invalid("window FILTER requires BOOLEAN"));
                         }
                         require_deterministic_scalar_expression(&filter, "window FILTER")?;
-                        Some(Box::new(filter))
+                        (Some(names.one()?), Some(Box::new(filter)))
                     }
-                    None => None,
+                    None => (None, None),
                 };
+                if offset_function && required_offset.is_none() {
+                    let preflight_input = WinFunctionInput {
+                        arguments: arguments.clone(),
+                        partition_by: partition_by.clone(),
+                        order_by: sorts.clone(),
+                        window_frame: window_frame.clone(),
+                        ignore_nulls,
+                        distinct: is_distinct,
+                        filter: filter.clone(),
+                        function_context: FunctionContextInput {
+                            argument_display_names: &argument_display_names,
+                            plan_config: &self.config,
+                            session_context: self.ctx,
+                            schema,
+                        },
+                    };
+                    function(preflight_input)?;
+                }
+                if offset_function {
+                    let required = match required_offset {
+                        Some(required) => required,
+                        None => self.resolve_offset_window_boundary(
+                            &canonical_function_name,
+                            &arguments,
+                            schema,
+                        )?,
+                    };
+                    let offset_display = if canonical_function_name == "lag" {
+                        if let Some(offset) = arguments.get_mut(1) {
+                            // Reuse this fold instead of invoking the offset again during execution.
+                            *offset = ScalarUDF::from(SparkNegative::new(self.config.ansi_mode))
+                                .call(vec![required.clone()]);
+                        }
+                        let expr::Expr::Literal(value, _) = required else {
+                            return Err(PlanError::invalid("literal LAG frame boundary expected"));
+                        };
+                        SparkPlanFormatter
+                            .literal_to_string(&value, &self.config.session_timezone)?
+                    } else {
+                        argument_display_names
+                            .get(1)
+                            .cloned()
+                            .unwrap_or_else(|| "1".into())
+                    };
+                    frame_display = format!(
+                        "ROWS BETWEEN {offset_display} FOLLOWING AND {offset_display} FOLLOWING"
+                    );
+                }
+                let nth_value_ignore_nulls = canonical_function_name == "nth_value"
+                    && if arguments.len() == 3 {
+                        matches!(
+                            &arguments[2],
+                            expr::Expr::Literal(ScalarValue::Boolean(Some(true)), _)
+                        )
+                    } else {
+                        ignore_nulls == Some(true)
+                    };
+                let mut display_arguments = argument_display_names
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                if offset_function {
+                    if display_arguments.len() == 1 {
+                        display_arguments.push("1");
+                    }
+                    if display_arguments.len() == 2 {
+                        display_arguments.push("NULL");
+                    }
+                } else if canonical_function_name == "nth_value" {
+                    display_arguments.truncate(2);
+                }
+                let display_function_name = match canonical_function_name.as_str() {
+                    "rank" => "RANK",
+                    "dense_rank" => "DENSE_RANK",
+                    "percent_rank" => "PERCENT_RANK",
+                    name => name,
+                };
+                let name = SparkPlanFormatter
+                    .function_to_string(display_function_name, display_arguments, is_distinct)
+                    .map(|mut function_display| {
+                        if nth_value_ignore_nulls {
+                            function_display.push_str(" ignore nulls");
+                        }
+                        if let Some(filter) = filter_display {
+                            function_display.push_str(&format!(" FILTER (WHERE {filter})"));
+                        }
+                        SparkPlanFormatter.window_expression_to_string(
+                            &function_display,
+                            &partition_display,
+                            &order_display_names
+                                .iter()
+                                .zip(&sorts)
+                                .map(|(name, sort)| (name.as_str(), sort))
+                                .collect::<Vec<_>>(),
+                            &frame_display,
+                        )
+                    });
                 let input = WinFunctionInput {
                     arguments,
                     partition_by,
@@ -165,12 +287,8 @@ impl PlanResolver<'_> {
                         schema,
                     },
                 };
-                (
-                    function(input)?,
-                    function_name,
-                    argument_display_names,
-                    is_distinct,
-                )
+                let window = function(input)?;
+                (name?, window)
             }
             spec::Expr::CommonInlineUserDefinedFunction { .. } => {
                 return Err(PlanError::unsupported(
@@ -184,30 +302,20 @@ impl PlanResolver<'_> {
             }
         };
 
-        let name = SparkPlanFormatter.function_to_string(
-            function_name.as_str(),
-            argument_display_names.iter().map(|x| x.as_str()).collect(),
-            is_distinct,
-        )?;
         Ok(NamedExpr::new(vec![name], window))
     }
 
-    async fn validate_offset_window_frame(
+    fn resolve_offset_window_boundary(
         &self,
         function_name: &str,
         arguments: &[expr::Expr],
-        frame: &spec::WindowFrame,
         schema: &DFSchemaRef,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<()> {
+    ) -> PlanResult<expr::Expr> {
         let mismatch = || {
             PlanError::invalid(format!(
                 "[WINDOW_OFFSET_FRAME_MISMATCH] {function_name} frame must match its offset expression"
             ))
         };
-        if frame.frame_type != spec::WindowFrameType::Row {
-            return Err(mismatch());
-        }
         let offset = arguments
             .get(1)
             .cloned()
@@ -216,21 +324,56 @@ impl PlanResolver<'_> {
             || !offset.column_refs().is_empty()
             || offset.contains_outer()
             || offset.contains_scalar_subquery()
+            || offset.exists(|expression| {
+                Ok(match expression {
+                    expr::Expr::ScalarFunction(function) => {
+                        !function.func.inner().supports_constant_folding()
+                    }
+                    expr::Expr::HigherOrderFunction(function) => {
+                        !function.func.supports_constant_folding()
+                    }
+                    _ => false,
+                })
+            })?
         {
             return Err(mismatch());
         }
         // Spark folds LAG's negated offset but compares frame expressions before
         // folding them. Numerically equal frame expressions can still be invalid.
-        let required = if function_name == "lag" {
+        if function_name == "lag" {
             let context = SimplifyContextBuilder::default()
                 .with_schema(schema.clone())
                 .build();
-            let coerced = ExprSimplifier::new(context)
-                .coerce(expr::Expr::Negative(Box::new(offset)), schema)?;
-            expr::Expr::Literal(LiteralEvaluator::new().evaluate(&coerced)?, None)
+            let negative =
+                ScalarUDF::from(SparkNegative::new(self.config.ansi_mode)).call(vec![offset]);
+            let coerced = ExprSimplifier::new(context).coerce(negative, schema)?;
+            Ok(expr::Expr::Literal(
+                LiteralEvaluator::new().evaluate(&coerced)?,
+                None,
+            ))
         } else {
-            offset
+            Ok(offset)
+        }
+    }
+
+    /// Returns the function-required boundary after validating the supplied frame.
+    async fn validate_offset_window_frame(
+        &self,
+        function_name: &str,
+        arguments: &[expr::Expr],
+        frame: &spec::WindowFrame,
+        schema: &DFSchemaRef,
+        state: &mut PlanResolverState,
+    ) -> PlanResult<expr::Expr> {
+        let mismatch = || {
+            PlanError::invalid(format!(
+                "[WINDOW_OFFSET_FRAME_MISMATCH] {function_name} frame must match its offset expression"
+            ))
         };
+        if frame.frame_type != spec::WindowFrameType::Row {
+            return Err(mismatch());
+        }
+        let required = self.resolve_offset_window_boundary(function_name, arguments, schema)?;
         for boundary in [&frame.lower, &frame.upper] {
             let actual = match boundary {
                 spec::WindowFrameBoundary::Preceding(value) => expr::Expr::Negative(Box::new(
@@ -248,7 +391,7 @@ impl PlanResolver<'_> {
                 return Err(mismatch());
             }
         }
-        Ok(())
+        Ok(required)
     }
 
     async fn resolve_window_frame(
@@ -257,7 +400,7 @@ impl PlanResolver<'_> {
         order_by: &[expr::Sort],
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<WindowFrame> {
+    ) -> PlanResult<(String, WindowFrame)> {
         use spec::WindowFrameType;
 
         let spec::WindowFrame {
@@ -280,9 +423,12 @@ impl PlanResolver<'_> {
             }
             // Native RANGE coercion requires an order key; the whole partition
             // has identical membership under ROWS when no key exists.
-            return Ok(WindowFrame::new(None));
+            return Ok((
+                "RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING".into(),
+                WindowFrame::new(None),
+            ));
         }
-        let (start, end) = match units {
+        let ((lower_display, start), (upper_display, end)) = match units {
             WindowFrameUnits::Rows | WindowFrameUnits::Groups => (
                 self.resolve_window_boundary_offset(lower, schema, state)
                     .await?,
@@ -303,7 +449,10 @@ impl PlanResolver<'_> {
                 frame.start_bound, frame.end_bound,
             )));
         }
-        Ok(frame)
+        Ok((
+            format!("{units} BETWEEN {lower_display} AND {upper_display}"),
+            frame,
+        ))
     }
 
     async fn resolve_window_boundary(
@@ -311,13 +460,14 @@ impl PlanResolver<'_> {
         expr: spec::Expr,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<ScalarValue> {
-        if let spec::Expr::Literal(value) = expr {
-            return self.resolve_literal(value, state);
-        }
-        let resolved = self.resolve_expression(expr, schema, state).await?;
+    ) -> PlanResult<(String, ScalarValue)> {
+        let (names, expressions) = self
+            .resolve_expression_arguments(vec![expr], schema, state)
+            .await?;
+        let name = names.one()?;
+        let resolved = expressions.one()?;
         if let datafusion_expr::Expr::Literal(scalar, _) = resolved {
-            return Ok(scalar);
+            return Ok((name, scalar));
         }
         // Apply type coercion so that expressions like `CAST(0 AS INTERVAL SECOND)`
         // have compatible types before physical evaluation.
@@ -331,11 +481,12 @@ impl PlanResolver<'_> {
             ))
         })?;
         let evaluator = LiteralEvaluator::new();
-        evaluator.evaluate(&coerced).map_err(|e| {
+        let value = evaluator.evaluate(&coerced).map_err(|e| {
             PlanError::invalid(format!(
                 "window boundary must be a constant expression: {e}"
             ))
-        })
+        })?;
+        Ok((name, value))
     }
 
     async fn resolve_window_boundary_offset(
@@ -343,50 +494,49 @@ impl PlanResolver<'_> {
         value: spec::WindowFrameBoundary,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<WindowFrameBound> {
+    ) -> PlanResult<(String, WindowFrameBound)> {
         let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
         match value {
-            spec::WindowFrameBoundary::CurrentRow => Ok(WindowFrameBound::CurrentRow),
-            spec::WindowFrameBoundary::UnboundedPreceding => {
-                Ok(WindowFrameBound::Preceding(ScalarValue::UInt64(None)))
+            spec::WindowFrameBoundary::CurrentRow => {
+                Ok(("CURRENT ROW".into(), WindowFrameBound::CurrentRow))
             }
-            spec::WindowFrameBoundary::UnboundedFollowing => {
-                Ok(WindowFrameBound::Following(ScalarValue::UInt64(None)))
-            }
+            spec::WindowFrameBoundary::UnboundedPreceding => Ok((
+                "UNBOUNDED PRECEDING".into(),
+                WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+            )),
+            spec::WindowFrameBoundary::UnboundedFollowing => Ok((
+                "UNBOUNDED FOLLOWING".into(),
+                WindowFrameBound::Following(ScalarValue::UInt64(None)),
+            )),
             spec::WindowFrameBoundary::Preceding(expr)
             | spec::WindowFrameBoundary::Following(expr) => {
-                let value = self.resolve_window_boundary(*expr, schema, state).await?;
+                let (display, value) = self.resolve_window_boundary(*expr, schema, state).await?;
                 let ScalarValue::Int64(Some(offset)) = value.cast_to(&DataType::Int64)? else {
                     return Err(PlanError::invalid("invalid window boundary offset"));
                 };
-                if offset == 0 {
-                    Ok(WindowFrameBound::CurrentRow)
+                let bound = if offset == 0 {
+                    WindowFrameBound::CurrentRow
                 } else if preceding == (offset > 0) {
-                    Ok(WindowFrameBound::Preceding(ScalarValue::UInt64(Some(
-                        offset.unsigned_abs(),
-                    ))))
+                    WindowFrameBound::Preceding(ScalarValue::UInt64(Some(offset.unsigned_abs())))
                 } else {
-                    Ok(WindowFrameBound::Following(ScalarValue::UInt64(Some(
-                        offset.unsigned_abs(),
-                    ))))
-                }
+                    WindowFrameBound::Following(ScalarValue::UInt64(Some(offset.unsigned_abs())))
+                };
+                let direction = if preceding { "PRECEDING" } else { "FOLLOWING" };
+                Ok((format!("{display} {direction}"), bound))
             }
             spec::WindowFrameBoundary::Value(expr) => {
-                let value = self.resolve_window_boundary(*expr, schema, state).await?;
+                let (_, value) = self.resolve_window_boundary(*expr, schema, state).await?;
                 let ScalarValue::Int64(Some(value)) = value.cast_to(&DataType::Int64)? else {
                     return Err(PlanError::invalid("invalid window boundary offset"));
                 };
-                match value {
-                    i64::MIN => Ok(WindowFrameBound::Preceding(ScalarValue::UInt64(None))),
-                    i64::MAX => Ok(WindowFrameBound::Following(ScalarValue::UInt64(None))),
-                    0 => Ok(WindowFrameBound::CurrentRow),
-                    x if x < 0 => Ok(WindowFrameBound::Preceding(ScalarValue::UInt64(Some(
-                        -x as u64,
-                    )))),
-                    x => Ok(WindowFrameBound::Following(ScalarValue::UInt64(Some(
-                        x as u64,
-                    )))),
-                }
+                let bound = match value {
+                    i64::MIN => WindowFrameBound::Preceding(ScalarValue::UInt64(None)),
+                    i64::MAX => WindowFrameBound::Following(ScalarValue::UInt64(None)),
+                    0 => WindowFrameBound::CurrentRow,
+                    x if x < 0 => WindowFrameBound::Preceding(ScalarValue::UInt64(Some(-x as u64))),
+                    x => WindowFrameBound::Following(ScalarValue::UInt64(Some(x as u64))),
+                };
+                Ok((bound.to_string(), bound))
             }
         }
     }
@@ -397,7 +547,7 @@ impl PlanResolver<'_> {
         order_by: &[expr::Sort],
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
-    ) -> PlanResult<WindowFrameBound> {
+    ) -> PlanResult<(String, WindowFrameBound)> {
         // Helper to get the data type from the order_by expression for casting
         let get_order_by_type = || -> PlanResult<DataType> {
             let [order_by] = order_by else {
@@ -417,16 +567,22 @@ impl PlanResolver<'_> {
             Ok(field.data_type().clone())
         };
 
+        let preceding = matches!(value, spec::WindowFrameBoundary::Preceding(_));
         match value {
-            spec::WindowFrameBoundary::CurrentRow => Ok(WindowFrameBound::CurrentRow),
-            spec::WindowFrameBoundary::UnboundedPreceding => {
-                Ok(WindowFrameBound::Preceding(ScalarValue::Null))
+            spec::WindowFrameBoundary::CurrentRow => {
+                Ok(("CURRENT ROW".into(), WindowFrameBound::CurrentRow))
             }
-            spec::WindowFrameBoundary::UnboundedFollowing => {
-                Ok(WindowFrameBound::Following(ScalarValue::Null))
-            }
-            spec::WindowFrameBoundary::Preceding(expr) => {
-                let value = self.resolve_window_boundary(*expr, schema, state).await?;
+            spec::WindowFrameBoundary::UnboundedPreceding => Ok((
+                "UNBOUNDED PRECEDING".into(),
+                WindowFrameBound::Preceding(ScalarValue::Null),
+            )),
+            spec::WindowFrameBoundary::UnboundedFollowing => Ok((
+                "UNBOUNDED FOLLOWING".into(),
+                WindowFrameBound::Following(ScalarValue::Null),
+            )),
+            spec::WindowFrameBoundary::Preceding(expr)
+            | spec::WindowFrameBoundary::Following(expr) => {
+                let (display, value) = self.resolve_window_boundary(*expr, schema, state).await?;
                 // Cast numeric boundaries to match the ORDER BY type.
                 // Non-numeric boundaries (e.g. INTERVAL for TIMESTAMP ORDER BY) are left as-is
                 // since DataFusion handles interval arithmetic directly.
@@ -436,20 +592,15 @@ impl PlanResolver<'_> {
                 } else {
                     value
                 };
-                Ok(WindowFrameBound::Preceding(value))
-            }
-            spec::WindowFrameBoundary::Following(expr) => {
-                let value = self.resolve_window_boundary(*expr, schema, state).await?;
-                let data_type = get_order_by_type()?;
-                let value = if data_type.is_numeric() {
-                    value.cast_to(&data_type)?
+                let (direction, bound) = if preceding {
+                    ("PRECEDING", WindowFrameBound::Preceding(value))
                 } else {
-                    value
+                    ("FOLLOWING", WindowFrameBound::Following(value))
                 };
-                Ok(WindowFrameBound::Following(value))
+                Ok((format!("{display} {direction}"), bound))
             }
             spec::WindowFrameBoundary::Value(expr) => {
-                let value = self.resolve_window_boundary(*expr, schema, state).await?;
+                let (_, value) = self.resolve_window_boundary(*expr, schema, state).await?;
                 if value.is_null() {
                     Err(PlanError::invalid("window boundary value cannot be null"))
                 } else {
@@ -460,17 +611,20 @@ impl PlanResolver<'_> {
                         value
                     };
                     let zero = ScalarValue::new_zero(&data_type)?;
-                    match value.partial_cmp(&zero) {
-                        None => Err(PlanError::invalid(
-                            "cannot compare window boundary value with zero",
-                        )),
+                    let bound = match value.partial_cmp(&zero) {
+                        None => {
+                            return Err(PlanError::invalid(
+                                "cannot compare window boundary value with zero",
+                            ));
+                        }
                         Some(Ordering::Less) => {
                             let value = value.arithmetic_negate()?;
-                            Ok(WindowFrameBound::Preceding(value))
+                            WindowFrameBound::Preceding(value)
                         }
-                        Some(Ordering::Greater) => Ok(WindowFrameBound::Following(value)),
-                        Some(Ordering::Equal) => Ok(WindowFrameBound::CurrentRow),
-                    }
+                        Some(Ordering::Greater) => WindowFrameBound::Following(value),
+                        Some(Ordering::Equal) => WindowFrameBound::CurrentRow,
+                    };
+                    Ok((bound.to_string(), bound))
                 }
             }
         }

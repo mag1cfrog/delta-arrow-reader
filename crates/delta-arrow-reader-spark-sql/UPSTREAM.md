@@ -761,8 +761,33 @@ NULL results from its argument fields. The existing native regex memo compiles
 patterns only for non-NULL rows; group-index validation follows a successful
 match. Parser errors retain the native cause. The
 [extraction references](tests/fixtures/README.md#regular-expression-extraction)
-cover supported patterns, Spark INT indices and evaluation boundaries.
-BIGINT-to-INT index narrowing remains separate argument-coercion work.
+cover supported patterns, index conversion and evaluation boundaries.
+Supported index arguments use the existing shared Spark INT conversion builder,
+then widen to the Int64 input required by the regex kernel. This adaptation is
+local to REGEXP_EXTRACT. Shared legacy BIGINT conversion uses Spark's low-32-bit
+narrowing, and ANSI conversion checks overflow. Floating indices, including
+legacy NaN and Infinity, also use the shared converter. Primitive overflow and
+group identifiers match in the fixed `4847e810` replay under the separate
+`ab858ce4` comparison contract. It measures 960 strict matches and 48 phase-only
+negatives among 1,008 index contexts, with all 342 existing stage contracts
+unchanged. Historical captures and their observer grades keep their original
+source attribution. The remaining phase work stays under #788/#1036.
+
+Local VALUES inputs retain reached source work before index conversion. Bare
+known-NULL calls can prune unused arguments after type validation. Shared casts
+required by CSE remain evaluated even when extraction sources are NULL. Native
+callback controls preserve selection and producer folding permissions; async
+arguments retain the existing scalar fallback. A separate current async fixture
+preserves all six whole observations; the frozen be21 fixture and header remain
+unchanged. Scalar-parent and CAST-only planning callbacks remain under #893.
+Broader C06 acceptance also retains ARRAY declarations under #1000 and public
+names under #1042/#778. The references compare the native
+public resolved query schema, captured before the DataFusion session analyzer
+and optimizer under `analyzed_schema`, with Spark's analyzed declaration, and
+compare physical declarations separately. Exact incompatible observations remain
+separate from strict matches.
+Invalid constant VALUES cells retain the inline-table wrapper and underlying
+conversion cause during resolution, including when outer operators discard rows.
 Java-only pattern syntax, including lookbehind, remains a separate engine
 limitation under #779.
 
@@ -899,6 +924,9 @@ The default-true UDF folding capability is separate from volatility and delegate
 through aliases. Optimizer ancestor folding and successful Spark constant STRUCT
 preparation honor descendant opt-outs. Spark-marked ARRAY/STRUCT parents retain
 their complete child declarations before children fold; native defaults remain.
+The bounded local cast preview honors expression and input-producer opt-outs
+before physical evaluation and retains checks for eligible projection siblings.
+Scalar-parent and CAST-only planning callbacks retain the separate #893 gap.
 
 The result-field adapter prepares its owned whole operands without descending
 into user conditional branches. This retains required constant cast errors even

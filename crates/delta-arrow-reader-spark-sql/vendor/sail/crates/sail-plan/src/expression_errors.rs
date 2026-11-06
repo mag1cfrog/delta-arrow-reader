@@ -32,11 +32,11 @@ use crate::function::result_coercion::{
 };
 use crate::function::scalar::SparkArraySlice;
 use crate::function::scalar::conditional::SparkNullIf;
-use crate::function::scalar::lower_runtime_substring;
 use crate::function::scalar::math::{
     FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
     SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
 };
+use crate::function::scalar::{lower_runtime_regexp_extract, lower_runtime_substring};
 use crate::function::scalar::{
     preserve_local_case_conversion, simplify_projected_case_conversions,
 };
@@ -63,6 +63,7 @@ use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToIntege
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+use sail_function::scalar::string::spark_regexp_extract_all::SparkRegexpExtract;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -409,7 +410,7 @@ impl PrepareSparkExpressions {
             .get::<SparkSqlExpressionSemantics>()
             .is_some();
         let plan = if is_spark_query {
-            preserve_local_case_conversions(preserve_local_substrings(plan)?)?
+            preserve_local_case_conversions(preserve_local_string_arguments(plan)?)?
         } else {
             plan
         };
@@ -1082,7 +1083,7 @@ struct Prepare {
 
 // Preserve the early local row-evaluation boundary before logical folding.
 // The classification never evaluates rows or callbacks.
-fn preserve_local_substrings(plan: LogicalPlan) -> Result<LogicalPlan> {
+fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
     fn expressions(exprs: &[Expr], columns: bool) -> Result<bool> {
         exprs.iter().try_fold(true, |local, expr| {
             Ok(local && row_expression_with_volatile(expr, columns, true)?)
@@ -1119,22 +1120,37 @@ fn preserve_local_substrings(plan: LogicalPlan) -> Result<LogicalPlan> {
     }
     Ok(plan
         .transform_up_with_subqueries(|node| {
-            let local = match &node {
-                LogicalPlan::Projection(project) => local_input(&project.input)?,
-                LogicalPlan::Filter(filter) => local_input(&filter.input)?,
-                _ => false,
+            let input = match &node {
+                LogicalPlan::Projection(project) => Some(&project.input),
+                LogicalPlan::Filter(filter) => Some(&filter.input),
+                _ => None,
             };
-            if !local {
+            let Some(input) = input else {
+                return Ok(Transformed::no(node));
+            };
+            if !local_input(input)? {
                 return Ok(Transformed::no(node));
             }
+            let local_values = input.exists(|node| Ok(matches!(node, LogicalPlan::Values(_))))?;
             let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
             node.map_expressions(|expression| {
                 let name = names.save(&expression);
                 expression
                     .transform_up(|expression| {
-                        lower_runtime_substring(expression).map_err(|error| {
-                            datafusion_common::DataFusionError::External(Box::new(error))
-                        })
+                        lower_runtime_substring(expression)
+                            .and_then(|substring| {
+                                lower_runtime_regexp_extract(substring.data, local_values).map(
+                                    |extract| {
+                                        Transformed::new_transformed(
+                                            extract.data,
+                                            substring.transformed || extract.transformed,
+                                        )
+                                    },
+                                )
+                            })
+                            .map_err(|error| {
+                                datafusion_common::DataFusionError::External(Box::new(error))
+                            })
                     })
                     .map(|expression| expression.update_data(|expression| name.restore(expression)))
             })
@@ -1167,6 +1183,24 @@ pub(crate) fn prune_retained_local_like_limits(
         .data)
 }
 
+fn forbids_local_planning(expr: &Expr) -> Result<bool> {
+    expr.exists(|expr| {
+        Ok(matches!(expr, Expr::ScalarFunction(function)
+            if !function.func.inner().supports_constant_folding()))
+    })
+}
+
+fn input_forbids_local_planning(input: &LogicalPlan) -> Result<bool> {
+    input.exists(|node| {
+        let mut forbidden = false;
+        node.apply_expressions(|expr| {
+            forbidden |= forbids_local_planning(expr)?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(forbidden)
+    })
+}
+
 // Check errors using discarded local rows. True means local interpretation
 // consumed this expression, including an empty input; false means ineligible.
 // No table scan or volatile expression is executed; no rows enter the real plan.
@@ -1178,24 +1212,7 @@ pub(crate) fn try_check_local_row_errors(
     if !input.exists(|node| Ok(matches!(node, LogicalPlan::Values(_))))? {
         return Ok(false);
     }
-    // This LIKE-only preview must honor UDF planning permissions before the
-    // local evaluator visits any input projection, even below an empty filter.
-    let forbids_planning = |expr: &Expr| {
-        expr.exists(|expr| {
-            Ok(matches!(expr, Expr::ScalarFunction(function)
-                if !function.func.inner().supports_constant_folding()))
-        })
-    };
-    if forbids_planning(expr)?
-        || input.exists(|node| {
-            let mut forbidden = false;
-            node.apply_expressions(|expr| {
-                forbidden |= forbids_planning(expr)?;
-                Ok(TreeNodeRecursion::Continue)
-            })?;
-            Ok(forbidden)
-        })?
-    {
+    if forbids_local_planning(expr)? || input_forbids_local_planning(input)? {
         return Ok(false);
     }
     // Spark resolves its query clock before local interpretation. Lower only
@@ -1246,10 +1263,11 @@ pub(crate) fn try_check_local_row_errors(
     Ok(true)
 }
 
-// Only substring's three closed argument lambdas participate in early local
-// conversion. Other higher-order functions retain their existing preparation.
-fn substring_argument_bodies(expr: &Expr) -> Result<Option<[&Expr; 3]>> {
-    SparkSubstring::closed_argument_bodies(expr)
+// Only the two opted-in string implementations admit three closed arguments.
+// Other higher-order functions retain their existing preparation.
+fn local_string_argument_bodies(expr: &Expr) -> Result<Option<[&Expr; 3]>> {
+    Ok(SparkSubstring::closed_argument_bodies(expr)?
+        .or(SparkRegexpExtract::closed_argument_bodies(expr)?))
 }
 
 // Physical row expressions only; aggregates, subqueries and outer references
@@ -1262,7 +1280,7 @@ pub(crate) fn row_expression(expr: &Expr, columns: bool) -> Result<bool> {
 fn row_expression_with_volatile(expr: &Expr, columns: bool, allow_volatile: bool) -> Result<bool> {
     let mut eligible = true;
     expr.apply(|node| {
-        if let Some(bodies) = substring_argument_bodies(node)? {
+        if let Some(bodies) = local_string_argument_bodies(node)? {
             for body in bodies {
                 if !row_expression_with_volatile(body, columns, allow_volatile)? {
                     eligible = false;
@@ -1324,7 +1342,7 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         lambda(lit(1_i64)),
         lambda(lit(2_i64)),
     ]);
-    assert!(substring_argument_bodies(&closed)?.is_some());
+    assert!(local_string_argument_bodies(&closed)?.is_some());
     assert!(row_expression(&closed, false)?);
     let column = wrapper(vec![
         lambda(col("s")),
@@ -1346,7 +1364,7 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         ],
     ] {
         let malformed = wrapper(arguments);
-        assert!(substring_argument_bodies(&malformed)?.is_none());
+        assert!(local_string_argument_bodies(&malformed)?.is_none());
         assert!(!row_expression(&malformed, true)?);
     }
     let volatile = create_udf(
@@ -1361,7 +1379,7 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         lambda(lit(1_i64)),
         lambda(lit(2_i64)),
     ]);
-    assert!(substring_argument_bodies(&volatile)?.is_some());
+    assert!(local_string_argument_bodies(&volatile)?.is_some());
     assert!(!row_expression(&volatile, true)?);
     assert!(row_expression_with_volatile(&volatile, true, true)?);
     let other = Expr::HigherOrderFunction(HigherOrderFunction::new(
@@ -1370,7 +1388,7 @@ fn substring_preparation_requires_closed_arguments_and_pure_bodies() -> Result<(
         ))),
         vec![lambda(lit("UTC")), lambda(lit("UTC")), lambda(lit(1_i64))],
     ));
-    assert!(substring_argument_bodies(&other)?.is_none());
+    assert!(local_string_argument_bodies(&other)?.is_none());
     assert!(!row_expression(&other, true)?);
     Ok(())
 }
@@ -1961,7 +1979,7 @@ impl Prepare {
         schema: &DFSchema,
     ) -> Result<Transformed<Expr>> {
         expr.transform_down(|expr| {
-            let string_call = substring_argument_bodies(&expr)?.is_some();
+            let string_call = local_string_argument_bodies(&expr)?.is_some();
             if null_discarded(&expr) || (expr.short_circuits() && !string_call) {
                 return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
             }
@@ -2114,7 +2132,7 @@ impl Prepare {
                 }
             }
             _ => {
-                if let Some(bodies) = substring_argument_bodies(expr)? {
+                if let Some(bodies) = local_string_argument_bodies(expr)? {
                     for body in bodies {
                         if self.string_result_is_null_on_success(body, schema)? {
                             return Ok(true);
@@ -2534,7 +2552,7 @@ impl Prepare {
                             Ok::<_, datafusion_common::DataFusionError>(
                                 found
                                     || expr.exists(|expr| {
-                                        Ok(substring_argument_bodies(expr)?.is_some()
+                                        Ok(local_string_argument_bodies(expr)?.is_some()
                                             && array_index_error_candidate(expr)?)
                                     })?,
                             )
@@ -2546,7 +2564,9 @@ impl Prepare {
                         simplified_input = prepared.transformed;
                         project.input = Arc::new(prepared.data);
                     }
-                    if (casts && (evaluable || is_spark_query)) || retain_input {
+                    if ((casts && (evaluable || is_spark_query)) || retain_input)
+                        && !input_forbids_local_planning(&project.input)?
+                    {
                         input_batch = self.local_batch(&project.input)?;
                     }
                     if let Some(batch) = &input_batch
@@ -2615,6 +2635,50 @@ impl Prepare {
                     Transformed::no(node)
                 };
                 let node = prepared.data;
+                if let LogicalPlan::Projection(project) = &node {
+                    if is_spark_query && early_local_relation(&project.input)? {
+                        for expr in &project.expr {
+                            let mut expression = without_metadata_annotations(expr);
+                            while let Expr::Alias(alias) = expression {
+                                expression = without_metadata_annotations(&alias.expr);
+                            }
+                            let Expr::HigherOrderFunction(function) = expression else {
+                                continue;
+                            };
+                            let Some(extract) = (function.func.inner().as_ref()
+                                as &dyn std::any::Any)
+                                .downcast_ref::<SparkRegexpExtract>()
+                            else {
+                                continue;
+                            };
+                            let empty = known_empty(&project.input);
+                            if !empty && !extract.requires_local_index_check() {
+                                continue;
+                            }
+                            let Some([source, pattern, index]) =
+                                SparkRegexpExtract::closed_argument_bodies(expression)?
+                            else {
+                                continue;
+                            };
+                            // Keep earlier local input work and NULL selection before index conversion.
+                            let index = datafusion_expr::when(
+                                source.clone().is_null().or(pattern.clone().is_null()),
+                                lit(ScalarValue::Int64(None)),
+                            )
+                            .otherwise(index.clone())?;
+                            if try_check_local_row_errors(&index, &project.input, &self.props)?
+                                && empty
+                            {
+                                return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                                    EmptyRelation {
+                                        produce_one_row: false,
+                                        schema: Arc::clone(&project.schema),
+                                    },
+                                )));
+                            }
+                        }
+                    }
+                }
                 if let LogicalPlan::Projection(project) = &node
                     && casts
                     && (evaluable || is_spark_query)
@@ -2629,7 +2693,7 @@ impl Prepare {
                         simplifier = simplifier.with_local_input_errors();
                     }
                     for expr in &project.expr {
-                        if !row_expression(expr, true)? {
+                        if forbids_local_planning(expr)? || !row_expression(expr, true)? {
                             continue;
                         }
                         // Keep local comparisons while lowering other UDFs normally.
@@ -3143,7 +3207,7 @@ impl Prepare {
             || matches!(expr, Expr::ScalarFunction(f) if f.func.short_circuits()
                 && !f.func.inner().downcast_ref::<SparkSubstring>()
                     .is_some_and(SparkSubstring::has_logical_arguments))
-            || substring_argument_bodies(expr)?.is_some();
+            || local_string_argument_bodies(expr)?.is_some();
         expr.apply_children(|child| {
             self.check_expr(child, constants && !conditional)?;
             Ok(TreeNodeRecursion::Continue)

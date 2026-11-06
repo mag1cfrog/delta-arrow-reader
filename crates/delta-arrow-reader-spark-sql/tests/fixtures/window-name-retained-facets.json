@@ -1,0 +1,792 @@
+{
+  "authority": "Frozen PRIOR NATIVE behavior only for listed owned facets; not Spark expected results. Source labels are never taken from the native baseline.",
+  "base_production": "2451f16a79a7fa2a2903c47529736e51527e87da",
+  "source_reports": {
+    "main_base": {
+      "file": "727-post731-baseline-current-v1.json",
+      "sha256": "c0c9663cb85e8460725a6366827f471a90cf5b138df5c33d970beb94c54a074d"
+    },
+    "boundary_base": {
+      "file": "727-post731-extra-base-current-v2.boundaries.json",
+      "sha256": "153dc1bead20d33a70bf1f9d77c5bc79cb603e81bdee80827a075a8faf345642"
+    }
+  },
+  "controls": [
+    {
+      "corpus": "original",
+      "id": "inputs_date_range",
+      "ansi": true,
+      "sql": "SELECT id,SUM(v) OVER (ORDER BY DATE_ADD(DATE '2020-01-01',id) RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM inputs ",
+      "reference_condition": null,
+      "owner": "#747",
+      "kind": "date_rows",
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          "10"
+        ],
+        [
+          "10",
+          "68"
+        ],
+        [
+          "2",
+          "30"
+        ],
+        [
+          "3",
+          "30"
+        ],
+        [
+          "4",
+          "40"
+        ],
+        [
+          "5",
+          "40"
+        ],
+        [
+          "6",
+          "40"
+        ],
+        [
+          "7",
+          "36"
+        ],
+        [
+          "8",
+          "42"
+        ],
+        [
+          "9",
+          "48"
+        ]
+      ]
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_pivot_row_number",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM inputs) q) p PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 191:196 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_pivot_lag",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM inputs) q) p PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 182:187 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_pivot_sum",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM inputs) q) p PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 180:185 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "empty_inputs_pivot_row_number",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM empty_inputs) q) p PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 197:202 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "empty_inputs_pivot_lag",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM empty_inputs) q) p PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 188:193 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "empty_inputs_pivot_sum",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM empty_inputs) q) p PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 186:191 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "null_inputs_pivot_row_number",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM null_inputs) q) p PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 196:201 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "null_inputs_pivot_lag",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM null_inputs) q) p PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 187:192 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "null_inputs_pivot_sum",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM null_inputs) q) p PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 185:190 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_date_range",
+      "ansi": false,
+      "sql": "SELECT id,SUM(v) OVER (ORDER BY DATE_ADD(DATE '2020-01-01',id) RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM inputs ",
+      "reference_condition": null,
+      "owner": "#747",
+      "kind": "date_rows",
+      "rows": [
+        [
+          "0",
+          null
+        ],
+        [
+          "1",
+          "10"
+        ],
+        [
+          "10",
+          "68"
+        ],
+        [
+          "2",
+          "30"
+        ],
+        [
+          "3",
+          "30"
+        ],
+        [
+          "4",
+          "40"
+        ],
+        [
+          "5",
+          "40"
+        ],
+        [
+          "6",
+          "40"
+        ],
+        [
+          "7",
+          "36"
+        ],
+        [
+          "8",
+          "42"
+        ],
+        [
+          "9",
+          "48"
+        ]
+      ]
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_pivot_row_number",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM inputs) q) p PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 191:196 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_pivot_lag",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM inputs) q) p PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 182:187 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "inputs_pivot_sum",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM inputs) q) p PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 180:185 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "empty_inputs_pivot_row_number",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM empty_inputs) q) p PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 197:202 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "empty_inputs_pivot_lag",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM empty_inputs) q) p PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 188:193 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "empty_inputs_pivot_sum",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM empty_inputs) q) p PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 186:191 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "null_inputs_pivot_row_number",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM null_inputs) q) p PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 196:201 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "null_inputs_pivot_lag",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM null_inputs) q) p PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 187:192 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "original",
+      "id": "null_inputs_pivot_sum",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM null_inputs) q) p PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found PIVOT at 185:190 expected '(', 'NATURAL', 'INNER', 'CROSS', 'OUTER', 'SEMI', 'ANTI', 'LEFT', 'RIGHT', 'FULL', 'JOIN', ',', 'LATERAL', 'WHERE', 'GROUP', 'HAVING', 'INTERSECT', 'UNION', 'EXCEPT', 'MINUS', 'WINDOW', 'ORDER', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'LIMIT', 'OFFSET', ';', or end of input"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "inputs_pivot_row_number",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM inputs) q) PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 409:410 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "inputs_pivot_lag",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM inputs) q) PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 394:395 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "inputs_pivot_sum",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM inputs) q) PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 388:389 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "empty_inputs_pivot_row_number",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM empty_inputs) q) PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 415:416 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "empty_inputs_pivot_lag",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM empty_inputs) q) PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 400:401 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "empty_inputs_pivot_sum",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM empty_inputs) q) PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 394:395 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "null_inputs_pivot_row_number",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM null_inputs) q) PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 414:415 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "null_inputs_pivot_lag",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM null_inputs) q) PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 399:400 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "null_inputs_pivot_sum",
+      "ansi": true,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM null_inputs) q) PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 393:394 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "inputs_pivot_row_number",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM inputs) q) PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 409:410 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "inputs_pivot_lag",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM inputs) q) PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 394:395 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "inputs_pivot_sum",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM inputs) q) PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 388:389 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "empty_inputs_pivot_row_number",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM empty_inputs) q) PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 415:416 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "empty_inputs_pivot_lag",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM empty_inputs) q) PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 400:401 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "empty_inputs_pivot_sum",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM empty_inputs) q) PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 394:395 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "null_inputs_pivot_row_number",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,ROW_NUMBER() OVER (ORDER BY id) FROM null_inputs) q) PIVOT(MAX(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`row_number() OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 414:415 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "null_inputs_pivot_lag",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)` FROM (SELECT id,g,LAG(v) OVER (ORDER BY id) FROM null_inputs) q) PIVOT(MAX(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`),COUNT(`lag(v, 1, NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 399:400 expected '('"
+    },
+    {
+      "corpus": "alias_free_control",
+      "id": "null_inputs_pivot_sum",
+      "ansi": false,
+      "sql": "SELECT * FROM (SELECT g,`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` FROM (SELECT id,g,SUM(v) OVER (ORDER BY id) FROM null_inputs) q) PIVOT(MAX(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`),COUNT(`sum(v) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`) FOR g IN (0,1))",
+      "reference_condition": null,
+      "owner": "#744",
+      "kind": "parser_error",
+      "phase": "resolve",
+      "error": "External error: error in SQL parser: found g at 393:394 expected '('"
+    },
+    {
+      "corpus": "supplement",
+      "id": "inputs_literal_arguments",
+      "ansi": true,
+      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM inputs",
+      "reference_condition": null,
+      "owner": "#1044",
+      "kind": "lag_nullability",
+      "nullable_field": 2,
+      "nullable": true
+    },
+    {
+      "corpus": "supplement",
+      "id": "inputs_folded_ignore_nulls",
+      "ansi": true,
+      "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM inputs",
+      "reference_condition": "INVALID_PARAMETER_VALUE.BOOLEAN",
+      "owner": "#1045",
+      "kind": "boolean_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
+    },
+    {
+      "corpus": "supplement",
+      "id": "empty_inputs_literal_arguments",
+      "ansi": true,
+      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM empty_inputs",
+      "reference_condition": null,
+      "owner": "#1044",
+      "kind": "lag_nullability",
+      "nullable_field": 2,
+      "nullable": true
+    },
+    {
+      "corpus": "supplement",
+      "id": "empty_inputs_folded_ignore_nulls",
+      "ansi": true,
+      "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM empty_inputs",
+      "reference_condition": "INVALID_PARAMETER_VALUE.BOOLEAN",
+      "owner": "#1045",
+      "kind": "boolean_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
+    },
+    {
+      "corpus": "supplement",
+      "id": "null_inputs_literal_arguments",
+      "ansi": true,
+      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM null_inputs",
+      "reference_condition": null,
+      "owner": "#1044",
+      "kind": "lag_nullability",
+      "nullable_field": 2,
+      "nullable": true
+    },
+    {
+      "corpus": "supplement",
+      "id": "null_inputs_folded_ignore_nulls",
+      "ansi": true,
+      "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM null_inputs",
+      "reference_condition": "INVALID_PARAMETER_VALUE.BOOLEAN",
+      "owner": "#1045",
+      "kind": "boolean_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
+    },
+    {
+      "corpus": "supplement",
+      "id": "inputs_literal_arguments",
+      "ansi": false,
+      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM inputs",
+      "reference_condition": null,
+      "owner": "#1044",
+      "kind": "lag_nullability",
+      "nullable_field": 2,
+      "nullable": true
+    },
+    {
+      "corpus": "supplement",
+      "id": "inputs_folded_ignore_nulls",
+      "ansi": false,
+      "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM inputs",
+      "reference_condition": "INVALID_PARAMETER_VALUE.BOOLEAN",
+      "owner": "#1045",
+      "kind": "boolean_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
+    },
+    {
+      "corpus": "supplement",
+      "id": "empty_inputs_literal_arguments",
+      "ansi": false,
+      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM empty_inputs",
+      "reference_condition": null,
+      "owner": "#1044",
+      "kind": "lag_nullability",
+      "nullable_field": 2,
+      "nullable": true
+    },
+    {
+      "corpus": "supplement",
+      "id": "empty_inputs_folded_ignore_nulls",
+      "ansi": false,
+      "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM empty_inputs",
+      "reference_condition": "INVALID_PARAMETER_VALUE.BOOLEAN",
+      "owner": "#1045",
+      "kind": "boolean_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
+    },
+    {
+      "corpus": "supplement",
+      "id": "null_inputs_literal_arguments",
+      "ansi": false,
+      "sql": "SELECT id,SUM(1) OVER (PARTITION BY g),LAG(1,2,-99) OVER (ORDER BY id),NTH_VALUE(CAST(NULL AS INT),2) IGNORE NULLS OVER (ORDER BY id) FROM null_inputs",
+      "reference_condition": null,
+      "owner": "#1044",
+      "kind": "lag_nullability",
+      "nullable_field": 2,
+      "nullable": true
+    },
+    {
+      "corpus": "supplement",
+      "id": "null_inputs_folded_ignore_nulls",
+      "ansi": false,
+      "sql": "SELECT id,NTH_VALUE(v,2,CAST(true AS BOOLEAN)) OVER (ORDER BY id),FIRST_VALUE(v,CAST(true AS BOOLEAN)) OVER (ORDER BY id) FROM null_inputs",
+      "reference_condition": "INVALID_PARAMETER_VALUE.BOOLEAN",
+      "owner": "#1045",
+      "kind": "boolean_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: nth_value third argument should be boolean scalar"
+    },
+    {
+      "corpus": "additional_boundary",
+      "id": "implicit_lead_invalid_cast",
+      "ansi": true,
+      "sql": "SELECT LEAD(v,CAST('bad' AS INT)) OVER (ORDER BY id) FROM inputs",
+      "reference_condition": "CAST_INVALID_INPUT",
+      "owner": "#1048",
+      "kind": "offset_cast_phase",
+      "phase": "create_physical_plan",
+      "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+      "name_control": {
+        "source_ansi": false,
+        "source_stage": "analyzed",
+        "scope": "cross-mode generated NAME control only; not ANSI stage Field parity",
+        "names": [
+          "lead(v, CAST(bad AS INT), NULL) OVER (ORDER BY id ASC NULLS FIRST ROWS BETWEEN CAST(bad AS INT) FOLLOWING AND CAST(bad AS INT) FOLLOWING)"
+        ]
+      },
+      "native_public_fields": [
+        {
+          "type": "integer",
+          "nullable": true,
+          "metadata": {
+            "__autoGeneratedAlias": "true"
+          }
+        }
+      ]
+    },
+    {
+      "corpus": "additional_boundary",
+      "id": "implicit_lag_invalid_cast",
+      "ansi": false,
+      "sql": "SELECT LAG(v,CAST('bad' AS INT)) OVER (ORDER BY id) FROM inputs",
+      "reference_condition": "INTERNAL_ERROR",
+      "owner": "#1048",
+      "kind": "offset_null_rows",
+      "rows": [
+        [
+          "-4"
+        ],
+        [
+          "10"
+        ],
+        [
+          "10"
+        ],
+        [
+          "20"
+        ],
+        [
+          "20"
+        ],
+        [
+          "6"
+        ],
+        [
+          "6"
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "corpus": "additional_boundary",
+      "id": "explicit_lag_invalid_cast",
+      "ansi": false,
+      "sql": "SELECT LAG(v,CAST('bad' AS INT)) OVER (ORDER BY id ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING) FROM inputs",
+      "reference_condition": "_LEGACY_ERROR_TEMP_1035",
+      "owner": "#1048",
+      "kind": "offset_frame_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: [WINDOW_OFFSET_FRAME_MISMATCH] lag frame must match its offset expression"
+    },
+    {
+      "corpus": "additional_boundary",
+      "id": "implicit_lead_invalid_cast",
+      "ansi": false,
+      "sql": "SELECT LEAD(v,CAST('bad' AS INT)) OVER (ORDER BY id) FROM inputs",
+      "reference_condition": "INTERNAL_ERROR",
+      "owner": "#1048",
+      "kind": "offset_null_rows",
+      "rows": [
+        [
+          "-4"
+        ],
+        [
+          "10"
+        ],
+        [
+          "10"
+        ],
+        [
+          "20"
+        ],
+        [
+          "20"
+        ],
+        [
+          "6"
+        ],
+        [
+          "6"
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "corpus": "additional_boundary",
+      "id": "explicit_lead_invalid_cast",
+      "ansi": false,
+      "sql": "SELECT LEAD(v,CAST('bad' AS INT)) OVER (ORDER BY id ROWS BETWEEN CAST('bad' AS INT) FOLLOWING AND CAST('bad' AS INT) FOLLOWING) FROM inputs",
+      "reference_condition": "INTERNAL_ERROR",
+      "owner": "#1048",
+      "kind": "offset_frame_error",
+      "phase": "resolve",
+      "error": "External error: invalid argument: invalid window boundary offset"
+    }
+  ]
+}
