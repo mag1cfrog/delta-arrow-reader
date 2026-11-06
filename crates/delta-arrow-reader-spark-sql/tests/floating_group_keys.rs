@@ -146,9 +146,9 @@ async fn nested_key_normalization_preserves_argument_evaluation() -> TestResult 
             .await;
             assert!(
                 planned.as_ref().is_err_and(|error| {
-                    error
-                        .to_string()
-                        .contains("Non-deterministic expression volatile_key")
+                    let message = error.to_string();
+                    message.contains("AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION")
+                        && message.contains("volatile_key")
                 }),
                 "{planned:?}"
             );

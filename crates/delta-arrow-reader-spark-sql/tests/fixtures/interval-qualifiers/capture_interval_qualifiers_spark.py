@@ -2,17 +2,20 @@
 
 The query corpus is the original #749 capture (candidate commit c54d99c3,
 script SHA256 12cc8fd6...) plus review probes for NULL coercion, signs and
-boundaries written inside interval literals and quoted unit strings, and the
-#951 storage limits of every interval qualifier. Values
-are recorded from Spark's internal rows instead of string casts. Run from the
-crate root in the reference environment described in README.md; the output
-path must not exist.
+boundaries written inside interval literals and quoted unit strings, the
+#951 storage limits of every interval qualifier, the #781 and #985 scaling of
+year-month and day-time intervals by constant and column numbers, and the #957
+negation of every qualifier's limits. Values are recorded from
+Spark's internal rows instead of string casts. Run from the crate root in the
+reference environment described in README.md; the output path must not exist.
 """
 import argparse
+import decimal
 import hashlib
 import json
 import os
 from pathlib import Path
+import struct
 import sys
 from zipfile import ZipFile
 
@@ -226,6 +229,426 @@ LIMIT_PROBES = [
 ]
 
 
+# Year-month intervals multiplied and divided by constant numbers (#781): the month count
+# and the number's SQL. Each is multiplied in both operand orders and divided.
+SCALING_PROBES = [
+    ("tie", 27, "2"),
+    ("negative_interval_tie", -27, "2"),
+    ("negative_number_tie", 27, "-2"),
+    ("negative_both_tie", -27, "-2"),
+    ("below_tie", 25, "4"),
+    ("above_tie", 27, "4"),
+    ("negative_below_tie", -25, "4"),
+    ("negative_above_tie", -27, "4"),
+    ("tinyint", 27, "CAST(-2 AS TINYINT)"),
+    ("smallint", 27, "CAST(4 AS SMALLINT)"),
+    ("bigint", -27, "CAST(4 AS BIGINT)"),
+    ("decimal_half", 3, "0.5"),
+    ("decimal_negative_half", -3, "0.5"),
+    ("double_half", 3, "CAST(0.5 AS DOUBLE)"),
+    ("double_negative_half", -3, "CAST(0.5 AS DOUBLE)"),
+    ("double_below_half", 1, "CAST(0.49999999999999994 AS DOUBLE)"),
+    ("float_half", 3, "CAST(0.5 AS FLOAT)"),
+    ("float_inexact", 5, "CAST(0.3 AS FLOAT)"),
+    ("decimal_above_tie", 1, "CAST(0.50000000000000000000000000000000000001 AS DECIMAL(38,38))"),
+    ("decimal_below_tie", 1, "CAST(0.49999999999999999999999999999999999999 AS DECIMAL(38,38))"),
+    ("decimal_product_digits", 11,
+     "CAST(0.95454545454545454545454545454545454545 AS DECIMAL(38,38))"),
+    ("decimal_quotient_digits", 1, "CAST(2.0000000000000000000000000000000000001 AS DECIMAL(38,37))"),
+    ("decimal_tiny", 1, "CAST(0.00000000000000000000000000000000000001 AS DECIMAL(38,38))"),
+    ("decimal_wide", 2147483647, "CAST(99999999999999999999999999999999999999 AS DECIMAL(38,0))"),
+    ("maximum", 2147483647, "1"),
+    ("minimum", -2147483648, "1"),
+    ("int_overflow", 2147483647, "2"),
+    ("tinyint_overflow", -2147483648, "CAST(2 AS TINYINT)"),
+    ("bigint_int_overflow", 2147483647, "CAST(2 AS BIGINT)"),
+    ("bigint_long_overflow", 2, "CAST(9223372036854775807 AS BIGINT)"),
+    ("double_overflow", 2147483647, "CAST(2 AS DOUBLE)"),
+    ("double_negative_overflow", -2147483648, "CAST(1.5 AS DOUBLE)"),
+    ("decimal_overflow", 2147483647, "2.0"),
+    ("minimum_negative_one", -2147483648, "-1"),
+    ("minimum_negative_one_tinyint", -2147483648, "CAST(-1 AS TINYINT)"),
+    ("minimum_negative_one_bigint", -2147483648, "CAST(-1 AS BIGINT)"),
+    ("minimum_negative_one_decimal", -2147483648, "CAST(-1 AS DECIMAL(2,0))"),
+    ("minimum_negative_one_double", -2147483648, "CAST(-1 AS DOUBLE)"),
+    ("zero", 27, "0"),
+    ("zero_bigint", 27, "CAST(0 AS BIGINT)"),
+    ("zero_decimal", 27, "CAST(0 AS DECIMAL(2,1))"),
+    ("zero_double", 27, "CAST(0 AS DOUBLE)"),
+    ("negative_zero_double", 27, "CAST('-0.0' AS DOUBLE)"),
+    ("nan", 1, "CAST('NaN' AS DOUBLE)"),
+    ("infinity", 1, "CAST('Infinity' AS DOUBLE)"),
+    ("negative_infinity", 1, "CAST('-Infinity' AS DOUBLE)"),
+    ("typed_null", 27, "CAST(NULL AS INT)"),
+    ("untyped_null", 27, "NULL"),
+]
+
+# NULL intervals, which skip the number, and errors in operands that Spark discards.
+SCALING_NULL_PROBES = [
+    ("null_interval_multiply", "CAST(NULL AS INTERVAL YEAR TO MONTH) * 2"),
+    ("null_interval_divide_zero", "CAST(NULL AS INTERVAL YEAR TO MONTH) / 0"),
+    ("null_interval_divide_error", "CAST(NULL AS INTERVAL YEAR TO MONTH) / (1 / 0)"),
+    ("null_interval_multiply_error", "(1 / 0) * CAST(NULL AS INTERVAL YEAR TO MONTH)"),
+    ("null_number_interval_error", "(INTERVAL '1' MONTH / 0) * CAST(NULL AS INT)"),
+]
+
+# Constant scaling errors in branches, filters and projections that Spark may prune.
+SCALING_ERRORS = [
+    ("divide_zero", "INTERVAL '1' MONTH / 0"),
+    ("multiply_overflow", "INTERVAL '2147483647' MONTH * 2"),
+    ("divide_minimum", "INTERVAL '-2147483648' MONTH / -1"),
+]
+SCALING_ERROR_CONTEXTS = [
+    ("filtered", "SELECT {e} AS r FROM inputs WHERE false"),
+    ("unused", "SELECT 1 AS r FROM (SELECT {e} AS x FROM inputs) t"),
+    ("limit_zero", "SELECT {e} AS r FROM inputs LIMIT 0"),
+    ("values", "SELECT x AS r FROM VALUES ({e}) AS t(x)"),
+    ("values_filtered", "SELECT x AS r FROM VALUES ({e}) AS t(x) WHERE false"),
+    ("constant_case", "SELECT CASE WHEN false THEN {e} ELSE INTERVAL '1' MONTH END AS r"),
+    ("column_case",
+     "SELECT CASE WHEN id < 0 THEN {e} ELSE INTERVAL '1' MONTH END AS r FROM inputs"),
+    ("taken_column_case",
+     "SELECT CASE WHEN id = 0 THEN {e} ELSE INTERVAL '1' MONTH END AS r FROM inputs"),
+]
+
+# Recorded provider columns for scaling: name, Spark type, nullability and values. Each
+# interval column holds month counts.
+SCALING_INPUTS = [
+    ("scale_inputs", [
+        ("m", "interval year to month", True), ("i", "integer", True), ("b", "byte", False),
+        ("s", "short", False), ("l", "long", False), ("f", "float", False),
+        ("d", "double", False), ("x", "decimal(10,2)", False),
+        ("w", "decimal(38,37)", False), ("mo", "interval month", False),
+    ], [
+        [27, 2, 2, -2, 4, 0.5, -0.5, "0.50", "2.0000000000000000000000000000000000001", 27],
+        [-27, 2, -4, 4, -4, 0.5, 0.5, "-0.50", "0.5000000000000000000000000000000000000", -27],
+        [25, 4, 3, 3, 3, 0.3, 0.49999999999999994, "2.50", "1.0000000000000000000000000000000000000",
+         25],
+        [-1, 3, 3, -3, 3, 1.5, -1.5, "1.50", "1.5000000000000000000000000000000000000", -1],
+        # A NULL interval skips its zero divisor.
+        [None, 0, 1, 1, 1, 1.0, 1.0, "1.00", "1.0000000000000000000000000000000000000", 0],
+        [27, None, 1, 1, 1, 1.0, 1.0, "1.00", "1.0000000000000000000000000000000000000", 1],
+    ]),
+    ("scale_limits", [
+        ("high", "interval year to month", False), ("low", "interval year to month", False),
+        ("zero", "integer", False), ("minus_one", "integer", False),
+        ("long_minus_one", "long", False), ("long_max", "long", False),
+        ("two", "integer", False), ("double_zero", "double", False),
+        ("negative_zero", "double", False), ("nan", "double", False),
+        ("decimal_zero", "decimal(2,1)", False),
+    ], [
+        [2147483647, -2147483648, 0, -1, -1, 9223372036854775807, 2, 0.0, -0.0, float("nan"),
+         "0.0"],
+    ]),
+    # Day-time intervals hold microsecond counts (#985).
+    ("dt_scale_inputs", [
+        ("t", "interval day to second", True), ("i", "integer", True), ("b", "byte", False),
+        ("s", "short", False), ("l", "long", False), ("f", "float", False),
+        ("d", "double", False), ("x", "decimal(10,2)", False),
+        ("w", "decimal(38,37)", False),
+    ], [
+        [27, 2, 2, -2, 4, 0.5, -0.5, "0.50", "2.0000000000000000000000000000000000001"],
+        [-27, 2, -4, 4, -4, 0.5, 0.5, "-0.50", "0.5000000000000000000000000000000000000"],
+        [25, 4, 3, 3, 3, 0.3, 0.49999999999999994, "2.50", "1.0000000000000000000000000000000000000"],
+        [-1, 3, 3, -3, 3, 1.5, -1.5, "1.50", "1.5000000000000000000000000000000000000"],
+        # A NULL interval skips its zero divisor.
+        [None, 0, 1, 1, 1, 1.0, 1.0, "1.00", "1.0000000000000000000000000000000000000"],
+        [27, None, 1, 1, 1, 1.0, 1.0, "1.00", "1.0000000000000000000000000000000000000"],
+    ]),
+    ("dt_scale_limits", [
+        ("high", "interval day to second", False), ("low", "interval day to second", False),
+        ("zero", "integer", False), ("minus_one", "integer", False),
+        ("long_minus_one", "long", False), ("long_max", "long", False),
+        ("two", "integer", False), ("double_zero", "double", False),
+        ("negative_zero", "double", False), ("nan", "double", False),
+        ("double_one", "double", False), ("decimal_zero", "decimal(2,1)", False),
+    ], [
+        [9223372036854775807, -9223372036854775808, 0, -1, -1, 9223372036854775807, 2, 0.0,
+         -0.0, float("nan"), 1.0, "0.0"],
+    ]),
+]
+
+SCALING_COLUMN_PROBES = [
+    (f"{column}_{operation}", sql.format(n=column))
+    for column in ["i", "b", "s", "l", "f", "d", "x", "w"]
+    for operation, sql in [("left_multiply", "SELECT {n} * m AS r FROM scale_inputs"),
+                           ("right_multiply", "SELECT m * {n} AS r FROM scale_inputs"),
+                           ("divide", "SELECT m / {n} AS r FROM scale_inputs")]
+] + [
+    ("month_multiply", "SELECT mo * i AS r FROM scale_inputs"),
+    ("month_divide", "SELECT mo / b AS r FROM scale_inputs"),
+    ("constant_number", "SELECT m * 2, m / 2, 2 * m FROM scale_inputs"),
+    ("constant_interval", "SELECT INTERVAL '2-3' YEAR TO MONTH / b AS r FROM scale_inputs"),
+    ("unaliased", "SELECT m * i, i * m, m / i FROM scale_inputs"),
+    ("timestamp", "SELECT TIMESTAMP '2020-01-01 00:00:00.123456' + m * i AS r FROM scale_inputs"),
+    ("multiply_overflow", "SELECT high * two AS r FROM scale_limits"),
+    ("long_overflow", "SELECT high * long_max AS r FROM scale_limits"),
+    ("divide_zero", "SELECT high / zero AS r FROM scale_limits"),
+    ("divide_double_zero", "SELECT high / double_zero AS r FROM scale_limits"),
+    ("divide_negative_zero", "SELECT high / negative_zero AS r FROM scale_limits"),
+    ("divide_decimal_zero", "SELECT high / decimal_zero AS r FROM scale_limits"),
+    ("divide_minimum", "SELECT low / minus_one AS r FROM scale_limits"),
+    ("divide_minimum_long", "SELECT low / long_minus_one AS r FROM scale_limits"),
+    ("multiply_minimum", "SELECT low * minus_one AS r FROM scale_limits"),
+    ("multiply_nan", "SELECT high * nan AS r FROM scale_limits"),
+    ("filtered_divide_zero", "SELECT high / zero AS r FROM scale_limits WHERE false"),
+    ("unused_divide_zero", "SELECT 1 AS r FROM (SELECT high / zero AS x FROM scale_limits) t"),
+]
+
+# Failing constant operands beside column operands, which Spark folds while optimizing even
+# when no row reaches them, and NULL intervals that skip a number failing for that row.
+SCALING_OPERAND_PROBES = [
+    (f"{name}_{operation}{suffix}", f"SELECT {sql} AS r FROM scale_inputs{where}")
+    for name, interval in [("divide_minimum", "(INTERVAL '-2147483648' MONTH / -1)"),
+                           ("multiply_overflow", "(INTERVAL '2147483647' MONTH * 2)"),
+                           ("divide_zero", "(INTERVAL '1' MONTH / 0)")]
+    for operation, sql in [("left_multiply", f"i * {interval}"),
+                           ("right_multiply", f"{interval} * i"),
+                           ("divide", f"{interval} / b")]
+    for suffix, where in [("", ""), ("_filtered", " WHERE false")]
+] + [
+    (f"number_divide_zero_{operation}{suffix}", f"SELECT {sql} AS r FROM scale_inputs{where}")
+    for operation, sql in [("left_multiply", "(1 / 0) * m"), ("right_multiply", "m * (1 / 0)"),
+                           ("divide", "m / (1 / 0)")]
+    for suffix, where in [("", ""), ("_filtered", " WHERE false")]
+] + [
+    ("null_skips_divide", "SELECT m / (10 / i) AS r FROM scale_inputs"),
+    ("null_skips_multiply", "SELECT (10 / i) * m AS r FROM scale_inputs"),
+]
+
+
+def seconds_literal(micros):
+    """A SECOND interval literal for a microsecond count."""
+    sign = "-" if micros < 0 else ""
+    seconds, fraction = divmod(abs(micros), 1_000_000)
+    return f"INTERVAL '{sign}{seconds}.{fraction:06d}' SECOND"
+
+
+# Day-time intervals multiplied and divided by constant numbers (#985): the microsecond
+# count and the number's SQL.
+DT_SCALING_PROBES = [
+    ("tie", 27, "2"),
+    ("negative_interval_tie", -27, "2"),
+    ("negative_number_tie", 27, "-2"),
+    ("negative_both_tie", -27, "-2"),
+    ("below_tie", 25, "4"),
+    ("above_tie", 27, "4"),
+    ("negative_above_tie", -27, "4"),
+    ("tinyint", 27, "CAST(-2 AS TINYINT)"),
+    ("smallint", 27, "CAST(4 AS SMALLINT)"),
+    ("bigint", -27, "CAST(4 AS BIGINT)"),
+    ("decimal_half", 3, "0.5"),
+    ("decimal_negative_half", -3, "0.5"),
+    ("double_half", 3, "CAST(0.5 AS DOUBLE)"),
+    ("double_negative_half", -3, "CAST(0.5 AS DOUBLE)"),
+    ("float_inexact", 5, "CAST(0.3 AS FLOAT)"),
+    # FLOAT 0.7 widens to 0.699999988..., so 5 * 0.7 rounds to 3, not to the tie's 4.
+    ("float_widened_tie", 5, "CAST(0.7 AS FLOAT)"),
+    ("decimal_above_tie", 1, "CAST(0.50000000000000000000000000000000000001 AS DECIMAL(38,38))"),
+    ("decimal_below_tie", 1, "CAST(0.49999999999999999999999999999999999999 AS DECIMAL(38,38))"),
+    ("decimal_wide_product", 9223372036854775807,
+     "CAST(0.99999999999999999999999999999999999999 AS DECIMAL(38,38))"),
+    ("decimal_tiny", 1, "CAST(0.00000000000000000000000000000000000001 AS DECIMAL(38,38))"),
+    ("maximum", 9223372036854775807, "1"),
+    ("minimum", -9223372036854775808, "1"),
+    ("long_overflow", 9223372036854775807, "2"),
+    ("tinyint_overflow", -9223372036854775808, "CAST(2 AS TINYINT)"),
+    ("double_overflow", 9223372036854775807, "CAST(2 AS DOUBLE)"),
+    ("double_maximum", 9223372036854775807, "CAST(1 AS DOUBLE)"),
+    ("decimal_overflow", 9223372036854775807, "2.0"),
+    ("minimum_negative_one", -9223372036854775808, "-1"),
+    ("minimum_negative_one_tinyint", -9223372036854775808, "CAST(-1 AS TINYINT)"),
+    ("minimum_negative_one_decimal", -9223372036854775808, "CAST(-1 AS DECIMAL(2,0))"),
+    ("minimum_negative_one_double", -9223372036854775808, "CAST(-1 AS DOUBLE)"),
+    ("zero", 27, "0"),
+    ("zero_decimal", 27, "CAST(0 AS DECIMAL(2,1))"),
+    ("zero_double", 27, "CAST(0 AS DOUBLE)"),
+    ("negative_zero_double", 27, "CAST('-0.0' AS DOUBLE)"),
+    ("nan", 1, "CAST('NaN' AS DOUBLE)"),
+    ("infinity", 1, "CAST('Infinity' AS DOUBLE)"),
+    ("negative_infinity", 1, "CAST('-Infinity' AS DOUBLE)"),
+    ("negative_zero_float", 27, "CAST('-0.0' AS FLOAT)"),
+    ("typed_null", 27, "CAST(NULL AS INT)"),
+    ("untyped_null", 27, "NULL"),
+    ("day_qualifier", 93784000005, "2"),
+]
+
+DT_SCALING_NULL_PROBES = [
+    ("null_interval_multiply", "CAST(NULL AS INTERVAL DAY TO SECOND) * 2"),
+    ("null_interval_divide_zero", "CAST(NULL AS INTERVAL DAY) / 0"),
+    ("null_interval_divide_error", "CAST(NULL AS INTERVAL HOUR) / (1 / 0)"),
+    ("null_interval_multiply_error", "(1 / 0) * CAST(NULL AS INTERVAL SECOND)"),
+    ("null_number_interval_error", "(INTERVAL '1' DAY / 0) * CAST(NULL AS INT)"),
+]
+
+DT_SCALING_ERRORS = [
+    ("divide_zero", "INTERVAL '1' DAY / 0"),
+    ("multiply_overflow", "INTERVAL '9223372036854.775807' SECOND * 2"),
+    ("divide_minimum", "INTERVAL '-9223372036854.775808' SECOND / -1"),
+]
+DT_SCALING_ERROR_CONTEXTS = [(name, sql.replace("INTERVAL '1' MONTH", "INTERVAL '1' DAY"))
+                             for name, sql in SCALING_ERROR_CONTEXTS]
+# Spark folds NULL inspection of a required expression before it folds constants, so a
+# failing constant under IS NOT NULL returns true (#957 review).
+NULL_INSPECTION_CONTEXTS = [
+    ("is_null", "SELECT ({e}) IS NULL AS r"),
+    ("is_not_null", "SELECT ({e}) IS NOT NULL AS r"),
+    ("column_is_not_null", "SELECT ({e}) IS NOT NULL AS r FROM inputs WHERE id = 0"),
+]
+
+DT_SCALING_COLUMN_PROBES = [
+    (f"{column}_{operation}", sql.format(n=column))
+    for column in ["i", "b", "s", "l", "f", "d", "x", "w"]
+    for operation, sql in [("left_multiply", "SELECT {n} * t AS r FROM dt_scale_inputs"),
+                           ("right_multiply", "SELECT t * {n} AS r FROM dt_scale_inputs"),
+                           ("divide", "SELECT t / {n} AS r FROM dt_scale_inputs")]
+] + [
+    ("constant_number", "SELECT t * 2, t / 2, 2 * t FROM dt_scale_inputs"),
+    ("untyped_null_left", "SELECT NULL * t AS r FROM dt_scale_inputs"),
+    ("untyped_null_right", "SELECT t * NULL AS r FROM dt_scale_inputs"),
+    ("untyped_null_divide", "SELECT t / NULL AS r FROM dt_scale_inputs"),
+    ("constant_interval",
+     "SELECT INTERVAL '1 02:03:04.000005' DAY TO SECOND / b AS r FROM dt_scale_inputs"),
+    ("unaliased", "SELECT t * i, i * t, t / i FROM dt_scale_inputs"),
+    ("timestamp",
+     "SELECT TIMESTAMP '2020-01-01 00:00:00.123456' + t * i AS r FROM dt_scale_inputs"),
+    ("multiply_overflow", "SELECT high * two AS r FROM dt_scale_limits"),
+    ("long_overflow", "SELECT high * long_max AS r FROM dt_scale_limits"),
+    ("double_maximum", "SELECT high * double_one AS r FROM dt_scale_limits"),
+    ("divide_zero", "SELECT high / zero AS r FROM dt_scale_limits"),
+    ("divide_double_zero", "SELECT high / double_zero AS r FROM dt_scale_limits"),
+    ("divide_negative_zero", "SELECT high / negative_zero AS r FROM dt_scale_limits"),
+    ("divide_decimal_zero", "SELECT high / decimal_zero AS r FROM dt_scale_limits"),
+    ("divide_minimum", "SELECT low / minus_one AS r FROM dt_scale_limits"),
+    ("divide_minimum_long", "SELECT low / long_minus_one AS r FROM dt_scale_limits"),
+    ("multiply_minimum", "SELECT low * minus_one AS r FROM dt_scale_limits"),
+    ("multiply_nan", "SELECT high * nan AS r FROM dt_scale_limits"),
+    ("filtered_divide_zero", "SELECT high / zero AS r FROM dt_scale_limits WHERE false"),
+    ("unused_divide_zero",
+     "SELECT 1 AS r FROM (SELECT high / zero AS x FROM dt_scale_limits) t"),
+]
+
+DT_SCALING_OPERAND_PROBES = [
+    (f"{name}_{operation}{suffix}", f"SELECT {sql} AS r FROM dt_scale_inputs{where}")
+    for name, interval in [("divide_minimum", "(INTERVAL '-9223372036854.775808' SECOND / -1)"),
+                           ("multiply_overflow", "(INTERVAL '9223372036854.775807' SECOND * 2)"),
+                           ("divide_zero", "(INTERVAL '1' DAY / 0)")]
+    for operation, sql in [("left_multiply", f"i * {interval}"),
+                           ("right_multiply", f"{interval} * i"),
+                           ("divide", f"{interval} / b")]
+    for suffix, where in [("", ""), ("_filtered", " WHERE false")]
+] + [
+    (f"number_divide_zero_{operation}{suffix}", f"SELECT {sql} AS r FROM dt_scale_inputs{where}")
+    for operation, sql in [("left_multiply", "(1 / 0) * t"), ("right_multiply", "t * (1 / 0)"),
+                           ("divide", "t / (1 / 0)")]
+    for suffix, where in [("", ""), ("_filtered", " WHERE false")]
+] + [
+    ("null_skips_divide", "SELECT t / (10 / i) AS r FROM dt_scale_inputs"),
+    ("null_skips_multiply", "SELECT (10 / i) * t AS r FROM dt_scale_inputs"),
+]
+
+
+# Negation of each qualifier's storage limits (#957), as `-x` and `negative(x)`, of NULL, of
+# column intervals including the limit tables, and of a failing minimum where Spark prunes
+# or defers it.
+NEGATION_LIMITS = [(name, interval) for name, interval in LIMIT_PROBES
+                   if name.endswith(("_min", "_max")) and not name.startswith("cast_")
+                   and "_below_" not in name and "_above_" not in name] + [
+    # The signed-literal probes hold the SECOND maximum.
+    ("second_max", "INTERVAL '9223372036854.775807' SECOND"),
+]
+NEGATION_PROBES = [
+    ("null_year_month", "SELECT -(CAST(NULL AS INTERVAL YEAR TO MONTH)) AS r"),
+    ("null_day_time", "SELECT negative(CAST(NULL AS INTERVAL DAY)) AS r"),
+    ("column_year_month", "SELECT -m AS r FROM scale_inputs"),
+    ("column_month", "SELECT negative(mo) AS r FROM scale_inputs"),
+    ("column_day_time", "SELECT -t AS r FROM dt_scale_inputs"),
+    ("column_day_time_function", "SELECT negative(t) AS r FROM dt_scale_inputs"),
+    ("column_unaliased", "SELECT -m, negative(m) FROM scale_inputs"),
+    ("column_year_month_maximum", "SELECT -high AS r FROM scale_limits"),
+    ("column_year_month_minimum", "SELECT -low AS r FROM scale_limits"),
+    ("column_day_time_maximum", "SELECT -high AS r FROM dt_scale_limits"),
+    ("column_day_time_minimum", "SELECT -low AS r FROM dt_scale_limits"),
+    ("column_minimum_filtered", "SELECT -low AS r FROM dt_scale_limits WHERE false"),
+    ("timestamp", "SELECT TIMESTAMP '2020-01-01 00:00:00.123456' - (-t) AS r FROM dt_scale_inputs"),
+    ("range_key_descending",
+     "SELECT id, SUM(v) OVER (ORDER BY TIMESTAMP '2020-01-10 00:00:00' + (-(id * INTERVAL 1 DAY)) "
+     "DESC RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS r FROM inputs"),
+    ("range_key_ascending",
+     "SELECT id, SUM(v) OVER (ORDER BY TIMESTAMP '2020-01-10 00:00:00' + (-(id * INTERVAL 1 DAY)) "
+     "RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS r FROM inputs"),
+]
+NEGATION_MINIMA = [("year_month", "INTERVAL '-2147483648' MONTH", "INTERVAL '1' MONTH"),
+                   ("day_time", "INTERVAL '-9223372036854.775808' SECOND", "INTERVAL '1' DAY")]
+NEGATION_CONTEXTS = [
+    ("filtered", "SELECT -({e}) AS r FROM inputs WHERE false"),
+    ("unused", "SELECT 1 AS r FROM (SELECT -({e}) AS x FROM inputs) t"),
+    ("limit_zero", "SELECT -({e}) AS r FROM inputs LIMIT 0"),
+    ("values", "SELECT x AS r FROM VALUES (-({e})) AS t(x)"),
+    ("constant_case", "SELECT CASE WHEN false THEN -({e}) ELSE {other} END AS r"),
+    ("column_case", "SELECT CASE WHEN id < 0 THEN -({e}) ELSE {other} END AS r FROM inputs"),
+    ("taken_column_case",
+     "SELECT CASE WHEN id = 0 THEN -({e}) ELSE {other} END AS r FROM inputs"),
+]
+
+
+def negation_definitions():
+    for name, interval in NEGATION_LIMITS:
+        yield f"negation_{name}", "negation", f"SELECT -({interval}) AS r"
+        yield f"negation_function_{name}", "negation", f"SELECT negative({interval}) AS r"
+    for name, sql in NEGATION_PROBES:
+        yield f"negation_{name}", "negation", sql
+    for family, minimum, other in NEGATION_MINIMA:
+        for context, sql in NEGATION_CONTEXTS:
+            yield (f"negation_{family}_minimum_{context}", "negation_error",
+                   sql.format(e=minimum, other=other))
+        for context, sql in NULL_INSPECTION_CONTEXTS:
+            yield (f"negation_{family}_minimum_{context}", "negation_error",
+                   sql.format(e=f"-({minimum})"))
+    for prefix, errors in [("scaling", SCALING_ERRORS), ("dt_scaling", DT_SCALING_ERRORS)]:
+        for name, expression in errors:
+            for context, sql in NULL_INSPECTION_CONTEXTS:
+                yield (f"{prefix}_{name}_{context}", f"{prefix}_error",
+                       sql.format(e=expression))
+
+
+def dt_scaling_definitions():
+    for name, micros, number in DT_SCALING_PROBES:
+        interval = (seconds_literal(micros) if name != "day_qualifier"
+                    else "INTERVAL '1 02:03:04.000005' DAY TO SECOND")
+        for operation, expression in [("left_multiply", f"({number}) * ({interval})"),
+                                      ("right_multiply", f"({interval}) * ({number})"),
+                                      ("divide", f"({interval}) / ({number})")]:
+            yield f"dt_scaling_{name}_{operation}", "dt_scaling", f"SELECT {expression} AS r"
+    for name, expression in DT_SCALING_NULL_PROBES:
+        yield f"dt_scaling_{name}", "dt_scaling", f"SELECT {expression} AS r"
+    for name, expression in DT_SCALING_ERRORS:
+        for context, sql in DT_SCALING_ERROR_CONTEXTS:
+            yield f"dt_scaling_{name}_{context}", "dt_scaling_error", sql.format(e=expression)
+    for name, sql in DT_SCALING_COLUMN_PROBES:
+        yield f"dt_scaling_column_{name}", "dt_scaling_column", sql
+    for name, sql in DT_SCALING_OPERAND_PROBES:
+        yield f"dt_scaling_operand_{name}", "dt_scaling_operand", sql
+
+
+def scaling_definitions():
+    for name, months, number in SCALING_PROBES:
+        interval = f"INTERVAL '{months}' MONTH"
+        for operation, expression in [("left_multiply", f"({number}) * ({interval})"),
+                                      ("right_multiply", f"({interval}) * ({number})"),
+                                      ("divide", f"({interval}) / ({number})")]:
+            yield f"scaling_{name}_{operation}", "scaling", f"SELECT {expression} AS r"
+    for name, expression in SCALING_NULL_PROBES:
+        yield f"scaling_{name}", "scaling", f"SELECT {expression} AS r"
+    for name, expression in SCALING_ERRORS:
+        for context, sql in SCALING_ERROR_CONTEXTS:
+            yield f"scaling_{name}_{context}", "scaling_error", sql.format(e=expression)
+    for name, sql in SCALING_COLUMN_PROBES:
+        yield f"scaling_column_{name}", "scaling_column", sql
+    for name, sql in SCALING_OPERAND_PROBES:
+        yield f"scaling_operand_{name}", "scaling_operand", sql
+
+
 def definitions():
     yield from queries()
     for name, sql in NULL_COERCION_PROBES:
@@ -236,12 +659,70 @@ def definitions():
         yield f"quoted_units_{name}", "quoted_units", sql
     for name, interval in LIMIT_PROBES:
         yield f"limit_{name}", "limit", f"SELECT {interval}"
+    yield from scaling_definitions()
+    yield from dt_scaling_definitions()
+    yield from negation_definitions()
+
+
+def encode_input(value, spark_type):
+    """Encode a recorded input value: FLOAT and DOUBLE as big-endian bits in hex, other
+    values, including interval month counts, as decimal strings."""
+    if value is None:
+        return None
+    if spark_type in ("float", "double"):
+        return struct.pack("!f" if spark_type == "float" else "!d", value).hex()
+    return str(value)
+
+
+def register_scaling_inputs(spark, types, functions):
+    """Register the scaling providers as temporary views and describe them for the header."""
+    plain = {"integer": types.IntegerType(), "byte": types.ByteType(),
+             "short": types.ShortType(), "long": types.LongType(),
+             "float": types.FloatType(), "double": types.DoubleType()}
+    recorded = []
+    for name, columns, rows in SCALING_INPUTS:
+        fields, projections = [], []
+        for column, spark_type, nullable in columns:
+            if spark_type == "interval day to second":
+                # Subtracting the epoch types the exact microsecond count as an interval.
+                source_type = types.LongType()
+                projection = f"timestamp_micros({column}) - TIMESTAMP '1970-01-01 00:00:00'"
+                projections.append(functions.expr(projection).alias(column))
+            elif spark_type.startswith("interval "):
+                source_type = types.IntegerType()
+                # make_ym_interval types the month count as INTERVAL YEAR TO MONTH.
+                projection = (f"make_ym_interval(0, {column})"
+                              if spark_type == "interval year to month"
+                              else f"CAST({column} AS {spark_type.upper()})")
+                projections.append(functions.expr(projection).alias(column))
+            else:
+                if spark_type.startswith("decimal("):
+                    precision, scale = spark_type[8:-1].split(",")
+                    source_type = types.DecimalType(int(precision), int(scale))
+                else:
+                    source_type = plain[spark_type]
+                projections.append(functions.col(column))
+            fields.append(types.StructField(column, source_type, nullable))
+        values = [[decimal.Decimal(value) if isinstance(value, str) else value for value in row]
+                  for row in rows]
+        frame = spark.createDataFrame(values, types.StructType(fields)).select(*projections)
+        declared = [[column, spark_type, nullable] for column, spark_type, nullable in columns]
+        actual = [[field.name, field.dataType.jsonValue(), field.nullable]
+                  for field in frame.schema.fields]
+        assert actual == declared, (name, actual)
+        frame.createOrReplaceTempView(name)
+        recorded.append({"name": name, "schema": frame.schema.jsonValue(), "rows": [
+            [encode_input(value, spark_type) for value, (_, spark_type, _) in zip(row, columns)]
+            for row in rows]})
+    return recorded
 
 
 def encode_value(row, index, data_type, types, get_field):
     """Encode one internal-row value by its Spark type, without string casts."""
     if row.isNullAt(index):
         return None
+    if isinstance(data_type, types.BooleanType):
+        return "true" if row.getBoolean(index) else "false"
     if isinstance(data_type, (types.IntegerType, types.YearMonthIntervalType, types.DateType)):
         return str(row.getInt(index))
     if isinstance(data_type, (types.LongType, types.DayTimeIntervalType,
@@ -287,12 +768,22 @@ def capture(spark, sql, types, get_field, Py4JError):
         condition = error_condition(error, Py4JError)
         record["expected"] = {"status": "error", "condition": condition,
                               "message": str(error).splitlines()[0]}
+        # PySpark converts most errors and keeps the Java throwable. A job that fails with a
+        # plain Java exception reaches Python unconverted, and its first line names a py4j
+        # object id, so describe its innermost cause instead.
+        converted = getattr(error, "_origin", None)
+        throwable = converted if converted is not None else getattr(error, "java_exception", None)
+        assert throwable is not None, (sql, str(error))
+        cause = throwable
+        while cause.getCause() is not None:
+            cause = cause.getCause()
+        if converted is None:
+            record["expected"]["message"] = cause.toString().splitlines()[0]
         if condition is None:
-            # Some overflows raise a plain Java exception, which PySpark captures as the
-            # original throwable; record its class instead.
-            origin = getattr(error, "_origin", None)
-            assert origin is not None, (sql, str(error))
-            record["expected"]["exception"] = origin.getClass().getName()
+            # Some overflows raise a plain Java exception, which has no error condition;
+            # record its class and message instead.
+            record["expected"]["exception"] = cause.getClass().getName()
+            record["expected"]["exception_message"] = cause.getMessage()
         record["spark_error_phase"] = phase
     return record
 
@@ -306,7 +797,7 @@ def main():
     import pyspark
     from py4j.java_gateway import get_field
     from py4j.protocol import Py4JError
-    from pyspark.sql import SparkSession, types
+    from pyspark.sql import SparkSession, functions, types
 
     jar, = (Path(pyspark.__file__).parent / "jars").glob("spark-common-utils_*.jar")
     with ZipFile(jar) as archive:
@@ -325,6 +816,7 @@ def main():
         schema = types.StructType([types.StructField("id", types.IntegerType(), False),
                                    types.StructField("v", types.IntegerType(), True)])
         spark.createDataFrame(INPUT_ROWS, schema).createOrReplaceTempView("inputs")
+        scaling_inputs = register_scaling_inputs(spark, types, functions)
         header = {
             "spark_version": spark.version, "spark_build": build,
             "java_version": spark.sparkContext._jvm.System.getProperty("java.version"),
@@ -332,12 +824,14 @@ def main():
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "value_encoding": ("integers, DATE days and YEAR-MONTH months as int; BIGINT, "
                                "DAY-TIME microseconds and TIMESTAMP UTC microseconds as long; "
-                               "CALENDAR intervals as [months, days, microseconds]"),
+                               "CALENDAR intervals as [months, days, microseconds]; "
+                               "BOOLEAN as true or false"),
             "settings": {"spark.sql.optimizer.excludedRules":
                          spark.conf.get("spark.sql.optimizer.excludedRules")},
             # Recorded inputs encode integers as decimal strings.
             "inputs": [{"name": "inputs", "schema": schema.jsonValue(),
-                        "rows": [[str(i), None if v is None else str(v)] for i, v in INPUT_ROWS]}],
+                        "rows": [[str(i), None if v is None else str(v)] for i, v in INPUT_ROWS]},
+                       *scaling_inputs],
         }
         records = [header]
         cases = list(definitions())

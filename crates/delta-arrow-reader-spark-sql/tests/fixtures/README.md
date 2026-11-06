@@ -338,17 +338,33 @@ Consumers cover projections, NULL predicates, COALESCE, grouping and projected
 IN/NOT IN, including empty, limited and correlated subqueries.
 
 The raw Spark results remain in the fixture. Exact pre-existing differences are
-recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches:
-an unused invalid inline CAST is pruned before its required error (#722). The
-four `conditional_projection` and `conditional_empty` observations, in both ANSI
-modes, match Spark after the literal-TRUE CASE declaration repair (#721).
+recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches.
+In ANSI mode, an unused invalid inline CAST raises its required
+`INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION` error during analysis
+(#722). The four `conditional_projection` and `conditional_empty` observations, in
+both ANSI modes, match Spark after the literal-TRUE CASE declaration repair (#721).
 Six projected-IN observations retain SQL three-valued results that differ from
 Spark, including
 NULL-left/empty-subquery behavior in legacy mode. These remain unresolved #142
-cases and do not extend its approved four-case historical policy. In total, 115
-observations match Spark and 7 retain exact baseline differences. The retained-gap
+cases and do not extend its approved four-case historical policy. In total, 116
+observations match Spark and 6 retain exact baseline differences. The retained-gap
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
+
+## Inline VALUES validation
+
+`inline-values-evaluation/spark-reference.jsonl` records 72 Spark observations for
+constant inline expressions, including errors preserved under filters, LIMIT 0
+and unused projections, row/column error order, CASE branches and NULL/TRY_CAST.
+`null-boundaries-spark.jsonl` adds eight NULL-operand observations, and
+`literal-null-divisors-spark.jsonl` adds six integral DIV, remainder and Decimal
+division observations with literal NULL divisors, all in the same directory.
+The tests compare complete Fields, rows, error conditions, causes and stages at
+batch sizes 1 and 32. Native session modes and nonfoldable functions have separate
+preservation controls.
+
+Computed NULL divisors remain open in [#990](https://github.com/mag1cfrog/delta-arrow-reader/issues/990),
+and NULLIF inline-table admission remains open in [#991](https://github.com/mag1cfrog/delta-arrow-reader/issues/991).
 
 ## Historical expression-schema corrections
 
@@ -695,14 +711,14 @@ encoding and capture command.
 
 ## Interval qualifiers and generated names
 
-`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 614 Spark 4.2.0
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1756 Spark 4.2.0
 observations of interval literal names, signed and unit-syntax literals, storage
-limits, arithmetic and timestamp operand order, interval CASTs and RANGE
-offsets. The query corpus preserves the original #749 capture.
-`interval_qualifiers.rs` compares names, fields, typed values and errors at
-batch sizes 1 and 32. See the
-[interval fixture notes](interval-qualifiers/README.md) for the encoding, the
-retained differences and their owners, and the capture command.
+limits, arithmetic and timestamp operand order, year-month and day-time interval
+scaling and negation, interval CASTs and RANGE offsets. The query corpus
+preserves the original #749 capture. `interval_qualifiers.rs` compares names,
+fields, typed values and errors at batch sizes 1 and 32. See the [interval
+fixture notes](interval-qualifiers/README.md) for the encoding, the retained
+differences and their owners, and the capture command.
 
 ## String-to-BOOLEAN casts
 
@@ -1237,6 +1253,37 @@ python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$singl
 cargo test --workspace --test single_row_correlated
 cargo test --workspace --test window_metadata
 ```
+
+## Global aggregate argument admission
+
+`global-aggregate-admission-spark.jsonl` records 498 independent Spark 4.2.0
+observations in UTC and both ANSI modes from the
+[case manifest](global-aggregate-admission-cases.json). The
+[admission tests](../global_aggregate_admission.rs) check error causes and phases,
+schema stages and rows at batch sizes 1 and 32. Volatile UDF variants check that
+rejected arguments invoke no callbacks; random-result controls compare fields
+and cardinality.
+
+Supplemental `global-aggregate-*` manifests and captures cover sibling error
+priority, NULL AVG/LISTAGG structure, scalar-subquery volatility and internal
+window ordering. The [priority tests](../global_aggregate_admission_priority.rs)
+locate these families and replay their deterministic scalar-subquery, window
+and native SQL controls.
+
+`global-aggregate-admission-staging-baseline.json` records 56 exact pre-existing
+facets: 28 Spark INTERNAL_ERROR/window defects, 24 nested collection field
+differences and four grouped volatile EXISTS differences, tracked by #142 and
+#156. The tests preserve these scoped baselines alongside raw Spark outcomes;
+none counts as a Spark compatibility pass.
+
+Recapture with the pinned Python 3.12, PySpark 4.2.0 and Java 21 setup above.
+The [main capture](capture_global_aggregate_admission_spark.py) writes the main
+and retained cases; the [priority](capture_global_aggregate_admission_priority_spark.py)
+and [argument-structure](capture_global_aggregate_argument_structure_spark.py)
+scripts capture their matching families. The
+[control capture](capture_global_aggregate_admission_controls_spark.py) accepts
+a supplemental manifest and a new output path. Use fresh output paths to keep
+the committed captures unchanged.
 
 ## COUNT_IF aggregate filters
 
@@ -1972,9 +2019,8 @@ loaded JAR hashes, available schemas, values and structured errors.
 
 `substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
 and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
-retained regression result has 3,774 strict receipt matches and 162 retained failures:
-12 invalid UTF8 sibling casts (#780), 30 legacy BIGINT outcomes (#813 and the
-unfinished legacy #778 adapter), 72 analyzed numeric CAST declarations (#796),
+current regression result has 3,804 strict receipt matches and 132 retained failures:
+12 invalid UTF8 sibling casts (#780), 72 analyzed numeric CAST declarations (#796),
 24 legacy non-finite conversions (#897), and 24 overflow-notation comparisons.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
@@ -1984,7 +2030,7 @@ no Decimal defect or strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
-false. The separate meaningful-condition comparison has 3,798 matches and 138
+false. The separate meaningful-condition comparison has 3,828 matches and 108
 differences, so compatibility remains incomplete by either measure. No fixture
 field is rewritten and no missing Spark physical field is invented.
 
@@ -2191,11 +2237,12 @@ source projections must retain their original metadata. Derived result fields
 are compared separately, including names, types, nullability and metadata.
 
 The older cross-family profiles retain their named metadata and invalid-byte
-observations. The substring profiles now use the retained outcomes at
-`92de8d551c000b16cf9e0746fcbf7f5ffa15db93`: repaired admission and ANSI errors
-must match their concrete causes, while the two remaining original legacy length
-differences retain the precise #813 values. The invalid-byte substring observer
-now requires exact analyzed fields. All original fixture bytes remain unchanged.
+observations. The substring baseline at
+`92de8d551c000b16cf9e0746fcbf7f5ffa15db93` is historical. Current checks require
+repaired admission and ANSI errors to match their concrete causes and legacy
+BIGINT length conversions to match Spark through the shared INT conversion.
+The invalid-byte substring observer requires exact analyzed fields. All original
+fixture bytes remain unchanged.
 No reference fields are rewritten or used to construct actual schemas.
 Unavailable physical stages remain unavailable. New fields, values, stages or
 causes fail the tests, and negative controls retain the reviewed synthetic
@@ -2230,9 +2277,7 @@ control, together with pure BINARY, valid Unicode/NUL, empty providers, NULL-fir
 CONCAT, NULL-separator CONCAT_WS and skipped casts. The explicit evaluated CAST
 before a trailing NULL has its own bounded profile; it does not exempt other
 NULL cases. Malformed STRING conversion errors and TRY_CAST NULL results keep
-strict compatibility false. Profiles and the capability decision remain
-provisional until final current-source replay and independent complete-diff
-review. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
+strict compatibility false. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
 and [#928 visible-slice repair](https://github.com/mag1cfrog/delta-arrow-reader/issues/928)
 retain their separate contracts.
 

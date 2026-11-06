@@ -43,7 +43,7 @@ async fn values_preserve_input_guarantees_and_recorded_gaps() -> TestResult {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(gaps.len(), 7);
+    assert_eq!(gaps.len(), 6);
     check_spark_reference(
         include_str!("fixtures/values-nullability-spark.jsonl"),
         122,
@@ -129,7 +129,7 @@ async fn check_spark_reference(fixture: &str, count: usize, retained_gaps: &[Val
                     gap["actual"], case["expected"],
                     "resolved gaps must leave this ledger"
                 );
-                assert!(matches!(gap["issue"].as_u64(), Some(142 | 721 | 722)));
+                assert!(matches!(gap["issue"].as_u64(), Some(142 | 721)));
                 checked_gaps.insert((
                     gap["id"].as_str().ok_or("missing gap ID")?,
                     gap["ansi"].as_bool().ok_or("missing gap mode")?,

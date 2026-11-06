@@ -24,6 +24,7 @@ use datafusion_spark::function::string::format_string::FormatStringFunc;
 use datafusion_spark::function::string::length::SparkLengthFunc;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
@@ -146,11 +147,13 @@ fn cast_string_function_int(
             ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
                 .call(vec![argument])
         }
+        DataType::Int64 => {
+            ScalarUDF::from(SparkCastBigintToInt::new(ansi_mode, false)).call(vec![argument])
+        }
         DataType::Null
         | DataType::Int8
         | DataType::Int16
         | DataType::Int32
-        | DataType::Int64
         | DataType::Float32
         | DataType::Float64 => cast(argument, DataType::Int32),
         data_type => {
@@ -201,25 +204,17 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             let argument = if index == 0 {
                 argument
             } else {
-                let converted = if argument.get_type(function_context.schema)? == DataType::Int64
-                    && !function_context.plan_config.ansi_mode
-                {
-                    // Retain legacy BIGINT behavior until shared #813 supplies
-                    // Spark INT narrowing, as before this helper extraction.
-                    argument
+                let parameter = if index == 1 {
+                    "substring position"
                 } else {
-                    let parameter = if index == 1 {
-                        "substring position"
-                    } else {
-                        "substring length"
-                    };
-                    cast_string_function_int(
-                        argument,
-                        function_context.schema,
-                        function_context.plan_config.ansi_mode,
-                        parameter,
-                    )?
+                    "substring length"
                 };
+                let converted = cast_string_function_int(
+                    argument,
+                    function_context.schema,
+                    function_context.plan_config.ansi_mode,
+                    parameter,
+                )?;
                 // The value kernel consumes Int64 after Spark's INT conversion.
                 cast(converted, DataType::Int64)
             };

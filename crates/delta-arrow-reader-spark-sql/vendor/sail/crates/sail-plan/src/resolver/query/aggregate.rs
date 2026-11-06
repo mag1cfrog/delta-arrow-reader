@@ -46,13 +46,13 @@ type GeneratorReplacements = Vec<(Expr, Expr)>;
 
 const GROUPING_KEY_ORDER_METADATA: &str = "sail:grouping_key_order";
 
-/// Returns the name of a volatile (non-deterministic) scalar expression found
-/// in an aggregate context. Catches two Spark CheckAnalysis violations:
-/// 1. Volatile scalar UDF used directly in aggregate projections (outside any aggregate fn)
-/// 2. Volatile scalar UDF nested inside aggregate function arguments
-fn find_volatile_in_aggregate_context(expr: &Expr) -> Option<String> {
+/// Retain the existing grouped-output rule separately from ordinary aggregate arguments.
+fn find_volatile_outside_aggregate_functions(expr: &Expr) -> Option<String> {
     let mut found_name: Option<String> = None;
     let _ = expr.apply(|e| {
+        if matches!(e, Expr::AggregateFunction(_)) {
+            return Ok(TreeNodeRecursion::Jump);
+        }
         if let Expr::ScalarFunction(f) = e
             && f.func.signature().volatility == Volatility::Volatile
         {
@@ -116,14 +116,9 @@ impl PlanResolver<'_> {
             )
             .await?;
 
-        // Spark CheckAnalysis: reject non-deterministic expressions in aggregate context
-        for proj in &projections {
-            if let Some(name) = find_volatile_in_aggregate_context(&proj.expr) {
-                return Err(PlanError::AnalysisError(format!(
-                    "Non-deterministic expression {name} should not appear in an aggregate query",
-                )));
-            }
-        }
+        let volatile_output = projections
+            .iter()
+            .find_map(|projection| find_volatile_outside_aggregate_functions(&projection.expr));
 
         let having = if let Some(having) = having {
             let mut grouping = Self::named_grouping_expressions(grouping.clone())?;
@@ -148,14 +143,21 @@ impl PlanResolver<'_> {
             None
         };
 
-        self.rewrite_aggregate(
+        let plan = self.rewrite_aggregate(
             input,
             projections,
             grouping,
             having,
             with_grouping_expressions,
             state,
-        )
+        )?;
+        if let Some(name) = volatile_output {
+            Self::validate_aggregate_arguments(&plan)?;
+            return Err(PlanError::AnalysisError(format!(
+                "Non-deterministic expression {name} should not appear in an aggregate query",
+            )));
+        }
+        Ok(plan)
     }
 
     fn resolve_grouping_positions(
