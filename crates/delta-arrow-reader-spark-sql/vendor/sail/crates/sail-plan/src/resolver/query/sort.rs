@@ -129,20 +129,14 @@ impl PlanResolver<'_> {
             .collect::<PlanResult<Vec<_>>>()?;
 
         if let Some(aggregate) = aggregate {
-            let Aggregate {
-                input,
-                group_expr,
-                aggr_expr,
-                ..
-            } = aggregate;
-            let base = group_expr
-                .iter()
-                .cloned()
-                .chain(aggr_expr.iter().cloned())
+            let base = Self::distinct_grouping_expressions_from_exprs(&aggregate.group_expr)
+                .into_iter()
+                .chain(aggregate.aggr_expr.iter().cloned())
                 .collect::<Vec<_>>();
+            let plan = LogicalPlan::Aggregate(aggregate.clone());
             sorts
                 .into_iter()
-                .map(|x| Self::rebase_sort(x, &base, input.as_ref()))
+                .map(|x| Self::rebase_sort(x, &base, &plan))
                 .collect::<PlanResult<Vec<_>>>()
         } else {
             Ok(sorts)
