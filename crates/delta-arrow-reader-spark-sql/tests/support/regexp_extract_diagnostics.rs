@@ -1,7 +1,11 @@
 //! Exact diagnostic checks shared by extraction regression consumers.
 use serde_json::Value;
 
-pub(crate) fn group_error_suffix_matches(error: &str, parameters: &Value, condition: Option<&str>) -> bool {
+pub(crate) fn group_error_suffix_matches(
+    error: &str,
+    parameters: &Value,
+    condition: Option<&str>,
+) -> bool {
     if parameters["functionName"] != "`regexp_extract`" {
         return false;
     }
@@ -82,4 +86,3 @@ pub(crate) fn availability(actual: &Value, key: &str) -> &'static str {
         Some(_) => "available",
     }
 }
-
