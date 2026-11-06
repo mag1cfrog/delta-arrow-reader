@@ -263,9 +263,11 @@ fn retained_matches(profile: &Value, context: &Value, actual: &Value, comparison
 }
 
 fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
-    let source: Value = serde_json::from_str(include_str!(
-        "fixtures/regexp-extract-index-current-stages.json"
-    ))?;
+    contracts_from(include_str!("fixtures/regexp-extract-index-phase-stages.json"))
+}
+
+fn contracts_from(source: &str) -> TestResult<BTreeMap<ContextKey, Value>> {
+    let source: Value = serde_json::from_str(source)?;
     let contracts = by_context(
         source["contracts"]
             .as_array()
@@ -297,7 +299,7 @@ fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
 }
 
 fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
-    let mut lines = include_str!("fixtures/regexp-extract-index-current-negative.jsonl").lines();
+    let mut lines = include_str!("fixtures/regexp-extract-index-phase-negative.jsonl").lines();
     let header: Value = serde_json::from_str(lines.next().ok_or("missing negative header")?)?;
     assert_eq!(
         header["kind"],
@@ -315,6 +317,10 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
             .as_u64()
             .ok_or("missing negative count")?
     );
+    assert!(profiles.is_empty());
+    assert_eq!(header["full_compatibility"], false);
+    assert_eq!(header["checked_query_contexts"], 1008);
+    assert_eq!(header["owner_facets"], json!({}));
     let references = reference_cases()?;
     let contracts = load_contracts()?;
     let mut owner_counts = BTreeMap::<&str, usize>::new();
@@ -381,196 +387,77 @@ fn extraction_index_cause_keeps_the_exact_value_type_and_function() {
 
 #[test]
 fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResult {
-    let profiles = load_negatives()?;
+    assert!(load_negatives()?.is_empty());
     let contracts = load_contracts()?;
+    let fe_contracts = contracts_from(include_str!(
+        "fixtures/regexp-extract-index-current-stages.json"
+    ))?;
+    let native_contracts = contracts_from(include_str!(
+        "fixtures/regexp-extract-index-native-stages.json"
+    ))?;
     let references = reference_cases()?;
-    let historical = by_context(
-        include_str!("fixtures/regexp-extract-index-native-negative.jsonl")
-            .lines()
-            .skip(1)
-            .map(serde_json::from_str)
-            .collect::<Result<Vec<Value>, _>>()?,
-    )?;
-    // Frozen diagnostics remain fault seeds after these current cases pass.
-    let overflow = historical
-        .values()
-        .find(|profile| profile["id"] == "index_limit_zero_local" && profile["ansi"] == true)
-        .ok_or("missing frozen historical overflow")?;
-    let inline = historical
-        .values()
-        .find(|profile| profile["id"] == "bad_values_extract_empty")
-        .ok_or("missing measured inline-table error")?;
-    let group = historical
-        .values()
-        .find(|profile| profile["id"] == "index_long_negative_group")
-        .ok_or("missing frozen historical group error")?;
-    for group in ["facets", "evidence"] {
-        for malformed in [Value::Null, json!([])] {
-            let mut comparison = overflow["comparison"].clone();
-            comparison[group] = malformed;
-            assert!(false_facets(&comparison).is_err());
-            let mut profile = overflow.clone();
-            profile["comparison"] = comparison.clone();
-            assert!(!retained_matches(
-                &profile,
-                overflow,
-                &overflow["actual"],
-                &comparison
-            ));
-        }
-        let mut comparison = overflow["comparison"].clone();
-        comparison
-            .as_object_mut()
-            .ok_or("missing measured comparison")?
-            .remove(group);
-        assert!(false_facets(&comparison).is_err());
-    }
-    let compare = |profile: &Value, actual: &Value| -> TestResult<Value> {
+    let compare = |profile: &Value, actual: &Value,
+                   contracts: &BTreeMap<ContextKey, Value>| -> TestResult<Value> {
         let key = context_key(profile)?;
         let reference = references
             .get(&(key.0.clone(), key.1.clone(), key.3))
             .ok_or("missing frozen reference")?;
-        Ok(reference_comparison(
-            actual,
-            &reference["expected"],
-            contracts.get(&key),
-        ))
+        assert_eq!(profile["sql"], reference["sql"]);
+        Ok(reference_comparison(actual, &reference["expected"], contracts.get(&key)))
     };
-    let current = profiles
-        .values()
-        .next()
-        .ok_or("missing measured phase-only profile")?;
-    assert_eq!(current["false_facets"], json!(["phase"]));
-    let mut untagged = current["actual"].clone();
-    untagged["error"] = json!(
-        untagged["error"]
-            .as_str()
-            .unwrap()
+    let fe_profiles = by_context(
+        include_str!("fixtures/regexp-extract-index-current-negative.jsonl")
+            .lines().skip(1).map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?,
+    )?;
+    assert_eq!(fe_profiles.len(), 48);
+    for profile in fe_profiles.values() {
+        let comparison = compare(profile, &profile["actual"], &fe_contracts)?;
+        assert_eq!(profile["false_facets"], json!(["phase"]));
+        assert!(retained_matches(profile, profile, &profile["actual"], &comparison));
+        let mut untagged = profile["actual"].clone();
+        untagged["error"] = json!(untagged["error"].as_str().unwrap()
             .replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", "")
-    );
-    let comparison = compare(current, &untagged)?;
-    assert_eq!(comparison["facets"]["meaningful_cause"], true);
-    assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
-    assert!(!retained_matches(current, current, &untagged, &comparison));
-    let mut stale_stage = current["actual"].clone();
-    stale_stage["error_stage"] = json!("resolve");
-    let comparison = compare(current, &stale_stage)?;
-    assert_eq!(comparison["evidence"]["completed_stages"], false);
-    assert!(!retained_matches(
-        current,
-        current,
-        &stale_stage,
-        &comparison
-    ));
-    // The terminal message is preserved from the source-bound 08b590 serial capture.
-    let mut tagged_group = group["actual"].clone();
-    tagged_group["error"] = json!(concat!(
-        "execute: Execution error: Spark `regexp_extract` function: ",
-        "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ",
-        "Expects group index between 0 and 1, but got -1"
-    ));
-    let comparison = compare(group, &tagged_group)?;
-    assert_eq!(comparison["facets"]["meaningful_cause"], true);
-    assert_eq!(comparison["facets"]["diagnostic_identifier"], true);
-    assert_eq!(comparison["strict_compatibility"], true);
-    for (before, after) in [
-        ("`regexp_extract`", "`regexp_extract_all`"),
-        ("between 0 and 1", "between 0 and 2"),
-        ("got -1", "got -2"),
-        ("got -1", "got -1; changed cause"),
-    ] {
-        let mut actual = tagged_group.clone();
-        actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
-        let comparison = compare(group, &actual)?;
-        assert_eq!(comparison["facets"]["meaningful_cause"], false);
+            .replace("[CAST_OVERFLOW]", "[WRONG_CONDITION]"));
+        let comparison = compare(profile, &untagged, &fe_contracts)?;
         assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
-        assert_eq!(comparison["strict_compatibility"], false);
+        assert!(!retained_matches(profile, profile, &untagged, &comparison));
+        let mut stale_stage = profile["actual"].clone();
+        stale_stage["error_stage"] = json!("resolve");
+        let comparison = compare(profile, &stale_stage, &fe_contracts)?;
+        assert_eq!(comparison["evidence"]["completed_stages"], false);
+        assert!(!retained_matches(profile, profile, &stale_stage, &comparison));
     }
-    for (message, meaningful_cause) in [
-        (group["actual"]["error"].as_str().unwrap().to_owned(), true),
-        (
-            tagged_group["error"]
-                .as_str()
-                .unwrap()
-                .replace("REGEX_GROUP_INDEX", "WRONG_CONDITION"),
-            false,
-        ),
-        (
-            format!(
-                "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] {}",
-                group["actual"]["error"].as_str().unwrap()
-            ),
-            true,
-        ),
-    ] {
-        let mut actual = tagged_group.clone();
-        actual["error"] = json!(message);
-        let comparison = compare(group, &actual)?;
-        assert_eq!(comparison["facets"]["meaningful_cause"], meaningful_cause);
-        assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
-        assert_eq!(comparison["strict_compatibility"], false);
+    let historical = by_context(
+        include_str!("fixtures/regexp-extract-index-native-negative.jsonl")
+            .lines().skip(1).map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?,
+    )?;
+    let overflow = historical.values()
+        .find(|profile| profile["id"] == "index_limit_zero_local" && profile["ansi"] == true)
+        .ok_or("missing frozen historical overflow")?;
+    let inline = historical.values()
+        .find(|profile| profile["id"] == "bad_values_extract_empty")
+        .ok_or("missing frozen historical inline error")?;
+    let group = historical.values()
+        .find(|profile| profile["id"] == "index_long_negative_group")
+        .ok_or("missing frozen historical group error")?;
+    for profile in [overflow, inline, group] {
+        let comparison = compare(profile, &profile["actual"], &native_contracts)?;
+        assert!(retained_matches(profile, profile, &profile["actual"], &comparison));
     }
-    assert_eq!(
-        compare(inline, &inline["actual"])?["facets"]["meaningful_cause"],
-        false
-    );
-    assert_eq!(
-        compare(inline, &inline["actual"])?["strict_compatibility"],
-        false
-    );
-    let corrected_inline = json!({
-        "error":"resolve: External error: error in DataFusion: [INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
-        "error_stage":"resolve",
-        "analyzed_schema":null,"analyzed_arrow_schema":null,
-        "physical_schema":null,"physical_arrow_schema":null
-    });
-    assert_eq!(
-        compare(inline, &corrected_inline)?["strict_compatibility"],
-        true
-    );
-    for (before, after) in [
-        (
-            "[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n",
-            "",
-        ),
-        (
-            "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-            "INVALID_INLINE_TABLE.WRONG_CONDITION",
-        ),
-        ("[CAST_INVALID_INPUT]\ncaused by\n", ""),
-        (
-            "External error: error in DataFusion: ",
-            "arbitrary wrapper\ncaused by\nExternal error: error in DataFusion: ",
-        ),
-        ("'bad'", "'other'"),
-        ("Int32", "Int64"),
-    ] {
-        let mut actual = corrected_inline.clone();
-        actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
-        let comparison = compare(inline, &actual)?;
-        assert_eq!(comparison["facets"]["meaningful_cause"], false);
-        assert_eq!(comparison["strict_compatibility"], false);
-    }
-    for (field, replacement) in [
-        ("error_stage", json!("physical")),
-        ("analyzed_schema", json!({"type":"struct","fields":[]})),
-        ("physical_schema", json!({"type":"struct","fields":[]})),
-        ("rows", json!([])),
-    ] {
-        let mut actual = corrected_inline.clone();
-        actual[field] = replacement;
-        assert_eq!(compare(inline, &actual)?["strict_compatibility"], false);
-    }
-    for field in [
-        "error_stage",
-        "analyzed_schema",
-        "analyzed_arrow_schema",
-        "physical_schema",
-        "physical_arrow_schema",
-    ] {
-        let mut actual = corrected_inline.clone();
-        actual.as_object_mut().unwrap().remove(field);
-        assert_eq!(compare(inline, &actual)?["strict_compatibility"], false);
+    for group_name in ["facets", "evidence"] {
+        for malformed in [Value::Null, json!([])] {
+            let mut comparison = overflow["comparison"].clone();
+            comparison[group_name] = malformed;
+            assert!(false_facets(&comparison).is_err());
+            let mut profile = overflow.clone();
+            profile["comparison"] = comparison.clone();
+            assert!(!retained_matches(&profile, overflow, &overflow["actual"], &comparison));
+        }
+        let mut comparison = overflow["comparison"].clone();
+        comparison.as_object_mut().ok_or("missing measured comparison")?.remove(group_name);
+        assert!(false_facets(&comparison).is_err());
     }
     for (profile, before, after) in [
         (overflow, "4294967296", "4294967297"),
@@ -579,74 +466,132 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
     ] {
         let mut actual = profile["actual"].clone();
         actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
-        let comparison = compare(profile, &actual)?;
+        let comparison = compare(profile, &actual, &native_contracts)?;
         assert_eq!(comparison["facets"]["meaningful_cause"], false);
         assert!(!retained_matches(profile, profile, &actual, &comparison));
     }
-    for key in ["error_stage", "analyzed_arrow_schema", "physical_schema"] {
+    for field in ["error_stage", "analyzed_arrow_schema", "physical_schema"] {
         let mut actual = overflow["actual"].clone();
-        actual[key] = json!("changed observed value");
-        assert!(!retained_matches(
-            overflow,
-            overflow,
-            &actual,
-            &compare(overflow, &actual)?
-        ));
+        actual[field] = json!("changed observed value");
+        assert!(!retained_matches(overflow, overflow, &actual,
+            &compare(overflow, &actual, &native_contracts)?));
     }
-    let mut missing = overflow["actual"].clone();
-    missing.as_object_mut().unwrap().remove("physical_schema");
-    assert!(!retained_matches(
-        overflow,
-        overflow,
-        &missing,
-        &compare(overflow, &missing)?
-    ));
-    let mut arbitrary = overflow["actual"].clone();
-    arbitrary["error"] = json!("physical: arbitrary overflow");
-    assert!(!retained_matches(
-        overflow,
-        overflow,
-        &arbitrary,
-        &compare(overflow, &arbitrary)?
-    ));
-    let mut identified = overflow["actual"].clone();
-    identified["error"] = json!(format!(
-        "physical: [CAST_OVERFLOW] {}",
-        identified["error"].as_str().unwrap()
-    ));
-    assert_eq!(
-        compare(overflow, &overflow["actual"])?["facets"]["diagnostic_identifier"],
-        false
-    );
-    assert_eq!(
-        compare(overflow, &identified)?["facets"]["diagnostic_identifier"],
-        true
-    );
-    assert!(!retained_matches(
-        overflow,
-        overflow,
-        &identified,
-        &compare(overflow, &identified)?
-    ));
-    for (key, replacement) in [
-        ("fixture", json!("unknown.jsonl")),
-        ("id", json!("unknown")),
-        ("sql", json!("SELECT 1")),
-        ("ansi", json!(false)),
-        ("representation", json!(9)),
-        ("batch_size", json!(9)),
+    for (field, replacement) in [
+        ("fixture", json!("unknown.jsonl")), ("id", json!("unknown")),
+        ("sql", json!("SELECT 1")), ("ansi", json!(false)),
+        ("representation", json!(9)), ("batch_size", json!(9)),
     ] {
         let mut context = overflow.clone();
-        context[key] = replacement;
-        assert!(!retained_matches(
-            overflow,
-            &context,
-            &overflow["actual"],
-            &compare(overflow, &overflow["actual"])?
-        ));
+        context[field] = replacement;
+        assert!(!retained_matches(overflow, &context, &overflow["actual"],
+            &compare(overflow, &overflow["actual"], &native_contracts)?));
     }
     assert!(by_context([overflow.clone(), overflow.clone()]).is_err());
 
+    let mut lines = include_str!("fixtures/regexp-extract-index-phase-positive-seeds.jsonl").lines();
+    let header: Value = serde_json::from_str(lines.next().ok_or("missing positive seed header")?)?;
+    assert_eq!(header["kind"], "complete-native-current-positive-fault-seeds-not-spark-oracle");
+    assert_eq!(header["capture_source_head"], "e5732709d404a2e6fc49565db5b64af314380f3e");
+    assert_eq!(header["acceptance_waivers"], false);
+    let seeds = by_context(lines.map(serde_json::from_str)
+        .collect::<Result<Vec<Value>, _>>()?)?;
+    assert_eq!(seeds.len(), 50);
+    assert_eq!(header["observations"], seeds.len());
+    assert_eq!(seeds.values().filter(|seed| seed["role"] == "migrated_literal").count(), 48);
+    for seed in seeds.values() {
+        let actual = &seed["actual"];
+        assert_eq!(compare(seed, actual, &contracts)?["strict_compatibility"], true);
+        for field in actual.as_object().ok_or("missing native positive object")?.keys() {
+            let mut changed = actual.clone();
+            changed.as_object_mut().unwrap().remove(field);
+            assert_eq!(compare(seed, &changed, &contracts)?["strict_compatibility"], false);
+        }
+        for (field, replacement) in [
+            ("error_stage", json!("unknown")), ("rows", json!([])),
+        ] {
+            let mut changed = actual.clone();
+            changed[field] = replacement;
+            assert_eq!(compare(seed, &changed, &contracts)?["strict_compatibility"], false);
+        }
+        if actual["physical_schema"].is_null() {
+            let mut changed = actual.clone();
+            changed["physical_schema"] = json!({"type":"struct","fields":[]});
+            assert_eq!(compare(seed, &changed, &contracts)?["strict_compatibility"], false);
+        }
+        if seed["role"] == "migrated_literal" {
+            for field in ["name", "type", "nullable", "metadata"] {
+                let mut changed = actual.clone();
+                changed["analyzed_schema"]["fields"][0][field] = match field {
+                    "nullable" => json!(!actual["analyzed_schema"]["fields"][0][field].as_bool().unwrap()),
+                    "metadata" => json!({"unexpected":"metadata"}),
+                    _ => json!("changed"),
+                };
+                assert_eq!(compare(seed, &changed, &contracts)?["strict_compatibility"], false);
+            }
+            for stage in ["resolve", "execute"] {
+                let mut changed = actual.clone();
+                changed["error_stage"] = json!(stage);
+                assert_eq!(compare(seed, &changed, &contracts)?["strict_compatibility"], false);
+            }
+            for (before, after) in [
+                ("REGEX_GROUP_INDEX", "WRONG_CONDITION"),
+                ("`regexp_extract`", "`regexp_extract_all`"),
+                ("between 0 and ", "between 0 and changed "), ("got ", "got changed "),
+                ("CAST_OVERFLOW", "WRONG_CONDITION"), ("Int32", "Int64"),
+                ("value ", "value changed "),
+            ] {
+                let message = actual["error"].as_str().ok_or("missing current error")?;
+                if !message.contains(before) { continue; }
+                let mut changed = actual.clone();
+                changed["error"] = json!(message.replace(before, after));
+                assert_eq!(compare(seed, &changed, &contracts)?["strict_compatibility"], false);
+            }
+        }
+    }
+    let group_seed = seeds.values().find(|seed| seed["role"] == "dynamic_group")
+        .ok_or("missing whole current dynamic group seed")?;
+    let tagged_group = &group_seed["actual"];
+    for (before, after) in [
+        ("`regexp_extract`", "`regexp_extract_all`"),
+        ("between 0 and 1", "between 0 and 2"),
+        ("got -1", "got -2"), ("got -1", "got -1; changed cause"),
+    ] {
+        let mut actual = tagged_group.clone();
+        actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
+        let comparison = compare(group_seed, &actual, &contracts)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], false);
+        assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
+        assert_eq!(comparison["strict_compatibility"], false);
+    }
+    let message = tagged_group["error"].as_str().ok_or("missing current group error")?;
+    for (message, meaningful_cause) in [
+        (message.replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", ""), true),
+        (message.replace("REGEX_GROUP_INDEX", "WRONG_CONDITION"), false),
+        (format!("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] {}",
+            message.replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", "")), true),
+    ] {
+        let mut actual = tagged_group.clone();
+        actual["error"] = json!(message);
+        let comparison = compare(group_seed, &actual, &contracts)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], meaningful_cause);
+        assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
+        assert_eq!(comparison["strict_compatibility"], false);
+    }
+    let inline_seed = seeds.values().find(|seed| seed["role"] == "inline_error")
+        .ok_or("missing whole current inline error seed")?;
+    for (before, after) in [
+        ("[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n", ""),
+        ("INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION", "INVALID_INLINE_TABLE.WRONG_CONDITION"),
+        ("[CAST_INVALID_INPUT]\ncaused by\n", ""),
+        ("External error: error in DataFusion: ", "arbitrary wrapper\ncaused by\nExternal error: error in DataFusion: "),
+        ("'bad'", "'other'"), ("Int32", "Int64"),
+    ] {
+        let mut actual = inline_seed["actual"].clone();
+        actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
+        let comparison = compare(inline_seed, &actual, &contracts)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], false);
+        assert_eq!(comparison["strict_compatibility"], false);
+    }
     let inputs: Value = serde_json::from_str(include_str!(
         "fixtures/regexp-extract-index-selection-inputs.json"
     ))?;
