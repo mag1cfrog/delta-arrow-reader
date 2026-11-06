@@ -2398,9 +2398,9 @@ the full strict comparison and dependency ledger.
 
 The seven arity controls check the original Spark function/count parameters and
 precise native admission causes. They are reported separately from full Spark
-matches; they do not claim identical Spark diagnostics and do not accept #795's
-distinct zero-TRIM formatter failure. These tests add durable original coverage;
-they do not close #151 or #174, or the named dependencies.
+matches; they do not claim identical Spark diagnostics and reject the historical
+zero-argument TRIM formatter failure recorded under #795. These tests add durable
+original coverage; they do not close #151 or #174, or the named dependencies.
 
 ## Native STRING/BINARY capability boundary
 
@@ -3442,10 +3442,13 @@ require complete strict Spark fields and rows. Their old profiles cannot serve
 as current fallbacks. The gate requires 1,932 strict successful observations;
 other success differences fail.
 
-The 36 zero-argument trim contexts under #795 require the exact observed native
-formatter fingerprint and also keep both compatibility flags false. The other
-132 arity contexts check their specific resolution causes without claiming
-Spark diagnostic identifiers or complete parity. All 2,100 observations remain
+All 72 zero-argument and three-argument TRIM/LTRIM/RTRIM contexts require Spark's
+captured `WRONG_NUM_ARGS.WITHOUT_SUGGESTION` diagnostic at resolution, including
+the function name, accepted counts and actual count. Matching diagnostics set
+`strict_match` and `full_compatibility_pass` to true. The historical trim formatter
+failure receives no compatibility credit. The remaining 96 LOWER/UPPER/LCASE/UCASE
+arity contexts check their specific resolution causes without claiming Spark
+diagnostic identifiers or complete parity. All 2,100 observations remain
 in the output. A passing regression gate does not close #775 or waive its
 original complete-field/value acceptance requirements.
 
