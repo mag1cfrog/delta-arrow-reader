@@ -567,11 +567,68 @@ async fn offset_window_names_respect_folding_permission_and_evaluate_once() -> T
             ))
         }),
     ));
+    session.register_udf(create_udf(
+        "throwing_offset",
+        vec![],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(|_| {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+            datafusion::common::exec_err!("observed offset must not run before admission")
+        }),
+    ));
+    let mut failures = Vec::new();
     for ansi_mode in [true, false] {
         let options = SparkSqlOptions {
             ansi_mode,
             ..SparkSqlOptions::default()
         };
+        for kind in ["arity", "filter"] {
+            let mut control_error = None;
+            for (id, offset) in [
+                ("one", "1"),
+                ("zero", "0"),
+                ("folded", "folded_offset()"),
+                ("unfolded", "unfolded_offset()"),
+                ("volatile", "volatile_offset()"),
+                ("throwing", "throwing_offset()"),
+                ("divide", "CAST(1/0 AS INT)"),
+            ] {
+                let call = if kind == "arity" {
+                    format!("LAG(v,{offset},0,0)")
+                } else {
+                    format!("LAG(v,{offset},0) FILTER (WHERE true)")
+                };
+                let sql = format!(
+                    "SELECT {call} OVER (ORDER BY id) FROM VALUES(1,10),(2,20) inputs(id,v)"
+                );
+                let before = CALLS.load(Ordering::SeqCst);
+                let result = plan_query(&session, &sql, &options).await;
+                let error = result.as_ref().err().map(ToString::to_string);
+                let callback_count = CALLS.load(Ordering::SeqCst) - before;
+                let observation = json!({"id":format!("{kind}_{id}"),"ansi":ansi_mode,"sql":sql,
+                    "callback_count":callback_count,"phase":if result.is_err(){"resolve"}else{"resolved"},
+                    "error":error,"expected_cause_kind":kind});
+                eprintln!("WINDOW_OFFSET_ADMISSION {observation}");
+                if id == "one" {
+                    let cause_matches = error.as_ref().is_some_and(|error| {
+                        if kind == "arity" {
+                            error.contains("lag(Int32, Int32, Int32, Int32)")
+                        } else {
+                            error
+                                .contains("FILTER is only supported for aggregate window functions")
+                        }
+                    });
+                    if !cause_matches {
+                        failures.push(format!("invalid admission control: {observation}"));
+                    }
+                    control_error = error.clone();
+                }
+                if error.is_none() || error != control_error || callback_count != 0 {
+                    failures.push(observation.to_string());
+                }
+            }
+        }
         for function in ["LAG", "LEAD"] {
             for offset in [
                 "unfolded_offset()",
@@ -591,13 +648,19 @@ async fn offset_window_names_respect_folding_permission_and_evaluate_once() -> T
                     );
                     let before = CALLS.load(Ordering::SeqCst);
                     let result = plan_query(&session, &sql, &options).await;
-                    assert!(
-                        result.is_err_and(|error| error
-                            .to_string()
-                            .contains("[WINDOW_OFFSET_FRAME_MISMATCH]")),
-                        "{sql}"
-                    );
-                    assert_eq!(CALLS.load(Ordering::SeqCst), before, "{sql}");
+                    let error = result.as_ref().err().map(ToString::to_string);
+                    let callback_count = CALLS.load(Ordering::SeqCst) - before;
+                    let observation = json!({"id":format!("blocked_{function}_{offset}_{explicit}"),
+                        "ansi":ansi_mode,"sql":sql,"callback_count":callback_count,
+                        "phase":if result.is_err(){"resolve"}else{"resolved"},"error":error});
+                    eprintln!("WINDOW_OFFSET_ADMISSION {observation}");
+                    if !error
+                        .as_ref()
+                        .is_some_and(|error| error.contains("[WINDOW_OFFSET_FRAME_MISMATCH]"))
+                        || callback_count != 0
+                    {
+                        failures.push(observation.to_string());
+                    }
                 }
             }
         }
@@ -607,32 +670,48 @@ async fn offset_window_names_respect_folding_permission_and_evaluate_once() -> T
                     "SELECT LAG(v,{offset},-99) OVER (ORDER BY id{frame}) FROM VALUES(1,10),(2,20) inputs(id,v)"
                 );
                 let before = CALLS.load(Ordering::SeqCst);
-                let query = plan_query(&session, &sql, &options).await?;
-                assert!(
-                    query.column_names[0].contains(offset),
-                    "{}",
-                    query.column_names[0]
-                );
-                let expected_calls = before + usize::from(offset == "folded_offset()");
-                assert_eq!(CALLS.load(Ordering::SeqCst), expected_calls, "{sql}");
-                let physical = query.create_physical_plan(&session).await?;
-                let mut values = collect(physical, session.task_ctx())
-                    .await?
-                    .into_iter()
-                    .flat_map(|batch| {
-                        batch
-                            .column(0)
-                            .as_primitive::<Int32Type>()
-                            .values()
-                            .to_vec()
-                    })
-                    .collect::<Vec<_>>();
-                values.sort_unstable();
-                assert_eq!(values, [-99, 10], "{sql}");
-                assert_eq!(CALLS.load(Ordering::SeqCst), expected_calls, "{sql}");
+                let mut phase = "resolve";
+                let mut plan_callback_count = None;
+                let result: TestResult<_> = async {
+                    let query = plan_query(&session, &sql, &options).await?;
+                    plan_callback_count = Some(CALLS.load(Ordering::SeqCst) - before);
+                    phase = "create_physical_plan";
+                    let physical = query.create_physical_plan(&session).await?;
+                    phase = "collect";
+                    let mut values = collect(physical, session.task_ctx())
+                        .await?
+                        .into_iter()
+                        .flat_map(|batch| {
+                            batch
+                                .column(0)
+                                .as_primitive::<Int32Type>()
+                                .values()
+                                .to_vec()
+                        })
+                        .collect::<Vec<_>>();
+                    values.sort_unstable();
+                    Ok((query.column_names, values))
+                }
+                .await;
+                let callback_count = CALLS.load(Ordering::SeqCst) - before;
+                let observation = json!({"id":format!("allowed_{offset}_{frame}"),"ansi":ansi_mode,"sql":sql,
+                    "callback_count":callback_count,"plan_callback_count":plan_callback_count,
+                    "phase":phase,"error":result.as_ref().err().map(ToString::to_string),
+                    "result":result.as_ref().ok()});
+                eprintln!("WINDOW_OFFSET_ADMISSION {observation}");
+                let expected_calls = usize::from(offset == "folded_offset()");
+                if !result
+                    .as_ref()
+                    .is_ok_and(|(names, values)| names[0].contains(offset) && values == &[-99, 10])
+                    || callback_count != expected_calls
+                    || plan_callback_count != Some(expected_calls)
+                {
+                    failures.push(observation.to_string());
+                }
             }
         }
     }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
 

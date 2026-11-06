@@ -161,6 +161,38 @@ impl PlanResolver<'_> {
                     let frame = WindowFrame::new((!sorts.is_empty()).then_some(false));
                     (frame.to_string(), frame)
                 };
+                let (filter_display, filter) = match filter {
+                    Some(filter) => {
+                        let (names, filters) = self
+                            .resolve_expression_arguments(vec![*filter], schema, state)
+                            .await?;
+                        let filter = filters.one()?;
+                        if filter.get_type(schema)? != DataType::Boolean {
+                            return Err(PlanError::invalid("window FILTER requires BOOLEAN"));
+                        }
+                        require_deterministic_scalar_expression(&filter, "window FILTER")?;
+                        (Some(names.one()?), Some(Box::new(filter)))
+                    }
+                    None => (None, None),
+                };
+                if offset_function && required_offset.is_none() {
+                    let preflight_input = WinFunctionInput {
+                        arguments: arguments.clone(),
+                        partition_by: partition_by.clone(),
+                        order_by: sorts.clone(),
+                        window_frame: window_frame.clone(),
+                        ignore_nulls,
+                        distinct: is_distinct,
+                        filter: filter.clone(),
+                        function_context: FunctionContextInput {
+                            argument_display_names: &argument_display_names,
+                            plan_config: &self.config,
+                            session_context: self.ctx,
+                            schema,
+                        },
+                    };
+                    function(preflight_input)?;
+                }
                 if offset_function {
                     let required = match required_offset {
                         Some(required) => required,
@@ -191,20 +223,6 @@ impl PlanResolver<'_> {
                         "ROWS BETWEEN {offset_display} FOLLOWING AND {offset_display} FOLLOWING"
                     );
                 }
-                let (filter_display, filter) = match filter {
-                    Some(filter) => {
-                        let (names, filters) = self
-                            .resolve_expression_arguments(vec![*filter], schema, state)
-                            .await?;
-                        let filter = filters.one()?;
-                        if filter.get_type(schema)? != DataType::Boolean {
-                            return Err(PlanError::invalid("window FILTER requires BOOLEAN"));
-                        }
-                        require_deterministic_scalar_expression(&filter, "window FILTER")?;
-                        (Some(names.one()?), Some(Box::new(filter)))
-                    }
-                    None => (None, None),
-                };
                 let nth_value_ignore_nulls = canonical_function_name == "nth_value"
                     && if arguments.len() == 3 {
                         matches!(
