@@ -199,17 +199,17 @@ native resolution with no result schemas. The five direct CAST error references
 map separately to native physical planning, retaining analyzed fields and absent
 physical fields.
 
-The measured replay has 630 semantic matches and 30 value/field differences.
-Requiring the diagnostic condition identifier as well leaves 570 strict matches
-and 90 strict differences. Sixty otherwise matching primitive overflow errors
+The measured replay has 648 semantic matches and 12 field differences.
+Requiring the diagnostic condition identifier as well leaves 588 strict matches
+and 72 strict differences. Sixty otherwise matching primitive overflow errors
 lack Spark's `CAST_OVERFLOW` identifier. The seven legacy BIGINT contexts repaired
 by #813 now require strict Spark fields, values and errors across all six layouts.
-The seven original failing profile objects remain in the unchanged native
-fixture as historical evidence for those 42 contexts and cannot serve as current
-waivers. All other profiles retain exact actual fields, raw Arrow schemas, rows
-or complete error bodies and stages. Legacy nonfinite conversion (#897), analyzed
-CAST nullability (#796) and primitive CAST condition identifiers (#922) remain
-separate shared work. Exact profile preservation gives no Spark compatibility
+The three Legacy nonfinite profiles repaired by #897 also require strict Spark
+equality across all six layouts. All ten original failing objects remain in the
+unchanged native fixture as history for those 60 contexts and cannot serve as
+current waivers. Other profiles retain exact actual fields, raw Arrow schemas,
+rows or complete error bodies and stages. Analyzed CAST nullability (#796) and
+primitive CAST condition identifiers (#922) remain separate shared work. Exact profile preservation gives no Spark compatibility
 credit, and complete raw diagnostic parity remains unverified.
 
 `regexp_replace_position_folding.rs` protects all 36 measured custom Rust UDF

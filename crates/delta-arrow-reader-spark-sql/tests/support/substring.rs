@@ -188,36 +188,17 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
     }
     if matches!(
         id,
-        "float_nan_direct_cast"
-            | "float_nan_substring"
-            | "double_infinity_direct_cast"
-            | "double_infinity_substring"
-    ) && (!ansi || id.starts_with("double_infinity"))
+        "double_infinity_direct_cast" | "double_infinity_substring"
+    ) && ansi
     {
         let direct = id.ends_with("direct_cast");
         let kind = if direct { "integer" } else { "string" };
-        let value = if id.starts_with("float_nan") {
-            "NaN"
-        } else {
-            "inf"
-        };
-        let expected_matches = if ansi {
-            expected["condition"] == "CAST_OVERFLOW"
-                && expected["parameters"]["value"] == "Infinity"
-                && expected["parameters"]["sourceType"] == "\"DOUBLE\""
-                && expected["parameters"]["targetType"] == "\"INT\""
-                && expected["parameters"]["ansiConfig"] == "\"spark.sql.ansi.enabled\""
-        } else {
-            let expected_value = match (id.starts_with("float_nan"), direct) {
-                (true, true) => "0",
-                (true, false) => "ab",
-                (false, true) => "2147483647",
-                (false, false) => "",
-            };
-            expected["status"] == "ok"
-                && expected["rows"] == serde_json::json!([[expected_value]])
-                && single_field(&expected["physical_schema"], kind, false)
-        };
+        let value = "inf";
+        let expected_matches = expected["condition"] == "CAST_OVERFLOW"
+            && expected["parameters"]["value"] == "Infinity"
+            && expected["parameters"]["sourceType"] == "\"DOUBLE\""
+            && expected["parameters"]["targetType"] == "\"INT\""
+            && expected["parameters"]["ansiConfig"] == "\"spark.sql.ansi.enabled\"";
         let (stage, error) = if direct {
             (
                 "physical",
@@ -242,11 +223,7 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
             && physical_matches
             && error_is(actual, stage, &error)
         {
-            return Some(if ansi {
-                "strict_172_infinity_literal_notation"
-            } else {
-                "open_897_legacy_nonfinite_cast"
-            });
+            return Some("strict_172_infinity_literal_notation");
         }
     }
     if matches!(

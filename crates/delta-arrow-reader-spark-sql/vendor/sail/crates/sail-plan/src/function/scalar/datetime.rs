@@ -41,7 +41,7 @@ use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
 use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
-use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
@@ -71,10 +71,11 @@ fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
         if data_type == DataType::Int64 {
             bigint_argument = true;
-            *argument = ScalarUDF::from(SparkCastBigintToInt::new(
+            *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32,
                 input.function_context.plan_config.ansi_mode,
                 false,
-            ))
+            )?)
             .call(vec![argument.clone()]);
         }
     }
