@@ -453,7 +453,7 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
         "semantic_matches":semantic_matches,"semantic_differences":observations-semantic_matches,
         "strict_reference_matches":strict_matches,"strict_reference_differences":observations-strict_matches,
         "primitive_overflow_contexts":primitive_overflow_contexts,
-        "full_compatibility_pass":strict_matches==observations,"complete_raw_diagnostic_parity":"unverified"})
+        "full_compatibility_pass":false,"complete_raw_diagnostic_parity":"unverified"})
     );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
