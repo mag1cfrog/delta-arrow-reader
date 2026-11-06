@@ -41,7 +41,10 @@ line and failing stage. `ConvertToLocalRelation` is excluded, so registered-inpu
 expressions run during execution.
 
 `timestamp_diff.rs` compares names, type families, nullability, metadata, typed rows and
-failing stages at batch sizes 1 and 32, in each record's session time zone. An error
+failing stages at batch sizes 1 and 32, in each record's session time zone. The 20 records
+that read STRING columns also run over dictionary-encoded copies of their inputs, the
+encoding Delta gives a STRING partition column. Spark has no such encoding, so the same
+record applies. An error
 matches Spark's condition, or Spark's message when Spark raises a plain Java exception such
 as `long overflow`. DAR's parser message is the accepted form of `CAST_INVALID_INPUT`, as in
 the other temporal harnesses.

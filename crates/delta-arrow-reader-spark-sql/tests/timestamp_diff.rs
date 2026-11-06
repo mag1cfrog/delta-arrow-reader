@@ -2,9 +2,13 @@
 //! Spark, under every spelling, unit and argument type.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use arrow::array::{Array, AsArray};
-use arrow::datatypes::{DataType, Int32Type, Int64Type};
+use arrow::array::{Array, ArrayRef, AsArray};
+use arrow::compute::cast;
+use arrow::datatypes::{DataType, Field, Int32Type, Int64Type, Schema};
+use arrow::record_batch::RecordBatch;
+use datafusion::datasource::MemTable;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::physical_optimizer::aggregate_statistics::PreserveAggregateStatisticsSchema;
 use datafusion::physical_plan::collect;
@@ -15,7 +19,7 @@ use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
-use spark_inputs::register_recorded_inputs;
+use spark_inputs::{decode_recorded_batch, register_recorded_inputs};
 
 #[allow(dead_code)]
 #[path = "support/spark_results.rs"]
@@ -281,15 +285,81 @@ fn differing_parts(expectation: &Value, observation: &Value) -> TestResult<Vec<&
     Ok(differing)
 }
 
+/// Registers a `dict_<name>` copy of each recorded input with STRING columns, encoded as
+/// Delta encodes a STRING partition column. Spark has no such encoding.
+fn register_dictionary_string_inputs(
+    session: &SessionContext,
+    metadata: &Value,
+    batch_size: usize,
+) -> TestResult {
+    let encoded = DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8));
+    for input in metadata["inputs"].as_array().ok_or("missing inputs")? {
+        let batch = decode_recorded_batch(input)?;
+        let schema = batch.schema();
+        if !schema
+            .fields()
+            .iter()
+            .any(|field| field.data_type() == &DataType::Utf8)
+        {
+            continue;
+        }
+        let mut fields = Vec::new();
+        let mut columns: Vec<ArrayRef> = Vec::new();
+        for (field, column) in schema.fields().iter().zip(batch.columns()) {
+            if field.data_type() == &DataType::Utf8 {
+                fields.push(Field::clone(field).with_data_type(encoded.clone()));
+                columns.push(cast(column, &encoded)?);
+            } else {
+                fields.push(Field::clone(field));
+                columns.push(Arc::clone(column));
+            }
+        }
+        let batch = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns)?;
+        let mut partitions = vec![Vec::new(), Vec::new()];
+        for (chunk, offset) in (0..batch.num_rows()).step_by(batch_size).enumerate() {
+            partitions[chunk % 2]
+                .push(batch.slice(offset, batch_size.min(batch.num_rows() - offset)));
+        }
+        let name = input["name"].as_str().ok_or("missing table name")?;
+        session.register_table(
+            format!("dict_{name}"),
+            Arc::new(MemTable::try_new(batch.schema(), partitions)?),
+        )?;
+    }
+    Ok(())
+}
+
+/// The record's query over dictionary-encoded copies of its STRING inputs, for each record
+/// that reads a STRING column.
+fn dictionary_string_case(case: &Value) -> TestResult<Option<Value>> {
+    let id = case["id"].as_str().ok_or("missing id")?;
+    if !(id.ends_with("_string_columns") || id == "invalid_string_column") {
+        return Ok(None);
+    }
+    let sql = case["sql"].as_str().ok_or("missing SQL")?;
+    let dictionary_sql = sql
+        .replace(" FROM diff_inputs", " FROM dict_diff_inputs")
+        .replace(" FROM bad_strings", " FROM dict_bad_strings");
+    assert_ne!(dictionary_sql, sql, "{id} reads no recorded STRING input");
+    let mut case = case.clone();
+    case["sql"] = json!(dictionary_sql);
+    Ok(Some(case))
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn timestamp_diff_matches_spark() -> TestResult {
     let records = timestamp_diff_references()?;
     let mut retained = BTreeMap::new();
+    let mut dictionary_cases = 0;
     for case in &records[1..] {
         if let Some(difference) = retained_difference(case) {
             *retained.entry(difference).or_insert(0) += 1;
         }
+        if dictionary_string_case(case)?.is_some() {
+            dictionary_cases += 1;
+        }
     }
+    assert_eq!(dictionary_cases, 20);
     assert_eq!(
         retained,
         BTreeMap::from([
@@ -312,20 +382,24 @@ async fn timestamp_diff_matches_spark() -> TestResult {
             .build(),
         );
         register_recorded_inputs(&session, &records[0], batch_size)?;
+        register_dictionary_string_inputs(&session, &records[0], batch_size)?;
         for case in &records[1..] {
-            let observation = observe(&session, case).await;
             let expectation = match retained_difference(case) {
                 Some(difference) => current_expectation(case, difference)?,
                 None => case.clone(),
             };
-            let differing = differing_parts(&expectation, &observation)?;
-            if !differing.is_empty() {
-                differences.push(json!({
-                    "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
-                    "batch": batch_size, "sql": case["sql"], "differing": differing,
-                    "expected": case["expected"], "schema_stages": case["schema_stages"],
-                    "spark_error_phase": case["spark_error_phase"], "observed": observation,
-                }));
+            let dictionary_case = dictionary_string_case(case)?;
+            for observed_case in std::iter::once(case).chain(dictionary_case.as_ref()) {
+                let observation = observe(&session, observed_case).await;
+                let differing = differing_parts(&expectation, &observation)?;
+                if !differing.is_empty() {
+                    differences.push(json!({
+                        "id": case["id"], "timezone": case["timezone"], "ansi": case["ansi"],
+                        "batch": batch_size, "sql": observed_case["sql"], "differing": differing,
+                        "expected": case["expected"], "schema_stages": case["schema_stages"],
+                        "spark_error_phase": case["spark_error_phase"], "observed": observation,
+                    }));
+                }
             }
         }
     }

@@ -496,7 +496,8 @@ record the checks.
 TIMESTAMPDIFF, and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings, first
 convert both arguments to TIMESTAMP in the session time zone:
 - DATE and TIMESTAMP_NTZ with Spark's gap and overlap rules;
-- STRING with Spark's parser.
+- STRING with Spark's parser, including dictionary-encoded STRING such as a Delta
+  partition column.
 
 It then counts whole units between the two local date-times, as Java's
 `LocalDateTime.until` does. For instants beyond Chrono's range, the offset comes from the

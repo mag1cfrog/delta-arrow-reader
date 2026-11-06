@@ -429,6 +429,10 @@ fn timestamp_diff_argument(
     let timestamp = DataType::Timestamp(TimeUnit::Microsecond, Some(Arc::clone(timezone)));
     match expr.get_type(context.schema)? {
         DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => Ok(expr),
+        // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
+        DataType::Dictionary(_, value_type) => {
+            timestamp_diff_argument(function_name, ordinal, cast(expr, *value_type), context)
+        }
         DataType::Timestamp(_, Some(_)) | DataType::Null => Ok(cast(expr, timestamp)),
         DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64 => {
             Ok(cast_local_timestamp_expr_to_ltz(expr, timezone))
