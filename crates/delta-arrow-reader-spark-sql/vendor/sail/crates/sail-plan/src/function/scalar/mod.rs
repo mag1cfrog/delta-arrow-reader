@@ -14,7 +14,7 @@ mod collection;
 pub(crate) mod conditional;
 mod conversion;
 mod csv;
-mod datetime;
+pub(crate) mod datetime;
 mod geo;
 mod hash;
 mod integer_divide;
