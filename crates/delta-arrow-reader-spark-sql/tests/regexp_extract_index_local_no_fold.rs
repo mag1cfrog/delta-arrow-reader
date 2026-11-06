@@ -206,7 +206,9 @@ fn local_no_fold_contract(case: &Value, actual: &Value) -> Option<&'static str> 
     }
     if mixed && ansi && actual.get("error").is_some() {
         let cause = "Arrow error: Cast error: Can't cast value 4294967296 to type Int32";
-        let error = format!("preserve_spark_expression_errors\ncaused by\n[CAST_OVERFLOW]\ncaused by\n{cause}");
+        let error = format!(
+            "preserve_spark_expression_errors\ncaused by\n[CAST_OVERFLOW]\ncaused by\n{cause}"
+        );
         if actual["error_stage"] != "physical"
             || actual["error"] != error
             || actual["error_chain"]

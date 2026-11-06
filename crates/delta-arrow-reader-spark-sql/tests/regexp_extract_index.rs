@@ -520,10 +520,12 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         .ok_or("missing measured phase-only profile")?;
     assert_eq!(current["false_facets"], json!(["phase"]));
     let mut untagged = current["actual"].clone();
-    untagged["error"] = json!(untagged["error"].as_str().unwrap().replace(
-        "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ",
-        ""
-    ));
+    untagged["error"] = json!(
+        untagged["error"]
+            .as_str()
+            .unwrap()
+            .replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", "")
+    );
     let comparison = compare(current, &untagged)?;
     assert_eq!(comparison["facets"]["meaningful_cause"], true);
     assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
@@ -532,7 +534,12 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
     stale_stage["error_stage"] = json!("resolve");
     let comparison = compare(current, &stale_stage)?;
     assert_eq!(comparison["evidence"]["completed_stages"], false);
-    assert!(!retained_matches(current, current, &stale_stage, &comparison));
+    assert!(!retained_matches(
+        current,
+        current,
+        &stale_stage,
+        &comparison
+    ));
     // The terminal message is preserved from the source-bound 08b590 serial capture.
     let mut tagged_group = group["actual"].clone();
     tagged_group["error"] = json!(concat!(
