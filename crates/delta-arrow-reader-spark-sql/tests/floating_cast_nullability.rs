@@ -454,7 +454,102 @@ async fn floating_integer_conversion_evaluates_its_input_once() -> TestResult {
 }
 
 #[tokio::test]
-async fn floating_try_cast_propagates_producer_errors() -> TestResult {
+async fn ansi_numeric_integer_cast_overflow_keeps_condition_and_root_cause() -> TestResult {
+    use arrow::datatypes::{Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::{DataFusionError, ScalarValue};
+    use std::sync::Arc;
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for (name, source, value) in [
+        ("float_nan", ScalarValue::Float32(Some(f32::NAN)), "NaN"),
+        ("double_nan", ScalarValue::Float64(Some(f64::NAN)), "NaN"),
+        ("float_inf", ScalarValue::Float32(Some(f32::INFINITY)), "inf"),
+        ("double_inf", ScalarValue::Float64(Some(f64::INFINITY)), "inf"),
+        (
+            "float_neg_inf",
+            ScalarValue::Float32(Some(f32::NEG_INFINITY)),
+            "-inf",
+        ),
+        (
+            "double_neg_inf",
+            ScalarValue::Float64(Some(f64::NEG_INFINITY)),
+            "-inf",
+        ),
+        (
+            "float_finite_overflow",
+            ScalarValue::Float32(Some(1e30)),
+            "1e30",
+        ),
+        (
+            "double_finite_overflow",
+            ScalarValue::Float64(Some(1e100)),
+            "1e100",
+        ),
+        (
+            "bigint_overflow",
+            ScalarValue::Int64(Some(4294967296)),
+            "4294967296",
+        ),
+    ] {
+        session.register_batch(
+            name,
+            RecordBatch::try_new(
+                Arc::new(Schema::new(vec![Field::new("v", source.data_type(), false)])),
+                vec![source.to_array_of_size(1)?],
+            )?,
+        )?;
+        for (target, data_type) in [
+            ("TINYINT", DataType::Int8),
+            ("SMALLINT", DataType::Int16),
+            ("INT", DataType::Int32),
+            ("BIGINT", DataType::Int64),
+        ] {
+            if source.data_type() == DataType::Int64 && data_type != DataType::Int32 {
+                continue;
+            }
+            let sql = format!("SELECT CAST(v AS {target}) AS r FROM {name}");
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode: true,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let field = query.logical_plan.schema().field(0);
+            assert_eq!(field.data_type(), &data_type, "{sql}");
+            assert_eq!(
+                field.is_nullable(),
+                source.data_type() != DataType::Int64,
+                "{sql}"
+            );
+            let physical = query.create_physical_plan(&session).await?;
+            let error = collect(physical, session.task_ctx())
+                .await
+                .err()
+                .ok_or("ANSI column CAST must overflow")?;
+            assert!(
+                matches!(error.find_root(), DataFusionError::ArrowError(_, _)),
+                "{sql}: {error}"
+            );
+            assert_eq!(
+                error.find_root().to_string(),
+                format!("Arrow error: Cast error: Can't cast value {value} to type {data_type}"),
+                "{sql}"
+            );
+            assert!(error.to_string().contains("[CAST_OVERFLOW]"), "{sql}: {error}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn floating_integer_casts_propagate_producer_errors() -> TestResult {
+    use arrow::error::ArrowError;
     use datafusion::common::DataFusionError;
     use datafusion::logical_expr::{Volatility, create_udf};
     use std::sync::Arc;
@@ -464,9 +559,11 @@ async fn floating_try_cast_propagates_producer_errors() -> TestResult {
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
     let calls = Arc::new(AtomicUsize::new(0));
-    for (name, source) in [
-        ("failing_float_producer", DataType::Float32),
-        ("failing_double_producer", DataType::Float64),
+    for (name, source, typed_arrow) in [
+        ("failing_float_producer", DataType::Float32, false),
+        ("failing_double_producer", DataType::Float64, false),
+        ("failing_float_arrow_producer", DataType::Float32, true),
+        ("failing_double_arrow_producer", DataType::Float64, true),
     ] {
         let observed_calls = Arc::clone(&calls);
         session.register_udf(create_udf(
@@ -476,34 +573,48 @@ async fn floating_try_cast_propagates_producer_errors() -> TestResult {
             Volatility::Volatile,
             Arc::new(move |_| {
                 observed_calls.fetch_add(1, Ordering::SeqCst);
-                Err(DataFusionError::Execution(format!(
-                    "{name} failed before conversion"
-                )))
+                let message = format!("{name} failed before conversion");
+                Err(if typed_arrow {
+                    DataFusionError::ArrowError(Box::new(ArrowError::CastError(message)), None)
+                } else {
+                    DataFusionError::Execution(message)
+                })
             }),
         ));
         for ansi_mode in [true, false] {
-            for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
-                let before = calls.load(Ordering::SeqCst);
-                let query = plan_query(
-                    &session,
-                    &format!("SELECT TRY_CAST({name}() AS {target}) AS r"),
-                    &SparkSqlOptions {
-                        ansi_mode,
-                        ..SparkSqlOptions::default()
-                    },
-                )
-                .await?;
-                let physical = query.create_physical_plan(&session).await?;
-                assert_eq!(calls.load(Ordering::SeqCst), before);
-                let error = collect(physical, session.task_ctx())
-                    .await
-                    .err()
-                    .ok_or("TRY_CAST swallowed a producer error")?;
-                assert!(
-                    matches!(error.find_root(), DataFusionError::Execution(message)
-                    if message == &format!("{name} failed before conversion"))
-                );
-                assert_eq!(calls.load(Ordering::SeqCst), before + 1);
+            for function in ["CAST", "TRY_CAST"] {
+                for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
+                    let before = calls.load(Ordering::SeqCst);
+                    let query = plan_query(
+                        &session,
+                        &format!("SELECT {function}({name}() AS {target}) AS r"),
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    assert_eq!(calls.load(Ordering::SeqCst), before);
+                    let error = collect(physical, session.task_ctx())
+                        .await
+                        .err()
+                        .ok_or("numeric CAST swallowed a producer error")?;
+                    if typed_arrow {
+                        assert!(
+                            matches!(error.find_root(), DataFusionError::ArrowError(cause, _)
+                            if matches!(cause.as_ref(), ArrowError::CastError(message)
+                            if message == &format!("{name} failed before conversion")))
+                        );
+                    } else {
+                        assert!(
+                            matches!(error.find_root(), DataFusionError::Execution(message)
+                            if message == &format!("{name} failed before conversion"))
+                        );
+                    }
+                    assert!(!error.to_string().contains("[CAST_OVERFLOW]"));
+                    assert_eq!(calls.load(Ordering::SeqCst), before + 1);
+                }
             }
         }
     }
@@ -1555,21 +1666,22 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
     let mut controls = vec![
-        "SELECT CAST('1.5' AS DOUBLE) AS r",
-        "SELECT TRY_CAST('bad' AS FLOAT) AS r",
-        "SELECT CAST(NULL AS FLOAT) AS r",
-        "SELECT CAST(CAST(4294967296 AS BIGINT) AS INT) AS r",
+        ("SELECT CAST('1.5' AS DOUBLE) AS r", false),
+        ("SELECT TRY_CAST('bad' AS FLOAT) AS r", false),
+        ("SELECT CAST(NULL AS FLOAT) AS r", false),
+        ("SELECT CAST(CAST(4294967296 AS BIGINT) AS INT) AS r", true),
     ]
     .into_iter()
-    .map(str::to_owned)
+    .map(|(sql, fails)| (sql.to_owned(), fails))
     .collect::<Vec<_>>();
     for source in ["FLOAT", "DOUBLE"] {
         for cast in ["CAST", "TRY_CAST"] {
             for value in ["1.9", "'NaN'", "'Infinity'"] {
                 if cast == "CAST" && value != "1.9" {
                     for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
-                        controls.push(format!(
-                            "SELECT CAST(CAST({value} AS {source}) AS {target}) AS r"
+                        controls.push((
+                            format!("SELECT CAST(CAST({value} AS {source}) AS {target}) AS r"),
+                            true,
                         ));
                     }
                     continue;
@@ -1582,19 +1694,29 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
-                controls.push(format!("SELECT {outputs}"));
+                controls.push((format!("SELECT {outputs}"), false));
             }
         }
     }
     let mut before = Vec::new();
-    for sql in &controls {
+    for (sql, fails) in &controls {
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
         let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        if *fails {
+            for observation in [&expected, &actual] {
+                assert!(
+                    observation["error"]
+                        .as_str()
+                        .is_some_and(|error| !error.contains("[CAST_OVERFLOW]")),
+                    "before Spark planning: {sql}: {observation}"
+                );
+            }
+        }
         assert_eq!(actual, expected, "before Spark planning: {sql}");
         before.push(actual);
     }
     for ansi_mode in [true, false] {
-        for sql in &controls {
+        for (sql, _) in &controls {
             if sql.contains("1.9") || sql.contains("TRY_CAST(CAST('NaN'") {
                 let query = plan_query(
                     &configured,
@@ -1614,9 +1736,19 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
             }
         }
     }
-    for (sql, before) in controls.iter().zip(before) {
+    for ((sql, fails), before) in controls.iter().zip(before) {
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
         let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        if *fails {
+            for observation in [&expected, &actual] {
+                assert!(
+                    observation["error"]
+                        .as_str()
+                        .is_some_and(|error| !error.contains("[CAST_OVERFLOW]")),
+                    "after Spark planning: {sql}: {observation}"
+                );
+            }
+        }
         assert_eq!(actual, expected, "after Spark planning: {sql}");
         assert_eq!(
             actual, before,
