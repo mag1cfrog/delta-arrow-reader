@@ -97,18 +97,35 @@ fn retained_facets() -> TestResult<Value> {
     let bindings: Value = serde_json::from_str(include_str!(
         "fixtures/array-index-error-timing/binding-retained-baseline-facets.json"
     ))?;
-    assert_eq!(bindings["source"], "e9fa5d8e9341f785f046f2b8fb3203ce61a0c473");
+    assert_eq!(
+        bindings["source"],
+        "e9fa5d8e9341f785f046f2b8fb3203ce61a0c473"
+    );
     assert_eq!(bindings["runtime_source"], facets["runtime_source"]);
-    assert_eq!(bindings["source_log_sha256"],
-        "ad152dc389f1b81ec4414049dd98cc6f2f37aa63eeda92fe3ea9e4ca3a3aa72f");
-    assert_eq!(bindings["spark_reference_sha256"],
-        "7683c84bc284d4bb9fb68dcb2124bb6bee8dc99ef6bc719cd7c39403d31bd108");
+    assert_eq!(
+        bindings["source_log_sha256"],
+        "ad152dc389f1b81ec4414049dd98cc6f2f37aa63eeda92fe3ea9e4ca3a3aa72f"
+    );
+    assert_eq!(
+        bindings["spark_reference_sha256"],
+        "7683c84bc284d4bb9fb68dcb2124bb6bee8dc99ef6bc719cd7c39403d31bd108"
+    );
     assert_eq!(bindings["is_spark_compatibility_credit"], false);
-    assert!(bindings["field_facets"].as_array().ok_or("missing binding Fields")?.is_empty());
-    let outcomes = bindings["cause_facets"].as_array().ok_or("missing binding outcomes")?;
+    assert!(
+        bindings["field_facets"]
+            .as_array()
+            .ok_or("missing binding Fields")?
+            .is_empty()
+    );
+    let outcomes = bindings["cause_facets"]
+        .as_array()
+        .ok_or("missing binding outcomes")?;
     assert_eq!(outcomes.len(), 2);
     assert!(outcomes.iter().all(|facet| facet["owner"] == 1004));
-    facets["cause_facets"].as_array_mut().ok_or("missing mutable causes")?.extend(outcomes.iter().cloned());
+    facets["cause_facets"]
+        .as_array_mut()
+        .ok_or("missing mutable causes")?
+        .extend(outcomes.iter().cloned());
     Ok(facets)
 }
 
@@ -174,14 +191,28 @@ fn scoped_contract_matches(
     cause_matches: bool,
     raw_rows_match: bool,
 ) -> TestResult<bool> {
-    for facet in facets["cause_facets"].as_array().ok_or("missing cause facets")? {
-        if facet["fixture"] == fixture && facet["id"] == case["id"]
-            && facet["ansi"] == case["ansi"] && facet["batch"] == batch
+    for facet in facets["cause_facets"]
+        .as_array()
+        .ok_or("missing cause facets")?
+    {
+        if facet["fixture"] == fixture
+            && facet["id"] == case["id"]
+            && facet["ansi"] == case["ansi"]
+            && facet["batch"] == batch
             && facet["owner"] == 1004
         {
             assert_eq!(facet["sql"], case["sql"]);
-            let keys = ["public_schema", "optimized_schema", "before_collect", "physical_schema",
-                        "rows", "rows_raw", "native_phase", "error", "optimized_error"];
+            let keys = [
+                "public_schema",
+                "optimized_schema",
+                "before_collect",
+                "physical_schema",
+                "rows",
+                "rows_raw",
+                "native_phase",
+                "error",
+                "optimized_error",
+            ];
             assert!(keys.iter().all(|key| facet.get(*key).is_some()));
             // #1004 retains only the complete measured outcome; every value and Field is bound.
             if keys.iter().all(|key| actual[*key] == facet[*key]) {
@@ -420,8 +451,10 @@ async fn independently_captured_binding_boundaries_match_each_stage() -> TestRes
     ))?;
     assert_eq!(records.len() - 1, 8);
     assert_eq!(records[0]["case_count"], 4);
-    assert_eq!(records[0]["source_manifest_sha256"],
-        "4e032939d6233b003e3621644df5531bf7702296e39e6f3f03784de1e829c13e");
+    assert_eq!(
+        records[0]["source_manifest_sha256"],
+        "4e032939d6233b003e3621644df5531bf7702296e39e6f3f03784de1e829c13e"
+    );
     assert_eq!(records[0]["after_collect_error_fields_captured"], true);
     replay(&records, "binding-boundaries-spark.jsonl").await
 }
@@ -683,9 +716,15 @@ async fn array_preparation_honors_output_and_local_producer_permissions() -> Tes
         ] {
             CALLS.store(0, Ordering::SeqCst);
             let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-            let error = query.create_physical_plan(&session).await.err()
+            let error = query
+                .create_physical_plan(&session)
+                .await
+                .err()
                 .ok_or("selected ARRAY error became NULL because of a dead producer")?;
-            assert!(error.to_string().contains("[INVALID_ARRAY_INDEX]"), "{error}");
+            assert!(
+                error.to_string().contains("[INVALID_ARRAY_INDEX]"),
+                "{error}"
+            );
             assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
         }
         for sql in [
@@ -699,13 +738,17 @@ async fn array_preparation_honors_output_and_local_producer_permissions() -> Tes
             // A dead host producer must not erase selected bounds validation; phase is unrestricted.
             let error = match planned {
                 Err(error) => error,
-                Ok(physical) => collect(physical, session.task_ctx()).await.err()
+                Ok(physical) => collect(physical, session.task_ctx())
+                    .await
+                    .err()
                     .ok_or("computed CASE erased selected ARRAY bounds validation")?,
             };
-            assert!(error.to_string().contains("[INVALID_ARRAY_INDEX]"), "{error}");
+            assert!(
+                error.to_string().contains("[INVALID_ARRAY_INDEX]"),
+                "{error}"
+            );
             assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
         }
-
     }
     Ok(())
 }
@@ -846,23 +889,66 @@ fn retained_union_outcome_binds_every_observable_facet() -> TestResult {
     let bindings = records(include_str!(
         "fixtures/array-index-error-timing/binding-boundaries-spark.jsonl"
     ))?;
-    let case = bindings.iter().find(|case| case["id"] == "union_array_binding" && case["ansi"] == true)
+    let case = bindings
+        .iter()
+        .find(|case| case["id"] == "union_array_binding" && case["ansi"] == true)
         .ok_or("missing independent UNION reference")?;
-    let outcome = facets["cause_facets"].as_array().ok_or("missing retained outcomes")?.iter()
+    let outcome = facets["cause_facets"]
+        .as_array()
+        .ok_or("missing retained outcomes")?
+        .iter()
         .find(|facet| facet["owner"] == 1004 && facet["batch"] == 1)
         .ok_or("missing exact UNION baseline")?;
-    assert!(scoped_contract_matches(case, outcome, 1, "binding-boundaries-spark.jsonl", &facets, false, true)?);
-    for key in ["public_schema", "optimized_schema", "before_collect", "physical_schema",
-                "rows", "rows_raw", "native_phase", "error", "optimized_error"] {
+    assert!(scoped_contract_matches(
+        case,
+        outcome,
+        1,
+        "binding-boundaries-spark.jsonl",
+        &facets,
+        false,
+        true
+    )?);
+    for key in [
+        "public_schema",
+        "optimized_schema",
+        "before_collect",
+        "physical_schema",
+        "rows",
+        "rows_raw",
+        "native_phase",
+        "error",
+        "optimized_error",
+    ] {
         let mut changed = outcome.clone();
         changed[key] = json!("an unmeasured change");
-        assert!(!scoped_contract_matches(case, &changed, 1, "binding-boundaries-spark.jsonl", &facets, false, false)?, "{key}");
+        assert!(
+            !scoped_contract_matches(
+                case,
+                &changed,
+                1,
+                "binding-boundaries-spark.jsonl",
+                &facets,
+                false,
+                false
+            )?,
+            "{key}"
+        );
     }
-    let error = case["spark_error"].as_str().ok_or("missing UNION bounds cause")?;
+    let error = case["spark_error"]
+        .as_str()
+        .ok_or("missing UNION bounds cause")?;
     let improvement = json!({"public_schema":case["schema_stages"]["analyzed"],
         "native_phase":"create_physical_plan","error":error,"optimized_error":error,
         "rows_match":true,"ordered_rows_match":true,"error_matches":true});
-    assert!(scoped_contract_matches(case, &improvement, 1, "binding-boundaries-spark.jsonl", &facets, true, true)?);
+    assert!(scoped_contract_matches(
+        case,
+        &improvement,
+        1,
+        "binding-boundaries-spark.jsonl",
+        &facets,
+        true,
+        true
+    )?);
     Ok(())
 }
 

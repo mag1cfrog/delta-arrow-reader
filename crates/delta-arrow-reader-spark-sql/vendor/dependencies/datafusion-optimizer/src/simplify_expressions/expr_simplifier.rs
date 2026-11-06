@@ -578,7 +578,10 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
         }
         let expr = pruned.data;
         self.array_error_becomes_null.push(
-            self.array_error_becomes_null.last().copied().unwrap_or(false)
+            self.array_error_becomes_null
+                .last()
+                .copied()
+                .unwrap_or(false)
                 || (spark_query
                     && expr.short_circuits()
                     && !matches!(&expr, Expr::BinaryExpr(_))
@@ -629,11 +632,11 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                 }
                 ConstSimplifyResult::SimplifyRuntimeError(err, expr) => {
                     if self
-                            .info
-                            .config_options()
-                            .extensions
-                            .iter()
-                            .any(|(prefix, _)| prefix == "dar_spark_sql_errors")
+                        .info
+                        .config_options()
+                        .extensions
+                        .iter()
+                        .any(|(prefix, _)| prefix == "dar_spark_sql_errors")
                         && SparkArrayIndexError::is(&err)
                     {
                         if array_error_becomes_null {
