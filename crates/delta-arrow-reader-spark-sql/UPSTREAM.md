@@ -770,9 +770,11 @@ Local VALUES inputs retain reached source work before index conversion. Bare
 known-NULL calls can prune unused arguments after type validation. Shared casts
 required by CSE remain evaluated even when extraction sources are NULL. Native
 callback controls preserve selection and producer folding permissions; async
-arguments retain the existing scalar fallback. The references compare each
-available analyzed and physical declaration with its corresponding Spark stage,
-and preserve exact incompatible observations separately from strict matches.
+arguments retain the existing scalar fallback. The references compare the native
+public resolved query schema, captured before the DataFusion session analyzer
+and optimizer under `analyzed_schema`, with Spark's analyzed declaration, and
+compare physical declarations separately. Exact incompatible observations remain
+separate from strict matches.
 Invalid constant VALUES cells retain the inline-table wrapper and underlying
 conversion cause during resolution, including when outer operators discard rows.
 Java-only pattern syntax, including lookbehind, remains a separate engine

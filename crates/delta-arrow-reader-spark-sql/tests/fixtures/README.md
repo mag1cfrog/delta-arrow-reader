@@ -2255,11 +2255,14 @@ The index corpus preserves six independent Spark domains:
 
 `regexp_extract_index.rs` compares all 168 records across three string
 representations and two batch sizes, for 1,008 contexts. Fields compare complete
-names, types, nullability and metadata against the frozen declaration at the same
-stage. Ordered values compare in full. Spark can refine a nullable analyzed field
-to a nonnullable physical field; the comparison retains both declarations.
-Native primary observations expose analyzed and physical schemas and raw Arrow
-fields when those stages complete. Native optimized schemas remain unobserved.
+names, types, nullability and metadata against the frozen Spark declarations.
+Ordered values compare in full. Spark can refine a nullable analyzed field to a
+nonnullable physical field; the comparison retains both declarations. The native
+`analyzed_schema` label records the public resolved query schema before the
+DataFusion session analyzer and optimizer; Spark's analyzed declaration comes
+from `execution.analyzed()`. Native primary observations also expose physical
+schemas and raw Arrow fields when available. Native optimized schemas remain
+unobserved.
 Required errors retain the independently captured Spark phase, condition and
 parameters alongside the measured native stage and exact missing/null field
 availability. A reviewed native boundary does not imply phase or cause equality.
