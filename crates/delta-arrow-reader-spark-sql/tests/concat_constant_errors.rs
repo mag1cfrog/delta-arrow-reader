@@ -301,7 +301,11 @@ async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> T
     }
     for (catalog, schema, namespace) in [
         ("spark_catalog", "p", "`spark_catalog`.`p`"),
-        ("catalog`name", "schema`name", "`catalog``name`.`schema``name`"),
+        (
+            "catalog`name",
+            "schema`name",
+            "`catalog``name`.`schema``name`",
+        ),
     ] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
