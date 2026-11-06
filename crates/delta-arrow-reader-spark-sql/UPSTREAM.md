@@ -725,6 +725,9 @@ Row-dependent calls use native scalar NULL selection while retaining ordinary
 logical CSE. Whole constant and early local calls retain the private closed-lambda
 adapter for conditional folding and preparation. Its selection/scatter helpers
 remain in use.
+Pure literal calls keep the scalar path when the shared floating-to-INT cast
+overflows and neither integer argument can return NULL. Resolution retains the
+public declaration; ordinary optimization reports the required cast error.
 Async arguments retain their existing extraction and eager scalar evaluation path.
 The shared FLOAT/DOUBLE conversion covers TINYINT, SMALLINT, INT and BIGINT.
 Legacy conversion maps NaN to zero, saturates at INT/LONG bounds, and narrows

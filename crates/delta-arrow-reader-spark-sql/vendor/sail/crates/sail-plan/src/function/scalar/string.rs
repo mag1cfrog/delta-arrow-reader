@@ -25,6 +25,7 @@ use datafusion_spark::function::string::length::SparkLengthFunc;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
@@ -265,6 +266,11 @@ fn substring_lambdas(expression: expr::Expr) -> PlanResult<Transformed<expr::Exp
     })? {
         return Ok(Transformed::no(expression));
     }
+    if literal_substring_overflow(&function.args)? {
+        // Keep the checked cast visible to ordinary optimization. Resolving
+        // the call must still return its real public declaration first.
+        return Ok(Transformed::no(expression));
+    }
     let arguments = function
         .args
         .iter()
@@ -277,6 +283,71 @@ fn substring_lambdas(expression: expr::Expr) -> PlanResult<Transformed<expr::Exp
             arguments,
         ),
     )))
+}
+
+fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
+    fn literal_cast(expression: &expr::Expr) -> bool {
+        match expression {
+            expr::Expr::Literal(_, _) => true,
+            expr::Expr::Cast(cast)
+                if matches!(cast.field.data_type(),
+                    DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64) =>
+            {
+                literal_cast(&cast.expr)
+            }
+            expr::Expr::ScalarFunction(function)
+                if function.func.inner().is::<SparkCastStringToFloat>() =>
+            {
+                matches!(function.args.as_slice(), [input] if literal_cast(input))
+            }
+            expr::Expr::ScalarFunction(function)
+                if function.func.inner().downcast_ref::<SparkCastNumericToInteger>()
+                    .is_some_and(|cast| !cast.is_try() && cast.target_type() == &DataType::Int32) =>
+            {
+                matches!(function.args.as_slice(), [input] if literal_cast(input)
+                    && matches!(input.get_type(&DFSchema::empty()), Ok(DataType::Float32 | DataType::Float64)))
+            }
+            _ => false,
+        }
+    }
+    let [expr::Expr::Literal(source, _), position, length] = arguments else {
+        return Ok(false);
+    };
+    if source.is_null()
+        || !matches!(source.data_type(), DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
+            | DataType::Binary | DataType::LargeBinary | DataType::BinaryView)
+        || !literal_cast(position)
+        || !literal_cast(length)
+    {
+        return Ok(false);
+    }
+    if ![position, length].into_iter().try_fold(false, |found, argument| {
+        Ok::<_, datafusion_common::DataFusionError>(found || argument.exists(|value| {
+            Ok(matches!(value, expr::Expr::ScalarFunction(function)
+                if function.func.inner().is::<SparkCastNumericToInteger>()))
+        })?)
+    })? {
+        return Ok(false);
+    }
+    // Preview only these built-in literal casts. Integer TRY_CAST, callbacks,
+    // conditional bodies and column inputs retain their existing path.
+    let evaluator = LiteralEvaluator::new();
+    let mut overflow = false;
+    for argument in [position, length] {
+        match evaluator.evaluate(argument) {
+            Ok(value) if !value.is_null() => {}
+            Err(error)
+                if error.to_string().starts_with("[CAST_OVERFLOW]\ncaused by\n")
+                    && matches!(error.find_root(), datafusion_common::DataFusionError::ArrowError(cause, _)
+                        if matches!(cause.as_ref(), datafusion::arrow::error::ArrowError::CastError(_)
+                            | datafusion::arrow::error::ArrowError::ArithmeticOverflow(_))) =>
+            {
+                overflow = true;
+            }
+            _ => return Ok(false),
+        }
+    }
+    Ok(overflow)
 }
 
 pub(crate) fn lower_runtime_substring(
@@ -989,6 +1060,49 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
         true
     )?);
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    for (source_type, text) in [(DataType::Float32, "NaN"), (DataType::Float64, "Infinity")] {
+        let floating = ScalarUDF::from(SparkCastStringToFloat::try_new(source_type, false)?)
+            .call(vec![lit(text)]);
+        let integer = |ansi, is_try| -> datafusion_common::Result<Expr> {
+            Ok(cast(ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32, ansi, is_try,
+            )?).call(vec![floating.clone()]), DataType::Int64))
+        };
+        let position = integer(true, false)?;
+        let length = cast(cast(lit(2_i32), DataType::Int32), DataType::Int64);
+        let literal_args = vec![lit("abcdef"), position.clone(), length.clone()];
+        let literal = function.call(literal_args.clone());
+        let lowered = substring_lambdas(literal.clone())
+            .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
+        assert!(!lowered.transformed);
+        assert_eq!(lowered.data, literal);
+        let length_overflow = function.call(vec![lit("abcdef"), length.clone(), position.clone()]);
+        assert!(!substring_lambdas(length_overflow)
+            .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
+            .transformed);
+        let nullable_float = ScalarUDF::from(SparkCastStringToFloat::try_new(
+            DataType::Float32, true,
+        )?).call(vec![lit("bad")]);
+        let nullable_position = cast(ScalarUDF::from(SparkCastNumericToInteger::try_new(
+            DataType::Int32, true, false,
+        )?).call(vec![nullable_float]), DataType::Int64);
+        for arguments in [
+            vec![lit(ScalarValue::Utf8(None)), position.clone(), length.clone()],
+            vec![lit("abcdef"), lit(ScalarValue::Int64(None)), position.clone()],
+            vec![lit("abcdef"), position.clone(), lit(ScalarValue::Int64(None))],
+            vec![col("s"), position.clone(), length.clone()],
+            vec![lit("abcdef"), integer(false, false)?, length.clone()],
+            vec![lit("abcdef"), integer(true, true)?, length.clone()],
+            vec![lit("abcdef"), nullable_position, position.clone()],
+            vec![lit("abcdef"), position, permitted.call(vec![lit(2_i64)])],
+        ] {
+            assert!(substring_lambdas(function.call(arguments))
+                .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
+                .transformed);
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
 
     let known_null = SparkSubstring::new()
         .with_logical_arguments()
