@@ -360,9 +360,16 @@ fn extract_capture(
 ) -> Result<String> {
     let max_group_idx = caps.len().saturating_sub(1);
     if group_idx < 0 || group_idx as u64 > max_group_idx as u64 {
+        let condition = if function_name == SparkRegexpExtract::NAME {
+            "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] "
+        } else {
+            ""
+        };
         return Err(generic_exec_err(
             function_name,
-            &format!("Expects group index between 0 and {max_group_idx}, but got {group_idx}"),
+            &format!(
+                "{condition}Expects group index between 0 and {max_group_idx}, but got {group_idx}"
+            ),
         ));
     }
     Ok(caps
@@ -541,9 +548,11 @@ mod tests {
             let error = extract_first_match(SparkRegexpExtract::NAME, "a", &re, index)
                 .expect_err("matched invalid index must fail")
                 .to_string();
-            assert!(
-                error.contains(&format!("between 0 and 1, but got {index}")),
-                "{error}"
+            assert_eq!(
+                error,
+                format!(
+                    "Execution error: Spark `regexp_extract` function: [INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] Expects group index between 0 and 1, but got {index}"
+                )
             );
         }
         assert_eq!(
@@ -556,6 +565,35 @@ mod tests {
         assert!(
             error.contains("Invalid regex pattern") && error.contains("unclosed character class"),
             "{error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn extract_all_preserves_group_errors_and_no_match_behavior() -> Result<()> {
+        let re = parse_regex(SparkRegexpExtractAll::NAME, "(a)")?;
+        for (value, index, cause) in [
+            ("a", -1, "The group index must be non-negative, but got -1"),
+            ("b", -1, "The group index must be non-negative, but got -1"),
+            ("a", 2, "Expects group index between 0 and 1, but got 2"),
+            (
+                "a",
+                i64::from(i32::MAX),
+                "Expects group index between 0 and 1, but got 2147483647",
+            ),
+        ] {
+            let error = extract_all_matches(SparkRegexpExtractAll::NAME, value, &re, index)
+                .expect_err("invalid extract_all group index must retain its error")
+                .to_string();
+            assert_eq!(
+                error,
+                format!("Execution error: Spark `regexp_extract_all` function: {cause}")
+            );
+        }
+        assert!(extract_all_matches(SparkRegexpExtractAll::NAME, "b", &re, 2)?.is_empty());
+        assert_eq!(
+            extract_all_matches(SparkRegexpExtractAll::NAME, "a", &re, 0)?,
+            vec![Some("a".to_string())]
         );
         Ok(())
     }
