@@ -2033,9 +2033,10 @@ loaded JAR hashes, available schemas, values and structured errors.
 
 `substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
 and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
-current regression result has 3,804 strict receipt matches and 132 retained failures:
+current regression result has 3,828 strict receipt matches and 108 retained failures:
 12 invalid UTF8 sibling casts (#780), 72 analyzed numeric CAST declarations (#796),
-24 legacy non-finite conversions (#897), and 24 overflow-notation comparisons.
+and 24 overflow-notation comparisons. The 24 Legacy nonfinite conversions repaired
+by #897 require complete strict Spark fields and rows.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
 numeric value, SQL, available fields and exact native error are pinned; mutation
@@ -2044,7 +2045,7 @@ no Decimal defect or strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
-false. The separate meaningful-condition comparison has 3,828 matches and 108
+false. The separate meaningful-condition comparison has 3,852 matches and 84
 differences, so compatibility remains incomplete by either measure. No fixture
 field is rewritten and no missing Spark physical field is invented.
 

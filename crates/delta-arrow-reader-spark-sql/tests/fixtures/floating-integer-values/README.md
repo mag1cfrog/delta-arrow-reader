@@ -20,8 +20,8 @@ Use the pinned Spark environment and a fresh output path:
 
 ```sh
 TZ=UTC SPARK_LOCAL_IP=127.0.0.1 PYTHONDONTWRITEBYTECODE=1 \
-JAVA_HOME=/home/hanbo/.cache/hermit/pkg/openjdk-21.0.8_9 \
-/home/hanbo/.local/share/delta-arrow-reader-review/spark-array-null-2026-10-31/reference-venv/bin/python \
+JAVA_HOME=/path/to/pinned-jdk \
+/path/to/pinned-spark-venv/bin/python \
 capture_floating_integer_values.py /absolute/path/to/fresh-output.jsonl
 ```
 
@@ -35,3 +35,11 @@ The native replay observes both batch sizes 1 and 32. Its 704 comparisons cover
 the measured matrix; #897 owns the Legacy floating conversion policy. Field
 declarations (#796), checked overflow identity (#922), and the checked BIGINT
 endpoint (#1020) have separate contracts.
+
+`retained-baseline-facets.json` binds the exact remaining native differences to
+real accepted-runtime observations. It permits only listed nullable leaves,
+checked endpoint cells, and complete known error causes, stages and availability.
+The #1020 endpoint links include the original TRY literal's IEEE bits and the
+matching provider input row. Non-TRY Legacy rows receive no retained-value
+allowance. Strict Spark flags remain false for retained differences; the scoped
+#897 result is reported separately.

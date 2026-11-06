@@ -155,15 +155,17 @@ fn read_records(source: &str) -> TestResult<Vec<Value>> {
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-// The #813 receipts remain historical evidence; those contexts require strict Spark equality.
+// The repaired numeric receipts remain history; their contexts require strict Spark equality.
 fn current_native_profile<'a>(profiles: &'a [Value], case: &Value) -> Option<&'a Value> {
     profiles.iter().find(|profile| {
-        profile["owner"] != "#813" && profile["id"] == case["id"] && profile["ansi"] == case["ansi"]
+        !matches!(profile["owner"].as_str(), Some("#813" | "#897"))
+            && profile["id"] == case["id"]
+            && profile["ansi"] == case["ansi"]
     })
 }
 
 #[test]
-fn legacy_bigint_profiles_are_historical_only() -> TestResult {
+fn repaired_numeric_profiles_are_historical_only() -> TestResult {
     let references = read_records(include_str!(
         "fixtures/regexp-replace-position-int-spark.jsonl"
     ))?;
@@ -178,7 +180,7 @@ fn legacy_bigint_profiles_are_historical_only() -> TestResult {
             .skip(1)
             .find(|case| case["id"] == profile["id"] && case["ansi"] == profile["ansi"])
             .ok_or("missing native-profile reference")?;
-        if profile["owner"] == "#813" {
+        if matches!(profile["owner"].as_str(), Some("#813" | "#897")) {
             assert_eq!(profile["ansi"], false);
             let (semantic, _, strict) = reference_comparison(&profile["actual"], &case["expected"]);
             assert!(!semantic);
@@ -189,7 +191,7 @@ fn legacy_bigint_profiles_are_historical_only() -> TestResult {
             assert_eq!(current_native_profile(profiles, case), Some(profile));
         }
     }
-    assert_eq!(retired, 7);
+    assert_eq!(retired, 10);
     Ok(())
 }
 
@@ -327,8 +329,8 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
         }
     }
     assert_eq!(observations, 660);
-    assert_eq!(semantic_matches, 630);
-    assert_eq!(strict_matches, 570);
+    assert_eq!(semantic_matches, 648);
+    assert_eq!(strict_matches, 588);
     eprintln!(
         "c06 position regression summary: {}",
         json!({"references":110,"observations":observations,
