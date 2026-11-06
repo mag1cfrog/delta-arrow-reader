@@ -177,7 +177,9 @@ fn primitive_cast_overflow_profile_matches(
         return Ok(false);
     }
     let mut expected = profile["actual"].clone();
-    let error = expected["error"].as_str().ok_or("missing original overflow")?;
+    let error = expected["error"]
+        .as_str()
+        .ok_or("missing original overflow")?;
     assert!(!error.contains("[CAST_OVERFLOW]"));
     assert_eq!(error.matches("Arrow error: Cast error: ").count(), 1);
     // Preserve the complete frozen native object, adding only the numeric condition context.
@@ -243,37 +245,80 @@ fn position_error_comparison_rejects_later_stages_and_missing_fields() -> TestRe
             .ok_or("missing stage-control reference")?;
         let mut observation = profile["actual"].clone();
         if profile["owner"] == "#922" {
-            observation["error"] = json!(profile["actual"]["error"]
-                .as_str()
-                .ok_or("missing original primitive cause")?
-                .replacen("Arrow error: ", "[CAST_OVERFLOW]\ncaused by\nArrow error: ", 1));
-            assert!(primitive_cast_overflow_profile_matches(profile, case, &observation)?);
-            assert!(!primitive_cast_overflow_profile_matches(profile, case, &profile["actual"])?);
+            observation["error"] = json!(
+                profile["actual"]["error"]
+                    .as_str()
+                    .ok_or("missing original primitive cause")?
+                    .replacen(
+                        "Arrow error: ",
+                        "[CAST_OVERFLOW]\ncaused by\nArrow error: ",
+                        1
+                    )
+            );
+            assert!(primitive_cast_overflow_profile_matches(
+                profile,
+                case,
+                &observation
+            )?);
+            assert!(!primitive_cast_overflow_profile_matches(
+                profile,
+                case,
+                &profile["actual"]
+            )?);
             for (key, value) in [
                 ("error", profile["actual"]["error"].clone()),
-                ("error", json!(observation["error"].as_str().ok_or("missing annotated primitive cause")?.replace("[CAST_OVERFLOW]", ""))),
+                (
+                    "error",
+                    json!(
+                        observation["error"]
+                            .as_str()
+                            .ok_or("missing annotated primitive cause")?
+                            .replace("[CAST_OVERFLOW]", "")
+                    ),
+                ),
                 ("physical_schema", json!({"type":"struct","fields":[]})),
-                ("analyzed_arrow_schema", json!("changed native Arrow schema")),
+                (
+                    "analyzed_arrow_schema",
+                    json!("changed native Arrow schema"),
+                ),
                 ("unexpected", json!(true)),
             ] {
                 let mut fault = observation.clone();
                 fault[key] = value;
-                assert!(!primitive_cast_overflow_profile_matches(profile, case, &fault)?, "{key}");
+                assert!(
+                    !primitive_cast_overflow_profile_matches(profile, case, &fault)?,
+                    "{key}"
+                );
             }
             let mut wrong_value = observation.clone();
-            wrong_value["error"] = json!(observation["error"]
-                .as_str()
-                .ok_or("missing annotated primitive cause")?
-                .replace("Can't cast value ", "Can't cast value 0 instead of "));
-            assert!(!primitive_cast_overflow_profile_matches(profile, case, &wrong_value)?);
+            wrong_value["error"] = json!(
+                observation["error"]
+                    .as_str()
+                    .ok_or("missing annotated primitive cause")?
+                    .replace("Can't cast value ", "Can't cast value 0 instead of ")
+            );
+            assert!(!primitive_cast_overflow_profile_matches(
+                profile,
+                case,
+                &wrong_value
+            )?);
             assert!(!reference_comparison(&wrong_value, &case["expected"]).2);
             let mut omitted_null = observation.clone();
-            omitted_null.as_object_mut().ok_or("missing native object")?.remove("physical_schema");
-            assert!(!primitive_cast_overflow_profile_matches(profile, case, &omitted_null)?);
+            omitted_null
+                .as_object_mut()
+                .ok_or("missing native object")?
+                .remove("physical_schema");
+            assert!(!primitive_cast_overflow_profile_matches(
+                profile,
+                case,
+                &omitted_null
+            )?);
             if observation["analyzed_schema"].is_object() {
                 let mut metadata = observation.clone();
                 metadata["analyzed_schema"]["fields"][0]["metadata"] = json!({"wrong":"metadata"});
-                assert!(!primitive_cast_overflow_profile_matches(profile, case, &metadata)?);
+                assert!(!primitive_cast_overflow_profile_matches(
+                    profile, case, &metadata
+                )?);
             }
         }
         let actual = &observation;

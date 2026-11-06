@@ -323,11 +323,7 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
             .as_str()
             .ok_or("missing original Arrow cause")?
     ));
-    assert!(conversion_contract_matches(
-        case,
-        &repaired,
-        checked
-    ));
+    assert!(conversion_contract_matches(case, &repaired, checked));
     assert!(!conversion_contract_matches(
         case,
         &checked["observation"],

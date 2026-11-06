@@ -768,7 +768,10 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 error.to_string().lines().any(|line| line == expected_error),
                 "{sql}: {error}"
             );
-            assert!(error.to_string().contains("[CAST_OVERFLOW]"), "{sql}: {error}");
+            assert!(
+                error.to_string().contains("[CAST_OVERFLOW]"),
+                "{sql}: {error}"
+            );
             assert_eq!(final_invocations, 1, "{sql}");
         } else {
             result?;

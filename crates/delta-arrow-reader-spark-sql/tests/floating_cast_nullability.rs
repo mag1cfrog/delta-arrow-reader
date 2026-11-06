@@ -1030,7 +1030,10 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         )?);
     }
 
-    for id in ["float_tinyint_literal_nan", "float_bigint_literal_bigint_upper_cutoff"] {
+    for id in [
+        "float_tinyint_literal_nan",
+        "float_bigint_literal_bigint_upper_cutoff",
+    ] {
         let case = records
             .iter()
             .find(|case| case["id"] == id && case["ansi"] == true)
@@ -1040,13 +1043,23 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
             .ok_or("missing retained contexts")?
             .iter()
             .find(|control| {
-                control["id"] == case["id"] && control["ansi"] == case["ansi"] && control["batch"] == 1
+                control["id"] == case["id"]
+                    && control["ansi"] == case["ansi"]
+                    && control["batch"] == 1
             })
             .ok_or("missing exact cause")?["error"]
             .clone();
         for key in ["error", "optimized_error"] {
-            error[key] = json!(error[key].as_str().ok_or("missing checked error")?
-                .replacen("Arrow error: ", "[CAST_OVERFLOW]\ncaused by\nArrow error: ", 1));
+            error[key] = json!(
+                error[key]
+                    .as_str()
+                    .ok_or("missing checked error")?
+                    .replacen(
+                        "Arrow error: ",
+                        "[CAST_OVERFLOW]\ncaused by\nArrow error: ",
+                        1
+                    )
+            );
         }
         let condition_matches = error["owner"] == 922;
         let actual = json!({
@@ -1061,23 +1074,41 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
             "error_matches":condition_matches,"matches":condition_matches,
             "optimized_matches":condition_matches,"optimized_observation":null,
         });
-        assert!(floating_integer_scoped_contract_matches(case, &actual, 1, &facets)?);
+        assert!(floating_integer_scoped_contract_matches(
+            case, &actual, 1, &facets
+        )?);
         for key in ["error", "optimized_error", "native_phase"] {
             let mut changed = actual.clone();
             changed[key] = json!("[CAST_OVERFLOW] a different cause or stage");
-            assert!(!floating_integer_scoped_contract_matches(case, &changed, 1, &facets)?);
+            assert!(!floating_integer_scoped_contract_matches(
+                case, &changed, 1, &facets
+            )?);
         }
         let mut missing_marker = actual.clone();
         for key in ["error", "optimized_error"] {
-            missing_marker[key] = json!(actual[key].as_str().ok_or("missing checked error")?
-                .replace("[CAST_OVERFLOW]", ""));
+            missing_marker[key] = json!(
+                actual[key]
+                    .as_str()
+                    .ok_or("missing checked error")?
+                    .replace("[CAST_OVERFLOW]", "")
+            );
         }
-        assert!(!floating_integer_scoped_contract_matches(case, &missing_marker, 1, &facets)?);
+        assert!(!floating_integer_scoped_contract_matches(
+            case,
+            &missing_marker,
+            1,
+            &facets
+        )?);
         let mut wrong_flags = actual.clone();
         for key in ["error_matches", "matches", "optimized_matches"] {
             wrong_flags[key] = json!(!condition_matches);
         }
-        assert!(!floating_integer_scoped_contract_matches(case, &wrong_flags, 1, &facets)?);
+        assert!(!floating_integer_scoped_contract_matches(
+            case,
+            &wrong_flags,
+            1,
+            &facets
+        )?);
     }
 
     let case = records
@@ -1118,9 +1149,18 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         case, &actual, 1, &facets
     )?);
     let mut missing_marker = actual.clone();
-    missing_marker["error"] = json!(actual["error"].as_str().ok_or("missing later cause")?
-        .replace("[CAST_OVERFLOW]", ""));
-    assert!(!floating_integer_scoped_contract_matches(case, &missing_marker, 1, &facets)?);
+    missing_marker["error"] = json!(
+        actual["error"]
+            .as_str()
+            .ok_or("missing later cause")?
+            .replace("[CAST_OVERFLOW]", "")
+    );
+    assert!(!floating_integer_scoped_contract_matches(
+        case,
+        &missing_marker,
+        1,
+        &facets
+    )?);
     for (pointer, wrong) in [
         ("/physical_schema/fields/0/nullable", json!(false)),
         ("/physical_schema/fields/0/name", json!("wrong")),

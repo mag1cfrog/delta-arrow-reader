@@ -186,7 +186,9 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
         } else {
             (
                 "execute",
-                format!("execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"),
+                format!(
+                    "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+                ),
             )
         };
         let physical_matches = if direct {
