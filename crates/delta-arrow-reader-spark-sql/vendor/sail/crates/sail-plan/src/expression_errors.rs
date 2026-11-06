@@ -1887,7 +1887,7 @@ impl Prepare {
                     schema,
                 )?;
                 changed |= prepared.transformed;
-                lambda.body = Box::new(prepared.data);
+                *lambda.body = prepared.data;
                 if !row_expression(&lambda.body, false)?
                     || !permits_constant_preparation(&lambda.body)?
                 {
@@ -1913,7 +1913,7 @@ impl Prepare {
                     (!field.metadata().is_empty()).then(|| FieldMetadata::from(field.as_ref()));
                 let prepared = Expr::Literal(value, metadata);
                 changed |= prepared != *lambda.body;
-                lambda.body = Box::new(prepared);
+                *lambda.body = prepared;
                 if is_null {
                     break;
                 }
@@ -2444,15 +2444,15 @@ impl Prepare {
                     if (casts && (evaluable || is_spark_query)) || retain_input {
                         input_batch = self.local_batch(&project.input)?;
                     }
-                    if let Some(batch) = &input_batch {
-                        if batch.num_rows() == 0 {
-                            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
-                                EmptyRelation {
-                                    produce_one_row: false,
-                                    schema: Arc::clone(&project.schema),
-                                },
-                            )));
-                        }
+                    if let Some(batch) = &input_batch
+                        && batch.num_rows() == 0
+                    {
+                        return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                            EmptyRelation {
+                                produce_one_row: false,
+                                schema: Arc::clone(&project.schema),
+                            },
+                        )));
                     }
                 }
                 let mut retained = false;
@@ -2510,44 +2510,43 @@ impl Prepare {
                     Transformed::no(node)
                 };
                 let node = prepared.data;
-                if let LogicalPlan::Projection(project) = &node {
-                    if casts
-                        && (evaluable || is_spark_query)
-                        && let Some(batch) = &input_batch
-                    {
-                        let info = datafusion_expr::simplify::SimplifyContext::builder()
-                            .with_schema(Arc::clone(project.input.schema()))
-                            .with_config_options(Arc::new(options.clone()))
-                            .build();
-                        let mut simplifier = ExprSimplifier::new(info);
-                        if is_spark_query {
-                            simplifier = simplifier.with_local_input_errors();
+                if let LogicalPlan::Projection(project) = &node
+                    && casts
+                    && (evaluable || is_spark_query)
+                    && let Some(batch) = &input_batch
+                {
+                    let info = datafusion_expr::simplify::SimplifyContext::builder()
+                        .with_schema(Arc::clone(project.input.schema()))
+                        .with_config_options(Arc::new(options.clone()))
+                        .build();
+                    let mut simplifier = ExprSimplifier::new(info);
+                    if is_spark_query {
+                        simplifier = simplifier.with_local_input_errors();
+                    }
+                    for expr in &project.expr {
+                        if !row_expression(expr, true)? {
+                            continue;
                         }
-                        for expr in &project.expr {
-                            if !row_expression(expr, true)? {
-                                continue;
-                            }
-                            // Keep local comparisons while lowering other UDFs normally.
-                            let expr = expr
-                                .clone()
-                                .transform_up(|mut expr| {
-                                    if let Expr::ScalarFunction(f) = &mut expr
-                                        && let Some(nullif) =
-                                            f.func.inner().downcast_ref::<SparkNullIf>()
-                                    {
-                                        f.func = Arc::new(datafusion_expr::ScalarUDF::from(
-                                            nullif.for_local_values(),
-                                        ));
-                                        return Ok(Transformed::yes(expr));
-                                    }
-                                    Ok(Transformed::no(expr))
-                                })?
-                                .data;
-                            let expr = materialize_metadata_literals(expr)?.data;
-                            let expr = simplifier.simplify(expr)?;
-                            create_physical_expr(&expr, project.input.schema(), &self.props)?
-                                .evaluate(&batch)?;
-                        }
+                        // Keep local comparisons while lowering other UDFs normally.
+                        let expr = expr
+                            .clone()
+                            .transform_up(|mut expr| {
+                                if let Expr::ScalarFunction(f) = &mut expr
+                                    && let Some(nullif) =
+                                        f.func.inner().downcast_ref::<SparkNullIf>()
+                                {
+                                    f.func = Arc::new(datafusion_expr::ScalarUDF::from(
+                                        nullif.for_local_values(),
+                                    ));
+                                    return Ok(Transformed::yes(expr));
+                                }
+                                Ok(Transformed::no(expr))
+                            })?
+                            .data;
+                        let expr = materialize_metadata_literals(expr)?.data;
+                        let expr = simplifier.simplify(expr)?;
+                        create_physical_expr(&expr, project.input.schema(), &self.props)?
+                            .evaluate(batch)?;
                     }
                 }
                 Ok(Transformed::new_transformed(
