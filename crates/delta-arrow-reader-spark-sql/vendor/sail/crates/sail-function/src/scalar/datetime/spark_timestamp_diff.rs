@@ -247,8 +247,10 @@ impl ScalarUDFImpl for SparkTimestampDiff {
             (start, end),
             (ColumnarValue::Scalar(_), ColumnarValue::Scalar(_))
         );
-        let start = start.to_array(args.number_rows)?;
-        let end = end.to_array(args.number_rows)?;
+        // Two scalars give one scalar result, whatever the batch's row count.
+        let rows = if scalar { 1 } else { args.number_rows };
+        let start = start.to_array(rows)?;
+        let end = end.to_array(rows)?;
         let start = start.as_primitive::<TimestampMicrosecondType>();
         let end = end.as_primitive::<TimestampMicrosecondType>();
         let result = start
@@ -471,6 +473,38 @@ mod tests {
             "{evaluated:?}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn scalar_arguments_give_a_scalar_for_any_row_count() {
+        let function = SparkTimestampDiff::new("HOUR", "UTC".into());
+        let timestamp = |value: i64| {
+            ColumnarValue::Scalar(ScalarValue::TimestampMicrosecond(
+                Some(value),
+                Some("UTC".into()),
+            ))
+        };
+        let field = Arc::new(Field::new(
+            "t",
+            DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            false,
+        ));
+        for number_rows in [0, 1, 3] {
+            let result = function.invoke_with_args(ScalarFunctionArgs {
+                args: vec![timestamp(0), timestamp(7_200_000_000)],
+                arg_fields: vec![field.clone(), field.clone()],
+                number_rows,
+                return_field: Arc::new(Field::new("r", DataType::Int64, false)),
+                config_options: Arc::default(),
+            });
+            assert!(
+                matches!(
+                    &result,
+                    Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(2))))
+                ),
+                "{number_rows} rows: {result:?}"
+            );
+        }
     }
 
     #[test]
