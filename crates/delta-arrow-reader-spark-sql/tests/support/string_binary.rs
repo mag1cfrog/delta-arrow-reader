@@ -228,12 +228,25 @@ pub(crate) async fn capture_observation_with_state(
     case: &Value,
     state: Option<SessionState>,
 ) -> TestResult<Value> {
+    let settings = case
+        .get("settings")
+        .cloned()
+        .map(serde_json::from_value::<std::collections::BTreeMap<String, String>>)
+        .transpose()?
+        .unwrap_or_default();
+    let variable_substitution_enabled = settings
+        .get("spark.sql.variable.substitute")
+        .map(|value| value.parse::<bool>())
+        .transpose()?
+        .unwrap_or(true);
     let query = match plan_query(
         session,
         case["sql"].as_str().ok_or("missing SQL")?,
         &SparkSqlOptions {
             ansi_mode: case["ansi"].as_bool().ok_or("missing ANSI mode")?,
             session_timezone: "UTC".into(),
+            variable_substitution_enabled,
+            variable_substitution_values: settings,
             ..Default::default()
         },
     )
