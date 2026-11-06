@@ -40,6 +40,25 @@ The public API provides session configuration, query resolution and physical
 planning. Its crate-level example shows how to execute a query using the host
 session. The host must install `configure_spark_sql` before using `plan_query`.
 
+SQL configuration references such as `${name}` are expanded before parsing by
+default. Supply explicit values in `SparkSqlOptions::variable_substitution_values`
+or set `variable_substitution_enabled` to false to preserve the original text.
+The unprefixed, `spark`, `sparkconf`, `hivevar` and `hiveconf` namespaces share
+that map; missing names become empty text. Expansion is recursive and rejects
+cycles. It affects SQL text, including raw literals and identifiers. Provider
+values and native `SessionContext.sql` keep their own behavior. The expanded
+command must still be one supported read-only statement.
+
+This boundary reads no environment variables, JVM properties or implicit host
+configuration. Other namespaces, including `env` and `system`, remain literal.
+Values are redacted when their name or value matches the SQL options or secret
+redaction pattern, before recursive expansion. The defaults match the pinned
+Spark configuration. Overrides named `spark.sql.redaction.options.regex` and
+`spark.redaction.regex` in the explicit map use native regex syntax with ASCII
+character classes; expressions unsupported by the native UTF-8 matcher fail
+planning. This is a SQL-configuration subset, not full Java regex or ambient
+Spark-session configuration support.
+
 See [source provenance](UPSTREAM.md) for the retained implementation and dependency
 forks. The accepted-runtime test checks preservation of recorded outcomes; some
 of those outcomes have known Spark differences and are not compatibility passes.

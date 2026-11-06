@@ -62,8 +62,8 @@ controls require correct results for `^`, `\A`, `^|$`, `^|b`, multiline `^`, `\b
 
 The private `capture_observation` helper retains actual public analyzed fields,
 physical fields and raw Arrow schemas from the same execution when a later stage
-fails. All 94 required-error references with recorded analyzed fields and six
-known external-error references require those fields to match, for 600 field
+fails. All 94 required-error references with recorded analyzed fields and four
+current external-error references require those fields to match, for 588 field
 comparisons across the six configurations. Negative controls reject incorrect
 analyzed names, types, nullability and metadata. The 28 admission-error references
 have no recorded schema and require actual analysis to fail; their 168
@@ -73,16 +73,17 @@ Each observation records field-comparison availability separately. All 122 Spark
 error references lack physical fields, so their 732 observations retain any
 available native physical fields without claiming physical compatibility. A
 missing reference schema is marked `reference_unavailable`; a phase unavailable
-in both engines is marked `unavailable`. The six external-error references have
+in both engines is marked `unavailable`. The four current external-error references have
 Spark physical fields: available native fields must match, and a failed native
 physical-planning phase is marked `actual_unavailable`. No fields are inferred.
 
 The harness separates exact controls from retained dependencies:
 
 - `guarded_case` and `guarded_literal` require exact complete fields and rows.
-- The original `${x}` and `${missing}` literal queries depend on SQL variable
-  substitution under #789. Fresh column replacements exercise the actual
-  named-group strings without SQL text substitution.
+- The original `${x}` and `${missing}` literal queries require exact successful
+  results after shared SQL configuration substitution. Their earlier native
+  row/error differences remain historical evidence. Real-column replacements
+  continue to exercise the actual named-group strings and errors unchanged.
 - Mixed unaliased queries require exact complete analyzed and physical fields,
   including LIKE names, types, nullability and metadata, and all ordered rows.
 - Accepted-pattern final line-terminator matching remains a #930 difference
@@ -117,11 +118,31 @@ still requires the broader #798 matcher work and the other named dependencies.
 
 The original regression inventory recorded 2,280 complete-result observations,
 732 required errors and 96 precisely retained external observations. The current
-inventory requires 2,292 complete-result observations, 732 required errors and
-84 retained external observations. Passing this regression checks the current
+inventory requires 2,316 complete-result observations, 732 required errors and
+60 retained external observations. Passing this regression checks the current
 inventory; full Spark compatibility remains false while the external outcomes
 differ. The position and replacement rules follow the pinned
 [Spark RegExpReplace implementation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/regexpExpressions.scala#L637).
+
+`sql-variable-substitution-spark.jsonl` retains 116 independent observations:
+96 complete results and 20 errors. It pairs enabled/disabled substitution and
+defined/undefined/empty configuration values with literal and real-column
+replacement controls, raw literals, output names, namespace aliases, recursive
+values, literal dollar/backslash bytes, redaction and Java-default reference
+character classes. Expression, identifier and table substitutions pass through
+the shared SQL boundary. Provider metadata, nullable fields and replacement
+errors remain intact. Only the inherited input-only header wording changed;
+every captured observation remains byte-for-byte unchanged.
+
+The shared C06 observer replays exact per-case settings across the three string
+representations and batch sizes 1/32. All 576 successful results require complete
+analyzed/physical fields and ordered rows; 96 replacement errors require their
+recorded cause and the corresponding native physical/execution phase. The 24
+syntax errors require parser rejection before fields exist. Native parser
+diagnostic identifiers and wording differ from Spark and are reported separately.
+Absent Spark physical fields and unavailable native optimized fields receive no
+compatibility credit. Circular-reference engine evidence remains unverified;
+focused helper assertions alone do not establish that contract.
 
 ## Raw nonword boundary
 

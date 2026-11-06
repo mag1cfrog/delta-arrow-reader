@@ -42,7 +42,7 @@ use sail_plan::resolver::PlanResolver;
 pub use sail_plan::config::DefaultTimestampType;
 /// Behavior when a map constructor receives duplicate keys.
 pub use sail_plan::config::MapKeyDedupPolicy;
-/// Spark expression settings used while resolving a query.
+/// Spark SQL text and expression settings used while resolving a query.
 pub use sail_plan::config::PlanConfig as SparkSqlOptions;
 
 /// Install the Spark analyzer and physical planner on a host session builder.
@@ -94,12 +94,21 @@ impl SparkSqlQuery {
 /// The session must be configured with [`configure_spark_sql`]. Syntax errors,
 /// unsupported statements and resolution errors are returned without executing
 /// the query. This function does not create or modify catalog objects.
+/// SQL configuration references are expanded before parsing according to
+/// [`SparkSqlOptions::variable_substitution_enabled`] and its explicit values.
+/// This does not alter provider values or native `SessionContext::sql`.
 pub async fn plan_query(
     session: &SessionContext,
     sql: &str,
     options: &SparkSqlOptions,
 ) -> Result<SparkSqlQuery> {
-    let ast = sail_sql_analyzer::parser::parse_one_statement(sql)
+    let sql = sail_sql_analyzer::substitution::substitute_sql_variables(
+        sql,
+        options.variable_substitution_enabled,
+        &options.variable_substitution_values,
+    )
+    .map_err(|error| DataFusionError::External(Box::new(error)))?;
+    let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)
         .map_err(|error| DataFusionError::External(Box::new(error)))?;
     let query = sail_sql_analyzer::statement::from_ast_statement(ast)
         .map_err(|error| DataFusionError::External(Box::new(error)))?;
