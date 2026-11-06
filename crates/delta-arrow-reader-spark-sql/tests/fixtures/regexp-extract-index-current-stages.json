@@ -8728,5 +8728,129 @@
     "providers": 99,
     "separate_scalar_contexts": 24,
     "new_negative_or_phase_allowance": false
+  },
+  "numeric_staging_verification": {
+    "product_source_head": "d85c53a8bed053a63b717d7ea05b21579ead40aa",
+    "product_source_tree": "31fa0d3a74a545f277a65d0220b114ca432dc92f",
+    "formatted_source_equivalent_head": "a6b219d5c84ffb1e778fb050b2d194163d4cd381",
+    "formatted_source_equivalent_tree": "11043b9a476442ae736aab0ea95465c25ba231ee",
+    "format_source_equivalence": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-api-independent-review/FORMAT-SOURCE-EQUIVALENCE-a6b.json",
+      "sha256": "559558309464e3287d5c79fba7f2a185512c6a2250739fcb5edb189c1d954ed8"
+    },
+    "captures": {
+      "main_baseline": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/main/baseline-manifest.json",
+          "sha256": "62f0418ef6efe8587abe029f30d7a4d6dd51e2e7021ffc1388eabb52b2c21183"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/main/baseline.inventory.json",
+          "sha256": "70730b54330f16f146ecdd27b69960c014a5915224d84dae164893755a805bbf",
+          "total": 1082,
+          "contexts": {
+            "index": 1008,
+            "selection": 32,
+            "async": 6,
+            "local-no-fold": 24,
+            "alias": 12
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/main/baseline.log",
+          "sha256": "f9566de4f1b7e325d10663ea7b110512371d566f3f1bfa22bc6a32d6cfee65fd"
+        }
+      },
+      "main_candidate": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/main/candidate-manifest.json",
+          "sha256": "1910f78d005ebc64819f7c45ebd169042690409a63544013e9300c7b597463c0"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/main/candidate.inventory.json",
+          "sha256": "c940e1f4a02e7c6c5cc3cd04626e753777cb8519804ded32b2f244bd4132cc01",
+          "total": 1082,
+          "contexts": {
+            "index": 1008,
+            "selection": 32,
+            "async": 6,
+            "local-no-fold": 24,
+            "alias": 12
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/main/candidate.log",
+          "sha256": "85fb0e337330fd20dbfcb688e809b359db5f3ff03f1f7deb4997ac26e4348269"
+        }
+      },
+      "scalar_baseline": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/scalar-parent/baseline/capture.manifest.json",
+          "sha256": "936b900661ee388a0c09c611a92c4e0c1f2a8c4959afdc7c017e2043cd3fe2fd"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/scalar-parent/baseline/capture.inventory.json",
+          "sha256": "d58c667ca38f9525b6b869cd878cb6fa921e4142e4bfcb7cf474e25efe3c4d35",
+          "total": 24,
+          "contexts": {
+            "extraction_without_scalar_parent": 8,
+            "extraction_with_scalar_parent": 8,
+            "shared_cast_only_with_scalar_parent": 4,
+            "genuine_native_control": 4
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/scalar-parent/baseline/capture.log",
+          "sha256": "194c8c546844eb554a8f39c26690cd9623072f52987117131c5d0b7a8ead67d7"
+        }
+      },
+      "scalar_candidate": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/scalar-parent/candidate/capture.manifest.json",
+          "sha256": "1f760a2c28f6defef347c65238f66868aa0822453568a9d891c22c08d7171b67"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/scalar-parent/candidate/capture.inventory.json",
+          "sha256": "664a2c87f6d5d03c0d00b6cc6d873536a2667cc2694b909eb1ce7c2d666c7f88",
+          "total": 24,
+          "contexts": {
+            "extraction_without_scalar_parent": 8,
+            "extraction_with_scalar_parent": 8,
+            "shared_cast_only_with_scalar_parent": 4,
+            "genuine_native_control": 4
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-runtime/scalar-parent/candidate/capture.log",
+          "sha256": "3839d9782d817fb3d0b8f948376621633febd23fec9690de60be776c6147490f"
+        }
+      }
+    },
+    "independent_closeout": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-independent-review/NUMERIC-CAPTURE-CLOSEOUT-SEAL.json",
+      "sha256": "9438682e2ebb60968c9635be48be41b1049a520cd6c23c601bedec4a3049ec18"
+    },
+    "independent_data_review": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/numeric-staging-independent-review/DATA-FACT-TOOL-AND-OUTPUT-REVIEW.json",
+      "sha256": "546bbef3d60a76e26550e449b4ed416f6ebc25e9ec07c7419df2c4e042b26c4d"
+    },
+    "main_contexts": 1082,
+    "index_contexts": 1008,
+    "providers": 99,
+    "separate_scalar_contexts": 24,
+    "strict_matches": 756,
+    "negative_observations": 252,
+    "retired_nan_profiles": 6,
+    "updated_infinity_profiles": 6,
+    "stage_contract_changes": 0,
+    "new_negative_or_phase_allowance": false,
+    "primary_optimized_schema": "unobserved; diagnostic repeats are separate",
+    "raw_native_plan_strings": "preserved as capture evidence; no semantic normalization",
+    "full_compatibility_pass": false,
+    "merge_blocker": "#1022"
   }
 }

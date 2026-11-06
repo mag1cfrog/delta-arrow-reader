@@ -373,18 +373,20 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
             &profile["actual"],
             &comparison
         ));
+        let facets = false_facets(&comparison)?;
+        assert!(facets
+            .iter()
+            .all(|facet| ["diagnostic_identifier", "phase"].contains(&facet.as_str())));
         let owners = profile["facet_owners"]
             .as_object()
             .ok_or("missing facet owners")?;
         assert_eq!(
             owners.keys().cloned().collect::<BTreeSet<_>>(),
-            false_facets(&comparison)?
-                .into_iter()
-                .collect::<BTreeSet<_>>()
+            facets.into_iter().collect::<BTreeSet<_>>()
         );
         for owner in owners.values() {
             let owner = owner.as_str().ok_or("malformed facet owner")?;
-            assert!(["#897", "#922", "#788"].contains(&owner));
+            assert!(["#922", "#788"].contains(&owner));
             *owner_counts.entry(owner).or_default() += 1;
         }
     }

@@ -2245,15 +2245,16 @@ negative object and computed false facets in
 values, SQL or context keys, and missing, duplicate or unused profiles fail the
 regression gate. Preserved differences receive no Spark-match credit and retain
 `full_compatibility_pass=false`. Preservation does not waive a lost strict match
-or a newly introduced failure. The current inventory contains 750 strict matches
-and 258 negative observations. Legacy BIGINT narrowing preserves all 30 retained
+or a newly introduced failure. The current inventory contains 756 strict matches
+and 252 negative observations. Legacy BIGINT narrowing preserves all 30 retained
 NULL/no-match loss contexts and their ANSI overflow partners. Both bad-VALUES
 queries require the inline-table wrapper, the exact bad STRING-to-INT cause and
 resolve-stage availability across all 12 ANSI contexts.
 
-Remaining differences retain their measured facets: legacy NaN status/rows and
-Infinity cause/identifier failures (#897), primitive overflow identifiers (#922),
-and group identifiers and phase differences (#788). The original
+Shared floating index conversion preserves the frozen legacy NaN value and
+the required Infinity group-index cause for 2147483647. Remaining differences
+are primitive ANSI overflow identifiers (#922), group identifiers and phase
+differences (#788). The original
 `regexp-extract-index-native-negative.jsonl` and
 `regexp-extract-index-native-stages.json` remain frozen historical evidence.
 

@@ -748,8 +748,8 @@ cover supported patterns, index conversion and evaluation boundaries.
 Supported index arguments use the existing shared Spark INT conversion builder,
 then widen to the Int64 input required by the regex kernel. This adaptation is
 local to REGEXP_EXTRACT. Shared legacy BIGINT conversion uses Spark's low-32-bit
-narrowing, and ANSI conversion checks overflow.
-Nonfinite floating conversion limits remain under #897. Primitive ANSI overflow
+narrowing, and ANSI conversion checks overflow. Floating indices, including
+legacy NaN and Infinity, also use the shared converter. Primitive ANSI overflow
 identifiers remain under #922.
 
 Local VALUES inputs retain reached source work before index conversion. Bare
