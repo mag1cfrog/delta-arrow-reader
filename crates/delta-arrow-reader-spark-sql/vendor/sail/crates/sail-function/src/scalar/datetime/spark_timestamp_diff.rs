@@ -271,20 +271,19 @@ impl ScalarUDFImpl for SparkTimestampDiff {
 
 #[cfg(test)]
 mod tests {
+    use datafusion_common::exec_datafusion_err;
+
     use super::*;
 
-    fn micros(text: &str) -> i64 {
-        let Ok(instant) = DateTime::parse_from_rfc3339(text) else {
-            panic!("invalid test instant {text}");
-        };
-        instant.timestamp_micros()
+    fn micros(text: &str) -> Result<i64> {
+        DateTime::parse_from_rfc3339(text)
+            .map(|instant| instant.timestamp_micros())
+            .map_err(|error| exec_datafusion_err!("invalid test instant {text}: {error}"))
     }
 
     fn diff(unit: &str, zone: &str, start: &str, end: &str) -> Result<i64> {
-        let Ok(tz) = Tz::from_str(zone) else {
-            panic!("invalid test zone {zone}");
-        };
-        SparkTimestampDiff::new(unit, zone.into()).difference(micros(start), micros(end), &tz)
+        let tz = Tz::from_str(zone)?;
+        SparkTimestampDiff::new(unit, zone.into()).difference(micros(start)?, micros(end)?, &tz)
     }
 
     #[test]
@@ -419,10 +418,11 @@ mod tests {
             function.difference(0, i64::MAX, &Tz::from_str("UTC")?)?,
             i64::MAX
         );
-        let Err(error) = function.difference(-i64::MAX, i64::MAX, &tz) else {
-            panic!("expected an overflow");
-        };
-        assert!(error.to_string().contains("long overflow"), "{error}");
+        let overflow = function.difference(-i64::MAX, i64::MAX, &tz);
+        assert!(
+            matches!(&overflow, Err(error) if error.to_string().contains("long overflow")),
+            "{overflow:?}"
+        );
         // Chrono cannot represent these instants. Java places them in January of year 294247
         // (PST) and before the zone's first transition (local mean time, -07:52:58).
         assert_eq!(
@@ -456,17 +456,19 @@ mod tests {
                 config_options: Arc::default(),
             })
         };
-        let Ok(ColumnarValue::Scalar(ScalarValue::Int64(None))) = invoke(None) else {
-            panic!("a NULL argument skips the unit check");
-        };
-        let Err(error) = invoke(Some(0)) else {
-            panic!("expected an invalid unit");
-        };
+        // A NULL argument skips the unit check.
+        let null = invoke(None);
         assert!(
-            error
-                .to_string()
-                .contains("[INVALID_PARAMETER_VALUE.DATETIME_UNIT]"),
-            "{error}"
+            matches!(&null, Ok(ColumnarValue::Scalar(ScalarValue::Int64(None)))),
+            "{null:?}"
+        );
+        let evaluated = invoke(Some(0));
+        assert!(
+            matches!(
+                &evaluated,
+                Err(error) if error.to_string().contains("[INVALID_PARAMETER_VALUE.DATETIME_UNIT]")
+            ),
+            "{evaluated:?}"
         );
         Ok(())
     }
