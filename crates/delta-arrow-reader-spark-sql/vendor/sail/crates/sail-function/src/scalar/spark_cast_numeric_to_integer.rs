@@ -153,8 +153,8 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
     }
 
     fn coerce_types(&self, arguments: &[DataType]) -> Result<Vec<DataType>> {
-        if !matches!(arguments, [DataType::Float32 | DataType::Float64])
-            && !(self.target == DataType::Int32 && matches!(arguments, [DataType::Int64]))
+        if !(matches!(arguments, [DataType::Float32 | DataType::Float64])
+            || (self.target == DataType::Int32 && matches!(arguments, [DataType::Int64])))
         {
             return exec_err!(
                 "numeric CAST to {} expects FLOAT/DOUBLE, or BIGINT for INT, got {arguments:?}",
