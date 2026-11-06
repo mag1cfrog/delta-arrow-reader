@@ -126,6 +126,52 @@ fn retained_facets() -> TestResult<Value> {
         .as_array_mut()
         .ok_or("missing mutable causes")?
         .extend(outcomes.iter().cloned());
+    let opaque: Value = serde_json::from_str(include_str!(
+        "fixtures/array-index-error-timing/opaque-retained-baseline-facets.json"
+    ))?;
+    assert_eq!(opaque["source"], "ded20e6f6b783d13d3427680900396cbb7ab7ff3");
+    assert_eq!(
+        opaque["runtime_source"],
+        "cb9f10dcda765cafe81e63eabe7412c94949da1e"
+    );
+    assert_eq!(
+        opaque["source_log_sha256"],
+        "b39b9e2d45b19d9b3b308ab5b31bf059a880e7c9c327237750cb98221d8fc811"
+    );
+    assert_eq!(
+        opaque["spark_reference_sha256"],
+        "28a922e7c069cd4c25578a87e367e00735f7997c46f541e392fae740bfccda42"
+    );
+    assert_eq!(opaque["is_spark_compatibility_credit"], false);
+    let fields = opaque["field_facets"]
+        .as_array()
+        .ok_or("missing opaque Field facets")?;
+    assert_eq!(fields.len(), 2);
+    assert!(fields.iter().all(|facet| facet["owner"] == 1000));
+    assert!(
+        opaque["cause_facets"]
+            .as_array()
+            .ok_or("missing opaque causes")?
+            .is_empty()
+    );
+    facets["field_facets"]
+        .as_array_mut()
+        .ok_or("missing mutable Fields")?
+        .extend(fields.iter().cloned());
+    assert_eq!(
+        facets["field_facets"]
+            .as_array()
+            .ok_or("missing combined Fields")?
+            .len(),
+        114
+    );
+    assert_eq!(
+        facets["cause_facets"]
+            .as_array()
+            .ok_or("missing combined causes")?
+            .len(),
+        6
+    );
     Ok(facets)
 }
 
@@ -627,7 +673,7 @@ fn whole_expression_array_errors_keep_native_generic_and_conditional_policies() 
 }
 
 #[tokio::test]
-async fn array_preparation_honors_output_and_local_producer_permissions() -> TestResult {
+async fn array_preparation_preserves_callback_boundaries_and_live_errors() -> TestResult {
     use arrow::datatypes::DataType;
     use datafusion::common::{Result, config::ConfigOptions};
     use datafusion::logical_expr::simplify::SimplifyContext;
