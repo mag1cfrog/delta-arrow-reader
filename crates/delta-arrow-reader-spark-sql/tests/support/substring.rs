@@ -11,8 +11,9 @@ pub(crate) fn meaningful_error(case: &Value, error: &str) -> bool {
             .as_str()
             .map(|value| value.trim_end_matches('L'))
             .is_some_and(|value| {
-                error.contains(&format!("Can't cast value {value} to type Int32"))
-                    || error.contains(&format!("value of {value} is out of range Int32"))
+                error.contains("[CAST_OVERFLOW]")
+                    && (error.contains(&format!("Can't cast value {value} to type Int32"))
+                        || error.contains(&format!("value of {value} is out of range Int32")))
             }),
         Some("CAST_INVALID_INPUT") if parameters["targetType"] == "\"INT\"" => {
             parameters["expression"].as_str().is_some_and(|value| {
@@ -179,13 +180,13 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
             (
                 "physical",
                 format!(
-                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
                 ),
             )
         } else {
             (
                 "execute",
-                format!("execute: Arrow error: Cast error: Can't cast value {value} to type Int32"),
+                format!("execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"),
             )
         };
         let physical_matches = if direct {

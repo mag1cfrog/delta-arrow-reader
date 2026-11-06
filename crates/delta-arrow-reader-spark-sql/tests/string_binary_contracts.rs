@@ -250,7 +250,15 @@ fn uncaptured_substring_errors_reject_the_review_counterexample() -> TestResult 
     assert!(open_contract_outcome(&case, &reviewed, 0, 1).is_none());
     let mut concrete_cause = reviewed.clone();
     concrete_cause["error"] =
-        json!("execute: Arrow error: Cast error: Can't cast value 2147483648 to type Int32");
+        json!("execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 2147483648 to type Int32");
+    assert!(substring::meaningful_error(
+        &case,
+        concrete_cause["error"].as_str().ok_or("missing concrete cause")?
+    ));
+    assert!(!substring::meaningful_error(
+        &case,
+        "execute: Arrow error: Cast error: Can't cast value 2147483648 to type Int32"
+    ));
     assert!(!substring::matches_reference(&case, &concrete_cause));
     assert!(open_contract_outcome(&case, &concrete_cause, 0, 1).is_none());
 

@@ -261,7 +261,7 @@ fn conversion_contract_matches(case: &Value, observation: &Value, control: &Valu
         && parameters["targetType"] == "\"INT\""
         && case["spark_error_phase"] == "collect"
         && observation["native_phase"] == "collect"
-        && observation["error"] == cause
+        && observation["error"] == format!("[CAST_OVERFLOW]\ncaused by\n{cause}")
 }
 
 fn admission_contract_matches(case: &Value, observation: &Value) -> bool {
@@ -316,16 +316,28 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
         })
         .ok_or("missing checked control")?;
     let case = &checked["reference"];
+    let mut repaired = checked["observation"].clone();
+    repaired["error"] = json!(format!(
+        "[CAST_OVERFLOW]\ncaused by\n{}",
+        checked["observation"]["error"]
+            .as_str()
+            .ok_or("missing original Arrow cause")?
+    ));
     assert!(conversion_contract_matches(
+        case,
+        &repaired,
+        checked
+    ));
+    assert!(!conversion_contract_matches(
         case,
         &checked["observation"],
         checked
     ));
     for error in [
-        "Arrow error: Cast error: Can't cast value 4294967296 to type Int32",
-        "Arrow error: Cast error: Can't cast value 4294967297 to type Int64",
+        "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 4294967297 to type Int64",
     ] {
-        let mut changed = checked["observation"].clone();
+        let mut changed = repaired.clone();
         changed["error"] = json!(error);
         assert!(!conversion_contract_matches(case, &changed, checked));
     }
@@ -335,18 +347,18 @@ fn argument_boundary_gate_rejects_changed_causes_fields_and_null_priority() -> T
         "before_collect",
         "physical_schema",
     ] {
-        let mut changed = checked["observation"].clone();
+        let mut changed = repaired.clone();
         changed[key]["fields"][0]["metadata"] = json!({"unexpected":"metadata"});
         assert!(!conversion_contract_matches(case, &changed, checked));
     }
-    let mut changed = checked["observation"].clone();
+    let mut changed = repaired.clone();
     changed["native_phase"] = json!("create_physical_plan");
     assert!(!conversion_contract_matches(case, &changed, checked));
     let mut changed_case = case.clone();
     changed_case["sql"] = json!("SELECT 1");
     assert!(!conversion_contract_matches(
         &changed_case,
-        &checked["observation"],
+        &repaired,
         checked
     ));
     for control in &controls {

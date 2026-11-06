@@ -338,7 +338,7 @@ async fn floating_integer_cast_null_inspection_matches_recorded_contracts() -> T
     }
     let mut comparisons = 0;
     let mut strict_successes = 0;
-    let mut inherited_errors = 0;
+    let mut required_overflow_contexts = 0;
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -367,12 +367,13 @@ async fn floating_integer_cast_null_inspection_matches_recorded_contracts() -> T
                 strict_successes += 1;
             } else {
                 assert_eq!(case["ansi"], true);
+                assert!(strict, "{} batch={batch_size}: {actual}", case["id"]);
                 assert!(
                     floating_integer_scoped_contract_matches(case, &actual, batch_size, &facets)?,
                     "{} batch={batch_size}: {actual}",
                     case["id"]
                 );
-                inherited_errors += 1;
+                required_overflow_contexts += 1;
             }
             eprintln!(
                 "FLOATING_INTEGER_NULL_INSPECTION_RESULT {}",
@@ -386,7 +387,7 @@ async fn floating_integer_cast_null_inspection_matches_recorded_contracts() -> T
     }
     assert_eq!(comparisons, 24);
     assert_eq!(strict_successes, 16);
-    assert_eq!(inherited_errors, 8);
+    assert_eq!(required_overflow_contexts, 8);
     Ok(())
 }
 
@@ -684,6 +685,12 @@ fn floating_integer_scoped_contract_matches(
         return Ok(false);
     }
     let mut normalized = actual.clone();
+    // #1031 retains only these exact later substring failures and extra native Fields.
+    let later_substring_error = case["ansi"] == true
+        && matches!(
+            case["id"].as_str(),
+            Some("float_nan_substring" | "double_infinity_substring")
+        );
     for kind in ["fields", "availability", "rows"] {
         for facet in control[kind].as_array().ok_or("missing retained facets")? {
             let key = facet["key"].as_str().ok_or("missing observed key")?;
@@ -691,13 +698,7 @@ fn floating_integer_scoped_contract_matches(
             if kind == "availability" {
                 assert!(matches!(owner, 922 | 1020));
                 let mut expected_native = facet["inherited_dar"].clone();
-                if owner == 922
-                    && case["ansi"] == true
-                    && matches!(
-                        case["id"].as_str(),
-                        Some("float_nan_substring" | "double_infinity_substring")
-                    )
-                {
+                if owner == 922 && later_substring_error {
                     assert!(matches!(
                         key,
                         "optimized_schema" | "before_collect" | "physical_schema"
@@ -761,12 +762,32 @@ fn floating_integer_scoped_contract_matches(
             retained_error["owner"].as_u64(),
             Some(865 | 922 | 1020)
         ));
+        let mut expected_error = retained_error.clone();
+        if matches!(retained_error["owner"].as_u64(), Some(922 | 1020)) {
+            for key in ["error", "optimized_error"] {
+                if let Some(error) = retained_error[key].as_str() {
+                    assert!(!error.contains("[CAST_OVERFLOW]"));
+                    assert_eq!(error.matches("Arrow error: Cast error: ").count(), 1);
+                    expected_error[key] = json!(error.replacen(
+                        "Arrow error: Cast error: ",
+                        "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: ",
+                        1,
+                    ));
+                }
+            }
+        }
+        if later_substring_error {
+            assert_eq!(retained_error["owner"], 922);
+            assert_eq!(retained_error["native_phase"], "collect");
+            assert_eq!(case["spark_error_phase"], "optimized");
+        }
+        let error_matches = retained_error["owner"] == 922 && !later_substring_error;
         if ["error", "native_phase", "optimized_error"]
             .into_iter()
-            .any(|key| actual[key] != retained_error[key])
+            .any(|key| actual[key] != expected_error[key])
             || !actual["rows"].is_null()
             || !actual["rows_raw"].is_null()
-            || actual["error_matches"] != false
+            || actual["error_matches"] != error_matches
         {
             return Ok(false);
         }
@@ -799,7 +820,7 @@ fn floating_integer_scoped_contract_matches(
         }
     }
     if actual["optimized_observation"].is_null() {
-        if actual["optimized_matches"] != false || retained_error.is_null() {
+        if actual["optimized_matches"] != actual["error_matches"] || retained_error.is_null() {
             return Ok(false);
         }
     } else {
@@ -1009,37 +1030,54 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         )?);
     }
 
-    let case = records
-        .iter()
-        .find(|case| case["id"] == "float_tinyint_literal_nan" && case["ansi"] == true)
-        .ok_or("missing checked cause control")?;
-    let error = facets["contexts"]
-        .as_array()
-        .ok_or("missing retained contexts")?
-        .iter()
-        .find(|control| {
-            control["id"] == case["id"] && control["ansi"] == case["ansi"] && control["batch"] == 1
-        })
-        .ok_or("missing exact cause")?["error"]
-        .clone();
-    let actual = json!({
-        "public_schema":case["schema_stages"]["analyzed"],
-        "optimized_schema":null,"before_collect":null,"physical_schema":null,
-        "rows":null,"rows_raw":null,"native_phase":error["native_phase"],
-        "error":error["error"],"optimized_error":error["optimized_error"],
-        "public_matches":true,"before_matches":true,"physical_matches":true,
-        "rows_match":true,"ordered_rows_match":true,"error_matches":false,
-        "matches":false,"optimized_matches":false,"optimized_observation":null,
-    });
-    assert!(floating_integer_scoped_contract_matches(
-        case, &actual, 1, &facets
-    )?);
-    for key in ["error", "optimized_error", "native_phase"] {
-        let mut changed = actual.clone();
-        changed[key] = json!("[CAST_OVERFLOW] a different cause or stage");
-        assert!(!floating_integer_scoped_contract_matches(
-            case, &changed, 1, &facets
-        )?);
+    for id in ["float_tinyint_literal_nan", "float_bigint_literal_bigint_upper_cutoff"] {
+        let case = records
+            .iter()
+            .find(|case| case["id"] == id && case["ansi"] == true)
+            .ok_or("missing checked cause control")?;
+        let mut error = facets["contexts"]
+            .as_array()
+            .ok_or("missing retained contexts")?
+            .iter()
+            .find(|control| {
+                control["id"] == case["id"] && control["ansi"] == case["ansi"] && control["batch"] == 1
+            })
+            .ok_or("missing exact cause")?["error"]
+            .clone();
+        for key in ["error", "optimized_error"] {
+            error[key] = json!(error[key].as_str().ok_or("missing checked error")?
+                .replacen("Arrow error: ", "[CAST_OVERFLOW]\ncaused by\nArrow error: ", 1));
+        }
+        let condition_matches = error["owner"] == 922;
+        let actual = json!({
+            "public_schema":case["schema_stages"]["analyzed"],
+            "optimized_schema":null,"before_collect":null,"physical_schema":null,
+            "rows":null,"rows_raw":null,"native_phase":error["native_phase"],
+            "error":error["error"],"optimized_error":error["optimized_error"],
+            "public_matches":true,
+            "before_matches":case["schema_stages"]["executed_before_collect"].is_null(),
+            "physical_matches":case["schema_stages"]["executed"].is_null(),
+            "rows_match":case["expected"].get("rows").is_none(),"ordered_rows_match":true,
+            "error_matches":condition_matches,"matches":condition_matches,
+            "optimized_matches":condition_matches,"optimized_observation":null,
+        });
+        assert!(floating_integer_scoped_contract_matches(case, &actual, 1, &facets)?);
+        for key in ["error", "optimized_error", "native_phase"] {
+            let mut changed = actual.clone();
+            changed[key] = json!("[CAST_OVERFLOW] a different cause or stage");
+            assert!(!floating_integer_scoped_contract_matches(case, &changed, 1, &facets)?);
+        }
+        let mut missing_marker = actual.clone();
+        for key in ["error", "optimized_error"] {
+            missing_marker[key] = json!(actual[key].as_str().ok_or("missing checked error")?
+                .replace("[CAST_OVERFLOW]", ""));
+        }
+        assert!(!floating_integer_scoped_contract_matches(case, &missing_marker, 1, &facets)?);
+        let mut wrong_flags = actual.clone();
+        for key in ["error_matches", "matches", "optimized_matches"] {
+            wrong_flags[key] = json!(!condition_matches);
+        }
+        assert!(!floating_integer_scoped_contract_matches(case, &wrong_flags, 1, &facets)?);
     }
 
     let case = records
@@ -1059,7 +1097,8 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         "public_schema":case["schema_stages"]["analyzed"],
         "optimized_schema":null,"before_collect":null,"physical_schema":null,
         "rows":null,"rows_raw":null,"native_phase":error["native_phase"],
-        "error":error["error"],"optimized_error":error["optimized_error"],
+        "error":format!("[CAST_OVERFLOW]\ncaused by\n{}", error["error"].as_str().ok_or("missing later cause")?),
+        "optimized_error":error["optimized_error"],
         "public_matches":true,"before_matches":true,"physical_matches":true,
         "rows_match":true,"ordered_rows_match":true,"error_matches":false,
         "matches":false,"optimized_matches":false,"optimized_observation":null,
@@ -1078,6 +1117,10 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
     assert!(floating_integer_scoped_contract_matches(
         case, &actual, 1, &facets
     )?);
+    let mut missing_marker = actual.clone();
+    missing_marker["error"] = json!(actual["error"].as_str().ok_or("missing later cause")?
+        .replace("[CAST_OVERFLOW]", ""));
+    assert!(!floating_integer_scoped_contract_matches(case, &missing_marker, 1, &facets)?);
     for (pointer, wrong) in [
         ("/physical_schema/fields/0/nullable", json!(false)),
         ("/physical_schema/fields/0/name", json!("wrong")),
@@ -1322,7 +1365,7 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
             control["batch"].as_u64().ok_or("missing batch")?,
         );
         assert!(historical_keys.insert(key.clone()));
-        if !control["error"].is_null()
+        if (!control["error"].is_null() && control["error"]["owner"] != 922)
             || !control["availability"]
                 .as_array()
                 .ok_or("missing availability")?
@@ -1472,7 +1515,8 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
     }
     assert_eq!(comparisons, 704);
     assert_eq!(historical_keys.len(), 260);
-    assert_eq!(retained_contexts, 212);
+    assert_eq!(retained_contexts, 36);
+    assert_eq!(strict_matches, 668);
     eprintln!(
         "FLOATING_INTEGER_VALUE_SUMMARY {}",
         json!({

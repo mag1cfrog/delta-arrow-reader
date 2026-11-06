@@ -164,6 +164,31 @@ fn current_native_profile<'a>(profiles: &'a [Value], case: &Value) -> Option<&'a
     })
 }
 
+fn primitive_cast_overflow_profile_matches(
+    profile: &Value,
+    case: &Value,
+    actual: &Value,
+) -> TestResult<bool> {
+    if profile["owner"] != "#922"
+        || profile["id"] != case["id"]
+        || profile["ansi"] != case["ansi"]
+        || profile["sql"] != case["sql"]
+    {
+        return Ok(false);
+    }
+    let mut expected = profile["actual"].clone();
+    let error = expected["error"].as_str().ok_or("missing original overflow")?;
+    assert!(!error.contains("[CAST_OVERFLOW]"));
+    assert_eq!(error.matches("Arrow error: Cast error: ").count(), 1);
+    // Preserve the complete frozen native object, adding only the numeric condition context.
+    expected["error"] = json!(error.replacen(
+        "Arrow error: Cast error: ",
+        "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: ",
+        1,
+    ));
+    Ok(actual == &expected && reference_comparison(actual, &case["expected"]).2)
+}
+
 #[test]
 fn repaired_numeric_profiles_are_historical_only() -> TestResult {
     let references = read_records(include_str!(
@@ -209,14 +234,49 @@ fn position_error_comparison_rejects_later_stages_and_missing_fields() -> TestRe
     for profile in profiles
         .iter()
         .skip(1)
-        .filter(|profile| profile["kind"] == "stage_control")
+        .filter(|profile| profile["kind"] == "stage_control" || profile["owner"] == "#922")
     {
         let case = references
             .iter()
             .skip(1)
             .find(|case| case["id"] == profile["id"] && case["ansi"] == profile["ansi"])
             .ok_or("missing stage-control reference")?;
-        let actual = &profile["actual"];
+        let mut observation = profile["actual"].clone();
+        if profile["owner"] == "#922" {
+            observation["error"] = json!(profile["actual"]["error"]
+                .as_str()
+                .ok_or("missing original primitive cause")?
+                .replacen("Arrow error: ", "[CAST_OVERFLOW]\ncaused by\nArrow error: ", 1));
+            assert!(primitive_cast_overflow_profile_matches(profile, case, &observation)?);
+            assert!(!primitive_cast_overflow_profile_matches(profile, case, &profile["actual"])?);
+            for (key, value) in [
+                ("error", profile["actual"]["error"].clone()),
+                ("error", json!(observation["error"].as_str().ok_or("missing annotated primitive cause")?.replace("[CAST_OVERFLOW]", ""))),
+                ("physical_schema", json!({"type":"struct","fields":[]})),
+                ("analyzed_arrow_schema", json!("changed native Arrow schema")),
+                ("unexpected", json!(true)),
+            ] {
+                let mut fault = observation.clone();
+                fault[key] = value;
+                assert!(!primitive_cast_overflow_profile_matches(profile, case, &fault)?, "{key}");
+            }
+            let mut wrong_value = observation.clone();
+            wrong_value["error"] = json!(observation["error"]
+                .as_str()
+                .ok_or("missing annotated primitive cause")?
+                .replace("Can't cast value ", "Can't cast value 0 instead of "));
+            assert!(!primitive_cast_overflow_profile_matches(profile, case, &wrong_value)?);
+            assert!(!reference_comparison(&wrong_value, &case["expected"]).2);
+            let mut omitted_null = observation.clone();
+            omitted_null.as_object_mut().ok_or("missing native object")?.remove("physical_schema");
+            assert!(!primitive_cast_overflow_profile_matches(profile, case, &omitted_null)?);
+            if observation["analyzed_schema"].is_object() {
+                let mut metadata = observation.clone();
+                metadata["analyzed_schema"]["fields"][0]["metadata"] = json!({"wrong":"metadata"});
+                assert!(!primitive_cast_overflow_profile_matches(profile, case, &metadata)?);
+            }
+        }
+        let actual = &observation;
         assert!(reference_comparison(actual, &case["expected"]).2);
         for stage in ["resolve", "physical", "execute"] {
             if actual["error_stage"] == stage {
@@ -254,7 +314,7 @@ fn position_error_comparison_rejects_later_stages_and_missing_fields() -> TestRe
         assert!(!reference_comparison(&wrong_target, &case["expected"]).0);
         checked += 1;
     }
-    assert_eq!(checked, 2);
+    assert_eq!(checked, 12);
     Ok(())
 }
 
@@ -278,6 +338,7 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
     let mut observations = 0;
     let mut semantic_matches = 0;
     let mut strict_matches = 0;
+    let mut primitive_overflow_contexts = 0;
     let mut differences = Vec::new();
     eprintln!(
         "c06 position regression header: {}",
@@ -305,13 +366,20 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
                 let expected = &case["expected"];
                 let (semantic, identifier, strict) = reference_comparison(&actual, expected);
                 let profile = current_native_profile(profiles, case);
-                let preserved = profile.is_some_and(|profile| {
-                    profile["sql"] == case["sql"]
-                        && actual == profile["actual"]
-                        && profile["semantic_match"] == semantic
-                        && profile["diagnostic_identifier_match"] == json!(identifier)
-                        && profile["strict_reference_match"] == strict
-                });
+                let preserved = if let Some(profile) = profile {
+                    if profile["owner"] == "#922" {
+                        primitive_overflow_contexts += 1;
+                        primitive_cast_overflow_profile_matches(profile, case, &actual)?
+                    } else {
+                        profile["sql"] == case["sql"]
+                            && actual == profile["actual"]
+                            && profile["semantic_match"] == semantic
+                            && profile["diagnostic_identifier_match"] == json!(identifier)
+                            && profile["strict_reference_match"] == strict
+                    }
+                } else {
+                    false
+                };
                 if !preserved && (profile.is_some() || !strict) {
                     differences.push(format!("id={} ANSI={} representation={representation} batch={batch_size}: {actual}", case["id"], case["ansi"]));
                 }
@@ -332,13 +400,15 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
     }
     assert_eq!(observations, 660);
     assert_eq!(semantic_matches, 660);
-    assert_eq!(strict_matches, 600);
+    assert_eq!(strict_matches, 660);
+    assert_eq!(primitive_overflow_contexts, 60);
     eprintln!(
         "c06 position regression summary: {}",
         json!({"references":110,"observations":observations,
         "semantic_matches":semantic_matches,"semantic_differences":observations-semantic_matches,
         "strict_reference_matches":strict_matches,"strict_reference_differences":observations-strict_matches,
-        "full_compatibility_pass":false,"complete_raw_diagnostic_parity":"unverified"})
+        "primitive_overflow_contexts":primitive_overflow_contexts,
+        "full_compatibility_pass":strict_matches==observations,"complete_raw_diagnostic_parity":"unverified"})
     );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())

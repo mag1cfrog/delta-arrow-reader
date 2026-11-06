@@ -33,17 +33,23 @@ expected to identify different capture sources.
 
 The native replay observes both batch sizes 1 and 32. Its 704 comparisons cover
 the measured matrix; #897 owns the Legacy floating conversion policy. Field
-declarations require Spark's conservative nullable Fields. Checked overflow
-identity (#922) and the checked BIGINT endpoint (#1020) have separate contracts.
+declarations require Spark's conservative nullable Fields. ANSI primitive
+overflow requires `[CAST_OVERFLOW]` while preserving the original Arrow cause,
+numeric value, target and failure stage. The checked BIGINT endpoint (#1020)
+keeps its separate value contract.
 
 `retained-baseline-facets.json` binds the exact remaining native differences to
 real accepted-runtime observations. Its 480 old #796 nullable leaves remain
-history and cannot permit an incorrect declaration. Active controls admit only
-the listed #1020 endpoint cells and nullable consequences, plus complete known
-error causes, stages and availability. For the two ANSI substring errors without
-Spark's later Fields, expected native schema copies require the corrected
-nullable declaration and preserve every other component and boundary.
+history and cannot permit an incorrect declaration. The gate requires 668 strict
+comparisons and 36 exact retained differences: 28 #1020 endpoint contexts, four
+#865 DIV diagnostics, and four #1031 substring contexts that fail later than
+Spark and expose extra native Fields. The historical file keeps its original
+owner IDs. Expected primitive errors gain only the overflow context; their
+causes and stages cannot drift. For the two ANSI substring queries, expected
+native schema copies require the corrected nullable declaration and preserve
+every other component and boundary. Their four batch contexts retain the #1031
+stage difference despite having the required overflow identifier.
 The #1020 endpoint links include the original TRY literal's IEEE bits and the
 matching provider input row. Non-TRY Legacy rows receive no retained-value
-allowance. Strict Spark flags remain false for retained differences; the scoped
-#796/#897 result is reported separately.
+allowance. Strict Spark flags remain false for retained differences; scoped
+regression preservation is reported separately from strict comparison.

@@ -56,11 +56,12 @@ fn substring_repaired_cast_fields_and_error_causes_stay_strict() -> TestResult {
         .ok_or("missing overflow reference")?;
     assert!(substring::meaningful_error(
         overflow,
-        "execute: Arrow error: Cast error: Can't cast value NaN to type Int32"
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32"
     ));
     for error in [
-        "execute: Arrow error: Cast error: Can't cast value 1 to type Int32",
-        "execute: Arrow error: Cast error: Can't cast value NaN to type Int64",
+        "execute: Arrow error: Cast error: Can't cast value NaN to type Int32",
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 1 to type Int32",
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int64",
         "execute: [UNRELATED] arbitrary failure",
     ] {
         assert!(!substring::meaningful_error(overflow, error));
@@ -78,13 +79,13 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
         (
             "double_infinity_direct_cast",
             "physical",
-            "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+            "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
             false,
         ),
         (
             "double_infinity_substring",
             "execute",
-            "execute: Arrow error: Cast error: Can't cast value inf to type Int32",
+            "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
             true,
         ),
         (
@@ -135,6 +136,7 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
             }
         }
         for wrong in [
+            cause.replace("[CAST_OVERFLOW]", ""),
             cause
                 .replace("inf to", "-inf to")
                 .replace("2147483648", "-2147483648"),
