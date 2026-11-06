@@ -5,6 +5,17 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Primitive CAST overflow conditions
+
+`reviewed-corrections.json` adds 93 exact ANSI error outcomes for #922. A complete
+25,180-observation replay found only the added `[CAST_OVERFLOW]` context in those
+outcomes; the other 25,087 retained their accepted contracts. Each correction
+inserts that context into the original expected error and preserves its complete
+cause, value, target, status and output names, including the existing analyzer-name
+normalization. The prior 2,542 correction entries, compressed corpus, provenance
+and parallel-error alternatives remain unchanged. The corpus continues to retain
+unresolved Spark differences.
+
 ## Unary negation result fields
 
 `unary-negate-fields/historical/spark-reference.jsonl` captures five exact
