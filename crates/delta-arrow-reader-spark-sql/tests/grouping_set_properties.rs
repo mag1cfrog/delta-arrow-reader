@@ -179,41 +179,8 @@ fn captured_records() -> TestResult<(Vec<Value>, Value)> {
 }
 
 #[tokio::test]
-async fn captured_grouping_masks_keep_spark_rows_and_physical_fields() -> TestResult {
+async fn captured_grouping_masks_match_each_spark_stage() -> TestResult {
     let (records, _) = captured_records()?;
-    let baseline: Value = serde_json::from_str(include_str!(
-        "fixtures/grouping-set-properties-731-declarations-baseline.json"
-    ))?;
-    assert_eq!(baseline["owner"], 731);
-    assert_eq!(
-        baseline["source"],
-        "c104e312bc8214d7bb9089668a80f890044b35fe"
-    );
-    assert_eq!(
-        baseline["source_observations_sha256"],
-        "d87d861a032939cfbd5d40e59fd59a228439f01b544e5ca08b94b041c2bf1107"
-    );
-    let declarations = baseline["declarations"]
-        .as_array()
-        .ok_or("missing baseline declarations")?;
-    assert_eq!(declarations.len(), 8);
-    let mut identities = BTreeSet::new();
-    for declaration in declarations {
-        let id = declaration["id"].as_str().ok_or("missing baseline ID")?;
-        let ansi = declaration["ansi"]
-            .as_bool()
-            .ok_or("missing baseline ANSI")?;
-        let batch = declaration["batch"]
-            .as_u64()
-            .ok_or("missing baseline batch")?;
-        assert!(matches!(
-            id,
-            "float_unmasked_array_sets" | "double_unmasked_array_sets"
-        ));
-        assert!(matches!(batch, 1 | 32));
-        assert!(identities.insert((id, ansi, batch)));
-    }
-    let mut preserved_observations = 0;
     let mut differences = Vec::new();
     for batch_size in [1, 32] {
         let session = session(batch_size, 2);
@@ -224,64 +191,21 @@ async fn captured_grouping_masks_keep_spark_rows_and_physical_fields() -> TestRe
         {
             let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await?;
             let matches = comparison_matches(case, &actual);
-            let mut declaration_preservation = Value::Null;
-            // #731 owns these exact logical Fields; remove this branch when its strict fix lands.
-            let required_contract_matches = if matches!(
-                case["id"].as_str(),
-                Some("float_unmasked_array_sets" | "double_unmasked_array_sets")
-            ) {
-                let declaration = declarations
-                    .iter()
-                    .find(|declaration| {
-                        declaration["id"] == case["id"]
-                            && declaration["ansi"] == case["ansi"]
-                            && declaration["batch"] == batch_size
-                    })
-                    .ok_or("missing exact #731 baseline identity")?;
-                let public_preserved = actual["public_schema"] == declaration["public_schema"];
-                let optimized_preserved =
-                    actual["optimized_schema"] == declaration["optimized_schema"];
-                let preservation_matches = public_preserved && optimized_preserved;
-                declaration_preservation = json!({
-                    "owner":731,"source":baseline["source"],
-                    "public_schema_matches_baseline":public_preserved,
-                    "optimized_schema_matches_baseline":optimized_preserved,
-                    "preservation_matches":preservation_matches,
-                });
-                preserved_observations += 1;
-                preservation_matches
-                    && actual["error"].is_null()
-                    && actual["optimized_error"].is_null()
-                    && [
-                        "rows_match",
-                        "ordered_rows_match",
-                        "before_matches",
-                        "physical_matches",
-                        "error_matches",
-                    ]
-                    .iter()
-                    .all(|key| actual[*key] == true)
-            } else {
-                matches
-            };
             eprintln!(
                 "GROUPING_SET_CAPTURE {}",
                 json!({
                     "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
                     "observation":actual,"matches":matches,
-                    "required_contract_matches":required_contract_matches,
-                    "declaration_preservation":declaration_preservation,
                 })
             );
-            if !required_contract_matches {
+            if !matches {
                 differences.push(format!(
-                    "{} ANSI={} batch={batch_size}: declaration_preservation={declaration_preservation}, {actual}",
+                    "{} ANSI={} batch={batch_size}: {actual}",
                     case["id"], case["ansi"]
                 ));
             }
         }
     }
-    assert_eq!(preserved_observations, 8);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
     Ok(())
 }

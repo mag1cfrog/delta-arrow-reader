@@ -436,6 +436,136 @@ async fn unmasked_constant_array_grouping_sets_match_each_spark_stage() -> TestR
 }
 
 #[tokio::test]
+async fn materialized_grouping_keys_preserve_fields_through_having_and_hidden_sort() -> TestResult {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use arrow::array::{Float32Array, Int32Array, ListArray};
+    use arrow::buffer::OffsetBuffer;
+    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::datasource::MemTable;
+    use datafusion::physical_plan::collect;
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, plan_query};
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+
+    let element = Arc::new(
+        Field::new("kept_element", DataType::Float32, true)
+            .with_metadata(HashMap::from([("unit".into(), "signed-zero".into())])),
+    );
+    let key = Field::new("key", DataType::List(Arc::clone(&element)), false)
+        .with_metadata(HashMap::from([("owner".into(), "materialized-key".into())]));
+    let nullable_key = Field::new("k", DataType::Float32, true)
+        .with_metadata(HashMap::from([("owner".into(), "nullable-key".into())]));
+    let id = Field::new("id", DataType::Int32, false);
+    let schema = Arc::new(Schema::new(vec![
+        key.clone(),
+        nullable_key.clone(),
+        id.clone(),
+    ]));
+    let batch = RecordBatch::try_new(
+        Arc::clone(&schema),
+        vec![
+            Arc::new(ListArray::new(
+                element,
+                OffsetBuffer::from_lengths([1, 1]),
+                Arc::new(Float32Array::from(vec![-0.0, -0.0])),
+                None,
+            )),
+            Arc::new(Float32Array::from(vec![Some(-0.0), None])),
+            Arc::new(Int32Array::from(vec![0, 1])),
+        ],
+    )?;
+    let session = session(1, true);
+    for (table, input) in [("keys", batch.clone()), ("empty_keys", batch.slice(0, 0))] {
+        session.register_table(
+            table,
+            Arc::new(MemTable::try_new(Arc::clone(&schema), vec![vec![input]])?),
+        )?;
+        for (select, suffix, visible_key) in [
+            ("key,k,id", "", true),
+            (
+                "key,k,id",
+                " HAVING key IS NOT NULL ORDER BY key,k,id",
+                true,
+            ),
+            ("k,id", " HAVING key IS NOT NULL ORDER BY key,k,id", false),
+        ] {
+            let sql = format!(
+                "SELECT {select},GROUPING(id) AS missing,COUNT(*) AS n FROM {table} \
+                 GROUP BY GROUPING SETS ((key,k,id),(key,k)){suffix}"
+            );
+            let query = plan_query(&session, &sql, &SparkSqlOptions::default()).await?;
+            let mut expected_fields = vec![
+                nullable_key.clone(),
+                id.clone().with_nullable(true),
+                Field::new("missing", DataType::Int8, false),
+                Field::new("n", DataType::Int64, false),
+            ];
+            if visible_key {
+                expected_fields.insert(0, key.clone());
+            }
+            let mut state = session.state();
+            state
+                .config_mut()
+                .options_mut()
+                .extensions
+                .insert(SparkSqlExpressionSemantics::default());
+            let optimized = state.optimize(&query.logical_plan)?;
+            for fields in [
+                query.logical_plan.schema().fields(),
+                optimized.schema().fields(),
+            ] {
+                let named = fields
+                    .iter()
+                    .zip(&query.column_names)
+                    .map(|(field, name)| field.as_ref().clone().with_name(name))
+                    .collect::<Vec<_>>();
+                assert_eq!(named, expected_fields, "{sql}");
+            }
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                physical.schema().as_ref(),
+                &Schema::new(expected_fields.clone()),
+                "{sql}"
+            );
+            let mut actual = Vec::new();
+            for batch in collect(physical.clone(), session.task_ctx()).await? {
+                spark_results::validate_batch(physical.schema().as_ref(), &batch)?;
+                for row in 0..batch.num_rows() {
+                    actual.push(
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|column| spark_results::encode_value(column.as_ref(), row))
+                            .collect::<TestResult<Vec<_>>>()?,
+                    );
+                }
+            }
+            let mut expected = if table == "empty_keys" {
+                Vec::new()
+            } else {
+                vec![
+                    vec![json!("00000000"), json!("0"), json!("0"), json!("1")],
+                    vec![json!("00000000"), Value::Null, json!("1"), json!("1")],
+                    vec![Value::Null, json!("1"), json!("0"), json!("1")],
+                    vec![Value::Null, Value::Null, json!("1"), json!("1")],
+                ]
+            };
+            if visible_key {
+                for row in &mut expected {
+                    row.insert(0, json!(["00000000"]));
+                }
+            }
+            actual.sort_by_key(|row| json!(row).to_string());
+            expected.sort_by_key(|row| json!(row).to_string());
+            assert_eq!(actual, expected, "{sql}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn literal_array_consumers_match_independent_boundary_stages() -> TestResult {
     let records = include_str!("fixtures/constant-group-literal-consumers-spark.jsonl")
         .lines()

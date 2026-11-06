@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use datafusion::functions_aggregate::{average, bit_and_or_xor, bool_and_or, count, min_max, sum};
-use datafusion_common::arrow::datatypes::DataType;
+use datafusion_common::arrow::datatypes::{DataType, FieldRef};
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
 use datafusion_common::{
     Column, DFSchema, DFSchemaRef, DataFusionError, Result as DataFusionResult, ScalarValue,
@@ -13,8 +13,9 @@ use datafusion_expr::expr_rewriter::normalize_col;
 use datafusion_expr::logical_plan::{FetchType, SkipType};
 use datafusion_expr::utils::{enumerate_grouping_sets, find_aggregate_exprs, powerset};
 use datafusion_expr::{
-    Aggregate, AggregateUDF, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder,
-    Projection, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
+    Aggregate, AggregateUDF, ColumnarValue, Expr, ExprSchemable, Extension, LogicalPlan,
+    LogicalPlanBuilder, Projection, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left,
     bitwise_shift_right, cast, lit, when,
 };
 use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
@@ -45,6 +46,47 @@ type ResolvedProjections = (Vec<Option<NamedExpr>>, Vec<usize>);
 type GeneratorReplacements = Vec<(Expr, Expr)>;
 
 const GROUPING_KEY_ORDER_METADATA: &str = "sail:grouping_key_order";
+
+// Native grouping-set schemas widen every key; these columns are never masked.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct RequiredMaterializedGroupingKey;
+
+impl ScalarUDFImpl for RequiredMaterializedGroupingKey {
+    fn name(&self) -> &str {
+        "spark_required_materialized_grouping_key"
+    }
+
+    fn signature(&self) -> &Signature {
+        static SIGNATURE: std::sync::LazyLock<Signature> =
+            std::sync::LazyLock::new(|| Signature::any(1, Volatility::Immutable));
+        &SIGNATURE
+    }
+
+    fn return_type(&self, arguments: &[DataType]) -> DataFusionResult<DataType> {
+        let [data_type] = arguments else {
+            return datafusion_common::plan_err!("expected one materialized grouping key");
+        };
+        Ok(data_type.clone())
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DataFusionResult<FieldRef> {
+        let [field] = args.arg_fields else {
+            return datafusion_common::plan_err!("expected one materialized grouping key");
+        };
+        Ok(Arc::new(
+            field
+                .as_ref()
+                .clone()
+                .with_name(self.name())
+                .with_nullable(false),
+        ))
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DataFusionResult<ColumnarValue> {
+        let [key] = datafusion_common::utils::take_function_args(self.name(), args.args)?;
+        Ok(key)
+    }
+}
 
 /// Retain the existing grouped-output rule separately from ordinary aggregate arguments.
 fn find_volatile_outside_aggregate_functions(expr: &Expr) -> Option<String> {
@@ -1281,9 +1323,11 @@ impl PlanResolver<'_> {
         Ok(expr
             .transform_down(|e| {
                 if base.contains(&e) {
-                    Ok(Transformed::yes(
-                        Self::expr_as_column_expr(&e, plan)
+                    Ok(Transformed::new(
+                        Self::aggregate_output_reference(&e, plan)
                             .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        true,
+                        TreeNodeRecursion::Jump,
                     ))
                 } else {
                     Ok(Transformed::no(e))
@@ -1292,9 +1336,8 @@ impl PlanResolver<'_> {
             .data()?)
     }
 
-    // Modification of DataFusion's `expr_as_column_expr`
-    fn expr_as_column_expr(expr: &Expr, plan: &LogicalPlan) -> PlanResult<Expr> {
-        match expr {
+    fn aggregate_output_reference(expr: &Expr, plan: &LogicalPlan) -> PlanResult<Expr> {
+        let column = match expr {
             Expr::Column(column) => {
                 let result = plan
                     .schema()
@@ -1304,12 +1347,22 @@ impl PlanResolver<'_> {
                         plan.schema().qualified_field_from_column(&column)
                     })?;
                 let (qualifier, field) = result;
-                Ok(Expr::from(Column::from((qualifier, field))))
+                Expr::from(Column::from((qualifier, field)))
             }
-            _ => Ok(Expr::Column(Column::from_name(
-                expr.schema_name().to_string(),
-            ))),
+            _ => Expr::Column(Column::from_name(expr.schema_name().to_string())),
+        };
+        if let LogicalPlan::Aggregate(aggregate) = plan
+            && let [Expr::GroupingSet(grouping @ GroupingSet::GroupingSets(sets))] =
+                aggregate.group_expr.as_slice()
+            && let Expr::Column(reference) = &column
+            && let Some(index) = aggregate.schema.maybe_index_of_column(reference)
+            && let Some(key) = grouping.distinct_expr().into_iter().nth(index)
+            && sets.iter().all(|set| set.contains(key))
+            && !expr.to_field(aggregate.input.schema())?.1.is_nullable()
+        {
+            return Ok(ScalarUDF::from(RequiredMaterializedGroupingKey).call(vec![column]));
         }
+        Ok(column)
     }
 }
 
