@@ -218,7 +218,7 @@ async fn ilike_matches_spark_unicode_lowering() -> TestResult {
 
 #[tokio::test]
 async fn ilike_preserves_native_lower_and_like() -> TestResult {
-    let native_sql = "SELECT 'Σ' ILIKE 'ς' AS sigma,'ſ' ILIKE 's' AS long_s,lower('İ') AS dotted_i,'x' LIKE '_' AS ordinary";
+    let native_sql = "SELECT 'Σ' ILIKE 'ς' AS sigma,'ſ' ILIKE 's' AS long_s,lower('İ') AS dotted_i,'x' LIKE '_' AS ordinary,'x' LIKE '_'";
     let plain = SessionContext::new();
     let expected = plain.sql(native_sql).await?.collect().await?;
     let session = SessionContext::new_with_state(
