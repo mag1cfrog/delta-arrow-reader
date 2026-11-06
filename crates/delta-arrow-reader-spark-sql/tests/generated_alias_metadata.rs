@@ -10,10 +10,6 @@ use serde_json::{Value, json};
 
 #[path = "support/spark_inputs.rs"]
 mod spark_inputs;
-#[expect(
-    dead_code,
-    reason = "This replay uses the shared encoders with resolved schemas."
-)]
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_inputs::register_recorded_inputs;

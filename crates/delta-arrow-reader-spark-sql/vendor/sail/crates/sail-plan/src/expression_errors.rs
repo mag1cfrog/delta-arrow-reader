@@ -47,11 +47,14 @@ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmeti
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
+    spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
 use sail_function::scalar::string::spark_regexp_extract_all::SparkRegexpExtract;
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
@@ -80,6 +83,7 @@ fn null_literal(expr: &Expr) -> bool {
         Expr::ScalarFunction(f)
             if (f.func.inner().is::<SparkNullIfZero>()
                 || f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastBigintToInt>()
                 || f.func.inner().is::<SparkNullIf>()
                 || f.func
                     .inner()
@@ -88,6 +92,30 @@ fn null_literal(expr: &Expr) -> bool {
             f.args.first().is_some_and(null_literal)
         }
         _ => false,
+    }
+}
+
+/// Local division and remainder inspect a NULL divisor before their dividend.
+pub(crate) fn prune_null_divisor(expr: Expr, schema: &DFSchemaRef) -> Result<Transformed<Expr>> {
+    let right = match &expr {
+        Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
+            Some(binary.right.as_ref())
+        }
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<SparkCheckedDivide>()
+                || f.func.inner().is::<SparkCheckedModulo>()
+                || f.func.inner().is::<FusedDecimalDivide>() =>
+        {
+            Some(&f.args[1])
+        }
+        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
+    };
+    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
+        Ok(Transformed::yes(lit(ScalarValue::try_new_null(
+            &expr.get_type(schema)?,
+        )?)))
+    } else {
+        Ok(Transformed::no(expr))
     }
 }
 
@@ -102,6 +130,7 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
                 || (f.func.inner().is::<NormalizeNestedFloatKeys>()
                     && f.func.inner().supports_constant_folding())
                 || f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastBigintToInt>()
                 || f.func.inner().is::<SparkComparisonFloat>() =>
         {
             match f.args.as_slice() {
@@ -154,6 +183,7 @@ fn null_discarded(expr: &Expr) -> bool {
                 || inner.is::<SparkCheckedDivide>()
                 || inner.is::<SparkCheckedModulo>()
                 || inner.is::<SparkCheckedArithmetic>()
+                || inner.is::<SparkIntervalScale>()
                 || inner.is::<SparkIntegerDivide>())
                 && f.args.iter().any(null_literal))
                 || null_round(expr)
@@ -175,6 +205,8 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
         || matches!(expr, Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkAbs>()
                 || f.func.inner().is::<SparkCheckedArithmetic>()
+                || f.func.inner().is::<SparkIntervalScale>()
+                || f.func.inner().is::<SparkIntervalNegate>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkDecimalCast>()
@@ -347,8 +379,13 @@ impl PrepareSparkExpressions {
         {
             return Ok(plan);
         }
+        // These checks reproduce Spark's interpreted evaluation of constants and local rows.
+        let mut evaluation_options = options.clone();
+        evaluation_options
+            .extensions
+            .insert(SparkInterpretedEvaluation::default());
         let mut props = ExecutionProps::new();
-        props.config_options = Some(Arc::new(options.clone()));
+        props.config_options = Some(Arc::new(evaluation_options));
         let prepare = Prepare {
             props,
             has_groups,
@@ -1553,6 +1590,8 @@ fn one_row_exprs(plan: &LogicalPlan) -> Result<Option<Vec<Expr>>> {
 
 fn has_cast(expr: &Expr) -> Result<bool> {
     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
+        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().downcast_ref::<SparkCastBigintToInt>()
+            .is_some_and(|cast| !cast.is_try()))
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
             || f.func.inner().is::<SparkDecimalCast>()
@@ -1969,7 +2008,7 @@ impl Prepare {
         exists: bool,
     ) -> Result<LogicalPlan> {
         use datafusion_expr::logical_plan::EmptyRelation;
-        let spark_comparison_errors = options
+        let is_spark_query = options
             .extensions
             .get::<SparkSqlExpressionSemantics>()
             .is_some();
@@ -1978,7 +2017,7 @@ impl Prepare {
         let plan = plan
             .transform_up(|node| {
                 if let LogicalPlan::Projection(project) = &node {
-                    if spark_comparison_errors && early_local_relation(&project.input)? {
+                    if is_spark_query && early_local_relation(&project.input)? {
                         for expr in &project.expr {
                             let mut expression = without_metadata_annotations(expr);
                             while let Expr::Alias(alias) = expression {
@@ -2023,11 +2062,11 @@ impl Prepare {
                     let mut casts = false;
                     let mut evaluable = true;
                     for expr in &project.expr {
-                        casts |= early_cast(expr, project.input.schema(), spark_comparison_errors)?;
+                        casts |= early_cast(expr, project.input.schema(), is_spark_query)?;
                         evaluable &= row_expression(expr, true)?;
                     }
                     if casts
-                        && (evaluable || spark_comparison_errors)
+                        && (evaluable || is_spark_query)
                         && !input_forbids_local_planning(&project.input)?
                         && let Some(batch) = self.local_batch(&project.input)?
                     {
@@ -2044,8 +2083,8 @@ impl Prepare {
                             .with_config_options(Arc::new(options.clone()))
                             .build();
                         let mut simplifier = ExprSimplifier::new(info);
-                        if spark_comparison_errors {
-                            simplifier = simplifier.with_left_to_right_comparison_errors();
+                        if is_spark_query {
+                            simplifier = simplifier.with_local_input_errors();
                         }
                         for expr in &project.expr {
                             // Declining one expression must not discard eligible sibling checks.
@@ -2102,7 +2141,7 @@ impl Prepare {
         // Decide LIKE's early local eligibility before column pruning can
         // remove an unevaluable sibling. Other expressions retain their
         // existing post-projection LIMIT-zero pruning below.
-        let plan = if spark_comparison_errors {
+        let plan = if is_spark_query {
             plan.transform_down(|node| {
                 if let LogicalPlan::Limit(limit) = &node
                     && crate::like_errors::contains_spark_like(&limit.input)?
@@ -2119,7 +2158,7 @@ impl Prepare {
         };
         let plan = self.prune_projections(plan, &config, exists)?;
         let plan = plan
-            .transform_down(|node| self.prune_limit_zero(node, spark_comparison_errors))?
+            .transform_down(|node| self.prune_limit_zero(node, is_spark_query))?
             .data;
         if !self.has_null_sensitive_comparison {
             return Ok(plan);
@@ -2285,27 +2324,11 @@ impl Prepare {
         Ok(expr
             .transform_down(|expr| {
                 let expr = if local {
-                    let right = match &expr {
-                        Expr::BinaryExpr(binary)
-                            if matches!(binary.op, Operator::Divide | Operator::Modulo) =>
-                        {
-                            Some(binary.right.as_ref())
-                        }
-                        Expr::ScalarFunction(f)
-                            if f.func.inner().is::<SparkCheckedDivide>()
-                                || f.func.inner().is::<SparkCheckedModulo>()
-                                || f.func.inner().is::<FusedDecimalDivide>() =>
-                        {
-                            Some(&f.args[1])
-                        }
-                        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
-                    };
-                    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
-                        return Ok(Transformed::yes(lit(ScalarValue::try_new_null(
-                            &expr.get_type(schema)?,
-                        )?)));
+                    let pruned = prune_null_divisor(expr, schema)?;
+                    if pruned.transformed {
+                        return Ok(pruned);
                     }
-                    expr
+                    pruned.data
                 } else if null_round(&expr) && !expr.contains_scalar_subquery() {
                     lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?)
                 } else {

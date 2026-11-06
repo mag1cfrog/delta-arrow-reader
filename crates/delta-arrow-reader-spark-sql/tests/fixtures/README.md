@@ -338,17 +338,33 @@ Consumers cover projections, NULL predicates, COALESCE, grouping and projected
 IN/NOT IN, including empty, limited and correlated subqueries.
 
 The raw Spark results remain in the fixture. Exact pre-existing differences are
-recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches:
-an unused invalid inline CAST is pruned before its required error (#722). The
-four `conditional_projection` and `conditional_empty` observations, in both ANSI
-modes, match Spark after the literal-TRUE CASE declaration repair (#721).
+recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches.
+In ANSI mode, an unused invalid inline CAST raises its required
+`INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION` error during analysis
+(#722). The four `conditional_projection` and `conditional_empty` observations, in
+both ANSI modes, match Spark after the literal-TRUE CASE declaration repair (#721).
 Six projected-IN observations retain SQL three-valued results that differ from
 Spark, including
 NULL-left/empty-subquery behavior in legacy mode. These remain unresolved #142
-cases and do not extend its approved four-case historical policy. In total, 115
-observations match Spark and 7 retain exact baseline differences. The retained-gap
+cases and do not extend its approved four-case historical policy. In total, 116
+observations match Spark and 6 retain exact baseline differences. The retained-gap
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
+
+## Inline VALUES validation
+
+`inline-values-evaluation/spark-reference.jsonl` records 72 Spark observations for
+constant inline expressions, including errors preserved under filters, LIMIT 0
+and unused projections, row/column error order, CASE branches and NULL/TRY_CAST.
+`null-boundaries-spark.jsonl` adds eight NULL-operand observations, and
+`literal-null-divisors-spark.jsonl` adds six integral DIV, remainder and Decimal
+division observations with literal NULL divisors, all in the same directory.
+The tests compare complete Fields, rows, error conditions, causes and stages at
+batch sizes 1 and 32. Native session modes and nonfoldable functions have separate
+preservation controls.
+
+Computed NULL divisors remain open in [#990](https://github.com/mag1cfrog/delta-arrow-reader/issues/990),
+and NULLIF inline-table admission remains open in [#991](https://github.com/mag1cfrog/delta-arrow-reader/issues/991).
 
 ## Historical expression-schema corrections
 
@@ -481,7 +497,15 @@ returns -1 for NULL only when ANSI mode is off and the legacy setting is on.
 accept arrays and maps; ARRAY_SIZE accepts arrays and always returns NULL for
 NULL. The captures check values, INT output types, argument admission, untyped
 NULLs, empty inputs and live cast errors. Returned NULLs must fit both output
-schemas; exact Spark schema-nullability parity remains S07 work.
+schemas.
+
+The [collection-length field references](collection-length-fields/README.md)
+add 144 unchanged independent observations for complete analyzed, optimized
+and executed fields under all four ANSI/legacy settings. The strict replay
+also checks all six original SIZE-over-TRANSFORM provider records, native SQL
+and session options. Required containers have required count fields even when
+their elements or Map values are nullable. ARRAY_SIZE keeps its NULL-on-NULL
+rule in every setting.
 
 Separate public-API tests cover sliced and empty List, LargeList, ListView,
 LargeListView, FixedSizeList, Map and Null arrays. A counted volatile input must
@@ -671,10 +695,44 @@ dates, NULLs and empty results in both ANSI modes. Timestamp literals provide
 controls for the shared date-component grammar.
 
 `date_boundaries.rs` checks exact values, result types and expected errors at
-batch sizes 1 and 32. It strictly matches 514 observations. The other two retain
-an existing lowercase timestamp-separator difference tracked in #632; their
-Spark error expectations stay unchanged, and the test explicitly checks the
-current staged result. They are not counted as supported Spark behavior.
+batch sizes 1 and 32, and strictly matches all 516 observations, including the
+lowercase timestamp-separator controls fixed by #632.
+
+## Timestamp date/time separators
+
+`timestamp-separators/timestamp-separators-spark.jsonl` contains 3,348 Spark
+4.2.0 observations of the date/time separator in timestamp strings and typed
+literals. CAST, TRY_CAST, TO_TIMESTAMP, TO_TIMESTAMP_NTZ, DATE_FORMAT, STRING
+comparison and DATE casts read constant and registered-column inputs in both
+ANSI modes, UTC and New York. `timestamp_separators.rs` compares typed values,
+schemas at each stage and failing stages at batch sizes 1 and 32. See the
+[separator fixture notes](timestamp-separators/README.md) for the inputs,
+encoding and capture command.
+
+## DATEDIFF fields
+
+`date-diff/date-diff-spark.jsonl` contains 216 Spark 4.2.0 observations of
+`datediff` and `date_diff` result fields and day counts for DATE, TIMESTAMP and
+TIMESTAMP_NTZ arguments at calendar boundaries and the DATE extremes, in both
+ANSI modes and in UTC and America/Los_Angeles. `date_diff.rs` compares names,
+fields and typed values at batch sizes 1 and 32. See the [DATEDIFF fixture
+notes](date-diff/README.md) for the encoding, the retained difference and its
+owner, and the capture command. `reviewed-corrections.json` replaces the four
+historical BIGINT DATEDIFF outcomes in the accepted runtime replay
+(`focused-arithmetic-cases/216` and `217`, both ANSI modes) with Spark's INT,
+recorded for their exact SQL as `history_date_add` and `history_date_sub`; only
+the result type changes.
+
+## Interval qualifiers and generated names
+
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1948 Spark 4.2.0
+observations of interval literal names, signed and unit-syntax literals, storage
+limits, arithmetic and timestamp operand order, year-month and day-time interval
+scaling and negation, interval CASTs and RANGE offsets. The query corpus
+preserves the original #749 capture. `interval_qualifiers.rs` compares names,
+fields, typed values and errors at batch sizes 1 and 32. See the [interval
+fixture notes](interval-qualifiers/README.md) for the encoding, the retained
+differences and their owners, and the capture command.
 
 ## String-to-BOOLEAN casts
 
@@ -1209,6 +1267,37 @@ python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$singl
 cargo test --workspace --test single_row_correlated
 cargo test --workspace --test window_metadata
 ```
+
+## Global aggregate argument admission
+
+`global-aggregate-admission-spark.jsonl` records 498 independent Spark 4.2.0
+observations in UTC and both ANSI modes from the
+[case manifest](global-aggregate-admission-cases.json). The
+[admission tests](../global_aggregate_admission.rs) check error causes and phases,
+schema stages and rows at batch sizes 1 and 32. Volatile UDF variants check that
+rejected arguments invoke no callbacks; random-result controls compare fields
+and cardinality.
+
+Supplemental `global-aggregate-*` manifests and captures cover sibling error
+priority, NULL AVG/LISTAGG structure, scalar-subquery volatility and internal
+window ordering. The [priority tests](../global_aggregate_admission_priority.rs)
+locate these families and replay their deterministic scalar-subquery, window
+and native SQL controls.
+
+`global-aggregate-admission-staging-baseline.json` records 56 exact pre-existing
+facets: 28 Spark INTERNAL_ERROR/window defects, 24 nested collection field
+differences and four grouped volatile EXISTS differences, tracked by #142 and
+#156. The tests preserve these scoped baselines alongside raw Spark outcomes;
+none counts as a Spark compatibility pass.
+
+Recapture with the pinned Python 3.12, PySpark 4.2.0 and Java 21 setup above.
+The [main capture](capture_global_aggregate_admission_spark.py) writes the main
+and retained cases; the [priority](capture_global_aggregate_admission_priority_spark.py)
+and [argument-structure](capture_global_aggregate_argument_structure_spark.py)
+scripts capture their matching families. The
+[control capture](capture_global_aggregate_admission_controls_spark.py) accepts
+a supplemental manifest and a new output path. Use fresh output paths to keep
+the committed captures unchanged.
 
 ## COUNT_IF aggregate filters
 
@@ -1944,9 +2033,8 @@ loaded JAR hashes, available schemas, values and structured errors.
 
 `substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
 and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
-retained regression result has 3,774 strict receipt matches and 162 retained failures:
-12 invalid UTF8 sibling casts (#780), 30 legacy BIGINT outcomes (#813 and the
-unfinished legacy #778 adapter), 72 analyzed numeric CAST declarations (#796),
+current regression result has 3,804 strict receipt matches and 132 retained failures:
+12 invalid UTF8 sibling casts (#780), 72 analyzed numeric CAST declarations (#796),
 24 legacy non-finite conversions (#897), and 24 overflow-notation comparisons.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
@@ -1956,7 +2044,7 @@ no Decimal defect or strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
-false. The separate meaningful-condition comparison has 3,798 matches and 138
+false. The separate meaningful-condition comparison has 3,828 matches and 108
 differences, so compatibility remains incomplete by either measure. No fixture
 field is rewritten and no missing Spark physical field is invented.
 
@@ -2215,11 +2303,12 @@ source projections must retain their original metadata. Derived result fields
 are compared separately, including names, types, nullability and metadata.
 
 The older cross-family profiles retain their named metadata and invalid-byte
-observations. The substring profiles now use the retained outcomes at
-`92de8d551c000b16cf9e0746fcbf7f5ffa15db93`: repaired admission and ANSI errors
-must match their concrete causes, while the two remaining original legacy length
-differences retain the precise #813 values. The invalid-byte substring observer
-now requires exact analyzed fields. All original fixture bytes remain unchanged.
+observations. The substring baseline at
+`92de8d551c000b16cf9e0746fcbf7f5ffa15db93` is historical. Current checks require
+repaired admission and ANSI errors to match their concrete causes and legacy
+BIGINT length conversions to match Spark through the shared INT conversion.
+The invalid-byte substring observer requires exact analyzed fields. All original
+fixture bytes remain unchanged.
 No reference fields are rewritten or used to construct actual schemas.
 Unavailable physical stages remain unavailable. New fields, values, stages or
 causes fail the tests, and negative controls retain the reviewed synthetic
@@ -2231,6 +2320,32 @@ precise native admission causes. They are reported separately from full Spark
 matches; they do not claim identical Spark diagnostics and do not accept #795's
 distinct zero-TRIM formatter failure. These tests add durable original coverage;
 they do not close #151 or #174, or the named dependencies.
+
+## Native STRING/BINARY capability boundary
+
+`binary-string-capability/boundary-spark.jsonl` and
+`binary-string-capability/controls-spark.jsonl` preserve the independent raw
+Spark captures, including their full build/settings/input headers. Their
+STRING bytes come from detached `executeCollect()` InternalRows through
+`getUTF8String(i).getBytes()`; BINARY bytes use `getBinary(i)`. Displayed
+replacement characters are retained separately. The
+[manifest](binary-string-capability/manifest.json) pins the Spark collector,
+exact source receipts and measured native source. The
+[reference locators and byte receipts](binary-string-capability/references.json)
+reuse the original CAST, cross-family and CONCAT_WS fixture homes above.
+
+`binary_casts.rs` compares complete actual analyzed and physical fields,
+availability, ordered rows, bytes and exact error stages/causes against the
+[native profiles](binary-string-capability/native-profiles.jsonl). Independent
+optimized fields remain diagnostic. Only metadata map ordering in raw Arrow
+Debug text is canonicalized. The guarded visible-value cast is a strict positive
+control, together with pure BINARY, valid Unicode/NUL, empty providers, NULL-first
+CONCAT, NULL-separator CONCAT_WS and skipped casts. The explicit evaluated CAST
+before a trailing NULL has its own bounded profile; it does not exempt other
+NULL cases. Malformed STRING conversion errors and TRY_CAST NULL results keep
+strict compatibility false. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
+and [#928 visible-slice repair](https://github.com/mag1cfrog/delta-arrow-reader/issues/928)
+retain their separate contracts.
 
 ## Named struct declarations
 
@@ -2766,16 +2881,27 @@ assertions retain the independent Spark discriminators without inherited
 allowances. Local tests also cover all four list input layouts, complete
 element fields, nested literal folding and opaque runtime Scalar operands.
 Runtime layout checks retain immediate element metadata. The constant fixture
-constructs List/LargeList scalars directly for three input declarations:
-required Int32 elements, nullable Int32 elements, and nullable Struct elements
-with named required/nullable child fields carrying metadata. All six cases check
-the complete input and output types, valid Arrow data and the interpreted empty
-result. The pre-existing scalar list-cast loss of immediate element metadata is
-tracked separately in
+constructs List/LargeList scalars directly for four input declarations:
+required/nullable Int32 elements and required/nullable Struct elements, with
+metadata on the element and named required/nullable child fields. All eight
+cases check the complete input and output types, valid Arrow data and the
+interpreted empty result. The common-valid typed literal test separately checks
+direct and nested `SLICE(..., 1, 1)` calls over primitive, nested List and Struct
+values through native evaluation and constant folding. It checks immediate and
+nested fields, empty inputs and results, selected NULL elements, NULL optional
+Struct children and NULL arguments for List and LargeList.
+
+The [typed literal field tests](../literal_list_fields.rs) check direct
+scalar construction, row conversion, scalar casts, coercion and cast folding
+against declared input fields. They cover required/nullable elements, empty and
+nonempty lists, NULL parents, nullable Struct elements, target-field changes and
+native rejection of incompatible types or NULLs in required elements. These
+tests cover the scalar metadata boundary tracked in
 [#909](https://github.com/mag1cfrog/delta-arrow-reader/issues/909).
-Restoring required Struct elements across a list cast also fails on unchanged
-product and is tracked in
-[#910](https://github.com/mag1cfrog/delta-arrow-reader/issues/910).
+SLICE retains required Struct-element declarations while preserving nullable
+children. Native Scalar and Array result checks reject actual NULL Struct
+elements in a required result. Runtime NULL-parent tests cover both list widths
+and retain hidden child storage only for nullable element declarations.
 
 `slice-conditional-coordinates/` adds twelve independent Spark observations for
 six CASE scenarios, with raw SHA256
@@ -3008,7 +3134,8 @@ and elements, typed/untyped NULLs, nested arrays and STRUCTs, zero-row providers
 fallible casts, repeated compaction, membership, overlap and flattening. The
 observer verifies internal output names and order before mapping optimized
 fields to public names. Successful native array controls compare configured
-and unconfigured sessions before and after Spark execution.
+and unconfigured sessions before and after Spark execution. A fallible native
+array NULL check also retains its planning error.
 
 The SparkArrayCompact unit tests check both list widths, immediate versus deeper
 fields, custom element metadata, sliced child storage, scalar adaptation and
@@ -3022,20 +3149,10 @@ pass safe construction with required elements.
 
 `array-compact-inherited-controls.jsonl` preserves three complete DAR observation
 objects from baseline `87384089cc4d902a70a9a984b7782abe7ddb357c`, paired with the
-full independent Spark records. Only the ANSI constant bad-cast IS NULL result
-under #890 permits an inherited observation, giving two comparisons across the
-batch sizes. The other 146 comparisons require strict Spark fields, rows and
-errors, including the `invalid_non_array` references in both ANSI modes. The
-historical #891 controls remain frozen and must fail the inherited guard. The
-summary reports strict matches separately from the issue contract.
-
-The #890 inherited guard requires the same identity, complete reference and
-complete baseline observation, normalizing only batch 1 versus 32. It preserves every
-canonical comparison flag. A full strict success also passes, so a later fix can
-resolve an inherited gap. Adversarial checks reject changed queries, conditions,
-phases, causes, fields, metadata, rows, flags, missing/extra keys, unsupported
-batches, ANSI modes and panics. These controls do not establish full
-ARRAY_COMPACT compatibility.
+full independent Spark records. These historical observations remain unchanged
+as raw evidence and grant no current exception. All 148 comparisons require
+strict Spark fields, rows and errors, including constant bad-cast IS NULL success
+and non-array rejection in both ANSI modes.
 
 `array-compact-input-types/` contains 14 supplemental Spark observations for
 integer, STRING, STRUCT, MAP and typed NULL integer inputs, plus valid ARRAY and
@@ -3049,10 +3166,21 @@ DataFusion controls compare complete successful and rejected observations before
 and after Spark execution. The builder unit test preserves original arguments
 for NULL, all five list representations and dictionary children.
 
+The [NULL-inspection boundary references](array-compact-null-inspection/README.md)
+retain 22 further independent observations for VALUES, required provider siblings
+in both output orders, direct/STRUCT first errors, scalar subqueries and a
+discarded volatile operand. Local ARRAY_COMPACT, ARRAY and STRUCT NULL checks
+retain their early conversions. The constant-subquery supplement preserves
+preparation errors before outer NULL pruning. `compact_null_inspection.rs`
+requires 44 strict comparisons of complete fields, rows, phases and first cast
+inputs at batch sizes 1 and 32. These bounded references do not establish full
+ARRAY_COMPACT compatibility.
+
 From this crate, replay the references and focused kernel checks with:
 
 ```sh
 cargo test --locked --workspace --test compact_result_fields -- --nocapture
+cargo test --locked --workspace --test compact_null_inspection -- --nocapture
 cargo test --locked --workspace -p sail-plan --lib array_compact_validation -- --nocapture
 cargo test --locked --workspace -p sail-function --lib spark_array_compact -- --nocapture
 cargo test --locked --workspace -p sail-function --lib scalar_adapter -- --nocapture
@@ -3585,4 +3713,50 @@ python tests/fixtures/recapture_string_binary_spark.py \
   --output /tmp/like-evaluation-spark-fresh.jsonl
 cargo test --locked --workspace --test like_escapes -- --nocapture
 
+```
+
+## Nested lambda capture positions
+
+The four `nested-lambda-captures-*-spark.jsonl` references retain independent
+Spark 4.2.0 records at revision `32f7299601108917fb01920a54e084595b7b3bf8`.
+The original corpus has 92 records, the supplement 126, and the CASE and
+projection/filter/join interaction corpora 54 each. Their unchanged hashes are
+in [nested-lambda-captures-source-provenance.json](nested-lambda-captures-source-provenance.json).
+Each header retains provider schemas, values and capture settings. Successful
+records retain complete analyzed, optimized and executed fields and rows;
+required planning errors retain their precise conditions.
+
+`nested_lambda_captures` replays every record in both ANSI modes at batch sizes
+1 and 32, accumulating differences before its final assertion. The four original
+corpora have no ORDER BY; their capture helpers sorted expected outer rows.
+Their row comparison preserves duplicates without requiring a sequence. Raw
+rows and references remain unchanged, and complete fields from every stage are
+still checked.
+
+`nested-lambda-inherited-declarations.jsonl` retains ten complete native baseline
+comparisons for five unchanged references at the exact same batch sizes. Six
+contexts track unresolved ANSI SIZE nullability under #822 and four track
+unresolved unaliased MAP labels under #823. These controls require the unchanged
+whole native observation or a complete Spark match; they are not Spark-compatible
+expectations. All own-scope successes require full Spark fields and values.
+Precise free/qualified-variable cause checks retain rejection guarantees without
+claiming parity for the missing Spark condition identifiers. The provenance file
+records the accepted parent, observer head and unchanged control-file hash.
+
+Native expression tests cover reconstruction, full source widths, file-source
+fallback, full file-plus-partition schema widths and strict malformed bindings.
+Connected runtime CONCAT tests use `nested-lambda-concat-consumer-spark.jsonl`, a fresh six-record
+independent capture of the exact issue 906 SQL and wrapper-isolation controls.
+They replay its original SQL at all 36 payload-representation/batch/ANSI
+contexts and retain raw Arrow schema evidence. Its explicit ORDER BY k keeps an
+exact unsorted collected-row comparison. The capture script is
+`capture_nested_lambda_concat_consumer_spark.py`; its unchanged hash is in the
+same provenance file. NULL masks, empty providers and a capture-free volatile
+body have a separate exact row-counter guard.
+Cross-input join rewriting #829 and malformed bindings erased by optimization
+#856 retain their separate before/after evidence; these references do not waive
+unrelated errors or establish those issues' acceptance.
+
+```sh
+cargo test --locked --workspace --test nested_lambda_captures -- --nocapture
 ```

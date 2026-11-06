@@ -7,10 +7,12 @@ use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{Expr, Extension, LogicalPlan, ident};
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::misc::monotonically_increasing_id::SparkMonotonicallyIncreasingId;
-use sail_logical_plan::monotonic_id::MonotonicIdNode;
+use sail_logical_plan::monotonic_id::{MonotonicIdNode, MonotonicIdPurpose};
 
 use crate::resolver::state::PlanResolverState;
-use crate::resolver::tree::{PlanRewriter, empty_logical_plan};
+use crate::resolver::tree::{
+    PlanRewriter, empty_logical_plan, skip_aggregate_arguments_needing_validation,
+};
 
 pub(crate) struct MonotonicIdRewriter<'s> {
     plan: LogicalPlan,
@@ -35,6 +37,10 @@ impl<'s> PlanRewriter<'s> for MonotonicIdRewriter<'s> {
 impl TreeNodeRewriter for MonotonicIdRewriter<'_> {
     type Node = Expr;
 
+    fn f_down(&mut self, node: Expr) -> Result<Transformed<Expr>> {
+        skip_aggregate_arguments_needing_validation(node)
+    }
+
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {
         let (func, args) = match node {
             Expr::ScalarFunction(ScalarFunction { func, args }) => (func, args),
@@ -57,7 +63,11 @@ impl TreeNodeRewriter for MonotonicIdRewriter<'_> {
 
                 let plan = mem::replace(&mut self.plan, empty_logical_plan());
                 self.plan = LogicalPlan::Extension(Extension {
-                    node: Arc::new(MonotonicIdNode::try_new(Arc::new(plan), col.clone())?),
+                    node: Arc::new(MonotonicIdNode::try_new(
+                        Arc::new(plan),
+                        col.clone(),
+                        MonotonicIdPurpose::SqlFunction,
+                    )?),
                 });
                 self.column_name = Some(col.clone());
                 col

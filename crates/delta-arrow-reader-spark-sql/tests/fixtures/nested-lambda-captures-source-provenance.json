@@ -1,0 +1,75 @@
+{
+  "issue": 821,
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "references_unchanged": true,
+  "sources": [
+    {
+      "path": "nested-lambda-captures-original-spark.jsonl",
+      "sha256": "5062ca7347936534b7a1b5732327ba4c7752a97436ef8b51495d5029828136ae",
+      "records": 92,
+      "batch_sizes": [
+        1,
+        32
+      ]
+    },
+    {
+      "path": "nested-lambda-captures-spark.jsonl",
+      "sha256": "771b04982e7305bc3d74b64a4b5a69b0e18efc3ef8c71dcf2a574744ca17aed2",
+      "records": 126,
+      "batch_sizes": [
+        1,
+        32
+      ]
+    },
+    {
+      "path": "nested-lambda-captures-case-spark.jsonl",
+      "sha256": "aeda6595f0790ece4873b2765059cc3e2216fd0a49fa03b9b03df2aa30d11817",
+      "records": 54,
+      "batch_sizes": [
+        1,
+        32
+      ]
+    },
+    {
+      "path": "nested-lambda-captures-interactions-spark.jsonl",
+      "sha256": "551d3ea0125d155560c6f8b43013aeffe3c8304d76d1dfb8261140cdda8c03e2",
+      "records": 54,
+      "batch_sizes": [
+        1,
+        32
+      ]
+    },
+    {
+      "path": "nested-lambda-concat-consumer-spark.jsonl",
+      "sha256": "7a33f23ebfecbc4c1de2abf6de17448b7aa28781f7250da7a902f71987a0805e",
+      "records": 6,
+      "batch_sizes": [
+        1,
+        32
+      ],
+      "payload_representations": [
+        "Utf8",
+        "LargeUtf8",
+        "Utf8View"
+      ],
+      "capture_source": "capture_nested_lambda_concat_consumer_spark.py",
+      "capture_source_sha256": "2f9078684a379a959a3995e6da68f216c78fb815395abc6b7514c557a6bcfb12",
+      "capture_kind": "fresh independent root capture; not the unavailable earlier Mac handoff"
+    }
+  ],
+  "inherited_declaration_controls": {
+    "path": "nested-lambda-inherited-declarations.jsonl",
+    "sha256": "70c2a79d714b4fc9d60eba24ae410fd825e016c13857c0d1b952a17d62656082",
+    "contexts": 10,
+    "reference_records": 5,
+    "tracking_issues": [
+      822,
+      823
+    ],
+    "product_parent": "e1622a8999bf6bd3ef21aa5f0834f0551374f742",
+    "observer_head": "de1e5d23bc96ca8127b86b7e93ce240d5a134349",
+    "comparison": "complete native observation at the exact same batch; not Spark-compatible expectations"
+  }
+}

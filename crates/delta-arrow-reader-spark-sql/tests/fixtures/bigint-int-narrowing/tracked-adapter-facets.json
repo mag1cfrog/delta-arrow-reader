@@ -1,0 +1,3368 @@
+{
+  "source": "3853bd37067e7f194f99615373f51130742f56e7",
+  "source_tree": "4aa88104f1bb11cf10d4b7a018be0bac9f094420",
+  "source_observations_file": "813-native-baseline-current-v2.log",
+  "source_observations_sha256": "2e14c519637733f83186a1b6ec2db0d4aacf4eb9adff3dfa1f15100713bb39d8",
+  "source_group": "BIGINT_INT_OBSERVATION ",
+  "source_test_sha256": "e1547e455803fe6a4337208cb5469a66fcf7699130822f08bae59d409625979d",
+  "spark_reference_sha256": "87155b99408b25d6e7c7bcb40951ace31365de09fac3f1d642b79157e87c4b65",
+  "scope": "Source Spark comparisons remain false. Accept actual bounded Spark improvements or only the exact inherited facets; all #813 conversion and other facets must pass.",
+  "facets": [
+    {
+      "id": "c06_substring_implicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        778
+      ],
+      "kind": "observation",
+      "source_log_line": 6,
+      "source_record_sha256": "9ac9a43570af70252d3bc4dad7c2bb4467633edad0e9867226cb1d87972cb56f",
+      "reference": {
+        "id": "c06_substring_implicit",
+        "sql": "SELECT substring('abcd',4294967297L,1) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcd, cast(4294967297 as int), 1) AS r#198]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967297L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967297L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Arrow error: Cast error: Can't cast value 4294967297 to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_substring_explicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        778
+      ],
+      "kind": "observation",
+      "source_log_line": 8,
+      "source_record_sha256": "607515f617b24c8b15a57ead04a3c6af40679d1ded4fd4cf952e07ef2dfb7261",
+      "reference": {
+        "id": "c06_substring_explicit",
+        "sql": "SELECT substring('abcd',CAST(4294967297L AS INT),1) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcd, cast(4294967297 as int), 1) AS r#200]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967297L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967297L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Arrow error: Cast error: Can't cast value 4294967297 to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_extract_implicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        788
+      ],
+      "kind": "observation",
+      "source_log_line": 14,
+      "source_record_sha256": "2c7c516b36e2be391dbe7b761816b1c281c522ea8c95f5d07c6119bbf3964b17",
+      "reference": {
+        "id": "c06_extract_implicit",
+        "sql": "SELECT regexp_extract('ab','(a)',4294967296L) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [regexp_extract(ab, (a), cast(4294967296 as int)) AS r#206]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_extract_implicit",
+      "ansi": false,
+      "batch": 1,
+      "owners": [
+        788
+      ],
+      "kind": "observation",
+      "source_log_line": 15,
+      "source_record_sha256": "5f82a81545a2a8e83adcc6c7b0c64d9a565abedab19f4a0f2b639489ff5aad74",
+      "reference": {
+        "id": "c06_extract_implicit",
+        "sql": "SELECT regexp_extract('ab','(a)',4294967296L) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [regexp_extract(ab, (a), cast(4294967296 as int)) AS r#207]\n+- OneRowRelation\n",
+          "optimized": "Project [a AS r#207]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [a AS r#207]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [a AS r#207]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "a"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": true,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_implicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        981,
+        982
+      ],
+      "kind": "observation",
+      "source_log_line": 18,
+      "source_record_sha256": "94b8e65bc6ad6f5c676bec008f7916e83c25f87734acfc14cb4e7af3d0d10183",
+      "reference": {
+        "id": "c07_timestampadd_implicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,4294967296L,TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, 4294967296, 2020-01-01 00:00:00, Some(UTC)) as string) AS r#210]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "DATETIME_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "DATETIME_OVERFLOW",
+          "parameters": {
+            "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+          },
+          "sql_state": "22008",
+          "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+              "condition": "DATETIME_OVERFLOW",
+              "parameters": {
+                "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_implicit",
+      "ansi": false,
+      "batch": 1,
+      "owners": [
+        981,
+        982
+      ],
+      "kind": "observation",
+      "source_log_line": 19,
+      "source_record_sha256": "7eb71f20bb259067b5b8f7c65eadf0906e5c739e487488468978a601ba38a3da",
+      "reference": {
+        "id": "c07_timestampadd_implicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,4294967296L,TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, 4294967296, 2020-01-01 00:00:00, Some(UTC)) as string) AS r#211]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "DATETIME_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "DATETIME_OVERFLOW",
+          "parameters": {
+            "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+          },
+          "sql_state": "22008",
+          "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+              "condition": "DATETIME_OVERFLOW",
+              "parameters": {
+                "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_explicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 20,
+      "source_record_sha256": "87b71fcc324eae03d6d81df421a277bd4fc35628ab76c2c3c834be18a9217b3b",
+      "reference": {
+        "id": "c07_timestampadd_explicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,CAST(4294967296L AS INT),TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, cast(cast(4294967296 as int) as bigint), 2020-01-01 00:00:00, Some(UTC)) as string) AS r#212]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_explicit",
+      "ansi": false,
+      "batch": 1,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 21,
+      "source_record_sha256": "fb4abc144f70c92b0793bb4fb8c09376422ed1b9450771e933827faad8ed6c1f",
+      "reference": {
+        "id": "c07_timestampadd_explicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,CAST(4294967296L AS INT),TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, cast(cast(4294967296 as int) as bigint), 2020-01-01 00:00:00, Some(UTC)) as string) AS r#213]\n+- OneRowRelation\n",
+          "optimized": "Project [2020-01-01 00:00:00 AS r#213]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [2020-01-01 00:00:00 AS r#213]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [2020-01-01 00:00:00 AS r#213]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "2020-01-01 00:00:00"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": false,
+        "physical_matches": false,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_implicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 22,
+      "source_record_sha256": "8c946b27b6f1d2ec60ba56d7d7e114b0526c8de893edc40c197b9291eaeb126e",
+      "reference": {
+        "id": "c07_yearmonth_implicit",
+        "sql": "SELECT CAST(make_ym_interval(4294967296L,1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#214]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_implicit",
+      "ansi": false,
+      "batch": 1,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 23,
+      "source_record_sha256": "dae675322698c233892fc90da085027abda5646a6666bfdb28f4fca4fa6ee7a2",
+      "reference": {
+        "id": "c07_yearmonth_implicit",
+        "sql": "SELECT CAST(make_ym_interval(4294967296L,1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#215]\n+- OneRowRelation\n",
+          "optimized": "Project [INTERVAL '0-1' YEAR TO MONTH AS r#215]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#215]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#215]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "INTERVAL '0-1' YEAR TO MONTH"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": false,
+        "physical_matches": false,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_explicit",
+      "ansi": true,
+      "batch": 1,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 24,
+      "source_record_sha256": "faf8f173bd13c1710dc671b29a3d9a097990a946458df76a0466aa8dd5796da5",
+      "reference": {
+        "id": "c07_yearmonth_explicit",
+        "sql": "SELECT CAST(make_ym_interval(CAST(4294967296L AS INT),1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#216]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_explicit",
+      "ansi": false,
+      "batch": 1,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 25,
+      "source_record_sha256": "753eb4659281307eb2ab32eb4bd0868a90a8c306b69b8797fe0ef6a0488d4cb0",
+      "reference": {
+        "id": "c07_yearmonth_explicit",
+        "sql": "SELECT CAST(make_ym_interval(CAST(4294967296L AS INT),1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#217]\n+- OneRowRelation\n",
+          "optimized": "Project [INTERVAL '0-1' YEAR TO MONTH AS r#217]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#217]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#217]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "INTERVAL '0-1' YEAR TO MONTH"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": false,
+        "physical_matches": false,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_substring_implicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        778
+      ],
+      "kind": "observation",
+      "source_log_line": 26,
+      "source_record_sha256": "81be69c8cdb0364a7e01928de217734aabea64ee10c441412af49f7714e284f6",
+      "reference": {
+        "id": "c06_substring_implicit",
+        "sql": "SELECT substring('abcd',4294967297L,1) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcd, cast(4294967297 as int), 1) AS r#198]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967297L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967297L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Arrow error: Cast error: Can't cast value 4294967297 to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_substring_explicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        778
+      ],
+      "kind": "observation",
+      "source_log_line": 28,
+      "source_record_sha256": "f057b58f54881e63037e8d76837118ee8928952cc859da6b3c981a133a2e6b0d",
+      "reference": {
+        "id": "c06_substring_explicit",
+        "sql": "SELECT substring('abcd',CAST(4294967297L AS INT),1) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcd, cast(4294967297 as int), 1) AS r#200]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967297L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967297L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967297L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Arrow error: Cast error: Can't cast value 4294967297 to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_extract_implicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        788
+      ],
+      "kind": "observation",
+      "source_log_line": 34,
+      "source_record_sha256": "1aa7748ada550f7013ed46d6677aa790b369d1bdc3670eb6cceb93b194d96faf",
+      "reference": {
+        "id": "c06_extract_implicit",
+        "sql": "SELECT regexp_extract('ab','(a)',4294967296L) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [regexp_extract(ab, (a), cast(4294967296 as int)) AS r#206]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c06_extract_implicit",
+      "ansi": false,
+      "batch": 32,
+      "owners": [
+        788
+      ],
+      "kind": "observation",
+      "source_log_line": 35,
+      "source_record_sha256": "1e1c5a801348116a0d9ec257ae57b999a539ad89a8ebfde0adb156f18cd4d8d0",
+      "reference": {
+        "id": "c06_extract_implicit",
+        "sql": "SELECT regexp_extract('ab','(a)',4294967296L) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [regexp_extract(ab, (a), cast(4294967296 as int)) AS r#207]\n+- OneRowRelation\n",
+          "optimized": "Project [a AS r#207]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [a AS r#207]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [a AS r#207]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "a"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "physical_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "collect",
+        "error": "Execution error: Spark `regexp_extract` function: Expects group index between 0 and 1, but got 4294967296",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": true,
+        "optimized_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "optimized_observation": {
+          "raw_schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "#0",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "names_match": true
+        },
+        "optimized_error": null
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_implicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        981,
+        982
+      ],
+      "kind": "observation",
+      "source_log_line": 38,
+      "source_record_sha256": "cd3ec6cd2cbfaaca50f81dd117c06d7413cb106c3a5cef4cc15e89b07ddf7e59",
+      "reference": {
+        "id": "c07_timestampadd_implicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,4294967296L,TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, 4294967296, 2020-01-01 00:00:00, Some(UTC)) as string) AS r#210]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "DATETIME_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "DATETIME_OVERFLOW",
+          "parameters": {
+            "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+          },
+          "sql_state": "22008",
+          "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+              "condition": "DATETIME_OVERFLOW",
+              "parameters": {
+                "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_implicit",
+      "ansi": false,
+      "batch": 32,
+      "owners": [
+        981,
+        982
+      ],
+      "kind": "observation",
+      "source_log_line": 39,
+      "source_record_sha256": "e495c0d753c7327559c25f7764c21a6d5949bcdbaec80d45d3aa266e2cb8bc7b",
+      "reference": {
+        "id": "c07_timestampadd_implicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,4294967296L,TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, 4294967296, 2020-01-01 00:00:00, Some(UTC)) as string) AS r#211]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "DATETIME_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "DATETIME_OVERFLOW",
+          "parameters": {
+            "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+          },
+          "sql_state": "22008",
+          "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[DATETIME_OVERFLOW] Datetime operation overflow: add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'. SQLSTATE: 22008",
+              "condition": "DATETIME_OVERFLOW",
+              "parameters": {
+                "operation": "add 4294967296L MONTH to TIMESTAMP '2020-01-01 00:00:00'"
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_explicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 40,
+      "source_record_sha256": "4f631920532c1b68ba84dce718bf5c481f329941ec051c4513586c2bb7b6960b",
+      "reference": {
+        "id": "c07_timestampadd_explicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,CAST(4294967296L AS INT),TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, cast(cast(4294967296 as int) as bigint), 2020-01-01 00:00:00, Some(UTC)) as string) AS r#212]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_timestampadd_explicit",
+      "ansi": false,
+      "batch": 32,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 41,
+      "source_record_sha256": "d999bdf669f65fed2f709600a7538f2237c51282ec54ef33c6eef620522fa6ca",
+      "reference": {
+        "id": "c07_timestampadd_explicit",
+        "sql": "SELECT CAST(timestampadd(MONTH,CAST(4294967296L AS INT),TIMESTAMP '2020-01-01 00:00:00') AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(timestampadd(MONTH, cast(cast(4294967296 as int) as bigint), 2020-01-01 00:00:00, Some(UTC)) as string) AS r#213]\n+- OneRowRelation\n",
+          "optimized": "Project [2020-01-01 00:00:00 AS r#213]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [2020-01-01 00:00:00 AS r#213]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [2020-01-01 00:00:00 AS r#213]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "2020-01-01 00:00:00"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": false,
+        "physical_matches": false,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_implicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 42,
+      "source_record_sha256": "52e2d5b9e8d83ad8146f79758da0f80774db4a309c9790d92e6d31aed626c792",
+      "reference": {
+        "id": "c07_yearmonth_implicit",
+        "sql": "SELECT CAST(make_ym_interval(4294967296L,1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#214]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_implicit",
+      "ansi": false,
+      "batch": 32,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 43,
+      "source_record_sha256": "cc018dc7d991c07c8bd0c40d816c30797cc34eea66eecd6d7d7d23b78dc8a21e",
+      "reference": {
+        "id": "c07_yearmonth_implicit",
+        "sql": "SELECT CAST(make_ym_interval(4294967296L,1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#215]\n+- OneRowRelation\n",
+          "optimized": "Project [INTERVAL '0-1' YEAR TO MONTH AS r#215]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#215]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#215]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "INTERVAL '0-1' YEAR TO MONTH"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": false,
+        "physical_matches": false,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_explicit",
+      "ansi": true,
+      "batch": 32,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 44,
+      "source_record_sha256": "b843b41966e64bab81226adda910bfcaf31b18e8e38273eeed51435d53123dc3",
+      "reference": {
+        "id": "c07_yearmonth_explicit",
+        "sql": "SELECT CAST(make_ym_interval(CAST(4294967296L AS INT),1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#216]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "4294967296L",
+            "sourceType": "\"BIGINT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value 4294967296L of the type \"BIGINT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "4294967296L",
+                "sourceType": "\"BIGINT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    },
+    {
+      "id": "c07_yearmonth_explicit",
+      "ansi": false,
+      "batch": 32,
+      "owners": [
+        982
+      ],
+      "kind": "public_schema",
+      "source_log_line": 45,
+      "source_record_sha256": "610939410af588865d9aecf11ed3233265a099db905202bc045cbe953d5bedd6",
+      "reference": {
+        "id": "c07_yearmonth_explicit",
+        "sql": "SELECT CAST(make_ym_interval(CAST(4294967296L AS INT),1) AS STRING) AS r",
+        "domain": "adapter",
+        "ordered": false,
+        "ansi": false,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "optimized": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed_before_collect": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "executed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [cast(make_ym_interval(cast(4294967296 as int), 1) as string) AS r#217]\n+- OneRowRelation\n",
+          "optimized": "Project [INTERVAL '0-1' YEAR TO MONTH AS r#217]\n+- OneRowRelation\n",
+          "executed_before_collect": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#217]\n+- *(1) Scan OneRowRelation[]\n",
+          "executed": "*(1) Project [INTERVAL '0-1' YEAR TO MONTH AS r#217]\n+- *(1) Scan OneRowRelation[]\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "schema": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": false,
+                "metadata": {}
+              }
+            ]
+          },
+          "rows": [
+            [
+              "INTERVAL '0-1' YEAR TO MONTH"
+            ]
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "false"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32",
+        "public_matches": false,
+        "before_matches": false,
+        "physical_matches": false,
+        "rows_match": false,
+        "ordered_rows_match": true,
+        "error_matches": false,
+        "matches": false,
+        "optimized_matches": false,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+      },
+      "source_required_contract_matches": false,
+      "source_full_diagnostic_parity": false
+    }
+  ]
+}

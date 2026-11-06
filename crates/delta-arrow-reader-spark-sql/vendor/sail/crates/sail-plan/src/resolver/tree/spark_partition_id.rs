@@ -10,7 +10,9 @@ use sail_function::scalar::misc::spark_partition_id::SparkPartitionId;
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use crate::resolver::state::PlanResolverState;
-use crate::resolver::tree::{PlanRewriter, empty_logical_plan};
+use crate::resolver::tree::{
+    PlanRewriter, empty_logical_plan, skip_aggregate_arguments_needing_validation,
+};
 
 pub(crate) struct SparkPartitionIdRewriter<'s> {
     plan: LogicalPlan,
@@ -34,6 +36,10 @@ impl<'s> PlanRewriter<'s> for SparkPartitionIdRewriter<'s> {
 
 impl TreeNodeRewriter for SparkPartitionIdRewriter<'_> {
     type Node = Expr;
+
+    fn f_down(&mut self, node: Expr) -> Result<Transformed<Expr>> {
+        skip_aggregate_arguments_needing_validation(node)
+    }
 
     fn f_up(&mut self, node: Expr) -> Result<Transformed<Expr>> {
         let (func, args) = match node {

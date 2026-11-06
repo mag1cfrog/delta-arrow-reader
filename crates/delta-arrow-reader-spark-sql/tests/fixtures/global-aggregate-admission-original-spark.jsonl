@@ -1,0 +1,4 @@
+{"id":"distinct","ansi":true,"sql":"SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)","expected":{"condition":"AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION"}}
+{"id":"sum","ansi":true,"sql":"SELECT SUM(RAND()) AS result FROM VALUES(1),(2) t(v)","expected":{"condition":"AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION"}}
+{"id":"distinct","ansi":false,"sql":"SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)","expected":{"condition":"AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION"}}
+{"id":"sum","ansi":false,"sql":"SELECT SUM(RAND()) AS result FROM VALUES(1),(2) t(v)","expected":{"condition":"AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION"}}

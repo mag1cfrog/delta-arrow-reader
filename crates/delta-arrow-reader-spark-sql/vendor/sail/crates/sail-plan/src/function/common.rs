@@ -17,6 +17,7 @@ use datafusion_expr::{
     WindowFrame, WindowFunctionDefinition, WindowUDF, cast, expr, lit,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
@@ -222,6 +223,15 @@ pub(crate) fn literal_value_without_evaluation(expression: &expr::Expr) -> Optio
             } else {
                 None
             }
+        }
+        expr::Expr::ScalarFunction(function)
+            if function.func.inner().is::<SparkCastBigintToInt>() =>
+        {
+            let [input] = function.args.as_slice() else {
+                return None;
+            };
+            let value = literal_value_without_evaluation(input)?;
+            matches!(value, ScalarValue::Int64(None)).then_some(ScalarValue::Int32(None))
         }
         _ => None,
     }
@@ -489,6 +499,15 @@ impl ScalarFunctionBuilder {
                       function_context,
                   }| {
                 let arg = arguments.one()?;
+                if data_type == DataType::Int32
+                    && arg.get_type(function_context.schema)? == DataType::Int64
+                {
+                    return Ok(ScalarUDF::from(SparkCastBigintToInt::new(
+                        function_context.plan_config.ansi_mode,
+                        false,
+                    ))
+                    .call(vec![arg]));
+                }
                 if let DataType::Decimal128(precision, scale) = data_type {
                     match arg.get_type(function_context.schema)? {
                         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
@@ -552,6 +571,23 @@ fn numeric_literal(value: &expr::Expr) -> Option<ScalarValue> {
             .as_literal()
             .filter(|value| value.data_type().is_numeric() || value.is_null())
             .and_then(|value| value.cast_to(field.data_type()).ok()),
+        expr::Expr::ScalarFunction(function) => {
+            let cast = function
+                .func
+                .inner()
+                .downcast_ref::<SparkCastBigintToInt>()?;
+            let [input] = function.args.as_slice() else {
+                return None;
+            };
+            let input = without_metadata_annotations(input).as_literal()?;
+            let ColumnarValue::Scalar(value) = cast
+                .cast_value(&ColumnarValue::Scalar(input.clone()))
+                .ok()?
+            else {
+                return None;
+            };
+            (!value.is_null() || input.is_null()).then_some(value)
+        }
         _ => None,
     }
 }

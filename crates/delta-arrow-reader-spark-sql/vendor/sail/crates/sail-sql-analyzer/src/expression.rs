@@ -17,7 +17,7 @@ use sail_sql_parser::ast::query::{
 
 use crate::data_type::from_ast_data_type;
 use crate::error::{SqlError, SqlResult};
-use crate::literal::interval::from_ast_signed_interval;
+use crate::literal::interval::{IntervalValue, from_ast_signed_interval};
 use crate::literal::utils::Signed;
 use crate::query::{from_ast_named_expression, from_ast_query};
 use crate::value::{
@@ -304,11 +304,9 @@ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
                 }),
                 _ => Ok(spec::Expr::UnresolvedExtractValue {
                     child: Box::new(expr),
-                    extraction: Box::new(spec::Expr::UnresolvedAttribute {
-                        name: spec::ObjectName::bare(field.value),
-                        plan_id: None,
-                        is_metadata_column: false,
-                    }),
+                    extraction: Box::new(spec::Expr::Literal(spec::Literal::Utf8 {
+                        value: Some(field.value),
+                    })),
                 }),
             }
         }
@@ -1072,9 +1070,17 @@ fn from_ast_atom_expression(atom: AtomExpr) -> SqlResult<spec::Expr> {
         AtomExpr::NumberLiteral(value) => from_ast_number_literal(value),
         AtomExpr::BooleanLiteral(value) => from_ast_boolean_literal(value),
         AtomExpr::Null(_) => Ok(spec::Expr::Literal(spec::Literal::Null)),
-        AtomExpr::Interval(_, value) => Ok(spec::Expr::Literal(
-            from_ast_signed_interval(Signed::Positive(*value))?.into(),
-        )),
+        AtomExpr::Interval(_, value) => {
+            let interval = from_ast_signed_interval(Signed::Positive(*value))?;
+            // A SQL literal chooses its family by written units, so a calendar interval here
+            // means units from both the year-month and day-time families were written.
+            if matches!(interval, IntervalValue::MonthDayNanosecond { .. }) {
+                return Err(SqlError::invalid(
+                    "[_LEGACY_ERROR_TEMP_0029] cannot mix year-month and day-time interval units",
+                ));
+            }
+            Ok(spec::Expr::Literal(interval.into()))
+        }
         AtomExpr::Placeholder(variable) => Ok(spec::Expr::Placeholder(variable.value)),
         AtomExpr::Identifier(x) => Ok(spec::Expr::UnresolvedAttribute {
             name: spec::ObjectName::bare(x.value),

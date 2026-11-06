@@ -26,12 +26,14 @@ are recorded in Git rather than rewriting the accepted source checksums.
 
 ## Dependency forks
 
-Twelve dependencies have local source overrides in this crate's Cargo.toml:
+Fourteen dependencies have local source overrides in this crate's Cargo.toml:
 
 | Source | Version | Retained changes |
 | --- | --- | --- |
+| DataFusion common | 54.1.0 | Preserve complete list element Fields during scalar conversion and scalar casts |
 | DataFusion expression and execution crates | 54.1.0 | Spark coercion and nullability, subquery preparation, filtering and sorting, and accepted arithmetic execution changes |
 | DataFusion aggregate functions | 54.1.0 | Clear cached sliding MIN/MAX values when no contributing value remains; expose shallow MovingMin queue buffer accounting |
+| DataFusion datasource | 54.1.0 | Supply the owned complete table schema width when unprojecting filters, including custom file sources |
 | Arrow array, arithmetic and cast crates | 58.4.0 | Accepted cast, checked arithmetic, buffer handling and logical List child validation changes |
 | lexical-parse-float | 1.0.6 | Hexadecimal floating-point parsing used by Spark string casts |
 
@@ -39,6 +41,19 @@ The JSON inventory lists each package and its original crates.io archive checksu
 Unmodified files came from those archives, rather than mutable Cargo source caches.
 Modified dependency files carry a DAR notice. The source is checked in directly;
 the historical patch files are evidence, not build-time dependencies.
+
+Typed List and LargeList literals retain their complete element fields when
+converted from Arrow rows or cast to a declared list type. For example, an
+element named `kept_element` with `source=constant-coordinate-test` keeps that
+metadata after a constant `SLICE(..., 1, 1)`, including nested and empty results.
+The shared single-row list builder uses the supplied field and Arrow's existing
+constructors, which still reject mismatched child types and required elements
+containing logical NULLs. The [literal field tests](tests/literal_list_fields.rs)
+cover direct scalar construction, conversion, casts, folding and NULL parents.
+SLICE retains required Struct elements through result declaration and literal
+folding while allowing NULLs in optional Struct children. Its native result
+adaptation uses checked Arrow casts after removing hidden NULL children from
+NULL list parents with required elements.
 
 Arrow cast also exposes `parse_string_rows_until_error` for callers that need
 successful rows before a strict parse failure. It reuses the primitive parser
@@ -158,6 +173,77 @@ inline state and allocations owned by a generic element; the Spark element
 stores only inline values. The [extrema references](tests/fixtures/README.md#floating-minmax)
 cover returned bits, schemas, filters, DISTINCT and native controls.
 
+### Interval expression names
+
+The SQL analyzer keeps interval start and end fields with month or microsecond
+literal values. In a SQL literal, unit presence decides the family even when a
+unit-syntax literal is zero or cancels, and SQL literals that mix year-month and
+day-time units are rejected as in Spark. Interval strings converted at run time,
+by string casts and `window` durations, keep choosing the family by non-zero
+values. Qualified and single-unit interval values, including run-time strings in
+casts and `window` durations, apply their sign before narrowing to the stored
+month or microsecond value, so each qualifier's minimum is accepted as in Spark.
+
+The existing Spark formatter uses those fields for literal and CAST names, and
+unqualified interval literals use its full-range form.
+Resolved operand types choose Spark's display order for interval
+multiplication and timestamp addition or subtraction, and `TIMESTAMP + NULL`
+is planned as timestamp arithmetic. Execution keeps the existing Arrow interval
+storage. The [interval references](tests/fixtures/interval-qualifiers/README.md)
+record the checks and the separately owned differences.
+
+### Interval scaling
+
+A local Sail function follows Spark's `MultiplyYMInterval`, `DivideYMInterval`,
+`MultiplyDTInterval` and `DivideDTInterval` in both ANSI modes. It multiplies a
+year-month or day-time interval by a BYTE, SHORT, INT, BIGINT, FLOAT, DOUBLE,
+DECIMAL or NULL number in either operand order, and divides it by such a number.
+Integral numbers use Java `int` or `long` arithmetic, FLOAT numbers widen to
+DOUBLE, and DECIMAL numbers scale exactly. Every result rounds HALF_UP to whole
+months or microseconds. Overflow, zero divisors and NaN or infinite results fail
+with Spark's error condition or, where Spark raises a plain
+`java.lang.ArithmeticException`, with its message. A NULL interval skips the
+number for its row, and a NULL operand discards errors in the other operand
+before constants fold. Unlike CASE branches, both operands fold as constants, so
+a failing constant operand fails while optimizing even beside a column operand
+or under a false filter.
+
+Spark names a different condition for the minimum interval divided by -1 when
+its optimizer interprets the expression than when generated code evaluates it at
+run time. The expression-error analyzer marks its own evaluation of constants
+and local rows with the `SparkInterpretedEvaluation` configuration extension, so
+the function reports the optimizer's condition there and the run-time condition
+elsewhere. Its result range is typed as the interval, so enclosing sort keys
+keep their ordering properties. Interval addition and subtraction and native
+DataFusion SQL are unchanged. The [interval
+references](tests/fixtures/interval-qualifiers/README.md) record the checks.
+
+### Interval negation
+
+A second local function follows Spark's `UnaryMinus` and `negative` for
+year-month and day-time intervals. It negates the stored count exactly, keeps the
+input's nullability, and raises `INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION`
+for the minimum in both ANSI modes, with the same condition while optimizing and
+at run time. The expression-error analyzer folds a failing constant negation, so
+it fails while optimizing except in unused columns, LIMIT 0 and untaken CASE
+branches. Its result range is typed as the interval too. Other durations keep
+their existing negation.
+
+Spark folds IS NULL and IS NOT NULL of a required expression before it folds
+constants, so a failing constant scaling or negation under either check returns
+a value. The expression-error analyzer's NULL-inspection precheck in the
+DataFusion simplifier fork now folds IS NOT NULL as well as IS NULL.
+
+### Interval qualifier casts
+
+A cast from a year-month or day-time interval to a qualifier of the same family
+keeps only the target's units, as in Spark. When the target ends in YEAR, DAY,
+HOUR or MINUTE, a third local function truncates the stored month or microsecond
+count toward zero to whole units of that field; targets ending in MONTH or
+SECOND keep the count. Interval leaves of nested ARRAY, STRUCT and MAP casts
+still keep their count (#995). Numeric and string casts to intervals and native
+DataFusion SQL are unchanged.
+
 ## Licenses and maintenance
 
 The Sail selection retains its Apache-2.0 LICENSE. The pinned Sail revision has no
@@ -237,13 +323,23 @@ Their inputs retain their own field declarations. Explicit SQL CAST keeps its
 separate declared type.
 The [metadata-stage references](tests/fixtures/correlated-scalar-metadata-stages/README.md)
 retain independent public and executed fields, the original scalar guards and
-the explicit Arrow type-contract difference from Spark. Native DataFusion
-scalar construction is unchanged.
+the explicit Arrow type-contract difference from Spark. These annotations do
+not change native DataFusion scalar-subquery construction.
 VALUES column declarations use the coerced expressions' nullability. Projected
 IN can reuse its nonnullable match result when both operands are nonnullable;
 nullable operands retain the existing three-valued comparison.
 The [expression references](tests/fixtures/README.md#numeric-decimal-and-arithmetic-nullability)
 cover exact schemas, rows, required errors and separately recorded open gaps.
+
+The VALUES resolver validates eligible constant cells before outer pruning can
+erase their errors. Calls that are stable, volatile or opt out of constant folding
+are excluded throughout each expression. It prepares the original types before
+applying the shared rule for known NULL divisors to a discarded clone. Successful
+expressions and Fields remain in the plan to preserve their declarations and later
+execution behavior. `LiteralEvaluator::evaluate_physical` lets callers keep
+preparation errors outside the inline-table context while retaining original
+evaluation causes. The [inline references](tests/fixtures/README.md#inline-values-validation)
+cover these boundaries.
 
 ARRAY_CONTAINS now delegates to the already pinned DataFusion Spark
 function, with local adaptations for constant-array simplification and all-NULL
@@ -378,6 +474,13 @@ cover the full Date32 boundary, string coercion and invalid inputs. Month/year
 intervals, three-argument timestamp forms and the Sail-only ADD_DAYS keep their
 existing paths.
 
+Two-argument DATEDIFF/DATE_DIFF return Spark's INT day count, subtracting the
+DATE days as a native INT subtraction that wraps at the DATE limits like Spark's
+`int` arithmetic; TIMESTAMP arguments are cast to DATE in their TIMESTAMP type's
+zone, which is the session time zone for Spark-typed values. The three-argument
+`datediff(unit, start, end)` form keeps its BIGINT TIMESTAMPDIFF path. The
+[DATEDIFF references](tests/fixtures/date-diff/README.md) record the checks.
+
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
@@ -439,6 +542,15 @@ operators conservatively normalize their outputs. Executable branches are not
 removed, so required evaluations and errors remain. UNION ALL retains every
 original value and duplicate. Floating UNION schemas allow nullable physical
 results when native simplification removes an inner constant marker.
+
+Spark aggregate admission retains argument structure through input typing and
+structural checks. COUNT/COUNT_IF pruning and AVG/LISTAGG NULL handling must
+preserve nested aggregate/window and nondeterministic-argument errors, including
+scalar-subquery producers. SQL-produced monotonic IDs remain nondeterministic;
+internal IDs used for stable window ordering have a distinct purpose that
+survives plan cloning and rebuilding. The
+[global aggregate admission references](tests/fixtures/README.md#global-aggregate-argument-admission)
+cover the admission rules and retain scoped #142/#156 differences.
 
 COUNT_IF retains its SQL FILTER separately from the count argument. The native
 NULLIF expression shape permits common subexpression elimination before FILTER,
@@ -595,15 +707,14 @@ SUBSTR and SUBSTRING reuse DataFusion Spark's Unicode substring kernel. Binary
 ranges retain Spark's Java INT arithmetic and zero padding through a small
 native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
 length is INT_MAX for both strings and binary values.
-Position and length use the existing mode-aware STRING and Decimal integer
-casts before widening to the value kernel's Int64 inputs. Row-dependent calls
-use native scalar NULL selection while retaining ordinary logical CSE. Whole
-constant and early local calls retain the private closed-lambda adapter for
-conditional folding and preparation. Its selection/scatter helpers remain in use.
+Position and length use the mode-aware STRING and Decimal integer casts and the
+shared BIGINT-to-INT conversion before widening to the value kernel's Int64 inputs.
+Row-dependent calls use native scalar NULL selection while retaining ordinary
+logical CSE. Whole constant and early local calls retain the private closed-lambda
+adapter for conditional folding and preparation. Its selection/scatter helpers
+remain in use.
 Async arguments retain their existing extraction and eager scalar evaluation path.
-Legacy BIGINT arguments retain their previous route until shared #813 supplies
-Spark INT narrowing. General numeric CAST declarations and non-finite values
-remain with #796 and #897.
+General numeric CAST declarations and non-finite values remain with #796 and #897.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
 retain all 656 references and 3,936 native observations, plus the separate
 84-observation competing-error supplement, native SQL and fixed-binary controls.
@@ -874,9 +985,19 @@ complete Spark fields and values for direct and connected consumers.
 The Spark function builder rejects non-array arguments during resolution with
 `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE`, preserving untyped NULL and the
 existing array coercion path. Internal ARRAYS_OVERLAP compaction keeps the direct
-expression builder. The constant bad-cast IS NULL gap remains under #890; only
-its exact inherited observation permits a difference from Spark. The historical
-#891 controls stay frozen, while their non-array errors require strict matches.
+expression builder.
+
+Early local input preparation retains required IS NULL operands and comparison
+order until their conversions run. This covers ARRAY_COMPACT, ARRAY and STRUCT
+checks over VALUES. Later Spark NULL pruning uses a required operand's
+declaration to answer IS NULL and IS NOT NULL before constant folding visits its
+children.
+Scalar subqueries retain their separate preparation checks, and native
+DataFusion keeps its existing evaluation order. Direct and STRUCT consumers
+still require the compacted values and retain reachable cast errors. The
+references require all 148 original comparisons, 28 supplemental input-admission
+comparisons and 44 NULL-inspection boundary comparisons to match strictly, with
+no inherited exceptions.
 
 ### Projection metadata
 
@@ -1049,9 +1170,10 @@ New coercion paths reject custom operands that disable constant folding before
 literal evaluation. The existing INT position path is unchanged.
 
 The focused position fixture retains 110 independent Spark references and all
-660 native configurations. Shared BIGINT narrowing, nonfinite conversion and
-CAST declarations remain with #813, #897 and #796. No numeric parser, overflow
-policy, replacement kernel or native DataFusion SQL behavior is changed here.
+660 native configurations. BIGINT narrowing uses the shared INT conversion;
+nonfinite conversion and CAST declarations remain with #897 and #796. No numeric
+parser, overflow policy, replacement kernel or native DataFusion SQL behavior is
+changed here.
 
 REGEXP_REPLACE constructs that INT coercion before testing position foldability,
 so unsupported types report `UNEXPECTED_INPUT_TYPE` even for provider expressions
@@ -1061,3 +1183,39 @@ which visits original descendants through the cast wrapper. The
 require all 192 contexts from 32 independent Spark references. Native structured
 error parameters remain unavailable; the regression checks the exact native
 cause and result-field boundary without claiming complete raw diagnostic parity.
+
+### Nested lambda capture positions
+
+Physical lambdas retain their complete enclosing input width. `capture_indices`
+contains ascending source input indices in compact capture order, excluding the
+lambda's own parameters. `projected_body` consumes those captures followed by
+every declared parameter slot, including unused outer parameters. A lambda from
+`try_new` is unbound until its enclosing higher-order expression supplies the
+width: `None` and its provisional empty captures differ from `Some(0)`, a known
+zero-width input. Nested lambdas contribute captures without exposing their own
+parameter slots.
+
+Sorted capture compaction preserves nested capture order and can reuse normalized
+arithmetic and higher-order bodies while rebasing their original bodies and
+boundaries. Other reconstruction kinds derive normalization again. Arbitrary
+column-rewrite callbacks retain full reconstruction, including equal-width
+capture permutations. Rebuilt bodies still undergo async validation. One scoped
+column rewrite carries the boundary through CASE, selected scalar inputs,
+projection, filter, ordering, repartition and join reconstruction. Physical
+field, index, qualifier and parameter-name checks remain active.
+
+Projection APIs retain their signatures. `from_indices` and `make_projector`
+record authoritative source widths; expression-only constructors cannot infer
+unused trailing columns. Lambda unprojection without that context names the
+explicit-width method in its error, while ordinary column unprojection keeps
+its existing behavior. The datasource override supplies the owned full table
+width before source filter support is checked. Its pinned archive and single
+modified file are recorded in [source-provenance.json](source-provenance.json).
+
+Projection child replacement reuses the projector for an equal input schema
+and rebases it when that schema changes, retaining child-derived properties and
+the accepted row-error-prefix option. The shared projector prefix transport,
+scalar NULL masks and once-only evaluation paths retain their existing code.
+Internal CONCAT lambdas keep their dummy parameter and selected-row cardinality
+API. The [nested lambda references](tests/fixtures/README.md#nested-lambda-capture-positions)
+cover all original and supplemental cases plus CASE and connected consumers.

@@ -289,17 +289,16 @@ async fn substring_retains_complete_spark_comparisons() -> TestResult {
     assert_eq!(
         profiles,
         BTreeMap::from([
-            ("full_spark_match", 3774),
+            ("full_spark_match", 3804),
             ("open_780_invalid_utf8", 12),
-            ("open_813_legacy_bigint", 30),
             ("open_796_float_integer_analyzed_nullable", 72),
             ("open_897_legacy_nonfinite_cast", 24),
             ("strict_172_infinity_literal_notation", 12),
             ("strict_decimal_literal_notation", 12),
         ])
     );
-    assert_eq!(strict_differences, 162);
-    assert_eq!(meaningful_differences, 138);
+    assert_eq!(strict_differences, 132);
+    assert_eq!(meaningful_differences, 108);
     assert!(
         !full_compatibility_pass,
         "the known failures remain incompatible"

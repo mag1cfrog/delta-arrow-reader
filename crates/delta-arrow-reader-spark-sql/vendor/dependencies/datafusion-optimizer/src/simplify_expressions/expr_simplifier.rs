@@ -112,7 +112,7 @@ pub struct ExprSimplifier {
     canonicalize: bool,
     /// Maximum number of simplifier cycles
     max_simplifier_cycles: u32,
-    preserve_comparison_error_order: bool,
+    preserve_local_input_errors: bool,
 }
 
 pub const THRESHOLD_INLINE_INLIST: usize = 3;
@@ -129,16 +129,16 @@ impl ExprSimplifier {
             guarantees: vec![],
             canonicalize: true,
             max_simplifier_cycles: DEFAULT_MAX_SIMPLIFIER_CYCLES,
-            preserve_comparison_error_order: false,
+            preserve_local_input_errors: false,
         }
     }
 
-    /// Keep a comparison's left operand before a NULL right operand.
-    /// Local input preparation can require its conversion error before NULL
-    /// propagation. Disables operand canonicalization and comparison-cast removal
-    /// for this pass; default simplification is unchanged.
-    pub fn with_left_to_right_comparison_errors(mut self) -> Self {
-        self.preserve_comparison_error_order = true;
+    /// Preserve conversion errors while preparing Spark local input.
+    /// Keep comparison operands in order and retain required IS NULL operands
+    /// until local evaluation consumes them. Disables canonicalization and
+    /// comparison-cast removal for this pass; default simplification is unchanged.
+    pub fn with_local_input_errors(mut self) -> Self {
+        self.preserve_local_input_errors = true;
         self.canonicalize = false;
         self
     }
@@ -223,10 +223,10 @@ impl ExprSimplifier {
         mut expr: Expr,
     ) -> Result<(Transformed<Expr>, u32)> {
         let mut simplifier = Simplifier::new(&self.info);
-        simplifier.preserve_comparison_error_order = self.preserve_comparison_error_order;
+        simplifier.preserve_local_input_errors = self.preserve_local_input_errors;
         let config_options = Some(Arc::clone(self.info.config_options()));
         let mut const_evaluator = ConstEvaluator::try_new(config_options, &self.info)?;
-        const_evaluator.preserve_comparison_error_order = self.preserve_comparison_error_order;
+        const_evaluator.preserve_local_input_errors = self.preserve_local_input_errors;
         let mut shorten_in_list_simplifier = ShortenInListSimplifier::new();
         let guarantees_map: HashMap<&Expr, &NullableInterval> =
             self.guarantees.iter().map(|(k, v)| (k, v)).collect();
@@ -503,7 +503,7 @@ impl TreeNodeRewriter for Canonicalizer {
 struct ConstEvaluator<'a> {
     info: &'a SimplifyContext,
     conditional: Vec<bool>,
-    preserve_comparison_error_order: bool,
+    preserve_local_input_errors: bool,
     /// `can_evaluate` is used during the depth-first-search of the
     /// `Expr` tree to track if any siblings (or their descendants) were
     /// non evaluatable (e.g. had a column reference or volatile
@@ -540,10 +540,10 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
     type Node = Expr;
 
     fn f_down(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
-        let mut pruned = prune_null_with_comparison_order(
+        let mut pruned = prune_null_with_local_input_errors(
             expr,
             self.info,
-            self.preserve_comparison_error_order,
+            self.preserve_local_input_errors,
         )?;
         let fold_nested_parent = matches!(&pruned.data, Expr::ScalarFunction(_))
             && self
@@ -675,7 +675,7 @@ impl<'a> ConstEvaluator<'a> {
             info,
             conditional: vec![],
             can_evaluate: vec![],
-            preserve_comparison_error_order: false,
+            preserve_local_input_errors: false,
             execution_props,
         })
     }
@@ -830,10 +830,11 @@ impl<'a> ConstEvaluator<'a> {
     }
 }
 
-// Discard a NULL-propagating parent before trying to fold its fallible children.
+// Prune NULL-propagating parents and redundant Spark IS NULL and IS NOT NULL checks before
+// folding children.
 // Scalar subqueries retain their separate planning/error checks.
 pub fn prune_null(expr: Expr, info: &SimplifyContext) -> Result<Transformed<Expr>> {
-    prune_null_with_comparison_order(expr, info, false)
+    prune_null_with_local_input_errors(expr, info, false)
 }
 
 fn null_literal(expr: &Expr) -> bool {
@@ -846,8 +847,11 @@ fn null_literal(expr: &Expr) -> bool {
     }
 }
 
-fn null_binary_can_be_pruned(binary: &BinaryExpr, preserve_comparison_order: bool) -> bool {
-    let keep_left = preserve_comparison_order
+fn null_binary_can_be_pruned(
+    binary: &BinaryExpr,
+    preserve_local_input_errors: bool,
+) -> bool {
+    let keep_left = preserve_local_input_errors
         && matches!(
             binary.op,
             Operator::Eq
@@ -861,14 +865,27 @@ fn null_binary_can_be_pruned(binary: &BinaryExpr, preserve_comparison_order: boo
         && (null_literal(&binary.left) || (!keep_left && null_literal(&binary.right)))
 }
 
-fn prune_null_with_comparison_order(
+fn prune_null_with_local_input_errors(
     expr: Expr,
     info: &SimplifyContext,
-    preserve_comparison_order: bool,
+    preserve_local_input_errors: bool,
 ) -> Result<Transformed<Expr>> {
     match &expr {
+        // Spark NULL inspection follows early local input evaluation. Spark folds IS NULL and
+        // IS NOT NULL of a required expression before folding its constants.
+        Expr::IsNull(_) | Expr::IsNotNull(_)
+            if !preserve_local_input_errors
+                && info
+                    .config_options()
+                    .extensions
+                    .iter()
+                    .any(|(prefix, _)| prefix == "dar_spark_sql_errors")
+                && !expr.contains_scalar_subquery() =>
+        {
+            return Simplifier::new(info).f_up(expr);
+        }
         Expr::BinaryExpr(binary)
-            if null_binary_can_be_pruned(binary, preserve_comparison_order)
+            if null_binary_can_be_pruned(binary, preserve_local_input_errors)
                 && !expr.contains_scalar_subquery() =>
         {
             return Ok(Transformed::yes(Expr::Literal(
@@ -893,7 +910,8 @@ fn prune_null_with_comparison_order(
                     }
                 })
                 .collect::<Result<Vec<_>>>()?;
-            if let Ok(ExprSimplifyResult::Simplified(literal)) = f.func.simplify(args, info)
+            if let Ok(ExprSimplifyResult::Simplified(literal)) =
+                f.func.simplify(args, info)
                 && matches!(&literal, Expr::Literal(value, _) if value.is_null())
             {
                 return Ok(Transformed::yes(literal));
@@ -916,7 +934,7 @@ fn prune_null_with_comparison_order(
 struct Simplifier<'a> {
     info: &'a SimplifyContext,
     conditional: Vec<bool>,
-    preserve_comparison_error_order: bool,
+    preserve_local_input_errors: bool,
 }
 
 impl<'a> Simplifier<'a> {
@@ -924,7 +942,7 @@ impl<'a> Simplifier<'a> {
         Self {
             info,
             conditional: vec![],
-            preserve_comparison_error_order: false,
+            preserve_local_input_errors: false,
         }
     }
 }
@@ -956,7 +974,10 @@ impl TreeNodeRewriter for Simplifier<'_> {
             // except for few operators that can return non-null value even when one of the operands is NULL
             ref expr @ Expr::BinaryExpr(ref binary)
                 if (is_null(&binary.left) || is_null(&binary.right))
-                    && null_binary_can_be_pruned(binary, self.preserve_comparison_error_order) =>
+                    && null_binary_can_be_pruned(
+                        binary,
+                        self.preserve_local_input_errors,
+                    ) =>
             {
                 Transformed::yes(Expr::Literal(
                     ScalarValue::try_new_null(&info.get_data_type(expr)?)?,
@@ -997,8 +1018,9 @@ impl TreeNodeRewriter for Simplifier<'_> {
                 op: Eq,
                 right,
             }) if is_bool_lit(&right)
-                && (!self.preserve_comparison_error_order || !is_null(&right))
-                && info.is_boolean_type(&left)? => {
+                && (!self.preserve_local_input_errors || !is_null(&right))
+                && info.is_boolean_type(&left)? =>
+            {
                 Transformed::yes(match as_bool_lit(&right)? {
                     Some(true) => *left,
                     Some(false) => Expr::Not(left),
@@ -1049,8 +1071,9 @@ impl TreeNodeRewriter for Simplifier<'_> {
                 op: NotEq,
                 right,
             }) if is_bool_lit(&right)
-                && (!self.preserve_comparison_error_order || !is_null(&right))
-                && info.is_boolean_type(&left)? => {
+                && (!self.preserve_local_input_errors || !is_null(&right))
+                && info.is_boolean_type(&left)? =>
+            {
                 Transformed::yes(match as_bool_lit(&right)? {
                     Some(true) => Expr::Not(left),
                     Some(false) => *left,
@@ -1634,9 +1657,13 @@ impl TreeNodeRewriter for Simplifier<'_> {
             // CASE WHEN false THEN A END --> NULL
             // CASE WHEN false THEN A ELSE B END --> B
             // CASE WHEN X THEN A WHEN false THEN B END --> CASE WHEN X THEN A ELSE B END
-            Expr::Case(case) if (case.expr.is_none() || case.is_spark_searched())
-                && case.when_then_expr.iter()
-                    .any(|(when, _)| is_true(when.as_ref()) || is_false(when.as_ref()) || is_null(when.as_ref())) =>
+            Expr::Case(case)
+                if (case.expr.is_none() || case.is_spark_searched())
+                    && case.when_then_expr.iter().any(|(when, _)| {
+                        is_true(when.as_ref())
+                            || is_false(when.as_ref())
+                            || is_null(when.as_ref())
+                    }) =>
             {
                 // A synthesized NULL keeps the complete Spark result type, including nested fields.
                 let out_type = if case.is_spark_searched() {
@@ -1644,7 +1671,11 @@ impl TreeNodeRewriter for Simplifier<'_> {
                 } else {
                     info.get_data_type(&case.when_then_expr[0].1)?
                 };
-                let Case { expr, when_then_expr, mut else_expr } = case;
+                let Case {
+                    expr,
+                    when_then_expr,
+                    mut else_expr,
+                } = case;
                 let mut new_when_then_expr = Vec::with_capacity(when_then_expr.len());
 
                 for (when, then) in when_then_expr.into_iter() {
@@ -1776,7 +1807,9 @@ impl TreeNodeRewriter for Simplifier<'_> {
                 let original = conditional.then(|| args.clone());
                 let simplified = match udf.simplify(args, info) {
                     Ok(result) => result,
-                    Err(_) if conditional => ExprSimplifyResult::Original(original.unwrap()),
+                    Err(_) if conditional => {
+                        ExprSimplifyResult::Original(original.unwrap())
+                    }
                     Err(error) => return Err(error),
                 };
                 match simplified {
@@ -1911,7 +1944,12 @@ impl TreeNodeRewriter for Simplifier<'_> {
             }
 
             // a is null/unknown --> false (if a is not nullable)
-            Expr::IsNull(expr) | Expr::IsUnknown(expr) if !info.nullable(&expr)? => {
+            Expr::IsNull(expr)
+                if !self.preserve_local_input_errors && !info.nullable(&expr)? =>
+            {
+                Transformed::yes(lit(false))
+            }
+            Expr::IsUnknown(expr) if !info.nullable(&expr)? => {
                 Transformed::yes(lit(false))
             }
 
@@ -2102,10 +2140,11 @@ impl TreeNodeRewriter for Simplifier<'_> {
             // For case:
             // try_cast/cast(expr as data_type) op literal
             Expr::BinaryExpr(BinaryExpr { left, op, right })
-                if !self.preserve_comparison_error_order
+                if !self.preserve_local_input_errors
                     && is_cast_expr_and_support_unwrap_cast_in_comparison_for_binary(
                         info, &left, op, &right,
-                    ) && op.supports_propagation() =>
+                    )
+                    && op.supports_propagation() =>
             {
                 unwrap_cast_in_comparison_for_binary(info, *left, *right, op)?
             }
@@ -2113,10 +2152,11 @@ impl TreeNodeRewriter for Simplifier<'_> {
             // -->
             // try_cast/cast(expr as data_type) op_swap literal
             Expr::BinaryExpr(BinaryExpr { left, op, right })
-                if !self.preserve_comparison_error_order
+                if !self.preserve_local_input_errors
                     && is_cast_expr_and_support_unwrap_cast_in_comparison_for_binary(
                         info, &right, op, &left,
-                    ) && op.supports_propagation()
+                    )
+                    && op.supports_propagation()
                     && op.swap().is_some() =>
             {
                 unwrap_cast_in_comparison_for_binary(
@@ -4250,8 +4290,9 @@ mod tests {
                 Field::new("value", data_type.clone(), false),
                 Field::new("flag", DataType::Boolean, true),
             ]))?);
-            let simplifier =
-                ExprSimplifier::new(SimplifyContext::builder().with_schema(schema).build());
+            let simplifier = ExprSimplifier::new(
+                SimplifyContext::builder().with_schema(schema).build(),
+            );
             for condition in [lit(ScalarValue::Boolean(None)), lit(ScalarValue::Null)] {
                 let dead = (Box::new(condition), Box::new(col("discarded")));
                 for branches in [
@@ -4284,20 +4325,30 @@ mod tests {
                         vec![dead.clone(), live.clone()],
                         vec![live.clone(), dead.clone()],
                     ] {
-                        let expr = Expr::Case(Case::new(None, branches, Some(Box::new(col("value")))));
+                        let expr = Expr::Case(Case::new(
+                            None,
+                            branches,
+                            Some(Box::new(col("value"))),
+                        ));
                         let expected = Expr::Case(Case::new(
                             None,
                             vec![live.clone()],
                             Some(Box::new(col("value"))),
                         ));
-                        assert_eq!(simplifier.simplify_algebraic_once(expr)?.data, expected);
+                        assert_eq!(
+                            simplifier.simplify_algebraic_once(expr)?.data,
+                            expected
+                        );
                     }
                     let expr = Expr::Case(Case::new(
                         Some(Box::new(col("value"))),
                         vec![dead],
                         Some(Box::new(col("value"))),
                     ));
-                    assert_eq!(simplifier.simplify_algebraic_once(expr.clone())?.data, expr);
+                    assert_eq!(
+                        simplifier.simplify_algebraic_once(expr.clone())?.data,
+                        expr
+                    );
                 }
             }
         }

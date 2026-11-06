@@ -1,0 +1,43 @@
+{
+  "input_version": 1,
+  "capture_kind": "aggregate_argument_structure",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "cases": [
+    {
+      "id": "sum_deterministic_aggregate_scalar_subquery",
+      "scope": "scalar_subquery_scope_control",
+      "sql": "SELECT SUM((SELECT SUM(x) FROM VALUES(1),(2)u(x))) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "count_if_deterministic_aggregate_scalar_subquery",
+      "scope": "scalar_subquery_scope_control",
+      "sql": "SELECT COUNT_IF((SELECT SUM(x) FROM VALUES(1),(2)u(x))>0) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "null_avg_rows",
+      "scope": "null_avg_structure_control",
+      "sql": "SELECT AVG(NULL) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "null_avg_empty",
+      "scope": "null_avg_structure_control",
+      "sql": "SELECT AVG(NULL) AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_null_avg",
+      "scope": "nested_null_avg",
+      "sql": "SELECT SUM(AVG(NULL)) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    }
+  ]
+}

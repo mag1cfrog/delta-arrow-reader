@@ -12,7 +12,9 @@ use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
+use sail_function::scalar::datetime::spark_interval_truncate::SparkIntervalTruncate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
@@ -94,6 +96,39 @@ impl PlanResolver<'_> {
             } => end_field.or(*start_field),
             _ => None,
         };
+        // Spark keeps only the target's units when it casts an interval to a qualifier of its
+        // family, truncating the stored count toward zero to the length of the target's end
+        // field. Only YEAR, DAY, HOUR and MINUTE span more than one stored month or microsecond.
+        let interval_unit_length: Option<i64> = match (&cast_to_type, day_time_interval_field) {
+            (
+                spec::DataType::Interval {
+                    interval_unit: spec::IntervalUnit::YearMonth,
+                    start_field,
+                    end_field,
+                },
+                _,
+            ) if end_field.or(*start_field) == Some(spec::IntervalFieldType::Year) => Some(12),
+            (
+                _,
+                Some(
+                    field @ (spec::IntervalFieldType::Day
+                    | spec::IntervalFieldType::Hour
+                    | spec::IntervalFieldType::Minute),
+                ),
+            ) => Some(day_time_field_to_microseconds(field)),
+            _ => None,
+        };
+        let interval_type_name = match &cast_to_type {
+            spec::DataType::Interval {
+                start_field: Some(start),
+                end_field,
+                ..
+            } => Some(format!(
+                "INTERVAL {}",
+                SparkPlanFormatter.interval_fields_to_string(*start, end_field.unwrap_or(*start)),
+            )),
+            _ => None,
+        };
         let cast_to_type = self.resolve_data_type(&cast_to_type, state)?;
         let named = self.resolve_named_expression(expr, schema, state).await?;
         let expr_field = named.expr.to_field(schema)?.1;
@@ -105,7 +140,10 @@ impl PlanResolver<'_> {
                 expr::Expr::Alias(_) | expr::Expr::Column(_) | expr::Expr::OuterReferenceColumn(..)
             );
         let name = if include_cast_in_name || !named_input {
-            let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
+            let data_type_string = match interval_type_name {
+                Some(name) => name,
+                None => SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?,
+            };
             vec![format!(
                 "{}CAST({} AS {})",
                 if is_try { "TRY_" } else { "" },
@@ -116,6 +154,18 @@ impl PlanResolver<'_> {
             named.name
         };
         let expr = named.expr;
+        // Equal Arrow types mean the source is an interval of the target's family; numeric,
+        // string and NULL sources keep their conversions below.
+        if let Some(unit_length) = interval_unit_length
+            && expr_type == cast_to_type
+        {
+            let expr =
+                ScalarUDF::new_from_impl(SparkIntervalTruncate::new(unit_length)).call(vec![expr]);
+            return Ok((
+                NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                named_input,
+            ));
+        }
         let override_string_cast = matches!(
             expr_type,
             DataType::Float32
@@ -324,6 +374,10 @@ impl PlanResolver<'_> {
                     DecimalCastMode::Legacy
                 };
                 ScalarUDF::from(SparkDecimalCast::to_integer(to, mode)?).call(vec![expr])
+            }
+            (DataType::Int64, DataType::Int32, is_try) => {
+                ScalarUDF::from(SparkCastBigintToInt::new(self.config.ansi_mode, is_try))
+                    .call(vec![expr])
             }
             (_, to, true) => try_cast(expr, to),
             (_, to, _) => cast(expr, to),

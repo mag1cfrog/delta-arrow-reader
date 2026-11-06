@@ -3,7 +3,7 @@ use std::str::FromStr;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use chumsky::Parser;
 use chumsky::extra::ParserExtra;
-use chumsky::prelude::{any, choice, empty, end, just, one_of};
+use chumsky::prelude::{any, end, just, one_of};
 
 use crate::error::{SqlError, SqlResult};
 
@@ -147,22 +147,31 @@ where
         })
 }
 
-fn date<'a, E>(
-    day_suffix: impl Parser<'a, &'a str, (), E>,
-) -> impl Parser<'a, &'a str, DateValue, E>
+/// Parses a complete or partial date.
+///
+/// `day_suffix` runs only after a complete year-month-day date. Its output is
+/// `None` for a partial date. The suffix must always succeed, for example by
+/// ending in `.or_not()`; a failing suffix would discard the parsed day.
+fn date<'a, O, E>(
+    day_suffix: impl Parser<'a, &'a str, O, E>,
+) -> impl Parser<'a, &'a str, (DateValue, Option<O>), E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
     let year = signed(4, 7);
     let month = unsigned(1, 2);
-    let day = unsigned(1, 2).then_ignore(day_suffix);
+    let day = unsigned(1, 2).then(day_suffix);
 
     year.then(just('-').ignore_then(month).or_not())
         .then(just('-').ignore_then(day).or_not())
-        .map(|((year, month), day)| DateValue {
-            year,
-            month: month.unwrap_or(1),
-            day: day.unwrap_or(1),
+        .map(|((year, month), day)| {
+            let (day, suffix) = day.unzip();
+            let date = DateValue {
+                year,
+                month: month.unwrap_or(1),
+                day: day.unwrap_or(1),
+            };
+            (date, suffix)
         })
 }
 
@@ -207,21 +216,14 @@ fn timestamp<'a, E>() -> impl Parser<'a, &'a str, TimestampValue<'a>, E>
 where
     E: ParserExtra<'a, &'a str> + 'a,
 {
-    date(empty())
-        .then(choice((
-            just('T')
-                .or(just('t'))
-                .padded_by(just(' ').repeated())
-                .ignored()
-                .or(just(' ').repeated().at_least(1))
-                .ignore_then(time().then(timezone()).map(Some)),
-            just(' ').repeated().map(|_| None),
-        )))
+    // Like Spark, exactly one space or uppercase T separates a time from a complete date.
+    let time_suffix = one_of([' ', 'T'])
+        .ignore_then(time().then(timezone()))
+        .or_not();
+    date(time_suffix)
+        .then_ignore(just(' ').repeated())
         .map(|(date, time_and_timezone)| {
-            let (time, timezone) = match time_and_timezone {
-                None => (Default::default(), ""),
-                Some((t, tz)) => (t, tz),
-            };
+            let (time, timezone) = time_and_timezone.flatten().unwrap_or_default();
             TimestampValue {
                 date,
                 time,
@@ -235,7 +237,9 @@ where
     E: ParserExtra<'a, &'a str> + 'a,
 {
     // Only a complete date may ignore a suffix starting with space or uppercase T.
-    date(one_of([' ', 'T']).then(any().repeated()).or_not().ignored()).then_ignore(end())
+    date(one_of([' ', 'T']).then(any().repeated()).or_not().ignored())
+        .map(|(date, _)| date)
+        .then_ignore(end())
 }
 
 pub fn create_timestamp_parser<'a, E>() -> impl Parser<'a, &'a str, TimestampValue<'a>, E>

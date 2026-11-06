@@ -85,14 +85,24 @@ pub enum Literal {
     DurationMillisecond {
         milliseconds: Option<i64>,
     },
+    /// A day-time interval. `start_field` and `end_field` are its qualifier, such as
+    /// `HOUR TO SECOND`, and only change its name. Without a start field the name uses the full
+    /// `DAY TO SECOND` range; without an end field the qualifier is the start field alone.
     DurationMicrosecond {
         microseconds: Option<i64>,
+        start_field: Option<spec::IntervalFieldType>,
+        end_field: Option<spec::IntervalFieldType>,
     },
     DurationNanosecond {
         nanoseconds: Option<i64>,
     },
+    /// A year-month interval. `start_field` and `end_field` are its qualifier, such as `MONTH`,
+    /// and only change its name. Without a start field the name uses the full `YEAR TO MONTH`
+    /// range; without an end field the qualifier is the start field alone.
     IntervalYearMonth {
         months: Option<i32>,
+        start_field: Option<spec::IntervalFieldType>,
+        end_field: Option<spec::IntervalFieldType>,
     },
     IntervalDayTime {
         value: Option<IntervalDayTime>,

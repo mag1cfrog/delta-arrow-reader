@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -200,7 +201,7 @@ impl ScalarUDFImpl for SparkDayTimeIntervalToCalendarInterval {
 fn string_to_year_month_interval(value: &str) -> Result<i32> {
     let interval = parse_interval(value).map_err(|e| exec_datafusion_err!("{e}"))?;
     match interval {
-        IntervalValue::YearMonth { months } => Ok(months),
+        IntervalValue::YearMonth { months, .. } => Ok(months),
         IntervalValue::Microsecond { .. } | IntervalValue::MonthDayNanosecond { .. } => {
             exec_err!("expected year month interval, but got: {value}")
         }
@@ -210,7 +211,7 @@ fn string_to_year_month_interval(value: &str) -> Result<i32> {
 fn string_to_day_time_interval(value: &str) -> Result<i64> {
     let interval = parse_interval(value).map_err(|e| exec_datafusion_err!("{e}"))?;
     match interval {
-        IntervalValue::Microsecond { microseconds } => Ok(microseconds),
+        IntervalValue::Microsecond { microseconds, .. } => Ok(microseconds),
         IntervalValue::YearMonth { .. } | IntervalValue::MonthDayNanosecond { .. } => {
             exec_err!("expected day time interval, but got: {value}")
         }
@@ -220,12 +221,12 @@ fn string_to_day_time_interval(value: &str) -> Result<i64> {
 fn string_to_calendar_interval(value: &str) -> Result<IntervalMonthDayNano> {
     let interval = parse_interval(value).map_err(|e| exec_datafusion_err!("{e}"))?;
     match interval {
-        IntervalValue::YearMonth { months } => Ok(IntervalMonthDayNano {
+        IntervalValue::YearMonth { months, .. } => Ok(IntervalMonthDayNano {
             months,
             days: 0,
             nanoseconds: 0,
         }),
-        IntervalValue::Microsecond { microseconds } => {
+        IntervalValue::Microsecond { microseconds, .. } => {
             day_time_interval_to_calendar_interval(microseconds)
         }
         IntervalValue::MonthDayNanosecond {
@@ -256,6 +257,15 @@ fn day_time_interval_to_calendar_interval(microseconds: i64) -> Result<IntervalM
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn calendar_interval_string_preserves_mixed_components() -> Result<()> {
+        assert_eq!(
+            string_to_calendar_interval("1 MONTH 1 DAY 5 MICROSECONDS")?,
+            IntervalMonthDayNano::new(1, 1, 5_000)
+        );
+        Ok(())
+    }
 
     #[test]
     fn day_time_interval_preserves_calendar_days_and_microsecond_remainder() -> Result<()> {

@@ -41,7 +41,7 @@ use crate::limit::LocalLimitExec;
 use crate::metrics::{MetricBuilder, MetricType};
 use crate::projection::{
     EmbeddedProjection, ProjectionExec, ProjectionExpr, all_columns, make_with_child,
-    try_embed_projection, update_expr,
+    try_embed_projection, update_expr_with_input_schema_size,
 };
 use crate::stream::EmptyRecordBatchStream;
 use crate::{
@@ -599,9 +599,12 @@ impl ExecutionPlan for FilterExec {
             && all_columns(projection.expr())
         {
             // Each column in the predicate expression must exist after the projection.
-            if let Some(new_predicate) =
-                update_expr(self.predicate(), projection.expr(), false)?
-            {
+            if let Some(new_predicate) = update_expr_with_input_schema_size(
+                self.predicate(),
+                projection.expr(),
+                false,
+                projection.expr().len(),
+            )? {
                 return FilterExecBuilder::from(self)
                     .with_input(make_with_child(projection, self.input())?)
                     .with_predicate(new_predicate)
@@ -3237,7 +3240,7 @@ mod tests {
                 expr: col("id", &schema)?,
                 alias: "key".into(),
             }],
-            filter.clone(),
+            Arc::clone(&filter) as _,
         )?;
         let optimized = filter.try_swapping_with_projection(&projection)?.unwrap();
         assert!(optimized.is::<FilterExec>());

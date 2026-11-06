@@ -5,9 +5,141 @@ is not a supported-feature reference and is not part of the documentation site.
 Keep implementation evidence and unfinished work here until the relevant slice
 has been reviewed. Publish the final support contract separately.
 
-## Current slice
+## Current delivery status
 
-### Core delivery order
+The latest accepted source is `e5c8368580fe010cb2c3f99223ce7ccadb213a32` after
+test-build capacity repair #962. The next bounded delivery is Map lookup names
+#823; its independent Spark reference and unchanged-product DAR baseline are
+recorded, with implementation and acceptance still in progress.
+C06 and C07 remain owned by the two Mac workers.
+
+### Accepted nested lambda repair
+
+Issue [#821](https://github.com/mag1cfrog/delta-arrow-reader/issues/821) is closed
+as completed after PR [#956](https://github.com/mag1cfrog/delta-arrow-reader/pull/956)
+merged into `feat/spark-sql-staging` at
+`5f0df26f7852c67803aae034acdfb76d8aa463af`. The merged tree is the exact tested
+tree `2975233115ff8a7312afc05c0f477d7208d09afb`. The repair preserves nested lambda
+capture and declared parameter positions, including same-name and same-type
+parameters that previously returned wrong values.
+
+Fresh comparisons of actual baseline `389fa414` and candidate `9060ecaa` fix
+96 recorded failures and preserve 542 successful controls and 16 verified
+rejections. Ten declaration differences remain explicitly owned by #822/#823;
+24 other rejections retain precise native causes with unverified Spark condition
+identifiers. They are not counted as verified condition matches.
+
+The exact candidate passes 1,240 local Linux workspace tests with zero failures
+and three existing ignored tests, plus 23 focused and 66 connected tests.
+Formatting and root-crate Clippy pass. Broader Sail Clippy still exits 101 with
+60 distinct inherited diagnostics tracked by #626 before main adoption; the
+baseline printed one duplicate. Independent review found no remaining actionable
+finding within #821's standalone staging scope.
+
+The source, closure, validation and review records are
+`821-pr956-merge-verified.json`, `821-github-closure-and-parent-sync.json`,
+`821-final-gates-root-audit-current-v2.json`, `821-review-final-906-ledger.json`
+and `821-current-paired-independent-final-current-v3-conclusion.json` in the
+external `spark-window-completion-2026-11-02` evidence directory. Older receipts
+keep their original source attribution.
+
+### Accepted collection-length declarations
+
+Issue [#822](https://github.com/mag1cfrog/delta-arrow-reader/issues/822) is closed
+after PR [#963](https://github.com/mag1cfrog/delta-arrow-reader/pull/963), merged
+at `1bf9f019`. The merge tree equals the tested `865b053d` tree. The final
+same-harness comparison accepts 300/300 observations against 194/300 before the
+repair, correcting 106 successful public-schema observations and 206 Fields.
+Values, required errors, native failure timing and native SQL controls remain
+unchanged. The exact candidate passes 1,251 workspace tests with zero failures
+and three existing ignores, plus formatting and root Clippy. Existing Sail lint
+debt and the historical capture-name observation remain explicit in the review.
+This completes the bounded SIZE, CARDINALITY and ARRAY_SIZE repair, not the whole
+nested-value category. Current records are `822-progress-current.json`,
+`822-pr963-merge-verified-current-v1.json`, `822-review-final-current-v1.json` and
+`822-paired-independent-current-v3.json` in the external evidence directory.
+
+### Next bounded work and ownership
+
+| Issue | Current state | Acceptance still required |
+| --- | --- | --- |
+| [#823](https://github.com/mag1cfrog/delta-arrow-reader/issues/823), parent #169 | Open; the capacity checkpoint is complete. Independent Spark and unchanged-product DAR observations are recorded; the first runtime repair is being validated. | Independent unaliased Map lookup names in direct/nested expressions and outer consumers; preserve aliases, STRUCT names, fields, lookup values/errors and native SQL. |
+
+`822-823-preparation-current-v1.md/json` records read-only preparation against the
+older `0613b0ad` source. It informs the bounded repairs but does not validate the
+new implementations or accept either issue. Keep original observations, full
+Fields, required error causes/stages, workspace checks and independent review.
+
+Mac Codex retains C06 Strings/binary (#174/#151); Mac Claude Code retains C07
+Dates/timestamps (#175). PR #949's binary/string input contract, PR #954's
+interval qualifiers and PR #960's minimum interval literals are merged, while
+both full categories remain reserved and unfinished. The CONCAT consumer [#906](https://github.com/mag1cfrog/delta-arrow-reader/issues/906)
+remains open under C06. Its native `blockedBy` issue #821 is closed, and the
+retained consumer comparisons pass at the exact #821 candidate, but #906's own
+complete acceptance remains with its owner.
+
+Use the existing issue ownership and the work-area map below for remaining
+S04-S11 work. Reader/CLI integration, release comparisons and the final support
+statement remain required before production adoption. This checkpoint does not
+accept all Spark behavior or authorize main adoption.
+
+### Validation policy and platform checkpoint
+
+An earlier accepted-staging three-platform checkpoint is
+[run 41887812093](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41887812093)
+at `24b5c375990a53ae9fd115c919bbc85ff17be31e`: Linux, macOS and Windows each
+passed 1,138 tests with zero failures and three existing ignores. After 15
+first-parent merges, [run 41982447902](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/41982447902)
+was dispatched for merged source `5f0df26f7852c67803aae034acdfb76d8aa463af`.
+The completed first attempt passed on macOS. Linux exhausted disk while linking
+test executables before running tests: the same-source debug rerun records 27 MB
+free, LLVM output failure and OS error 28. Windows failed a fixture checksum
+before SQL replay because checkout converted LF to CRLF. Issue
+[#959](https://github.com/mag1cfrog/delta-arrow-reader/issues/959) is closed after
+PR [#961](https://github.com/mag1cfrog/delta-arrow-reader/pull/961) pinned LF bytes
+for both affected fixture directories; controlled checkouts retain all 12 files
+under both autocrlf settings.
+
+Capacity repair [#962](https://github.com/mag1cfrog/delta-arrow-reader/issues/962)
+is closed after [PR #964](https://github.com/mag1cfrog/delta-arrow-reader/pull/964)
+merged at `e5c83685`. The accepted tree equals tested candidate `a7fa575a`. Its
+actual local Cargo run passes 1,251 tests and produces 129 main integration executables totaling
+about 13.26 GiB with debug information and symbol tables absent. That local result
+alone does not establish hosted capacity. The actual Linux recovery target passes
+all three tests with symbol and line tables restored, and a profile-matched panic
+confirms user function names and source lines. Default test backtraces omit that
+optional detail; the standalone README gives the focused recovery command.
+
+[Candidate checkpoint 42001080182](https://github.com/mag1cfrog/delta-arrow-reader/actions/runs/42001080182)
+completed its first attempt on Linux, macOS and Windows: each passes 1,251 tests
+with zero failures and three unchanged ignores, plus formatting, root Clippy and
+cache packaging. All three initial cache lookups missed. The Linux-only same-source
+second attempt restores the complete exact-key cache and also passes 1,251 tests.
+The independent clean-context review resolves all 30 criteria: 28 satisfied and
+two scope-grounded not applicable. The successful current workload establishes
+operational fit; exact hosted peak disk use and future margin remain unmeasured.
+Warm-cache reruns and direct binary/backtrace inspection are Linux-only. Current
+records are `962-pr964-merge-verified-v1.json`, `962-final-gates-root-audit-v1.json`,
+`962-review-source-v7-final.json` and
+`962-checkpoint-warm-linux-current-v1-result.json` in the external evidence directory.
+
+Ordinary staging slices keep local Linux validation and periodic hosted
+three-platform checkpoints under the existing workflow. Sol/xhigh authors use
+isolated worktrees, followed by clean-context Sol/xhigh review with the latest
+Bulletproof Review. The coordinator serializes engines through one central build
+target and owns integration and cleanup. Remove owned merged worktrees, branches,
+proof refs and temporary outputs while preserving raw references, unmerged work,
+stashes and dirty main work.
+
+## Historical validation snapshots
+
+The sections below, through S01 acceptance, retain earlier source-specific
+results and delivery states. Their present-tense and pending descriptions apply
+to those snapshots, not the current delivery queue. Preserve their source
+revisions, test counts and unresolved observations; use the current status above
+for active work and current checkpoint results.
+
+### Earlier core sequence at staging 2104fb8c
 
 The SQL MAP constructor repair for #824 completes the original #816 lambda
 contract through PR #857. PR #858 supplies the basic projection metadata repair
@@ -85,8 +217,6 @@ was removed, what original acceptance remains, and the next blocking action.
 After this core sequence, reconcile the preserved queue before choosing the next
 slice; an unfinished draft or a newly discovered case does not set priority by
 itself.
-
-### Earlier deliveries and retained evidence
 
 ### Completed S04 nested windows, ordering and metadata
 
@@ -381,12 +511,13 @@ The 1,280 focused observations yield 2,538 Spark matches and 22 exact retained-g
 comparisons at two batch sizes. Complete historical replacements are recorded
 without relaxing the matcher or its parallel-error alternatives.
 
-Five existing VALUES differences remain explicit: unreachable CASE branches
-widen analyzed nullability (#721), and an unused invalid inline CAST misses its
-required error (#722). Six additional projected-IN/NULL observations also differ
-from Spark on the unchanged staging baseline. They remain unresolved #142 work,
-separate from its previously approved four-case policy. Raw Spark facts remain
-intact and these observations do not count as compatibility matches.
+The earlier staging baseline recorded five VALUES differences: unreachable CASE
+branches widened analyzed nullability (#721), and an unused invalid inline CAST
+missed its required error (#722). The inline CAST raises that error during
+analysis in ANSI mode. Six projected-IN/NULL observations still differ from Spark. They remain
+unresolved #142 work, separate from its previously approved four-case policy. Raw
+Spark facts remain intact and these observations do not count as compatibility
+matches.
 #717 separately tracks generated DIV names, alongside #710's alias metadata.
 
 ### S04 grouping NULL predicates
@@ -906,6 +1037,9 @@ Each row is a work area, not permission to combine its independent fixes into on
 PR. Restore one implementation or validation issue at a time. Reuse existing
 native parent/sub-issue relationships; give newly confirmed independent causes
 their own small implementation issues. Assign resumed work to `mag1cfrog`.
+The issue lists retain the original work-area map; use current native issue
+states and ownership for completed deliveries and active children. The current
+status above identifies the next bounded repair and reserved external categories.
 
 | Order | Work | Existing issues | Completion evidence |
 | --- | --- | --- | --- |

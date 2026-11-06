@@ -1,0 +1,563 @@
+{
+  "group": "inline-values-evaluation-722-v1",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "source_commit": "b0b98f64981a5fde769e92ba87a3cf9257dd6c24",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "float_encoding": "ieee754_bits",
+  "meaning": "Independent Spark observations from exact SQL and registered inputs. No expected results, native profiles, or compatibility overlays.",
+  "inputs": [
+    {
+      "name": "inline_runtime",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "i",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "bad",
+          "0"
+        ],
+        [
+          "1",
+          "7",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "scenario_count": 36,
+  "observations": 72,
+  "cases": [
+    {
+      "id": "cast_int_read",
+      "sql": "SELECT x AS r FROM VALUES (CAST('bad' AS INT)), (1) t(x)",
+      "ordered": false,
+      "group": "cast_int"
+    },
+    {
+      "id": "cast_int_false_filter",
+      "sql": "SELECT x AS r FROM VALUES (CAST('bad' AS INT)), (1) t(x) WHERE false",
+      "ordered": false,
+      "group": "cast_int"
+    },
+    {
+      "id": "cast_int_limit_zero",
+      "sql": "SELECT x AS r FROM VALUES (CAST('bad' AS INT)), (1) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "cast_int"
+    },
+    {
+      "id": "cast_int_unused",
+      "sql": "SELECT 1 AS r FROM VALUES (CAST('bad' AS INT)), (1) t(x)",
+      "ordered": false,
+      "group": "cast_int"
+    },
+    {
+      "id": "divide_zero_read",
+      "sql": "SELECT x AS r FROM VALUES (7 DIV 0) t(x)",
+      "ordered": false,
+      "group": "divide_zero"
+    },
+    {
+      "id": "divide_zero_false_filter",
+      "sql": "SELECT x AS r FROM VALUES (7 DIV 0) t(x) WHERE false",
+      "ordered": false,
+      "group": "divide_zero"
+    },
+    {
+      "id": "divide_zero_limit_zero",
+      "sql": "SELECT x AS r FROM VALUES (7 DIV 0) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "divide_zero"
+    },
+    {
+      "id": "divide_zero_unused",
+      "sql": "SELECT 1 AS r FROM VALUES (7 DIV 0) t(x)",
+      "ordered": false,
+      "group": "divide_zero"
+    },
+    {
+      "id": "integer_overflow_read",
+      "sql": "SELECT x AS r FROM VALUES (2147483647 + 1) t(x)",
+      "ordered": false,
+      "group": "integer_overflow"
+    },
+    {
+      "id": "integer_overflow_false_filter",
+      "sql": "SELECT x AS r FROM VALUES (2147483647 + 1) t(x) WHERE false",
+      "ordered": false,
+      "group": "integer_overflow"
+    },
+    {
+      "id": "integer_overflow_limit_zero",
+      "sql": "SELECT x AS r FROM VALUES (2147483647 + 1) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "integer_overflow"
+    },
+    {
+      "id": "integer_overflow_unused",
+      "sql": "SELECT 1 AS r FROM VALUES (2147483647 + 1) t(x)",
+      "ordered": false,
+      "group": "integer_overflow"
+    },
+    {
+      "id": "interval_divide_zero_read",
+      "sql": "SELECT x AS r FROM VALUES (INTERVAL '1' MONTH/0) t(x)",
+      "ordered": false,
+      "group": "interval_divide_zero"
+    },
+    {
+      "id": "interval_divide_zero_false_filter",
+      "sql": "SELECT x AS r FROM VALUES (INTERVAL '1' MONTH/0) t(x) WHERE false",
+      "ordered": false,
+      "group": "interval_divide_zero"
+    },
+    {
+      "id": "interval_divide_zero_limit_zero",
+      "sql": "SELECT x AS r FROM VALUES (INTERVAL '1' MONTH/0) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "interval_divide_zero"
+    },
+    {
+      "id": "interval_divide_zero_unused",
+      "sql": "SELECT 1 AS r FROM VALUES (INTERVAL '1' MONTH/0) t(x)",
+      "ordered": false,
+      "group": "interval_divide_zero"
+    },
+    {
+      "id": "cast_decimal_standalone",
+      "sql": "VALUES (CAST('bad' AS DECIMAL(4,2))), (1.25)",
+      "ordered": false,
+      "group": "cast_decimal"
+    },
+    {
+      "id": "cast_decimal_unused_limit_zero",
+      "sql": "SELECT 1 AS r FROM VALUES (CAST('bad' AS DECIMAL(4,2))), (1.25) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "cast_decimal"
+    },
+    {
+      "id": "original_cast_unused_limit_zero",
+      "sql": "SELECT 1 AS r FROM VALUES (CAST('bad' AS INT)), (1) t(v) LIMIT 0",
+      "ordered": false,
+      "group": "cast_int"
+    },
+    {
+      "id": "row_cast_before_divide",
+      "sql": "SELECT x AS r FROM VALUES (CAST('row-cast' AS INT)), (7 DIV 0) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "error_order"
+    },
+    {
+      "id": "row_divide_before_cast",
+      "sql": "SELECT x AS r FROM VALUES (7 DIV 0), (CAST('row-cast' AS INT)) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "error_order"
+    },
+    {
+      "id": "row_first_before_second",
+      "sql": "SELECT x AS r FROM VALUES (CAST('row-first' AS INT)), (CAST('row-second' AS INT)) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "error_order"
+    },
+    {
+      "id": "row_second_before_first",
+      "sql": "SELECT x AS r FROM VALUES (CAST('row-second' AS INT)), (CAST('row-first' AS INT)) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "error_order"
+    },
+    {
+      "id": "column_cast_before_divide",
+      "sql": "SELECT 1 AS r FROM VALUES (CAST('column-cast' AS INT), 7 DIV 0) t(a,b) WHERE false",
+      "ordered": false,
+      "group": "error_order"
+    },
+    {
+      "id": "column_divide_before_cast",
+      "sql": "SELECT 1 AS r FROM VALUES (7 DIV 0, CAST('column-cast' AS INT)) t(a,b) WHERE false",
+      "ordered": false,
+      "group": "error_order"
+    },
+    {
+      "id": "valid_dead_cast",
+      "sql": "SELECT x AS r FROM VALUES (CASE WHEN false THEN CAST('bad' AS INT) ELSE 7 END), (8) t(x)",
+      "ordered": false,
+      "group": "valid_dead"
+    },
+    {
+      "id": "valid_dead_divide",
+      "sql": "SELECT x AS r FROM VALUES (CASE WHEN true THEN 7L ELSE 7 DIV 0 END), (8L) t(x)",
+      "ordered": false,
+      "group": "valid_dead"
+    },
+    {
+      "id": "valid_dead_overflow",
+      "sql": "SELECT x AS r FROM VALUES (CASE WHEN true THEN 7 ELSE 2147483647 + 1 END), (8) t(x)",
+      "ordered": false,
+      "group": "valid_dead"
+    },
+    {
+      "id": "valid_dead_interval_divide",
+      "sql": "SELECT 1 AS r FROM VALUES (CASE WHEN true THEN INTERVAL '1' MONTH ELSE INTERVAL '1' MONTH/0 END) t(x)",
+      "ordered": false,
+      "group": "valid_dead"
+    },
+    {
+      "id": "valid_null_and_try_cast",
+      "sql": "SELECT k,x,y FROM VALUES (0,CAST(NULL AS INT),TRY_CAST('bad' AS INT)), (1,2,TRY_CAST('7' AS INT)) t(k,x,y) ORDER BY k",
+      "ordered": true,
+      "group": "valid_null"
+    },
+    {
+      "id": "valid_false_filter",
+      "sql": "SELECT x AS r FROM VALUES (CASE WHEN false THEN CAST('bad' AS INT) ELSE 7 END), (8) t(x) WHERE false",
+      "ordered": false,
+      "group": "valid_dead"
+    },
+    {
+      "id": "valid_limit_zero",
+      "sql": "SELECT x AS r FROM VALUES (CASE WHEN false THEN CAST('bad' AS INT) ELSE 7 END), (8) t(x) LIMIT 0",
+      "ordered": false,
+      "group": "valid_dead"
+    },
+    {
+      "id": "provider_cast_read",
+      "sql": "SELECT CAST(s AS INT) AS r FROM inline_runtime ORDER BY k",
+      "ordered": true,
+      "group": "runtime_column"
+    },
+    {
+      "id": "provider_cast_false_filter",
+      "sql": "SELECT CAST(s AS INT) AS r FROM inline_runtime WHERE false",
+      "ordered": false,
+      "group": "runtime_column"
+    },
+    {
+      "id": "provider_cast_limit_zero",
+      "sql": "SELECT CAST(s AS INT) AS r FROM inline_runtime LIMIT 0",
+      "ordered": false,
+      "group": "runtime_column"
+    },
+    {
+      "id": "provider_cast_unused",
+      "sql": "SELECT k AS r FROM (SELECT k,CAST(s AS INT) AS v FROM inline_runtime) q ORDER BY k",
+      "ordered": true,
+      "group": "runtime_column"
+    }
+  ],
+  "identities": [
+    {
+      "id": "cast_int_read",
+      "ansi": true
+    },
+    {
+      "id": "cast_int_false_filter",
+      "ansi": true
+    },
+    {
+      "id": "cast_int_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "cast_int_unused",
+      "ansi": true
+    },
+    {
+      "id": "divide_zero_read",
+      "ansi": true
+    },
+    {
+      "id": "divide_zero_false_filter",
+      "ansi": true
+    },
+    {
+      "id": "divide_zero_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "divide_zero_unused",
+      "ansi": true
+    },
+    {
+      "id": "integer_overflow_read",
+      "ansi": true
+    },
+    {
+      "id": "integer_overflow_false_filter",
+      "ansi": true
+    },
+    {
+      "id": "integer_overflow_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "integer_overflow_unused",
+      "ansi": true
+    },
+    {
+      "id": "interval_divide_zero_read",
+      "ansi": true
+    },
+    {
+      "id": "interval_divide_zero_false_filter",
+      "ansi": true
+    },
+    {
+      "id": "interval_divide_zero_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "interval_divide_zero_unused",
+      "ansi": true
+    },
+    {
+      "id": "cast_decimal_standalone",
+      "ansi": true
+    },
+    {
+      "id": "cast_decimal_unused_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "original_cast_unused_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "row_cast_before_divide",
+      "ansi": true
+    },
+    {
+      "id": "row_divide_before_cast",
+      "ansi": true
+    },
+    {
+      "id": "row_first_before_second",
+      "ansi": true
+    },
+    {
+      "id": "row_second_before_first",
+      "ansi": true
+    },
+    {
+      "id": "column_cast_before_divide",
+      "ansi": true
+    },
+    {
+      "id": "column_divide_before_cast",
+      "ansi": true
+    },
+    {
+      "id": "valid_dead_cast",
+      "ansi": true
+    },
+    {
+      "id": "valid_dead_divide",
+      "ansi": true
+    },
+    {
+      "id": "valid_dead_overflow",
+      "ansi": true
+    },
+    {
+      "id": "valid_dead_interval_divide",
+      "ansi": true
+    },
+    {
+      "id": "valid_null_and_try_cast",
+      "ansi": true
+    },
+    {
+      "id": "valid_false_filter",
+      "ansi": true
+    },
+    {
+      "id": "valid_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "provider_cast_read",
+      "ansi": true
+    },
+    {
+      "id": "provider_cast_false_filter",
+      "ansi": true
+    },
+    {
+      "id": "provider_cast_limit_zero",
+      "ansi": true
+    },
+    {
+      "id": "provider_cast_unused",
+      "ansi": true
+    },
+    {
+      "id": "cast_int_read",
+      "ansi": false
+    },
+    {
+      "id": "cast_int_false_filter",
+      "ansi": false
+    },
+    {
+      "id": "cast_int_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "cast_int_unused",
+      "ansi": false
+    },
+    {
+      "id": "divide_zero_read",
+      "ansi": false
+    },
+    {
+      "id": "divide_zero_false_filter",
+      "ansi": false
+    },
+    {
+      "id": "divide_zero_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "divide_zero_unused",
+      "ansi": false
+    },
+    {
+      "id": "integer_overflow_read",
+      "ansi": false
+    },
+    {
+      "id": "integer_overflow_false_filter",
+      "ansi": false
+    },
+    {
+      "id": "integer_overflow_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "integer_overflow_unused",
+      "ansi": false
+    },
+    {
+      "id": "interval_divide_zero_read",
+      "ansi": false
+    },
+    {
+      "id": "interval_divide_zero_false_filter",
+      "ansi": false
+    },
+    {
+      "id": "interval_divide_zero_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "interval_divide_zero_unused",
+      "ansi": false
+    },
+    {
+      "id": "cast_decimal_standalone",
+      "ansi": false
+    },
+    {
+      "id": "cast_decimal_unused_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "original_cast_unused_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "row_cast_before_divide",
+      "ansi": false
+    },
+    {
+      "id": "row_divide_before_cast",
+      "ansi": false
+    },
+    {
+      "id": "row_first_before_second",
+      "ansi": false
+    },
+    {
+      "id": "row_second_before_first",
+      "ansi": false
+    },
+    {
+      "id": "column_cast_before_divide",
+      "ansi": false
+    },
+    {
+      "id": "column_divide_before_cast",
+      "ansi": false
+    },
+    {
+      "id": "valid_dead_cast",
+      "ansi": false
+    },
+    {
+      "id": "valid_dead_divide",
+      "ansi": false
+    },
+    {
+      "id": "valid_dead_overflow",
+      "ansi": false
+    },
+    {
+      "id": "valid_dead_interval_divide",
+      "ansi": false
+    },
+    {
+      "id": "valid_null_and_try_cast",
+      "ansi": false
+    },
+    {
+      "id": "valid_false_filter",
+      "ansi": false
+    },
+    {
+      "id": "valid_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "provider_cast_read",
+      "ansi": false
+    },
+    {
+      "id": "provider_cast_false_filter",
+      "ansi": false
+    },
+    {
+      "id": "provider_cast_limit_zero",
+      "ansi": false
+    },
+    {
+      "id": "provider_cast_unused",
+      "ansi": false
+    }
+  ]
+}

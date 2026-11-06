@@ -20,6 +20,11 @@ resolver = "3"
 [profile.dev]
 opt-level = 1
 
+# Many integration tests link the same large dependency graph; keep their binaries smaller.
+[profile.test]
+debug = 0
+strip = "symbols"
+
 [workspace.package]
 version = "0.7.1"
 authors = ["LakeSail <hello@lakesail.com>"]
@@ -128,6 +133,7 @@ parquet = "=58.4.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sail-function = { path = "vendor/sail/crates/sail-function" }
+sail-logical-plan = { path = "vendor/sail/crates/sail-logical-plan" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[bench]]
@@ -146,6 +152,8 @@ harness = false
 arrow-arith = { path = "vendor/dependencies/arrow-arith" }
 arrow-array = { path = "vendor/dependencies/arrow-array" }
 arrow-cast = { path = "vendor/dependencies/arrow-cast" }
+datafusion-datasource = { path = "vendor/dependencies/datafusion-datasource" }
+datafusion-common = { path = "vendor/dependencies/datafusion-common" }
 datafusion-expr = { path = "vendor/dependencies/datafusion-expr" }
 datafusion-functions = { path = "vendor/dependencies/datafusion-functions" }
 datafusion-functions-aggregate = { path = "vendor/dependencies/datafusion-functions-aggregate" }

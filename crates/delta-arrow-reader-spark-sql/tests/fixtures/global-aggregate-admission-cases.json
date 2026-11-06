@@ -1,0 +1,1984 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "cases": [
+    {
+      "id": "global_rows_count",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_array",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_distinct_array",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(DISTINCT ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_distinct_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_null_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_count_dead_case",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COUNT(CASE WHEN false THEN observed_arg(v) ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_sum",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT SUM(RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT SUM(observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_sum_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT SUM(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT SUM(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_sum_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT SUM(ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_sum_distinct_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT SUM(DISTINCT ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_sum_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT SUM(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_avg_null_type",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT AVG(observed_null(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_list",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_list_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_list_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_list_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_set",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_SET(observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_set_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_SET(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_rows_collect_set_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)",
+      "udf_sql": "SELECT COLLECT_SET(ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_array",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_distinct_array",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(DISTINCT ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_distinct_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_null_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_count_dead_case",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COUNT(CASE WHEN false THEN observed_arg(v) ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_sum",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT SUM(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT SUM(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_sum_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT SUM(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT SUM(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_sum_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT SUM(ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_sum_distinct_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT SUM(DISTINCT ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_sum_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT SUM(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_avg_null_type",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT AVG(observed_null(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_list",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_list_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_list_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_list_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_set",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_SET(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_set_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_SET(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_nulls_collect_set_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "udf_sql": "SELECT COLLECT_SET(ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_array",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_distinct_array",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(DISTINCT ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_distinct_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_null_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_count_dead_case",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COUNT(CASE WHEN false THEN observed_arg(v) ELSE CAST(v AS DOUBLE) END) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_sum",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT SUM(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT SUM(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_sum_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT SUM(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT SUM(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_sum_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT SUM(ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_sum_distinct_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT SUM(DISTINCT ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_sum_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT SUM(observed_arg(v)) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_avg_null_type",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT AVG(observed_null(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_list",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_list_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_LIST(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_list_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_LIST(ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_list_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_set",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_SET(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_set_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_SET(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "global_empty_collect_set_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": false,
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "udf_sql": "SELECT COLLECT_SET(ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_array",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_distinct_array",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_distinct_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_null_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_count_dead_case",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(CASE WHEN false THEN observed_arg(v) ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_sum",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT SUM(RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_sum_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT SUM(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_sum_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_sum_distinct_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(DISTINCT ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_sum_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_avg_null_type",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT AVG(observed_null(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_list",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_list_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_list_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_list_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_set",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_set_distinct",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(DISTINCT observed_arg(v)) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_rows_collect_set_nested",
+      "scope": "required_argument_rejection",
+      "input": "rows",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(ARRAY(observed_arg(v))) AS result FROM VALUES(1),(2) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_array",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_distinct_array",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_distinct_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_null_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_count_dead_case",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COUNT(CASE WHEN false THEN observed_arg(v) ELSE CAST(v AS DOUBLE) END) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_sum",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT SUM(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_sum_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT SUM(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_sum_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_sum_distinct_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(DISTINCT ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_sum_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT SUM(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_avg_null_type",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT AVG(observed_null(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_list",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_list_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_list_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_list_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) FILTER (WHERE false) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_set",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_set_distinct",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(DISTINCT observed_arg(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_nulls_collect_set_nested",
+      "scope": "required_argument_rejection",
+      "input": "nulls",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(ARRAY(observed_arg(v))) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_array",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_distinct_array",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_distinct_tuple_null",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_null_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) FILTER (WHERE CAST(NULL AS BOOLEAN)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_count_dead_case",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COUNT(CASE WHEN false THEN observed_arg(v) ELSE CAST(v AS DOUBLE) END) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_sum",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT SUM(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT SUM(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_sum_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT SUM(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT SUM(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_sum_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT SUM(ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_sum_distinct_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT SUM(DISTINCT ABS(observed_arg(v)+CAST(v AS DOUBLE))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_sum_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT SUM(observed_arg(v)) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_avg_null_type",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT AVG(observed_null(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_list",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_list_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_list_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_list_false_filter",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_LIST(observed_arg(v)) FILTER (WHERE false) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_set",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_set_distinct",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(DISTINCT observed_arg(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_empty_collect_set_nested",
+      "scope": "required_argument_rejection",
+      "input": "empty",
+      "grouped": true,
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "udf_sql": "SELECT COLLECT_SET(ARRAY(observed_arg(v))) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_distinct",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(DISTINCT RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_array",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(ARRAY(RAND())) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_distinct_array",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_tuple_null",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_distinct_tuple_null",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_false_filter",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_null_filter",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_count_dead_case",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_sum",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT SUM(RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_sum_distinct",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT SUM(DISTINCT RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_sum_nested",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_sum_distinct_nested",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_sum_false_filter",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_avg_null_type",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_list",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_LIST(RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_list_distinct",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_list_nested",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_list_false_filter",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_set",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_SET(RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_set_distinct",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_rows_collect_set_nested",
+      "scope": "window_contract",
+      "input": "rows",
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_distinct",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(DISTINCT RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_array",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(ARRAY(RAND())) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_distinct_array",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_tuple_null",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_distinct_tuple_null",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_false_filter",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_null_filter",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_count_dead_case",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_sum",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT SUM(RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_sum_distinct",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT SUM(DISTINCT RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_sum_nested",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_sum_distinct_nested",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_sum_false_filter",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_avg_null_type",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_list",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_LIST(RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_list_distinct",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_list_nested",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_list_false_filter",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_set",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_SET(RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_set_distinct",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_nulls_collect_set_nested",
+      "scope": "window_contract",
+      "input": "nulls",
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) OVER () AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_distinct",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(DISTINCT RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_array",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(ARRAY(RAND())) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_distinct_array",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(RAND())) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_tuple_null",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE),RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_distinct_tuple_null",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(DISTINCT CAST(NULL AS DOUBLE),RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_false_filter",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE false) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_null_filter",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(RAND()) FILTER (WHERE CAST(NULL AS BOOLEAN)) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_count_dead_case",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COUNT(CASE WHEN false THEN RAND() ELSE CAST(v AS DOUBLE) END) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_sum",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT SUM(RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_sum_distinct",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT SUM(DISTINCT RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_sum_nested",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT SUM(ABS(RAND()+CAST(v AS DOUBLE))) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_sum_distinct_nested",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT SUM(DISTINCT ABS(RAND()+CAST(v AS DOUBLE))) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_sum_false_filter",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT SUM(RAND()) FILTER (WHERE false) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_avg_null_type",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT AVG(IF(RAND()>0.5,NULL,NULL)) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_list",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_LIST(RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_list_distinct",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_LIST(DISTINCT RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_list_nested",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_LIST(ARRAY(RAND())) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_list_false_filter",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_LIST(RAND()) FILTER (WHERE false) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_set",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_SET(RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_set_distinct",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_SET(DISTINCT RAND()) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_empty_collect_set_nested",
+      "scope": "window_contract",
+      "input": "empty",
+      "sql": "SELECT COLLECT_SET(ARRAY(RAND())) OVER () AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "rows_deterministic_count",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(ABS(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_deterministic_count_distinct",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_deterministic_count_literals",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(DISTINCT 7,8) FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_deterministic_sum",
+      "scope": "allowed_control",
+      "sql": "SELECT SUM(ABS(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_deterministic_sum_distinct",
+      "scope": "allowed_control",
+      "sql": "SELECT SUM(DISTINCT ABS(v)) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_deterministic_collections",
+      "scope": "allowed_control",
+      "sql": "SELECT SORT_ARRAY(COLLECT_LIST(v)),SORT_ARRAY(COLLECT_SET(v)) FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_deterministic_null",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE)),SUM(CAST(NULL AS DOUBLE)) FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_scalar_volatile",
+      "scope": "allowed_control",
+      "sql": "SELECT RAND() IS NOT NULL AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_scalar_volatile_sibling",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(*) AS n,RAND() IS NOT NULL AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_exists_grouped",
+      "scope": "allowed_control",
+      "sql": "SELECT EXISTS(SELECT ABS(v) FROM VALUES(1),(2) t(v) GROUP BY v) AS result",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "rows_exists_pruned_cast",
+      "scope": "allowed_control",
+      "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM VALUES(1),(2) t(v) GROUP BY v) AS result",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_count",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(ABS(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_count_distinct",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_count_literals",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(DISTINCT 7,8) FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_sum",
+      "scope": "allowed_control",
+      "sql": "SELECT SUM(ABS(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_sum_distinct",
+      "scope": "allowed_control",
+      "sql": "SELECT SUM(DISTINCT ABS(v)) AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_collections",
+      "scope": "allowed_control",
+      "sql": "SELECT SORT_ARRAY(COLLECT_LIST(v)),SORT_ARRAY(COLLECT_SET(v)) FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_deterministic_null",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE)),SUM(CAST(NULL AS DOUBLE)) FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_scalar_volatile",
+      "scope": "allowed_control",
+      "sql": "SELECT RAND() IS NOT NULL AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_scalar_volatile_sibling",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(*) AS n,RAND() IS NOT NULL AS result FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_exists_grouped",
+      "scope": "allowed_control",
+      "sql": "SELECT EXISTS(SELECT ABS(v) FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v) AS result",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nulls_exists_pruned_cast",
+      "scope": "allowed_control",
+      "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM VALUES(CAST(NULL AS INT)),(CAST(NULL AS INT)) t(v) GROUP BY v) AS result",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_count",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(ABS(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_count_distinct",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(DISTINCT ARRAY(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_count_literals",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(DISTINCT 7,8) FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_sum",
+      "scope": "allowed_control",
+      "sql": "SELECT SUM(ABS(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_sum_distinct",
+      "scope": "allowed_control",
+      "sql": "SELECT SUM(DISTINCT ABS(v)) AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_collections",
+      "scope": "allowed_control",
+      "sql": "SELECT SORT_ARRAY(COLLECT_LIST(v)),SORT_ARRAY(COLLECT_SET(v)) FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_deterministic_null",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(CAST(NULL AS DOUBLE)),SUM(CAST(NULL AS DOUBLE)) FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_scalar_volatile",
+      "scope": "allowed_control",
+      "sql": "SELECT RAND() IS NOT NULL AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_scalar_volatile_sibling",
+      "scope": "allowed_control",
+      "sql": "SELECT COUNT(*) AS n,RAND() IS NOT NULL AS result FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_exists_grouped",
+      "scope": "allowed_control",
+      "sql": "SELECT EXISTS(SELECT ABS(v) FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v) AS result",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "empty_exists_pruned_cast",
+      "scope": "allowed_control",
+      "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM (SELECT * FROM VALUES(1),(2) t(v) WHERE false) t GROUP BY v) AS result",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "pivot_sum",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT * FROM (SELECT v FROM VALUES(1),(2) t(v)) PIVOT(SUM(RAND()) FOR (v) IN (1,2))",
+      "udf_sql": "SELECT * FROM (SELECT v FROM VALUES(1),(2) t(v)) PIVOT(SUM(observed_arg(v)) FOR (v) IN (1,2))",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "pivot_count_array",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT * FROM (SELECT v FROM VALUES(1),(2) t(v)) PIVOT(COUNT(ARRAY(RAND())) FOR (v) IN (1,2))",
+      "udf_sql": "SELECT * FROM (SELECT v FROM VALUES(1),(2) t(v)) PIVOT(COUNT(ARRAY(observed_arg(v))) FOR (v) IN (1,2))",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "pivot_collect_list",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT * FROM (SELECT v FROM VALUES(1),(2) t(v)) PIVOT(COLLECT_LIST(RAND()) FOR (v) IN (1,2))",
+      "udf_sql": "SELECT * FROM (SELECT v FROM VALUES(1),(2) t(v)) PIVOT(COLLECT_LIST(observed_arg(v)) FOR (v) IN (1,2))",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "having_argument",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT COUNT(*) AS result FROM VALUES(1),(2) t(v) HAVING SUM(RAND())>0",
+      "udf_sql": "SELECT COUNT(*) AS result FROM VALUES(1),(2) t(v) HAVING SUM(observed_arg(v))>0",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "grouped_having_argument",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT v AS result FROM VALUES(1),(2) t(v) GROUP BY v HAVING SUM(RAND())>0",
+      "udf_sql": "SELECT v AS result FROM VALUES(1),(2) t(v) GROUP BY v HAVING SUM(observed_arg(v))>0",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "scalar_subquery_argument",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT (SELECT SUM(RAND()) FROM VALUES(1),(2) t(v)) AS result",
+      "udf_sql": "SELECT (SELECT SUM(observed_arg(v)) FROM VALUES(1),(2) t(v)) AS result",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "exists_aggregate_argument",
+      "scope": "required_argument_rejection",
+      "sql": "SELECT EXISTS(SELECT SUM(RAND()) FROM VALUES(1),(2) t(v)) AS result",
+      "udf_sql": "SELECT EXISTS(SELECT SUM(observed_arg(v)) FROM VALUES(1),(2) t(v)) AS result",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "count_if_argument",
+      "scope": "preserve_category",
+      "sql": "SELECT COUNT_IF(RAND()>0.5) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "count_if_filter",
+      "scope": "preserve_category",
+      "sql": "SELECT COUNT_IF(v>0) FILTER (WHERE RAND()>0.5) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "count_if_nested",
+      "scope": "preserve_category",
+      "sql": "SELECT COUNT_IF(SUM(v)>0) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "count_if_window",
+      "scope": "preserve_category",
+      "sql": "SELECT COUNT_IF(ROW_NUMBER() OVER (ORDER BY v)>0) AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "window_inner_sum",
+      "sql": "SELECT SUM(SUM(RAND())) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "scope": "required_argument_rejection",
+      "udf_sql": "SELECT SUM(SUM(observed_arg(v))) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_inner_count_array",
+      "sql": "SELECT COUNT(COUNT(ARRAY(RAND()))) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "scope": "required_argument_rejection",
+      "udf_sql": "SELECT COUNT(COUNT(ARRAY(observed_arg(v)))) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "sum_invalid_volatile_array",
+      "sql": "SELECT SUM(ARRAY(RAND())) AS result FROM VALUES(1),(2) t(v)",
+      "scope": "category_precedence",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "sum_invalid_array",
+      "sql": "SELECT SUM(ARRAY(v)) AS result FROM VALUES(1),(2) t(v)",
+      "scope": "category_precedence",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_deterministic_sum",
+      "sql": "SELECT SUM(SUM(v)) AS result FROM VALUES(1),(2) t(v)",
+      "scope": "category_precedence",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "window_count_if_volatile",
+      "sql": "SELECT COUNT_IF(RAND()>0.5) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "scope": "window_contract",
+      "success_assertions": "admission_fields_and_cardinality"
+    },
+    {
+      "id": "window_count_if_volatile_false_filter",
+      "sql": "SELECT COUNT_IF(RAND()>0.5) FILTER (WHERE false) OVER () AS result FROM VALUES(1),(2) t(v)",
+      "scope": "window_contract",
+      "success_assertions": "admission_fields_and_cardinality"
+    }
+  ],
+  "retained_cases": [
+    {
+      "id": "retained_grouped_volatile_exists",
+      "scope": "retained_142",
+      "sql": "SELECT EXISTS(SELECT rand() FROM range(3) GROUP BY rand()) AS r"
+    }
+  ],
+  "input_version": 2
+}

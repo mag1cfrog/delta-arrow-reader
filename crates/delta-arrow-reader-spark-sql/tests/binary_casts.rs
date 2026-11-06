@@ -1,4 +1,4 @@
-//! Original STRING/BINARY cast contracts, with precise open #710/#780 outcomes.
+//! Original STRING/BINARY cast contracts and provisional native Arrow capability profiles.
 
 use serde_json::{Value, json};
 
@@ -70,7 +70,7 @@ fn open_cast_outcome(
                 "execute",
                 &format!("invalid utf-8 sequence of 1 bytes from index {offset}"),
             ) {
-                return Some("open_780_invalid_utf8_and_710_cast_metadata");
+                return Some("open_780_invalid_utf8_execution");
             }
         }
         return None;
@@ -127,4 +127,17 @@ fn binary_cast_gap_profiles_reject_unrelated_failures() -> TestResult {
         assert!(open_cast_outcome(case, &actual, 0, 1).is_none());
     }
     Ok(())
+}
+
+#[path = "support/binary_string_capability.rs"]
+mod capability;
+
+#[tokio::test]
+async fn native_arrow_string_binary_capability_profiles() -> TestResult {
+    capability::check_capability_profiles().await
+}
+
+#[test]
+fn binary_capability_profiles_reject_changed_values_fields_and_causes() -> TestResult {
+    capability::check_profile_mutations()
 }
