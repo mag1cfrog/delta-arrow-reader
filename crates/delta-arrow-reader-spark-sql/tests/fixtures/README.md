@@ -3618,8 +3618,9 @@ default and quote escapes. Alias, source metadata, ILIKE, regexp and nested
 NOT/IS NULL controls compare complete fields and ordered rows through the same
 replay. The 24 observation records are copied byte for byte from the independent
 C06 capture. Its header records the raw capture SHA-256 and runtime provenance;
-internal SQLConf getters remain pending independent followup, with explicit
-SparkConf startup values retained separately from SET -v observations.
+direct SQLConf getters verify every requested SQL setting, including the internal
+case sensitivity and escaped string literal settings. SparkContext settings
+separately record the master and default parallelism.
 
 `like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
 all-NULL and empty registered inputs. It distinguishes literal from
@@ -3770,13 +3771,15 @@ bounded contract. #771 remains open.
 
 Including the 480 clock controls and 32 independent host references, the recorded
 R3 baseline has 4,892 strict matches among 5,072 comparisons: 3,496 successful
-results and 1,396 precise errors. The current gate requires 4,964 of 5,072
-comparisons to match strictly, including all 72 arity contexts. The remaining
-108 current name/field observations and all 180 historical negative profiles
-remain incompatible.
-The complete 5,216-record raw collector also retains 144 diagnostics without
-Spark oracle credit, including its 24 native clock-value witnesses. These counts
-describe the recorded contexts and do not establish family-wide compatibility.
+results and 1,396 precise errors. The current gate requires 5,120 strict matches
+among 5,216 comparisons: 4,704 main, 480 clock and 32 host comparisons. All 72
+arity contexts and 12 LIKE name contexts must match strictly. The remaining 96
+current #875 RAND/STRING field observations remain incompatible. All 180 negative
+profiles retain their historical incompatible flags and complete observations.
+Separately, the historical R3 raw collector retained 5,216 records, including 144
+diagnostics without Spark oracle credit and its 24 native clock-value witnesses.
+These historical counts describe the recorded contexts and do not establish
+family-wide compatibility.
 
 Errors require the precise
 escape condition, pattern, offending character and DAR failure stage. Spark

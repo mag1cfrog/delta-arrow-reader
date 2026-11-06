@@ -77,14 +77,14 @@ in both engines is marked `unavailable`. The six external-error references have
 Spark physical fields: available native fields must match, and a failed native
 physical-planning phase is marked `actual_unavailable`. No fields are inferred.
 
-The harness reports these retained dependencies separately from exact matches:
+The harness separates exact controls from retained dependencies:
 
 - `guarded_case` and `guarded_literal` require exact complete fields and rows.
 - The original `${x}` and `${missing}` literal queries depend on SQL variable
   substitution under #789. Fresh column replacements exercise the actual
   named-group strings without SQL text substitution.
-- Mixed unaliased queries retain the LIKE label difference under #791. Their
-  available type, nullability and metadata comparisons remain strict.
+- Mixed unaliased queries require exact complete analyzed and physical fields,
+  including LIKE names, types, nullability and metadata, and all ordered rows.
 - Accepted-pattern final line-terminator matching remains a #930 difference
   under the #779 native-regex capability decision.
 - A nonempty pattern with a position inside a supplementary surrogate pair returns an explicit native
@@ -115,10 +115,12 @@ separate from #780's byte-backed STRING representation. Every reference and raw
 external outcome remains in the replay. Complete REGEXP_REPLACE compatibility
 still requires the broader #798 matcher work and the other named dependencies.
 
-The original regression inventory requires 2,280 complete-result observations,
-732 required errors and 96 precisely retained external observations. Passing this
-regression checks those invariants; the full Spark comparison remains false
-while the external outcomes differ. The position and replacement rules follow the pinned
+The original regression inventory recorded 2,280 complete-result observations,
+732 required errors and 96 precisely retained external observations. The current
+inventory requires 2,292 complete-result observations, 732 required errors and
+84 retained external observations. Passing this regression checks the current
+inventory; full Spark compatibility remains false while the external outcomes
+differ. The position and replacement rules follow the pinned
 [Spark RegExpReplace implementation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/regexpExpressions.scala#L637).
 
 ## Raw nonword boundary
