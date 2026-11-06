@@ -1,0 +1,96 @@
+{
+  "issue": 971,
+  "source_reference": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/731-literal-consumer-boundaries-spark-current-v1.jsonl",
+  "source_sha256": "bca7979a35a8eca98ae3f5340c87a8c364c184bc7698388357f8958ebe922c2d",
+  "source_observations": 24,
+  "selected_observations": 16,
+  "selected_ids": [
+    "null_element",
+    "null_array",
+    "empty_array",
+    "null_index",
+    "negative_index",
+    "out_of_bounds",
+    "unreachable_out_of_bounds",
+    "column_array_stays_nullable"
+  ],
+  "selection": "All affected ARRAY bounds records plus agreeing NULL, dead-branch, legacy and provider controls. Each selected line, including the source header, is unchanged. Source header counts describe the full 24-record capture.",
+  "source_lines": [
+    {
+      "line": 1,
+      "sha256": "fe5e6ca31024eccf854d6a427d9799375aa5d7bb46b0bd9cd7dbf3c7722dc563"
+    },
+    {
+      "line": 3,
+      "sha256": "ea4eaf30050ef5b1bc2d11971d96a74161f31c8145fb422b77249101f936b897"
+    },
+    {
+      "line": 4,
+      "sha256": "84def9eb45e5ca804d66045bdd662e0846a85e9927928057c875d261e78914af"
+    },
+    {
+      "line": 5,
+      "sha256": "5b09928f6ca8ce8155be658f05a56b4c9dbaac0a02ef63018abb706476791483"
+    },
+    {
+      "line": 6,
+      "sha256": "ab06a0297ecea3fe73c1df7a75ba9fbef9565bf3664a9439c9ea3092a5d12650"
+    },
+    {
+      "line": 7,
+      "sha256": "9537d202f17aff5692fd9735a74d7ab01ef08777540401c8855d672d56931bad"
+    },
+    {
+      "line": 8,
+      "sha256": "60c285ed773ea6655f1cc5eb3b412c18336efaf4e34f31de37c81868c07733d8"
+    },
+    {
+      "line": 11,
+      "sha256": "df4eb90d7e4748914162b233d42a769fdb7b31457f6e15aacf052d3005a7d4ac"
+    },
+    {
+      "line": 13,
+      "sha256": "b70fa99302eb5bd25857fc53887a2685fca8be573d2527a66f63cd308547d532"
+    },
+    {
+      "line": 15,
+      "sha256": "7bc2b5fe5524321585f4dfb2cec49e4d19cce999acb35470f257a1371a61ebb6"
+    },
+    {
+      "line": 16,
+      "sha256": "6f3198042aefaf3955f6bfcfd3c24b71383d2aeb9483ff2f1afdfc20d3d9d8c8"
+    },
+    {
+      "line": 17,
+      "sha256": "99562f5c58dcd8afc42d0db76884f64cc307369fd84769302049ea12256e8169"
+    },
+    {
+      "line": 18,
+      "sha256": "c046a4d3eef14a97e3f1ca564e0e7278aaf33fb4473897a175056b1a9edffaf8"
+    },
+    {
+      "line": 19,
+      "sha256": "b18840f28f848f125f1f36e38cf1410d39951071bba50be13fca561716246207"
+    },
+    {
+      "line": 20,
+      "sha256": "e0ea27ede74890fd862ee9e2f1ab138748afd5218cc4f37f1d800e90ca42f6b7"
+    },
+    {
+      "line": 23,
+      "sha256": "6cae0e04d53ef77d5bf61a3d1b293f0cd6ba000f90d7331298f1ac1450304a4c"
+    },
+    {
+      "line": 25,
+      "sha256": "907c76f7a6e76c184af76e66f6613184c80f9f0d5b4e02b2f7e5664c0c6c19bd"
+    }
+  ],
+  "selected_sha256": "2b6521c8c1bd69a2afeb358fa1e09b13eb961a95588323bbe6f7879816c6de6a",
+  "separate_issue_731_ids": [
+    "qualified_alias_chain",
+    "empty_group_input",
+    "nested_array",
+    "nonfloating_element"
+  ],
+  "separate_issue_731_reason": "These four successful groups have the 16 optimized/executed Field differences at the accepted base. Their original records remain in the source archive and belong to #731."
+}
