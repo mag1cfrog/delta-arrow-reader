@@ -1,4 +1,4 @@
-//! NULL predicates must retain the conversion of string-to-floating expressions.
+//! Floating conversion stages, values and required errors retain their recorded contracts.
 
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -12,7 +12,120 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
+#[allow(dead_code)]
+#[path = "support/spark_inputs.rs"]
+mod spark_inputs;
+#[allow(dead_code)]
+#[path = "support/spark_results.rs"]
+mod spark_results;
+
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
+
+#[tokio::test]
+async fn floating_integer_casts_match_recorded_stages() -> TestResult {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/floating-integer-values/sources/897-floating-integer-inputs-current-v1-manifest.json"
+    ))?;
+    let records = include_str!("fixtures/floating-integer-values/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 352);
+    let header = &records[0];
+    assert_eq!(header["spark_version"], "4.2.0");
+    assert_eq!(
+        header["spark_build"]["SPARK_REVISION"]["value"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(header["timezone"], "UTC");
+    assert_eq!(header["inputs"], manifest["inputs"]);
+    assert_eq!(header["native"], manifest["native"]);
+    assert_eq!(
+        header["manifest_sha256"],
+        "49a514c85966cebdaf2ff9b574bd4032e153b61c678af30565845332819b3c2e"
+    );
+    let definitions = manifest["cases"].as_array().ok_or("missing cases")?;
+    let mut expected_ids = BTreeSet::new();
+    for case in definitions {
+        for ansi in [true, false] {
+            expected_ids.insert((case["id"].to_string(), ansi));
+        }
+    }
+    let mut actual_ids = BTreeSet::new();
+    for case in &records[1..] {
+        let ansi = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
+        assert!(actual_ids.insert((case["id"].to_string(), ansi)));
+        let definition = definitions
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("undeclared case")?;
+        for (key, value) in definition.as_object().ok_or("invalid definition")? {
+            if key != "ansi_modes" {
+                assert_eq!(&case[key], value, "{key}: {}", case["id"]);
+            }
+        }
+        assert_eq!(case["settings"]["spark.sql.ansi.enabled"], ansi.to_string());
+        if case["expected"].get("rows").is_some() {
+            assert_eq!(
+                case["expected"]["schema"],
+                case["schema_stages"]["analyzed"]
+            );
+            for stage in [
+                "analyzed",
+                "optimized",
+                "executed_before_collect",
+                "executed",
+            ] {
+                assert!(case["schema_stages"][stage].is_object(), "{stage}: {case}");
+            }
+        } else {
+            assert!(case["spark_error_details"]["parameters"].is_object());
+        }
+    }
+    assert_eq!(actual_ids, expected_ids);
+
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        spark_inputs::register_recorded_inputs_with_slices(&session, header, batch_size)?;
+        for case in &records[1..] {
+            let actual =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await?;
+            let matches = actual["matches"] == true && actual["optimized_matches"] == true;
+            if !matches {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: {actual}",
+                    case["id"], case["ansi"]
+                ));
+            }
+            eprintln!(
+                "FLOATING_INTEGER_VALUE_RESULT {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "domain":case["domain"],"reference":case,"observation":actual,
+                    "strict_reference_match":matches
+                })
+            );
+            comparisons += 1;
+        }
+    }
+    assert_eq!(comparisons, 704);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
 
 #[tokio::test]
 async fn floating_casts_retain_spark_schemas_and_required_errors() -> TestResult {
