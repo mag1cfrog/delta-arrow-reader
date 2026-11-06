@@ -326,9 +326,9 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
                         "strict"
                     };
                     let strict_match = if trim_arity {
-                        actual.as_ref().is_err_and(|error| {
-                            trim_arity_error_matches(case, &error.to_string())
-                        })
+                        actual
+                            .as_ref()
+                            .is_err_and(|error| trim_arity_error_matches(case, &error.to_string()))
                     } else {
                         expected["status"] == "ok"
                             && actual.as_ref().is_ok_and(|value| {
