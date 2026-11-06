@@ -7,7 +7,10 @@ use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_qu
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
 use serde_json::{Value, json};
 
-#[expect(dead_code, reason = "This target captures complete failed-query observations.")]
+#[expect(
+    dead_code,
+    reason = "This target captures complete failed-query observations."
+)]
 #[path = "support/string_binary.rs"]
 mod string_binary;
 use string_binary::{TestResult, capture_observation};
@@ -46,7 +49,10 @@ async fn literal_group_errors_keep_resolved_fields_and_query_local_marker() -> T
         assert_query_marker_absent(&session);
         let actual = capture_observation(&session, case).await?;
         assert_query_marker_absent(&session);
-        assert_eq!(actual["analyzed_schema"], case["expected"]["analyzed_schema"]);
+        assert_eq!(
+            actual["analyzed_schema"],
+            case["expected"]["analyzed_schema"]
+        );
         assert!(actual["analyzed_arrow_schema"].is_string());
         assert_eq!(actual["error_stage"], "physical");
         assert_eq!(actual["physical_schema"], Value::Null);
@@ -67,10 +73,13 @@ async fn literal_group_errors_keep_resolved_fields_and_query_local_marker() -> T
             "{error}"
         );
         assert_eq!(session.sql(native_sql).await?.collect().await?, native);
-        eprintln!("c06 literal preparation regression: {}", json!({
-            "id":case["id"],"sql":case["sql"],"ansi":case["ansi"],"actual":actual,
-            "full_compatibility_pass":false
-        }));
+        eprintln!(
+            "c06 literal preparation regression: {}",
+            json!({
+                "id":case["id"],"sql":case["sql"],"ansi":case["ansi"],"actual":actual,
+                "full_compatibility_pass":false
+            })
+        );
         checked += 1;
     }
     assert_eq!(checked, 4);
@@ -87,7 +96,11 @@ async fn set_resolution_keeps_literal_fields_before_preparation_failure() -> Tes
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
     let mut checked = 0;
-    for case in references.iter().skip(1).filter(|case| case["id"] == "regexp_extract_literal_missing_index") {
+    for case in references
+        .iter()
+        .skip(1)
+        .filter(|case| case["id"] == "regexp_extract_literal_missing_index")
+    {
         assert_query_marker_absent(&session);
         let sql = format!(
             "{} UNION SELECT 'b' AS r",
@@ -127,10 +140,13 @@ async fn set_resolution_keeps_literal_fields_before_preparation_failure() -> Tes
         );
         // The set-op exercises resolver simplification; only the underlying
         // literal group cause is taken from the independent Spark reference.
-        eprintln!("c06 literal set resolution: {}", json!({
-            "sql":sql,"ansi":case["ansi"],"resolved_fields":format!("{resolved:?}"),
-            "column_names":query.column_names,"physical_error":error,"spark_set_oracle":false
-        }));
+        eprintln!(
+            "c06 literal set resolution: {}",
+            json!({
+                "sql":sql,"ansi":case["ansi"],"resolved_fields":format!("{resolved:?}"),
+                "column_names":query.column_names,"physical_error":error,"spark_set_oracle":false
+            })
+        );
         checked += 1;
     }
     assert_eq!(checked, 2);

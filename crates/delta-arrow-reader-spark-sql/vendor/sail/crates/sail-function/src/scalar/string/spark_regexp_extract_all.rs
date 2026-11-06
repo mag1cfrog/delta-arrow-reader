@@ -184,7 +184,7 @@ impl ScalarUDFImpl for SparkRegexpExtract {
                     | ScalarValue::Utf8View(Some(pattern)),
                     _,
                 ),
-                ..
+                ..,
             ] = args.as_slice()
             && let Ok(regex) = parse_regex(Self::NAME, pattern)
         {

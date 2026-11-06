@@ -443,15 +443,21 @@ pub(crate) fn lower_runtime_regexp_extract(
                 expr::Expr::Literal(ScalarValue::Int32(Some(_)), _) => true,
                 expr::Expr::Cast(cast) => cast.field.data_type() == &DataType::Int32,
                 expr::Expr::ScalarFunction(function) => {
-                    function.func.inner()
+                    function
+                        .func
+                        .inner()
                         .downcast_ref::<SparkCastNumericToInteger>()
                         .is_some_and(|cast| {
                             cast.target_type() == &DataType::Int32 && !cast.is_try()
                         })
-                        || function.func.inner()
+                        || function
+                            .func
+                            .inner()
                             .downcast_ref::<SparkCastStringToInteger>()
                             .is_some_and(|cast| cast.mode() != StringIntegerCastMode::Try)
-                        || function.func.inner()
+                        || function
+                            .func
+                            .inner()
                             .downcast_ref::<SparkDecimalCast>()
                             .is_some_and(|cast| cast.mode() != DecimalCastMode::Try)
                 }
@@ -1225,17 +1231,29 @@ fn regexp_extract_literal_simplification_requires_the_spark_marker() -> PlanResu
     let extract = SparkRegexpExtract::new().with_null_short_circuit(false);
     let plain = SimplifyContext::default();
     let mut options = ConfigOptions::default();
-    options.extensions.insert(
-        crate::expression_errors::SparkSqlExpressionSemantics::default(),
-    );
+    options
+        .extensions
+        .insert(crate::expression_errors::SparkSqlExpressionSemantics::default());
     let spark = SimplifyContext::builder()
         .with_config_options(Arc::new(options))
         .build();
     for (source, pattern, index, count, expected_index) in [
         ("a", "(a)", Some(-1_i64), 1, -1),
         ("a", "(a)", Some(2), 1, 2),
-        ("a", "(a)", Some(i64::from(i32::MAX)), 1, i64::from(i32::MAX)),
-        ("a", "(a)", Some(i64::from(i32::MIN)), 1, i64::from(i32::MIN)),
+        (
+            "a",
+            "(a)",
+            Some(i64::from(i32::MAX)),
+            1,
+            i64::from(i32::MAX),
+        ),
+        (
+            "a",
+            "(a)",
+            Some(i64::from(i32::MIN)),
+            1,
+            i64::from(i32::MIN),
+        ),
         ("abc", "abc", None, 0, 1),
     ] {
         let mut arguments = vec![lit(source), lit(pattern)];
@@ -1272,8 +1290,8 @@ fn regexp_extract_literal_simplification_requires_the_spark_marker() -> PlanResu
 
 #[test]
 fn regexp_extract_literal_routing_keeps_nonliteral_arguments_lazy() -> PlanResult<()> {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use datafusion_expr::{Volatility, col, create_udf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let calls = Arc::new(AtomicUsize::new(0));
     let extract = ScalarUDF::from(
