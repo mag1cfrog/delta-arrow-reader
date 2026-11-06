@@ -1,0 +1,41 @@
+{
+  "source": "ded20e6f6b783d13d3427680900396cbb7ab7ff3",
+  "runtime_source": "cb9f10dcda765cafe81e63eabe7412c94949da1e",
+  "source_log_sha256": "b39b9e2d45b19d9b3b308ab5b31bf059a880e7c9c327237750cb98221d8fc811",
+  "source_audit_sha256": "5b1a73ec4294e9f17defc74de07f629ecd1fd2ccc8dc4f26af5d3d5ddaa62acc",
+  "spark_reference_sha256": "28a922e7c069cd4c25578a87e367e00735f7997c46f541e392fae740bfccda42",
+  "is_spark_compatibility_credit": false,
+  "field_facets": [
+    {
+      "fixture": "opaque-conditional-arms-spark.jsonl",
+      "id": "literal_true_guard_volatile_else",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "e319dccb81fa17643d0d1eeebfd73c4f900a605789a02aa39b69916d69e2fe79",
+      "all_other_schema_parts_match": true,
+      "sql": "SELECT CASE WHEN true THEN ARRAY(7)[1] ELSE CAST(rand() AS INT) END AS r"
+    },
+    {
+      "fixture": "opaque-conditional-arms-spark.jsonl",
+      "id": "literal_true_guard_volatile_else",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "e319dccb81fa17643d0d1eeebfd73c4f900a605789a02aa39b69916d69e2fe79",
+      "all_other_schema_parts_match": true,
+      "sql": "SELECT CASE WHEN true THEN ARRAY(7)[1] ELSE CAST(rand() AS INT) END AS r"
+    }
+  ],
+  "cause_facets": []
+}
