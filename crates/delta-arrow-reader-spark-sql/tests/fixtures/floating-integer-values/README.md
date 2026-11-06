@@ -33,13 +33,17 @@ expected to identify different capture sources.
 
 The native replay observes both batch sizes 1 and 32. Its 704 comparisons cover
 the measured matrix; #897 owns the Legacy floating conversion policy. Field
-declarations (#796), checked overflow identity (#922), and the checked BIGINT
-endpoint (#1020) have separate contracts.
+declarations require Spark's conservative nullable Fields. Checked overflow
+identity (#922) and the checked BIGINT endpoint (#1020) have separate contracts.
 
 `retained-baseline-facets.json` binds the exact remaining native differences to
-real accepted-runtime observations. It permits only listed nullable leaves,
-checked endpoint cells, and complete known error causes, stages and availability.
+real accepted-runtime observations. Its 480 old #796 nullable leaves remain
+history and cannot permit an incorrect declaration. Active controls admit only
+the listed #1020 endpoint cells and nullable consequences, plus complete known
+error causes, stages and availability. For the two ANSI substring errors without
+Spark's later Fields, expected native schema copies require the corrected
+nullable declaration and preserve every other component and boundary.
 The #1020 endpoint links include the original TRY literal's IEEE bits and the
 matching provider input row. Non-TRY Legacy rows receive no retained-value
 allowance. Strict Spark flags remain false for retained differences; the scoped
-#897 result is reported separately.
+#796/#897 result is reported separately.
