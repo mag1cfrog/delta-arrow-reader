@@ -1522,14 +1522,19 @@ fn local_literal_regexp_group_admission_reuses_runtime_routing() -> Result<()> {
             Arc::new(HigherOrderUDF::new_from_impl(
                 SparkRegexpExtract::new().with_null_short_circuit(known_null),
             )),
-            vec![source, pattern, index].into_iter()
+            vec![source, pattern, index]
+                .into_iter()
                 .map(|body| Expr::Lambda(Lambda::new(vec!["unused".into()], body)))
                 .collect(),
         ))
     };
     for index in [-1_i32, 0, 2] {
-        let expr = closed(lit("a"), lit("(a)"),
-            cast(cast(lit(index), DataType::Int32), DataType::Int64), false);
+        let expr = closed(
+            lit("a"),
+            lit("(a)"),
+            cast(cast(lit(index), DataType::Int32), DataType::Int64),
+            false,
+        );
         assert!(local_literal_regexp_extract(&expr)?);
         assert!(local_literal_regexp_extract(&expr.alias("r"))?);
     }
@@ -1537,12 +1542,19 @@ fn local_literal_regexp_group_admission_reuses_runtime_routing() -> Result<()> {
     let invalid = SparkCastStringToInteger::try_new(
         DataType::Int32,
         sail_function::scalar::spark_cast_string_to_integer::StringIntegerCastMode::Ansi,
-    )?.into_expr(lit("bad"));
+    )?
+    .into_expr(lit("bad"));
     assert!(local_literal_regexp_extract(&closed(
-        lit("a"), lit("(a)"), cast(invalid, DataType::Int64), false,
+        lit("a"),
+        lit("(a)"),
+        cast(invalid, DataType::Int64),
+        false,
     ))?);
     assert!(local_literal_regexp_extract(&closed(
-        lit("a"), lit("["), lit(2_i64), false,
+        lit("a"),
+        lit("["),
+        lit(2_i64),
+        false,
     ))?);
     for expr in [
         closed(lit(ScalarValue::Utf8(None)), lit("(a)"), lit(2_i64), true),
@@ -1562,92 +1574,165 @@ mod literal_producer;
 #[tokio::test]
 async fn literal_regexp_producer_permissions_and_retention()
 -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use std::sync::atomic::Ordering;
+    use self::literal_producer::{Kind, producer};
+    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
     use datafusion::execution::SessionStateBuilder;
     use datafusion::prelude::SessionContext;
     use datafusion_expr::expr::{HigherOrderFunction, Lambda};
     use datafusion_expr::{HigherOrderUDF, LogicalPlanBuilder};
-    use self::literal_producer::{Kind, producer};
-    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
+    use std::sync::atomic::Ordering;
 
     let outer = Expr::HigherOrderFunction(HigherOrderFunction::new(
         Arc::new(HigherOrderUDF::new_from_impl(
             SparkRegexpExtract::new().with_null_short_circuit(false),
         )),
-        vec![lit("a"),lit("(a)"),lit(1_i64)].into_iter()
-            .map(|body| Expr::Lambda(Lambda::new(vec!["unused".into()],body)))
+        vec![lit("a"), lit("(a)"), lit(1_i64)]
+            .into_iter()
+            .map(|body| Expr::Lambda(Lambda::new(vec!["unused".into()], body)))
             .collect(),
-    )).alias("r");
+    ))
+    .alias("r");
     assert!(local_literal_regexp_extract(&outer)?);
-    for kind in [Kind::ImmutableNoFold,Kind::VolatileFold,Kind::AsyncFold,Kind::ImmutableFold] {
+    for kind in [
+        Kind::ImmutableNoFold,
+        Kind::VolatileFold,
+        Kind::AsyncFold,
+        Kind::ImmutableFold,
+    ] {
         let (callback, counts) = producer(kind);
-        assert_eq!(callback.inner().supports_constant_folding(),kind != Kind::ImmutableNoFold);
-        assert_eq!(callback.signature().volatility == datafusion_expr::Volatility::Volatile,
-            kind == Kind::VolatileFold);
-        assert_eq!(callback.as_async().is_some(),kind == Kind::AsyncFold);
+        assert_eq!(
+            callback.inner().supports_constant_folding(),
+            kind != Kind::ImmutableNoFold
+        );
+        assert_eq!(
+            callback.signature().volatility == datafusion_expr::Volatility::Volatile,
+            kind == Kind::VolatileFold
+        );
+        assert_eq!(callback.as_async().is_some(), kind == Kind::AsyncFold);
         let values = LogicalPlanBuilder::values(vec![vec![lit(1_i32)]])?.build()?;
         let key = Expr::Column(values.schema().columns()[0].clone()).alias("k");
-        let values = LogicalPlanBuilder::from(values).project(vec![key])?.build()?;
+        let values = LogicalPlanBuilder::from(values)
+            .project(vec![key])?
+            .build()?;
         let column = values.schema().columns()[0].clone();
         let input = LogicalPlan::Projection(datafusion_expr::logical_plan::Projection::try_new(
-            vec![callback.call(vec![Expr::Column(column)]).alias("produced")],Arc::new(values),
+            vec![callback.call(vec![Expr::Column(column)]).alias("produced")],
+            Arc::new(values),
         )?);
-        let input = LogicalPlan::SubqueryAlias(datafusion_expr::logical_plan::SubqueryAlias::try_new(
-            Arc::new(input),"q",
-        )?);
-        assert_eq!(literal_regexp_input_permitted(&input)?,kind == Kind::ImmutableFold);
-        assert_eq!(counts.calls.load(Ordering::SeqCst),0,"predicate invoked {kind:?}");
+        let input = LogicalPlan::SubqueryAlias(
+            datafusion_expr::logical_plan::SubqueryAlias::try_new(Arc::new(input), "q")?,
+        );
+        assert_eq!(
+            literal_regexp_input_permitted(&input)?,
+            kind == Kind::ImmutableFold
+        );
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            0,
+            "predicate invoked {kind:?}"
+        );
     }
 
-    for ansi_mode in [true,false] {
-        let session = SessionContext::new_with_state(SessionStateBuilder::new()
-            .with_default_features().with_analyzer_rule(Arc::new(PrepareSparkExpressions))
-            .with_query_planner(Arc::new(SparkQueryPlanner)).build());
+    for ansi_mode in [true, false] {
+        let session = SessionContext::new_with_state(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_analyzer_rule(Arc::new(PrepareSparkExpressions))
+                .with_query_planner(Arc::new(SparkQueryPlanner))
+                .build(),
+        );
         let (callback, counts) = producer(Kind::ImmutableFold);
         session.register_udf(callback);
         let sql = "SELECT regexp_extract('a','(a)',1) AS r, produced FROM \
             (SELECT literal_counted_producer(k) AS produced FROM VALUES(1) AS t(k)) AS q";
-        let mut config = PlanConfig::default();config.ansi_mode = ansi_mode;
+        let mut config = PlanConfig::default();
+        config.ansi_mode = ansi_mode;
         let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
         let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
-        let named = PlanResolver::new(&session,Arc::new(config)).resolve_named_plan(spec).await?;
-        assert_eq!(counts.calls.load(Ordering::SeqCst),0,"resolve consumed the producer");
-        let resolved = format!("{:?}",named.plan.schema());
+        let named = PlanResolver::new(&session, Arc::new(config))
+            .resolve_named_plan(spec)
+            .await?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            0,
+            "resolve consumed the producer"
+        );
+        let resolved = format!("{:?}", named.plan.schema());
         let mut options = ConfigOptions::default();
-        options.extensions.insert(SparkSqlExpressionSemantics::default());
-        options.extensions.insert(SparkInterpretedEvaluation::default());
-        let mut props = ExecutionProps::new();props.config_options = Some(Arc::new(options.clone()));
-        let prepare = Prepare {props,has_groups:false,has_null_sensitive_comparison:false,
-            spark_array_index_errors:true};
-        counts.phase.store(1,Ordering::SeqCst);
+        options
+            .extensions
+            .insert(SparkSqlExpressionSemantics::default());
+        options
+            .extensions
+            .insert(SparkInterpretedEvaluation::default());
+        let mut props = ExecutionProps::new();
+        props.config_options = Some(Arc::new(options.clone()));
+        let prepare = Prepare {
+            props,
+            has_groups: false,
+            has_null_sensitive_comparison: false,
+            spark_array_index_errors: true,
+        };
+        counts.phase.store(1, Ordering::SeqCst);
         let prepared = prepare.cast_reachability(
-            preserve_local_string_arguments(named.plan)?,&options,false,
+            preserve_local_string_arguments(named.plan)?,
+            &options,
+            false,
         )?;
-        assert_eq!(counts.calls.load(Ordering::SeqCst),1,"input conversion must run once");
-        assert!(!prepared.exists(|node| {
-            let mut original = false;
-            node.apply_expressions(|expr| {
-                original |= expr.exists(|expr| Ok(matches!(expr,Expr::ScalarFunction(function)
-                    if function.func.name() == "literal_counted_producer")))?;
-                Ok(TreeNodeRecursion::Continue)
-            })?;
-            Ok(original)
-        })?,"retained plan still contains the original producer");
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            1,
+            "input conversion must run once"
+        );
+        assert!(
+            !prepared.exists(|node| {
+                let mut original = false;
+                node.apply_expressions(|expr| {
+                    original |= expr.exists(|expr| {
+                        Ok(matches!(expr,Expr::ScalarFunction(function)
+                    if function.func.name() == "literal_counted_producer"))
+                    })?;
+                    Ok(TreeNodeRecursion::Continue)
+                })?;
+                Ok(original)
+            })?,
+            "retained plan still contains the original producer"
+        );
         let retained_plan = format!("{prepared:?}");
-        let physical = spark_test_frame(&session,prepared).create_physical_plan().await?;
-        assert_eq!(counts.calls.load(Ordering::SeqCst),1,"later planning replayed the producer");
-        counts.phase.store(2,Ordering::SeqCst);
-        let batches = datafusion::physical_plan::collect(physical,session.task_ctx()).await?;
-        assert_eq!(counts.calls.load(Ordering::SeqCst),1,"collection replayed the producer");
-        assert_eq!(batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),1);
-        assert_eq!(batches[0].num_columns(),2);
-        assert_eq!(ScalarValue::try_from_array(batches[0].column(0).as_ref(),0)?,
-            ScalarValue::Utf8(Some("a".into())));
-        assert_eq!(ScalarValue::try_from_array(batches[0].column(1).as_ref(),0)?,
-            ScalarValue::Int32(Some(1)));
-        eprintln!("c06 literal producer retention: {}",serde_json::json!({
+        let physical = spark_test_frame(&session, prepared)
+            .create_physical_plan()
+            .await?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            1,
+            "later planning replayed the producer"
+        );
+        counts.phase.store(2, Ordering::SeqCst);
+        let batches = datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            counts.calls.load(Ordering::SeqCst),
+            1,
+            "collection replayed the producer"
+        );
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        assert_eq!(batches[0].num_columns(), 2);
+        assert_eq!(
+            ScalarValue::try_from_array(batches[0].column(0).as_ref(), 0)?,
+            ScalarValue::Utf8(Some("a".into()))
+        );
+        assert_eq!(
+            ScalarValue::try_from_array(batches[0].column(1).as_ref(), 0)?,
+            ScalarValue::Int32(Some(1))
+        );
+        eprintln!(
+            "c06 literal producer retention: {}",
+            serde_json::json!({
             "sql":sql,"ansi":ansi_mode,"resolved_schema":resolved,"retained_plan":retained_plan,
-            "counts":counts.snapshot(),"spark_oracle_credit":false}));
+            "counts":counts.snapshot(),"spark_oracle_credit":false})
+        );
     }
     Ok(())
 }
