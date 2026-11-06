@@ -350,6 +350,92 @@ async fn constant_group_fields_match_each_independent_spark_stage() -> TestResul
 }
 
 #[tokio::test]
+async fn unmasked_constant_array_grouping_sets_match_each_spark_stage() -> TestResult {
+    let records = include_str!("fixtures/constant-group-unmasked-sets-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 4);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(records[0]["timezone"], "UTC");
+    // The unchanged header describes the source capture containing these four records.
+    assert_eq!(records[0]["case_count"], 23);
+    assert_eq!(records[0]["observations"], 46);
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert((
+            case["id"].as_str().ok_or("missing ID")?,
+            case["ansi"].as_bool().ok_or("missing ANSI mode")?,
+        )));
+        assert_eq!(case["category"], "unmasked_constant");
+        assert_eq!(case["public_schema"], case["expected"]["schema"]);
+        assert_eq!(case["public_schema"]["fields"][0]["nullable"], false);
+        assert_eq!(
+            case["public_schema"]["fields"][0]["type"]["containsNull"],
+            true
+        );
+        for stage in [
+            "analyzed",
+            "optimized",
+            "executed_before_collect",
+            "executed",
+        ] {
+            assert!(case["schema_stages"].get(stage).is_some(), "{case}");
+        }
+        assert!(case["rows_raw"].is_array());
+    }
+    assert_eq!(
+        identities,
+        BTreeSet::from([
+            ("float_unmasked_array_sets", true),
+            ("float_unmasked_array_sets", false),
+            ("double_unmasked_array_sets", true),
+            ("double_unmasked_array_sets", false),
+        ])
+    );
+    let mut differences = Vec::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size, true);
+        spark_inputs::register_recorded_inputs(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await?;
+            let public_matches = actual["public_schema"] == case["public_schema"];
+            let zero = if case["id"] == "float_unmasked_array_sets" {
+                "00000000"
+            } else {
+                "0000000000000000"
+            };
+            let key_payload_matches = actual["rows_raw"]
+                .as_array()
+                .is_some_and(|rows| rows.iter().all(|row| row[0] == json!([zero])));
+            eprintln!(
+                "CONSTANT_GROUP_UNMASKED {}",
+                json!({"id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "observation":actual,"public_result_matches":public_matches,
+                    "key_payload_matches":key_payload_matches})
+            );
+            if actual["matches"] != true
+                || actual["optimized_matches"] != true
+                || !public_matches
+                || !key_payload_matches
+            {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: public_result={public_matches} \
+                     key_payload={key_payload_matches} {actual}",
+                    case["id"], case["ansi"]
+                ));
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn literal_array_consumers_match_independent_boundary_stages() -> TestResult {
     let records = include_str!("fixtures/constant-group-literal-consumers-spark.jsonl")
         .lines()
