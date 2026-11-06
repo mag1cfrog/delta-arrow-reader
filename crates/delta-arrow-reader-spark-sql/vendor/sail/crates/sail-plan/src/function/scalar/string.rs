@@ -55,7 +55,7 @@ use sail_function::scalar::string::spark_to_number::SparkToNumber;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
-    ScalarFunction, ScalarFunctionInput, literal_value_without_evaluation,
+    ScalarFunction, ScalarFunctionBuilder, ScalarFunctionInput, literal_value_without_evaluation,
     without_inherited_column_metadata, without_metadata_annotations,
 };
 use crate::function::scalar::datetime::date_format;
@@ -977,10 +977,23 @@ fn in_str_out_i32(
     move |input: ScalarFunctionInput| Ok(cast(func(validate_utf8(input)?), DataType::Int32))
 }
 
-fn rev_args(
-    func: impl Fn(Vec<expr::Expr>) -> expr::Expr,
-) -> impl Fn(Vec<expr::Expr>) -> expr::Expr {
-    move |args: Vec<expr::Expr>| func(args.into_iter().rev().collect())
+fn build_trim_function(
+    function_name: &'static str,
+    native_function: Arc<ScalarUDF>,
+) -> ScalarFunction {
+    ScalarFunctionBuilder::var_arg(move |mut arguments| {
+        let argument_count = arguments.len();
+        if !(1..=2).contains(&argument_count) {
+            return Err(PlanError::invalid(format!(
+                "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] The `{function_name}` requires [1, 2] parameters but the actual number is {argument_count}."
+            )));
+        }
+        arguments.reverse();
+        Ok(call_null_propagating_string(
+            Arc::clone(&native_function),
+            arguments,
+        ))
+    })
 }
 
 /// Dispatch for `to_char(expr, format)` and its alias `to_varchar`, following Spark's
@@ -1071,9 +1084,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("lpad", F::var_arg(expr_fn::lpad)),
         (
             "ltrim",
-            F::var_arg(rev_args(|args| {
-                call_null_propagating_string(native_string::ltrim(), args)
-            })),
+            build_trim_function("ltrim", native_string::ltrim()),
         ),
         ("luhn_check", F::unary(string_fn::luhn_check)),
         ("make_valid_utf8", F::udf(MakeValidUtf8::new())),
@@ -1096,9 +1107,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("rpad", F::var_arg(expr_fn::rpad)),
         (
             "rtrim",
-            F::var_arg(rev_args(|args| {
-                call_null_propagating_string(native_string::rtrim(), args)
-            })),
+            build_trim_function("rtrim", native_string::rtrim()),
         ),
         ("sentences", F::udf(SparkSentences::new())),
         ("soundex", F::udf(Soundex::new())),
@@ -1114,12 +1123,7 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("to_number", F::udf(SparkToNumber::new(false))),
         ("to_varchar", F::custom(to_char)),
         ("translate", F::ternary(expr_fn::translate)),
-        (
-            "trim",
-            F::var_arg(rev_args(|args| {
-                call_null_propagating_string(native_string::btrim(), args)
-            })),
-        ),
+        ("trim", build_trim_function("trim", native_string::btrim())),
         ("try_to_binary", F::udf(SparkTryToBinary::new())),
         ("try_to_number", F::udf(SparkToNumber::new(true))),
         ("try_validate_utf8", F::custom(try_validate_utf8)),
