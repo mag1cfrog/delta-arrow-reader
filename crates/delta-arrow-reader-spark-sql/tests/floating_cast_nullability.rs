@@ -1343,7 +1343,7 @@ async fn literal_substring_float_overflows_fail_during_preparation() -> TestResu
             assert_eq!(actual["public_schema"], case["schema_stages"]["analyzed"]);
             assert_eq!(actual["native_phase"], "create_physical_plan");
             for key in ["optimized_schema", "optimized_observation", "before_collect", "physical_schema", "rows", "rows_raw"] {
-                assert!(actual[key].is_null(), "{key}: {actual}");
+                assert_eq!(actual.get(key), Some(&Value::Null), "{key}: {actual}");
             }
             let error = actual["error"].as_str().ok_or("missing preparation error")?;
             let value = if case["id"] == "float_nan_substring" { "NaN" } else { "inf" };
