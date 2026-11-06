@@ -21,7 +21,10 @@ fn group_error_suffix_matches(error: &str, parameters: &Value, condition: Option
     if parameters["functionName"] != "`regexp_extract`" {
         return false;
     }
-    match (parameters["groupCount"].as_str(), parameters["groupIndex"].as_str()) {
+    match (
+        parameters["groupCount"].as_str(),
+        parameters["groupIndex"].as_str(),
+    ) {
         (Some(count), Some(index)) => {
             let condition = condition.map_or(String::new(), |condition| format!("[{condition}] "));
             error.ends_with(&format!(
@@ -38,30 +41,45 @@ fn error_cause(actual: &Value, expected: &Value) -> bool {
     };
     let parameters = &expected["parameters"];
     match expected["condition"].as_str() {
-        Some("CAST_INVALID_INPUT") => parameters["sourceType"] == "\"STRING\""
-            && parameters["targetType"] == "\"INT\""
-            && parameters["expression"].as_str().is_some_and(|value| {
-                error.ends_with(&format!("Arrow error: Cast error: Cannot cast string {value} to value of Int32 type"))
+        Some("CAST_INVALID_INPUT") => {
+            parameters["sourceType"] == "\"STRING\""
+                && parameters["targetType"] == "\"INT\""
+                && parameters["expression"].as_str().is_some_and(|value| {
+                    error.ends_with(&format!(
+                        "Arrow error: Cast error: Cannot cast string {value} to value of Int32 type"
+                    ))
+                })
+        }
+        Some("INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION") => parameters["sqlExpr"]
+            == "\"CAST(CAST(bad AS INT) AS STRING)\""
+            && error.split_once(": ").is_some_and(|(_, cause)| {
+                cause
+                    == concat!(
+                        "External error: error in DataFusion: ",
+                        "[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n",
+                        "[CAST_INVALID_INPUT]\ncaused by\n",
+                        "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"
+                    )
             }),
-        Some("INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION") =>
-            parameters["sqlExpr"] == "\"CAST(CAST(bad AS INT) AS STRING)\""
-                && error.split_once(": ").is_some_and(|(_, cause)| cause == concat!(
-                    "External error: error in DataFusion: ",
-                    "[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n",
-                    "[CAST_INVALID_INPUT]\ncaused by\n",
-                    "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"
-                )),
         Some("CAST_OVERFLOW") if parameters["targetType"] == "\"INT\"" => {
-            let Some(value) = parameters["value"].as_str() else { return false; };
+            let Some(value) = parameters["value"].as_str() else {
+                return false;
+            };
             match parameters["sourceType"].as_str() {
                 Some("\"BIGINT\"") => error.ends_with(&format!(
-                    "Arrow error: Cast error: Can't cast value {} to type Int32", value.trim_end_matches('L'))),
+                    "Arrow error: Cast error: Can't cast value {} to type Int32",
+                    value.trim_end_matches('L')
+                )),
                 Some("\"FLOAT\"" | "\"DOUBLE\"") => {
                     let native = if value == "Infinity" { "inf" } else { value };
-                    error.ends_with(&format!("Arrow error: Cast error: Can't cast value {native} to type Int32"))
+                    error.ends_with(&format!(
+                        "Arrow error: Cast error: Can't cast value {native} to type Int32"
+                    ))
                 }
                 Some(source) if source.starts_with("\"DECIMAL(") => error.ends_with(&format!(
-                    "Arrow error: Cast error: value of {} is out of range Int32", value.trim_end_matches("BD"))),
+                    "Arrow error: Cast error: value of {} is out of range Int32",
+                    value.trim_end_matches("BD")
+                )),
                 _ => false,
             }
         }
@@ -209,19 +227,17 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
         facets["phase"] = json!(actual["error_stage"] == stage);
         facets["diagnostic_identifier"] =
             json!(expected["condition"].as_str().is_some_and(|condition| {
-                actual["error"]
-                    .as_str()
-                    .is_some_and(|message| {
-                        if condition == "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX" {
-                            group_error_suffix_matches(
-                                message,
-                                &expected["parameters"],
-                                Some(condition),
-                            )
-                        } else {
-                            message.contains(&format!("[{condition}]"))
-                        }
-                    })
+                actual["error"].as_str().is_some_and(|message| {
+                    if condition == "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX" {
+                        group_error_suffix_matches(
+                            message,
+                            &expected["parameters"],
+                            Some(condition),
+                        )
+                    } else {
+                        message.contains(&format!("[{condition}]"))
+                    }
+                })
             }));
     }
     let analyzed =
