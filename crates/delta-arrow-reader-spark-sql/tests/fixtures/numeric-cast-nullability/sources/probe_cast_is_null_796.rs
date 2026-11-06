@@ -27,11 +27,7 @@ async fn observe_floating_cast_is_null_preservation_796() -> TestResult {
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(
-        records.len(),
-        13,
-        "header plus twelve independent references"
-    );
+    assert_eq!(records.len(), 13, "header plus twelve independent references");
     let header = &records[0];
     assert_eq!(header["case_count"], 6);
     assert_eq!(header["observations"], 12);
@@ -47,10 +43,7 @@ async fn observe_floating_cast_is_null_preservation_796() -> TestResult {
     );
     assert_eq!(header["timezone"], "UTC");
     assert_eq!(header["native"]["batch_sizes"], json!([1, 32]));
-    assert_eq!(
-        header["inputs"].as_array().ok_or("missing inputs")?.len(),
-        5
-    );
+    assert_eq!(header["inputs"].as_array().ok_or("missing inputs")?.len(), 5);
     let ids = [
         "double_huge_literal_is_null",
         "float_nan_literal_is_null",
@@ -79,13 +72,9 @@ async fn observe_floating_cast_is_null_preservation_796() -> TestResult {
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
-                SessionStateBuilder::new()
-                    .with_default_features()
-                    .with_config(
-                        SessionConfig::new()
-                            .with_batch_size(batch_size)
-                            .with_target_partitions(2),
-                    ),
+                SessionStateBuilder::new().with_default_features().with_config(
+                    SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
+                ),
             )
             .build(),
         );
@@ -100,10 +89,7 @@ async fn observe_floating_cast_is_null_preservation_796() -> TestResult {
                 Err(error) => json!({"observer_error":error.to_string()}),
             };
             if let Some(error) = observation.get("observer_error") {
-                observer_errors.push(format!(
-                    "{} ANSI={} batch={batch_size}: {error}",
-                    case["id"], case["ansi"]
-                ));
+                observer_errors.push(format!("{} ANSI={} batch={batch_size}: {error}", case["id"], case["ansi"]));
             } else if [
                 "public_schema",
                 "before_collect",
@@ -121,16 +107,9 @@ async fn observe_floating_cast_is_null_preservation_796() -> TestResult {
             .iter()
             .any(|key| observation.get(*key).is_none())
             {
-                observer_errors.push(format!(
-                    "{} ANSI={} batch={batch_size}: incomplete observer object",
-                    case["id"], case["ansi"]
-                ));
+                observer_errors.push(format!("{} ANSI={} batch={batch_size}: incomplete observer object", case["id"], case["ansi"]));
             }
-            assert!(contexts.insert((
-                case["id"].to_string(),
-                case["ansi"].to_string(),
-                batch_size
-            )));
+            assert!(contexts.insert((case["id"].to_string(), case["ansi"].to_string(), batch_size)));
             eprintln!(
                 "CAST_IS_NULL_796_OBSERVATION {}",
                 json!({"source":&source,"source_type":case["source_type"],
