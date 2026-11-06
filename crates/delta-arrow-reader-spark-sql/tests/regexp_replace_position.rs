@@ -158,7 +158,7 @@ fn read_records(source: &str) -> TestResult<Vec<Value>> {
 // The repaired numeric receipts remain history; their contexts require strict Spark equality.
 fn current_native_profile<'a>(profiles: &'a [Value], case: &Value) -> Option<&'a Value> {
     profiles.iter().find(|profile| {
-        !matches!(profile["owner"].as_str(), Some("#813" | "#897"))
+        !matches!(profile["owner"].as_str(), Some("#813" | "#897" | "#796"))
             && profile["id"] == case["id"]
             && profile["ansi"] == case["ansi"]
     })
@@ -180,8 +180,10 @@ fn repaired_numeric_profiles_are_historical_only() -> TestResult {
             .skip(1)
             .find(|case| case["id"] == profile["id"] && case["ansi"] == profile["ansi"])
             .ok_or("missing native-profile reference")?;
-        if matches!(profile["owner"].as_str(), Some("#813" | "#897")) {
-            assert_eq!(profile["ansi"], false);
+        if matches!(profile["owner"].as_str(), Some("#813" | "#897" | "#796")) {
+            if profile["owner"] != "#796" {
+                assert_eq!(profile["ansi"], false);
+            }
             let (semantic, _, strict) = reference_comparison(&profile["actual"], &case["expected"]);
             assert!(!semantic);
             assert!(!strict);
@@ -191,7 +193,7 @@ fn repaired_numeric_profiles_are_historical_only() -> TestResult {
             assert_eq!(current_native_profile(profiles, case), Some(profile));
         }
     }
-    assert_eq!(retired, 10);
+    assert_eq!(retired, 12);
     Ok(())
 }
 
@@ -329,8 +331,8 @@ async fn regexp_replace_position_matches_complete_spark_references() -> TestResu
         }
     }
     assert_eq!(observations, 660);
-    assert_eq!(semantic_matches, 648);
-    assert_eq!(strict_matches, 588);
+    assert_eq!(semantic_matches, 660);
+    assert_eq!(strict_matches, 600);
     eprintln!(
         "c06 position regression summary: {}",
         json!({"references":110,"observations":observations,

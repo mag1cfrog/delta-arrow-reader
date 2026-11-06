@@ -199,18 +199,18 @@ native resolution with no result schemas. The five direct CAST error references
 map separately to native physical planning, retaining analyzed fields and absent
 physical fields.
 
-The measured replay has 648 semantic matches and 12 field differences.
-Requiring the diagnostic condition identifier as well leaves 588 strict matches
-and 72 strict differences. Sixty otherwise matching primitive overflow errors
+The regression gate requires 660 semantic matches. Requiring the diagnostic
+condition identifier as well leaves 600 strict matches and 60 strict differences. Sixty otherwise matching primitive overflow errors
 lack Spark's `CAST_OVERFLOW` identifier. The seven legacy BIGINT contexts repaired
 by #813 now require strict Spark fields, values and errors across all six layouts.
-The three Legacy nonfinite profiles repaired by #897 also require strict Spark
-equality across all six layouts. All ten original failing objects remain in the
-unchanged native fixture as history for those 60 contexts and cannot serve as
-current waivers. Other profiles retain exact actual fields, raw Arrow schemas,
-rows or complete error bodies and stages. Analyzed CAST nullability (#796) and
-primitive CAST condition identifiers (#922) remain separate shared work. Exact profile preservation gives no Spark compatibility
-credit, and complete raw diagnostic parity remains unverified.
+The three Legacy nonfinite profiles repaired by #897 and two CAST Field profiles
+repaired by #796 also require strict Spark equality across all six layouts. All
+12 original failing objects remain in the unchanged native fixture as history
+for those 72 contexts and cannot serve as current waivers. Other profiles retain
+exact actual fields, raw Arrow schemas, rows or complete error bodies and stages.
+Primitive CAST condition identifiers remain under #922. Exact profile preservation
+gives no Spark compatibility credit, and complete raw diagnostic parity remains
+unverified.
 
 `regexp_replace_position_folding.rs` protects all 36 measured custom Rust UDF
 contexts, including all 24 standalone Spark-resolver/native-SQL controls. Newly

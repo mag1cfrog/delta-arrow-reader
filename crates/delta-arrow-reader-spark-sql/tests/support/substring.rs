@@ -164,30 +164,6 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
     }
     if matches!(
         id,
-        "double_fraction_direct_cast"
-            | "double_negative_fraction_direct_cast"
-            | "float_fraction_direct_cast"
-            | "double_fraction_substring"
-            | "double_negative_fraction_substring"
-            | "float_fraction_substring"
-    ) && expected["status"] == "ok"
-        && actual.get("error").is_none()
-        && actual["rows"] == expected["rows"]
-        && actual["physical_schema"] == expected["physical_schema"]
-    {
-        let kind = if id.ends_with("direct_cast") {
-            "integer"
-        } else {
-            "string"
-        };
-        if single_field(&expected["analyzed_schema"], kind, true)
-            && single_field(&actual["analyzed_schema"], kind, false)
-        {
-            return Some("open_796_float_integer_analyzed_nullable");
-        }
-    }
-    if matches!(
-        id,
         "double_infinity_direct_cast" | "double_infinity_substring"
     ) && ansi
     {
@@ -215,7 +191,7 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
         let physical_matches = if direct {
             actual["physical_schema"].is_null()
         } else {
-            single_field(&actual["physical_schema"], "string", false)
+            single_field(&actual["physical_schema"], "string", true)
         };
         if expected_matches
             && single_field(&expected["analyzed_schema"], kind, true)

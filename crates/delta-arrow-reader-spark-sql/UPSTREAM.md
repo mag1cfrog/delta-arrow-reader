@@ -716,8 +716,9 @@ remain in use.
 Async arguments retain their existing extraction and eager scalar evaluation path.
 The shared FLOAT/DOUBLE conversion covers TINYINT, SMALLINT, INT and BIGINT.
 Legacy conversion maps NaN to zero, saturates at INT/LONG bounds, and narrows
-TINYINT/SMALLINT from the INT result. Analyzed CAST declarations (#796), checked
-overflow identity (#922), and the checked +2^63 BIGINT endpoint (#1020) remain
+TINYINT/SMALLINT from the INT result. Floating casts conservatively declare
+analyzed results nullable; ordinary folding may refine those Fields. Checked
+overflow identity (#922) and the checked +2^63 BIGINT endpoint (#1020) remain
 separate.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
 retain all 656 references and 3,936 native observations, plus the separate
@@ -1162,8 +1163,9 @@ literal evaluation. The existing INT position path is unchanged.
 The focused position fixture retains 110 independent Spark references and all
 660 native configurations. BIGINT narrowing and FLOAT/DOUBLE positions use the
 shared numeric INT conversion. Its Legacy floating policy covers all four signed
-integer targets; CAST declarations (#796), checked overflow identity (#922), and
-the checked +2^63 BIGINT endpoint (#1020) retain separate contracts. The
+integer targets and its floating casts retain Spark's conservative analyzed
+nullable declaration. Checked overflow identity (#922) and the checked +2^63
+BIGINT endpoint (#1020) retain separate contracts. The
 replacement kernel and native DataFusion SQL behavior remain unchanged.
 
 REGEXP_REPLACE constructs that INT coercion before testing position foldability,

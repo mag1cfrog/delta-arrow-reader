@@ -94,7 +94,7 @@ fn zero_trim_formatter_gap_matches(case: &Value, error: &str) -> bool {
             == "resolve: External error: error in DataFusion: Error during planning: expected at least one value, but got an empty vector"
 }
 
-fn has_numeric_cast_field_gap(id: &str) -> bool {
+fn is_numeric_cast_regression_control(id: &str) -> bool {
     matches!(
         id,
         "trim_cast_ascii_0_32_projected_coalesce" | "trim_cast_ascii_0_32_del_projected_coalesce"
@@ -136,94 +136,45 @@ fn native_dependency_profiles() -> TestResult<Vec<Value>> {
     Ok(records)
 }
 
-fn native_dependency_profile_matches(
-    profiles: &[Value],
-    case: &Value,
-    representation: usize,
-    batch_size: usize,
-    actual: &Value,
-) -> bool {
-    // Nested case profiles remain historical evidence; repaired results must be strict.
-    case["id"].as_str().is_some_and(has_numeric_cast_field_gap)
-        && actual.get("error").is_none()
-        && profiles.iter().any(|profile| {
-            profile["id"] == case["id"]
-                && profile["sql"] == case["sql"]
-                && profile["ansi"] == case["ansi"]
-                && profile["representation"] == representation
-                && profile["batch_size"] == batch_size
-                && ["analyzed_schema", "physical_schema", "rows"]
-                    .iter()
-                    .all(|field| {
-                        profile["actual"]
-                            .get(*field)
-                            .is_some_and(|recorded| actual.get(*field) == Some(recorded))
-                    })
-        })
-}
-
 #[test]
-fn trim_case_native_profiles_reject_changed_controls() -> TestResult {
+fn trim_case_numeric_profiles_are_historical_only() -> TestResult {
     let profiles = native_dependency_profiles()?;
-    for profile in profiles
-        .iter()
-        .filter(|p| !p["id"].as_str().is_some_and(has_numeric_cast_field_gap))
-    {
-        let case = json!({"id":profile["id"],"sql":profile["sql"],"ansi":profile["ansi"]});
-        assert!(!native_dependency_profile_matches(
-            &profiles,
-            &case,
-            profile["representation"]
-                .as_u64()
-                .ok_or("missing representation")? as usize,
-            profile["batch_size"].as_u64().ok_or("missing batch size")? as usize,
-            &profile["actual"],
-        ));
+    let references = include_str!("fixtures/trim-case-connected-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut retired = 0;
+    for profile in profiles.iter().filter(|profile| {
+        profile["id"].as_str().is_some_and(is_numeric_cast_regression_control)
+    }) {
+        let case = references[1..].iter().find(|case| {
+            case["id"] == profile["id"] && case["ansi"] == profile["ansi"]
+                && case["sql"] == profile["sql"]
+        }).ok_or("missing historical numeric CAST reference")?;
+        assert_eq!(profile["actual"]["physical_schema"], case["expected"]["physical_schema"]);
+        assert_eq!(profile["actual"]["rows"], case["expected"]["rows"]);
+        assert_ne!(profile["actual"]["analyzed_schema"], case["expected"]["analyzed_schema"]);
+        let old = &profile["actual"]["analyzed_schema"]["fields"][0];
+        let expected = &case["expected"]["analyzed_schema"]["fields"][0];
+        for component in ["name", "type", "metadata"] {
+            assert_eq!(old[component], expected[component]);
+        }
+        assert_eq!(old["nullable"], false);
+        assert_eq!(expected["nullable"], true);
+        retired += 1;
     }
-    let profile = profiles
-        .iter()
-        .find(|p| p["id"].as_str().is_some_and(has_numeric_cast_field_gap))
-        .ok_or("missing active numeric CAST profile")?;
-    let mut case = json!({
-        "id":profile["id"],"sql":profile["sql"],"ansi":profile["ansi"]
-    });
-    let representation = profile["representation"]
-        .as_u64()
-        .ok_or("missing representation")?;
-    let batch_size = profile["batch_size"].as_u64().ok_or("missing batch size")?;
-    let matches = |case: &Value, actual: &Value| {
-        native_dependency_profile_matches(
-            &profiles,
-            case,
-            representation as usize,
-            batch_size as usize,
-            actual,
-        )
-    };
-    assert!(matches(&case, &profile["actual"]));
-    for field in ["analyzed_schema", "physical_schema", "rows"] {
-        let mut changed = profile["actual"].clone();
-        changed[field] = Value::Null;
-        assert!(!matches(&case, &changed));
-    }
-    let mut changed = profile["actual"].clone();
-    changed["error"] = json!("unrelated failure");
-    assert!(!matches(&case, &changed));
-    case["sql"] = json!("SELECT 'different control'");
-    assert!(!matches(&case, &profile["actual"]));
+    assert_eq!(retired, 24);
     Ok(())
 }
 
 #[tokio::test]
-async fn trim_case_fields_and_dependency_profiles() -> TestResult {
-    let profiles = native_dependency_profiles()?;
+async fn trim_case_fields_match_recorded_references() -> TestResult {
     let mut differences = Vec::new();
     let mut strict_matches = 0;
-    let mut native_profile_controls = 0;
     let mut compared = 0;
     let mut arity_observations = 0;
     let mut formatter_gap_observations = 0;
-    let mut numeric_cast_gap_observations = 0;
+    let mut numeric_cast_observations = 0;
     let mut nested_case_observations = 0;
     for (capture, count) in [
         (include_str!("fixtures/trim-case-fields-spark.jsonl"), 208),
@@ -250,7 +201,7 @@ async fn trim_case_fields_and_dependency_profiles() -> TestResult {
                     let expected = &case["expected"];
                     let formatter_gap = has_zero_trim_formatter_gap(case);
                     let id = case["id"].as_str().ok_or("missing ID")?;
-                    let numeric_cast_gap = has_numeric_cast_field_gap(id);
+                    let numeric_cast_control = is_numeric_cast_regression_control(id);
                     let nested_case = matches!(
                         id,
                         "nested_trim_case_nullable" | "nested_trim_case_required"
@@ -258,9 +209,9 @@ async fn trim_case_fields_and_dependency_profiles() -> TestResult {
                     let classification = if formatter_gap {
                         formatter_gap_observations += 1;
                         "open-795-zero-arity-formatter-error"
-                    } else if numeric_cast_gap {
-                        numeric_cast_gap_observations += 1;
-                        "open-796-numeric-cast-analyzed-nullability"
+                    } else if numeric_cast_control {
+                        numeric_cast_observations += 1;
+                        "strict-796-numeric-cast-declarations"
                     } else if nested_case {
                         nested_case_observations += 1;
                         "strict-792-nested-case-conversion"
@@ -270,8 +221,6 @@ async fn trim_case_fields_and_dependency_profiles() -> TestResult {
                     } else {
                         "strict"
                     };
-                    let known_dependency = numeric_cast_gap;
-                    native_profile_controls += usize::from(known_dependency);
                     let strict_match = expected["status"] == "ok"
                         && actual.as_ref().is_ok_and(|value| {
                             value["analyzed_schema"] == expected["analyzed_schema"]
@@ -284,16 +233,7 @@ async fn trim_case_fields_and_dependency_profiles() -> TestResult {
                             zero_trim_formatter_gap_matches(case, &error.to_string())
                         })
                     } else {
-                        known_dependency
-                            && actual.as_ref().is_ok_and(|value| {
-                                native_dependency_profile_matches(
-                                    &profiles,
-                                    case,
-                                    representation,
-                                    batch_size,
-                                    value,
-                                )
-                            })
+                        false
                     };
                     let meaningful_arity_cause_match = !formatter_gap
                         && expected["status"] == "error"
@@ -302,7 +242,7 @@ async fn trim_case_fields_and_dependency_profiles() -> TestResult {
                             .is_err_and(|error| arity_error_matches(case, &error.to_string()));
                     let matches = match expected["status"].as_str() {
                         Some("error") => native_profile_match || meaningful_arity_cause_match,
-                        Some("ok") => strict_match || native_profile_match,
+                        Some("ok") => strict_match,
                         _ => return Err("unknown Spark reference status".into()),
                     };
                     eprintln!(
@@ -324,10 +264,9 @@ async fn trim_case_fields_and_dependency_profiles() -> TestResult {
         }
     }
     assert_eq!(compared, (208 + 76 + 66) * 6);
-    assert_eq!(native_profile_controls, 24);
     assert_eq!(arity_observations, (16 + 12 - 6) * 6);
     assert_eq!(formatter_gap_observations, 6 * 6);
-    assert_eq!(numeric_cast_gap_observations, 4 * 6);
+    assert_eq!(numeric_cast_observations, 4 * 6);
     assert_eq!(nested_case_observations, 4 * 6);
     eprintln!(
         "C06 compared {compared}, strict Spark matches {strict_matches}, regression mismatches {}",

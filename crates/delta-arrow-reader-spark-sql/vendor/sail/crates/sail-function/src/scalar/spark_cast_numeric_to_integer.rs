@@ -24,6 +24,7 @@ enum CastMode {
 }
 
 /// Mode-aware floating-to-integer conversion and legacy BIGINT-to-INT narrowing.
+/// Spark conservatively declares analyzed floating casts nullable; folding may refine them later.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkCastNumericToInteger {
     target: DataType,
@@ -170,7 +171,9 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
         Ok(Arc::new(Field::new(
             self.name(),
             self.target.clone(),
-            input.is_nullable() || self.is_try(),
+            matches!(input.data_type(), DataType::Float32 | DataType::Float64)
+                || input.is_nullable()
+                || self.is_try(),
         )))
     }
 
@@ -227,7 +230,10 @@ mod tests {
                             scalar_arguments: &[None],
                         })?;
                         assert_eq!(result.data_type(), &target);
-                        assert_eq!(result.is_nullable(), nullable || is_try);
+                        assert_eq!(
+                            result.is_nullable(),
+                            source != DataType::Int64 || nullable || is_try
+                        );
                         assert!(result.metadata().is_empty());
                     }
                 }

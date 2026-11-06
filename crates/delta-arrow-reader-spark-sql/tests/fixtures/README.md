@@ -2033,10 +2033,10 @@ loaded JAR hashes, available schemas, values and structured errors.
 
 `substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
 and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
-current regression result has 3,828 strict receipt matches and 108 retained failures:
-12 invalid UTF8 sibling casts (#780), 72 analyzed numeric CAST declarations (#796),
-and 24 overflow-notation comparisons. The 24 Legacy nonfinite conversions repaired
-by #897 require complete strict Spark fields and rows.
+regression gate requires 3,900 strict receipt matches and 36 retained failures:
+12 invalid UTF8 sibling casts (#780) and 24 overflow-notation comparisons. The
+72 analyzed numeric CAST declarations repaired by #796 and 24 Legacy nonfinite
+conversions repaired by #897 require complete strict Spark fields and rows.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
 numeric value, SQL, available fields and exact native error are pinned; mutation
@@ -2045,7 +2045,7 @@ no Decimal defect or strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
-false. The separate meaningful-condition comparison has 3,852 matches and 84
+false. The separate meaningful-condition comparison requires 3,924 matches and 12
 differences, so compatibility remains incomplete by either measure. No fixture
 field is rewritten and no missing Spark physical field is invented.
 
@@ -3304,14 +3304,11 @@ and 76 observations; `replay.observations` records this capture's 66 observation
 
 Every successful record compares complete analyzed and physical schemas and
 ordered rows. `trim-case-native-dependency-profiles.jsonl` keeps all 48 original
-native negative records as historical evidence. Only the 24 analyzed numeric
-CAST differences under #796 remain active fallbacks. The 24 nested trim/case
-contexts repaired by #792 now require complete strict Spark fields and rows;
-the matcher rejects their retired profiles even when their old bytes match.
-The active profiles copy actual native schemas and rows from the recorded
-capture, with source and evidence hashes. An active negative match keeps
-`strict_match=false` and `full_compatibility_pass=false`. Other success
-differences fail.
+native negative records as historical evidence. The 24 analyzed numeric CAST
+contexts repaired by #796 and 24 nested trim/case contexts repaired by #792
+require complete strict Spark fields and rows. Their old profiles cannot serve
+as current fallbacks. The gate requires 1,932 strict successful observations;
+other success differences fail.
 
 The 36 zero-argument trim contexts under #795 require the exact observed native
 formatter fingerprint and also keep both compatibility flags false. The other
@@ -3709,3 +3706,16 @@ unrelated errors or establish those issues' acceptance.
 ```sh
 cargo test --locked --workspace --test nested_lambda_captures -- --nocapture
 ```
+
+### Floating integer CAST Fields
+
+`numeric-cast-nullability/spark.jsonl` preserves 264 independent Spark 4.2.0
+records, including all 18 original trim, substring and REGEXP_REPLACE consumer
+records. The source manifest and capture script remain unchanged.
+`floating_integer_cast_fields_match_recorded_stages` in
+`floating_cast_nullability.rs` compares all 528 batch contexts, separately
+requiring complete analyzed, optimized and physical Fields and ordered rows.
+The four exact #1019 type-function name controls keep their original complete
+observations, with only the independently required public nullable repair in an
+expected copy. They remain strict Spark differences. The value replay in the
+same file preserves the separate #897/#922/#1020 contracts.
