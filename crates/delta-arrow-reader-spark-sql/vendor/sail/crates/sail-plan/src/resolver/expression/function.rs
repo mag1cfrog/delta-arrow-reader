@@ -74,7 +74,7 @@ impl PlanResolver<'_> {
         // For functions that accept a date-part keyword as the first argument
         // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
         // to a string literal before resolution.
-        let arguments = Self::convert_date_part_argument(&canonical_function_name, arguments)?;
+        let arguments = self.convert_date_part_argument(&canonical_function_name, arguments)?;
 
         // For `mode() WITHIN GROUP (ORDER BY col)`, move the sort expression and a
         // tie-break sentinel into the argument list before resolution, so that the
@@ -441,6 +441,7 @@ impl PlanResolver<'_> {
     /// (e.g., `DATEDIFF(DAY, start, end)`, `TIMESTAMPDIFF(HOUR, start, end)`),
     /// convert the first argument from an unresolved attribute to a string literal.
     fn convert_date_part_argument(
+        &self,
         function_name: &str,
         mut arguments: Vec<spec::Expr>,
     ) -> PlanResult<Vec<spec::Expr>> {
@@ -455,7 +456,7 @@ impl PlanResolver<'_> {
         ];
         let function_name = function_name.trim().to_lowercase();
         if DIFF_FUNCTIONS.contains(&function_name.as_str()) && arguments.len() == 3 {
-            return Self::resolve_timestamp_diff_unit(&function_name, arguments);
+            return self.resolve_timestamp_diff_unit(&function_name, arguments);
         }
         let accepts_date_part = match function_name.as_str() {
             "date_add" | "dateadd" => arguments.len() == 3,
@@ -477,6 +478,7 @@ impl PlanResolver<'_> {
     /// string unit fails to parse, other TIMESTAMPDIFF and TIMEDIFF calls name no routine, and
     /// other DATEDIFF and DATE_DIFF calls keep an ordinary first argument.
     fn resolve_timestamp_diff_unit(
+        &self,
         function_name: &str,
         mut arguments: Vec<spec::Expr>,
     ) -> PlanResult<Vec<spec::Expr>> {
@@ -505,7 +507,7 @@ impl PlanResolver<'_> {
         if matches!(function_name, "datediff" | "date_diff") {
             Ok(arguments)
         } else {
-            Err(unresolved_timestamp_diff_routine(function_name))
+            Err(unresolved_timestamp_diff_routine(function_name, self.ctx))
         }
     }
 }
