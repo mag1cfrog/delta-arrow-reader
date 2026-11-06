@@ -493,10 +493,19 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         true
     );
     for (before, after) in [
-        ("[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n", ""),
-        ("INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION", "INVALID_INLINE_TABLE.WRONG_CONDITION"),
+        (
+            "[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n",
+            "",
+        ),
+        (
+            "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+            "INVALID_INLINE_TABLE.WRONG_CONDITION",
+        ),
         ("[CAST_INVALID_INPUT]\ncaused by\n", ""),
-        ("External error: error in DataFusion: ", "arbitrary wrapper\ncaused by\nExternal error: error in DataFusion: "),
+        (
+            "External error: error in DataFusion: ",
+            "arbitrary wrapper\ncaused by\nExternal error: error in DataFusion: ",
+        ),
         ("'bad'", "'other'"),
         ("Int32", "Int64"),
     ] {
