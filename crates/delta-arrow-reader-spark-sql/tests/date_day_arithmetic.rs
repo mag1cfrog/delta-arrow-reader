@@ -79,15 +79,16 @@ pub(crate) async fn capture_date_result(
         .or_else(|| case.get("executed_schema_before_collect"))
     {
         assert_eq!(
-            json!(physical_field.metadata()),
-            executed["fields"][0]["metadata"],
-            "recorded date executed metadata"
+            capture_field(physical_field)?,
+            executed["fields"][0],
+            "recorded date executed field"
         );
     } else {
         assert_eq!(resolved_field.metadata(), physical_field.metadata());
+        // Without a recorded executed field, folding may narrow the physical field while
+        // the analyzed declaration stays nullable.
+        assert!(!physical_field.is_nullable() || resolved_field.is_nullable());
     }
-    // Folding can narrow a physical field while the analyzed declaration stays nullable.
-    assert!(!physical_field.is_nullable() || resolved_field.is_nullable());
     let physical_control = matches!(
         case["id"].as_str(),
         Some(
@@ -274,29 +275,43 @@ async fn date_day_arithmetic_matches_spark() -> TestResult {
     Ok(())
 }
 
-#[tokio::test]
-#[should_panic(expected = "recorded date executed metadata")]
-async fn date_stage_reference_rejects_unrecorded_metadata() {
-    let stages = date_metadata_stages().unwrap();
+/// Run one recorded case after replacing a property of its recorded executed field.
+async fn capture_with_recorded_executed_field(property: &str, value: Value) -> TestResult {
+    let stages = date_metadata_stages()?;
     let mut case = stages[1..]
         .iter()
         .find(|case| case["id"] == "date_add_correlated_valid_text" && case["ansi"] == true)
-        .unwrap()
+        .ok_or("missing recorded case")?
         .clone();
-    case["executed_schema_after_collect"]["fields"][0]["metadata"] =
-        json!({"unrecorded":"metadata"});
+    case["executed_schema_after_collect"]["fields"][0][property] = value;
     let header: Value = serde_json::from_str(
         include_str!("fixtures/date-day-correlated-spark.jsonl")
             .lines()
             .next()
-            .unwrap(),
-    )
-    .unwrap();
+            .ok_or("missing input header")?,
+    )?;
     let session = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
-    register_recorded_inputs(&session, &header, 32).unwrap();
-    capture_date_result(&session, &case).await.unwrap();
+    register_recorded_inputs(&session, &header, 32)?;
+    capture_date_result(&session, &case).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[should_panic(expected = "recorded date executed field")]
+async fn date_stage_reference_rejects_unrecorded_metadata() {
+    capture_with_recorded_executed_field("metadata", json!({"unrecorded":"metadata"}))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[should_panic(expected = "recorded date executed field")]
+async fn date_stage_reference_rejects_unrecorded_nullability() {
+    capture_with_recorded_executed_field("nullable", json!(false))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

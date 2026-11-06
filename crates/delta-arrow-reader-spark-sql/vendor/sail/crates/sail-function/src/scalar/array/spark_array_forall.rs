@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 /// Spark-compatible `forall(array, predicate)` higher-order function.
 ///
 /// Spark semantics (`ArrayForAll`, three-valued logic):
@@ -50,6 +51,12 @@ impl SparkArrayForall {
 }
 
 impl HigherOrderUDFImpl for SparkArrayForall {
+    /// Spark never folds a lambda function, so the result keeps its declared field and is
+    /// evaluated during execution.
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "forall"
     }

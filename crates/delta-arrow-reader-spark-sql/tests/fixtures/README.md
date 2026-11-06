@@ -138,8 +138,9 @@ missing-column errors, keeping their planning stage and original message prefix.
 `date_day_arithmetic.rs` compares complete rows, field names, types, nullability
 and metadata for all 432 observations at batch sizes 1 and 32, giving 864
 comparisons. DATE results use the resolved declaration
-for comparison with Spark's analyzed schema. Physical fields may become
-nonnullable after folding; every returned NULL must fit both declarations.
+for comparison with Spark's analyzed schema. Where a record keeps Spark's executed
+schema, the physical field must match it exactly. Otherwise physical fields may
+become nonnullable after folding; every returned NULL must fit both declarations.
 The seven unchanged calendar/timestamp controls retain conservative resolved
 fields and compare their physical fields with the reference. This does not
 establish analyzed nullability parity for those controls. With `--nocapture`,
@@ -167,6 +168,18 @@ cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
 
 The new JSONL files are beside the copied scripts in `$date_day_capture_dir`.
 The Rust test continues to replay the committed fixtures.
+
+## DATE arithmetic with closed lambda day operands
+
+`date-day-closed-lambda-fields/date-day-closed-lambda-fields-spark.jsonl` contains
+366 Spark 4.2.0 observations of DATE_ADD, DATEADD and DATE_SUB whose day operand is
+a closed higher-order expression (#831), with literal, NULL, registered-column,
+empty-table and near-maximum starts, literal-day controls and plain higher-order
+results, including constant lambda bodies, in both ANSI modes.
+`date_day_closed_lambda_fields.rs` compares names, fields at each stage, typed
+values and failing stages at batch sizes 1 and 32. See the [closed-lambda fixture
+notes](date-day-closed-lambda-fields/README.md) for the retained differences and the
+capture command.
 
 ## Parallel errors
 
