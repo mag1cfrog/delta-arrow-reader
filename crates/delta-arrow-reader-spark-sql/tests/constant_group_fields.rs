@@ -32,7 +32,7 @@ fn session(batch_size: usize, spark: bool) -> SessionContext {
 }
 
 #[test]
-fn literal_projection_aliases_preserve_types_metadata_and_native_plans() -> TestResult {
+fn grouped_literal_consumers_preserve_types_metadata_and_native_plans() -> TestResult {
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -40,10 +40,11 @@ fn literal_projection_aliases_preserve_types_metadata_and_native_plans() -> Test
     use arrow::buffer::OffsetBuffer;
     use arrow::datatypes::{DataType, Field};
     use datafusion::common::{ScalarValue, config::ConfigOptions, metadata::FieldMetadata};
-    use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, col, lit};
+    use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, col, lit, when};
+    use datafusion::optimizer::AnalyzerRule;
     use datafusion::optimizer::optimizer::{OptimizerContext, OptimizerRule};
     use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
-    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+    use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 
     let metadata = HashMap::from([("source".to_owned(), "literal-alias".to_owned())]);
     let nested = ScalarValue::List(Arc::new(ListArray::new(
@@ -60,7 +61,7 @@ fn literal_projection_aliases_preserve_types_metadata_and_native_plans() -> Test
         nested,
     ] {
         let producer = LogicalPlanBuilder::empty(false)
-            .project(vec![lit(value.clone()).alias("value")])?
+            .aggregate(vec![lit(value.clone()).alias("value")], Vec::<Expr>::new())?
             .alias("first")?
             .project(vec![col("first.value").alias_with_metadata(
                 "key",
@@ -69,7 +70,11 @@ fn literal_projection_aliases_preserve_types_metadata_and_native_plans() -> Test
             .alias("second")?
             .build()?;
         let plan = LogicalPlanBuilder::from(producer)
-            .project(vec![col("second.key").alias("result")])?
+            .project(vec![
+                when(lit(true), col("second.key"))
+                    .otherwise(col("second.key"))?
+                    .alias_with_metadata("result", Some(FieldMetadata::from(metadata.clone()))),
+            ])?
             .build()?;
         for spark in [false, true] {
             let mut options = ConfigOptions::default();
@@ -78,19 +83,18 @@ fn literal_projection_aliases_preserve_types_metadata_and_native_plans() -> Test
                     .extensions
                     .insert(SparkSqlExpressionSemantics::default());
             }
+            let prepared = PrepareSparkExpressions.analyze(plan.clone(), &options)?;
             let config = OptimizerContext::new_with_config_options(Arc::new(options));
-            let actual = SimplifyExpressions::new()
-                .rewrite(plan.clone(), &config)?
-                .data;
+            let actual = SimplifyExpressions::new().rewrite(prepared, &config)?.data;
             assert_eq!(actual.schema().fields(), plan.schema().fields());
             assert_eq!(actual.schema().field(0).metadata(), &metadata);
-            if !spark {
-                assert_eq!(actual, plan);
-                continue;
-            }
             let LogicalPlan::Projection(projection) = actual else {
                 return Err("expected literal consumer projection".into());
             };
+            if !spark {
+                assert_eq!(projection.expr[0].clone().unalias(), col("second.key"));
+                continue;
+            }
             let Expr::Literal(actual, _) = projection.expr[0].clone().unalias() else {
                 return Err("qualified literal binding was not propagated".into());
             };
@@ -111,20 +115,24 @@ fn literal_lookup_leaves_computed_and_aggregate_producers_opaque() -> TestResult
 
     use arrow::datatypes::DataType;
     use datafusion::common::{ScalarValue, config::ConfigOptions};
+    use datafusion::functions_aggregate::count::count;
     use datafusion::logical_expr::{
-        ColumnarValue, LogicalPlanBuilder, Volatility, col, create_udf, lit,
+        ColumnarValue, Expr, LogicalPlan, LogicalPlanBuilder, Volatility, col, create_udf, lit,
+        when,
     };
+    use datafusion::optimizer::AnalyzerRule;
     use datafusion::optimizer::optimizer::{OptimizerContext, OptimizerRule};
     use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
-    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+    use sail_plan::expression_errors::{PrepareSparkExpressions, SparkSqlExpressionSemantics};
 
     let mut options = ConfigOptions::default();
     options
         .extensions
         .insert(SparkSqlExpressionSemantics::default());
-    let config = OptimizerContext::new_with_config_options(Arc::new(options));
+    let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
     let callbacks = Arc::new(AtomicUsize::new(0));
     let mut producers = Vec::new();
+    let mut opaque_group_outputs = Vec::new();
     for volatility in [Volatility::Immutable, Volatility::Volatile] {
         let observed = Arc::clone(&callbacks);
         let function = create_udf(
@@ -140,6 +148,11 @@ fn literal_lookup_leaves_computed_and_aggregate_producers_opaque() -> TestResult
         producers.push(
             LogicalPlanBuilder::empty(false)
                 .project(vec![function.call(vec![]).alias("key")])?
+                .build()?,
+        );
+        opaque_group_outputs.push(
+            LogicalPlanBuilder::empty(false)
+                .aggregate(vec![function.call(vec![]).alias("key")], Vec::<Expr>::new())?
                 .build()?,
         );
     }
@@ -167,6 +180,42 @@ fn literal_lookup_leaves_computed_and_aggregate_producers_opaque() -> TestResult
             .data;
         assert_eq!(actual, plan);
     }
+    for groups in [Vec::new(), vec![lit(1_i64).alias("dimension")]] {
+        opaque_group_outputs.push(
+            LogicalPlanBuilder::empty(false)
+                .aggregate(groups, vec![count(lit(1_i32)).alias("key")])?
+                .build()?,
+        );
+    }
+    opaque_group_outputs.push(
+        LogicalPlanBuilder::empty(false)
+            .aggregate(
+                vec![Expr::GroupingSet(
+                    datafusion::logical_expr::expr::GroupingSet::GroupingSets(vec![
+                        vec![lit(1_i64).alias("key")],
+                        vec![],
+                    ]),
+                )],
+                Vec::<Expr>::new(),
+            )?
+            .build()?,
+    );
+    for producer in opaque_group_outputs {
+        let plan = LogicalPlanBuilder::from(producer)
+            .alias("producer")?
+            .project(vec![
+                when(lit(true), col("producer.key"))
+                    .otherwise(col("producer.key"))?
+                    .alias("result"),
+            ])?
+            .build()?;
+        let prepared = PrepareSparkExpressions.analyze(plan, &options)?;
+        let actual = SimplifyExpressions::new().rewrite(prepared, &config)?.data;
+        let LogicalPlan::Projection(projection) = actual else {
+            return Err("expected opaque grouping consumer projection".into());
+        };
+        assert_eq!(projection.expr[0].clone().unalias(), col("producer.key"));
+    }
     let left = LogicalPlanBuilder::empty(false)
         .project(vec![lit(7_i32).alias("key")])?
         .alias("left")?
@@ -187,6 +236,56 @@ fn literal_lookup_leaves_computed_and_aggregate_producers_opaque() -> TestResult
         .data;
     assert_eq!(actual, joined);
     assert_eq!(callbacks.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_group_consumers_keep_opaque_projection_boundaries() -> TestResult {
+    let records = include_str!("fixtures/constant-group-provenance-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 16);
+    assert_eq!(records[0]["version"], "4.2.0");
+    assert_eq!(
+        records[0]["revision"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    let mut checked = BTreeSet::new();
+    for batch_size in [1, 32] {
+        let session = session(batch_size, true);
+        for reference in records[1..].iter().filter(|case| {
+            matches!(
+                case["id"].as_str(),
+                Some(
+                    "map_plain"
+                        | "map_group_scalar"
+                        | "map_group_equal_array"
+                        | "map_group_key_after"
+                        | "literal_group_positive"
+                )
+            )
+        }) {
+            let mut case = reference.clone();
+            case["expected"] = json!({
+                "schema":reference["public_schema"],"rows":reference["rows"],
+            });
+            let actual = compare_exact_spark_query_stages_with_optimized(&session, &case).await?;
+            assert!(checked.insert((
+                case["id"].as_str().ok_or("missing ID")?.to_owned(),
+                case["ansi"].as_bool().ok_or("missing ANSI")?,
+                batch_size,
+            )));
+            eprintln!(
+                "CONSTANT_GROUP_PROVENANCE {}",
+                json!({"id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "observation":actual})
+            );
+            assert_eq!(actual["matches"], true, "{case}: {actual}");
+            assert_eq!(actual["optimized_matches"], true, "{case}: {actual}");
+        }
+    }
+    assert_eq!(checked.len(), 20);
     Ok(())
 }
 
