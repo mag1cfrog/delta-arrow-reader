@@ -15,6 +15,7 @@ use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
 use datafusion::physical_expr::create_physical_expr;
 use datafusion_common::config::{ConfigExtension, ConfigOptions};
+use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
 use datafusion_expr::utils::{conjunction, split_conjunction_owned};
@@ -54,6 +55,7 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
@@ -1855,14 +1857,16 @@ impl Prepare {
             if null_discarded(&expr) || (expr.short_circuits() && !string_call) {
                 return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
             }
-            if !string_call
-                || !array_index_error_candidate(&expr)?
+            if !string_call {
+                return Ok(Transformed::no(expr));
+            }
+            if !array_index_error_candidate(&expr)?
                 || expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(function)
                     if !function.func.inner().supports_constant_folding()))
                 })?
             {
-                return Ok(Transformed::no(expr));
+                return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
             }
             let Expr::HigherOrderFunction(mut function) = expr else {
                 return Ok(Transformed::no(expr));
@@ -1902,8 +1906,8 @@ impl Prepare {
                     }
                 };
                 let is_null = value.is_null();
-                let metadata = (!field.metadata().is_empty())
-                    .then(|| datafusion_common::metadata::FieldMetadata::from(field.as_ref()));
+                let metadata =
+                    (!field.metadata().is_empty()).then(|| FieldMetadata::from(field.as_ref()));
                 let prepared = Expr::Literal(value, metadata);
                 changed |= prepared != *lambda.body;
                 lambda.body = Box::new(prepared);
@@ -1931,7 +1935,11 @@ impl Prepare {
             Expr::TryCast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
             Expr::ScalarFunction(function)
                 if function.func.inner().is::<SparkCastStringToInteger>()
-                    || function.func.inner().is::<SparkCastNumericToInteger>() =>
+                    || function.func.inner().is::<SparkCastNumericToInteger>()
+                    || function.func.inner().is::<SparkCastStringToFloat>()
+                    || function.func.inner().is::<SparkCastStringToDecimal>()
+                    || function.func.inner().is::<SparkCastStringToBoolean>()
+                    || function.func.inner().is::<SparkDecimalCast>() =>
             {
                 match function.args.as_slice() {
                     [input] => self.string_result_is_null_on_success(input, schema),
@@ -2425,24 +2433,22 @@ impl Prepare {
                             )?,
                         )
                     } else {
-                        let values =
-                            (0..batch.num_rows())
-                                .map(|row| {
-                                    batch
-                                        .columns()
-                                        .iter()
-                                        .zip(schema.fields())
-                                        .map(|(column, field)| {
-                                            let value =
-                                                ScalarValue::try_from_array(column.as_ref(), row)?;
-                                            let metadata = (!field.metadata().is_empty()).then(|| {
-                                    datafusion_common::metadata::FieldMetadata::from(field.as_ref())
-                                });
-                                            Ok(Expr::Literal(value, metadata))
-                                        })
-                                        .collect::<Result<Vec<_>>>()
-                                })
-                                .collect::<Result<Vec<_>>>()?;
+                        let values = (0..batch.num_rows())
+                            .map(|row| {
+                                batch
+                                    .columns()
+                                    .iter()
+                                    .zip(schema.fields())
+                                    .map(|(column, field)| {
+                                        let value =
+                                            ScalarValue::try_from_array(column.as_ref(), row)?;
+                                        let metadata = (!field.metadata().is_empty())
+                                            .then(|| FieldMetadata::from(field.as_ref()));
+                                        Ok(Expr::Literal(value, metadata))
+                                    })
+                                    .collect::<Result<Vec<_>>>()
+                            })
+                            .collect::<Result<Vec<_>>>()?;
                         LogicalPlan::Values(datafusion_expr::Values { schema, values })
                     };
                     project.input = Arc::new(input);

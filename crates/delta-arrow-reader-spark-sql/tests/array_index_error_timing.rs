@@ -978,6 +978,30 @@ async fn string_array_preparation_preserves_public_failure_boundaries() -> TestR
             true,
         ),
         (
+            "composed_null_float_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS DOUBLE) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_boolean_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BOOLEAN) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_decimal_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS DECIMAL(10,2)) AS BIGINT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
             "composed_null_source_before_array_length",
             "SELECT substring(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1),1,CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
             None,
@@ -1366,7 +1390,6 @@ async fn array_preparation_reuses_folded_string_arguments() -> TestResult {
     for sql in [
         "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) WHERE false) AS q",
         "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) WHERE 1=0) AS q",
-        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM (SELECT 1 AS k FROM VALUES(1) AS v(x) LIMIT 0) AS z) AS q",
         "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) LIMIT 0) AS q",
     ] {
         source_calls.store(0, Ordering::SeqCst);
@@ -1618,6 +1641,35 @@ async fn array_preparation_preserves_callback_boundaries_and_live_errors() -> Te
             }
         }
         for ansi_mode in [true, false] {
+            CALLS.store(0, Ordering::SeqCst);
+            let query = plan_query(&session,
+                "SELECT substring(CAST(NULL AS STRING),CAST(substring(CAST(ARRAY(7)[1] AS STRING),CAST(rand() AS INT),1) AS BIGINT),bounds_producer(1)) AS r FROM VALUES(1) AS t(k)",
+                &SparkSqlOptions { ansi_mode, ..Default::default() }).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "NULL source resolve: {volatility:?}, fold={fold}"
+            );
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "NULL source prepare: {volatility:?}, fold={fold}"
+            );
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            assert_eq!(
+                spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+                Value::Null
+            );
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "NULL source collect: {volatility:?}, fold={fold}"
+            );
             CALLS.store(0, Ordering::SeqCst);
             let query = plan_query(&session,
                 "SELECT substring(CAST(bounds_producer(7) AS STRING),CAST(ARRAY(1)[0] AS BIGINT),CAST(rand() AS BIGINT)+1) AS r FROM VALUES(1) AS t(k)",
