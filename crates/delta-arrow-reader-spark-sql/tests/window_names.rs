@@ -450,7 +450,7 @@ async fn generated_window_names_leave_native_sql_unchanged() -> TestResult {
         }
         if index >= sqls.len() {
             assert_eq!(
-                observations[index - sqls.len()]["native"],
+                &observations[index - sqls.len()]["native"],
                 actual,
                 "{observation}"
             );
