@@ -3622,6 +3622,11 @@ direct SQLConf getters verify every requested SQL setting, including the interna
 case sensitivity and escaped string literal settings. SparkContext settings
 separately record the master and default parallelism.
 
+The regexp control preserves the REGEXP operator's explicit `regexp_alias`
+and the other five expressions' unaliased names. The unaliased REGEXP operator's
+default name remains a separate #1060 difference: DAR uses `REGEXP(ab, (a))`,
+while Spark uses `RLIKE(ab, (a))`.
+
 `like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
 all-NULL and empty registered inputs. It distinguishes literal from
 column patterns under WHERE false, LIMIT 0, literal CASE and dynamic CASE.
