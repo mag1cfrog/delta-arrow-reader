@@ -6,13 +6,21 @@ use datafusion::common::{DataFusionError, Result};
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
 use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
 use datafusion_common::{ScalarValue, internal_err};
+use datafusion_expr::simplify::SparkArrayIndexError;
 use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs};
 use sail_common_datafusion::utils::items::ItemTaker;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RaiseError {
     signature: Signature,
-    user_error: bool,
+    kind: RaiseErrorKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum RaiseErrorKind {
+    Internal,
+    User,
+    ArrayIndex,
 }
 
 impl Default for RaiseError {
@@ -29,36 +37,54 @@ impl RaiseError {
                 vec![DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View],
                 Volatility::Immutable,
             ),
-            user_error: false,
+            kind: RaiseErrorKind::Internal,
         }
     }
 
     // SQL user errors need their own condition; internal callers carry other causes.
     pub fn new_user_error() -> Self {
         Self {
-            user_error: true,
+            kind: RaiseErrorKind::User,
             ..Self::new()
         }
+    }
+
+    pub fn new_array_index_error() -> Self {
+        Self {
+            kind: RaiseErrorKind::ArrayIndex,
+            ..Self::new()
+        }
+    }
+
+    pub fn is_array_index_error(&self) -> bool {
+        self.kind == RaiseErrorKind::ArrayIndex
     }
 
     fn raise(&self, message: Option<&str>) -> Result<ColumnarValue> {
         let message = match message {
             Some(message) => message,
-            None if self.user_error => "null",
+            None if self.kind == RaiseErrorKind::User => "null",
             None => return internal_err!("raise_error expects a single UTF-8 string argument"),
         };
-        Err(DataFusionError::Execution(if self.user_error {
-            format!("[USER_RAISED_EXCEPTION] {message}")
-        } else {
-            message.to_string()
-        }))
+        if self.is_array_index_error() {
+            return Err(DataFusionError::External(Box::new(
+                SparkArrayIndexError::new(message.to_string()),
+            )));
+        }
+        Err(DataFusionError::Execution(
+            if self.kind == RaiseErrorKind::User {
+                format!("[USER_RAISED_EXCEPTION] {message}")
+            } else {
+                message.to_string()
+            },
+        ))
     }
 
     fn raise_from_strings<'a>(
         &self,
         mut iter: impl Iterator<Item = Option<&'a str>>,
     ) -> Result<ColumnarValue> {
-        self.raise(if self.user_error {
+        self.raise(if self.kind == RaiseErrorKind::User {
             iter.next().flatten()
         } else {
             iter.find_map(|value| value)
@@ -94,7 +120,7 @@ impl ScalarUDFImpl for RaiseError {
         let Ok(arg) = args.one() else {
             return internal_err!("raise_error should only be called with one argument");
         };
-        if self.user_error && number_rows == 0 && arg.data_type().is_string() {
+        if self.kind == RaiseErrorKind::User && number_rows == 0 && arg.data_type().is_string() {
             return Ok(ColumnarValue::Array(Arc::new(NullArray::new(0))));
         }
         match arg {

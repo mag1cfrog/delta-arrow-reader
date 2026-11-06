@@ -1,0 +1,437 @@
+{
+  "source": "88d89d7bd25f38ac0e6d028a7ca09461b103aa05",
+  "runtime_source": "834cfde424bf19daa47f06ebf22c9a04620858de",
+  "source_log_sha256": "687dc3e4f68141d1a2feedc8b06361503e83b9dc426fbcc6d7e7903064ba923d",
+  "source_audit_sha256": "cab6f4834da0ce8190253567d1faebdf77fc9b34c5744b3c7137d67ef1ab0d3e",
+  "spark_reference_sha256": "02a4c392cec9051881471f5489d433e698960509e6f280ea918efc2120b80e68",
+  "is_spark_compatibility_credit": false,
+  "field_facets": [
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_first_required_second_condition",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "optimized",
+      "observation_key": "optimized_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-id"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "4168c8cc8b594ebcea8d78f67e77a1c82577fc0677589bab97fd6bcd4f334a25",
+      "sql": "SELECT CASE WHEN false THEN 0 WHEN ARRAY(7)[1]=0 THEN 1 ELSE id END AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_first_required_second_condition",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "executed_before_collect",
+      "observation_key": "before_collect",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-id"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "4168c8cc8b594ebcea8d78f67e77a1c82577fc0677589bab97fd6bcd4f334a25",
+      "sql": "SELECT CASE WHEN false THEN 0 WHEN ARRAY(7)[1]=0 THEN 1 ELSE id END AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_first_required_second_condition",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "executed",
+      "observation_key": "physical_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-id"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "4168c8cc8b594ebcea8d78f67e77a1c82577fc0677589bab97fd6bcd4f334a25",
+      "sql": "SELECT CASE WHEN false THEN 0 WHEN ARRAY(7)[1]=0 THEN 1 ELSE id END AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_and_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "ed4bad0f6ea331ad7e5d742855c455eb9cc8d824927a26eb505bebf8abdd2fc5",
+      "sql": "SELECT (id=1 AND ARRAY(7)[1]=0) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_and_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "d2fc6f2396fa8aeae384ae82f317bd0397929bdd2f6aad741a5f8944985909a3",
+      "sql": "SELECT (false AND ARRAY(7)[1]=0) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "true_or_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "1950e93e7032ea775b2c675ff3d3483972c99097032200298d4552ee46280631",
+      "sql": "SELECT (true OR ARRAY(7)[1]=0) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "optimized",
+      "observation_key": "optimized_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "executed_before_collect",
+      "observation_key": "before_collect",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "executed",
+      "observation_key": "physical_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": false,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "optimized",
+      "observation_key": "optimized_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "43ce69448e564f38caf2088078d83ebf7d5c365dfd1743ed3c428960ddd6c136",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": false,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "executed_before_collect",
+      "observation_key": "before_collect",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "43ce69448e564f38caf2088078d83ebf7d5c365dfd1743ed3c428960ddd6c136",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": false,
+      "batch": 1,
+      "owner": 1002,
+      "stage": "executed",
+      "observation_key": "physical_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "43ce69448e564f38caf2088078d83ebf7d5c365dfd1743ed3c428960ddd6c136",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_first_required_second_condition",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "optimized",
+      "observation_key": "optimized_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-id"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "4168c8cc8b594ebcea8d78f67e77a1c82577fc0677589bab97fd6bcd4f334a25",
+      "sql": "SELECT CASE WHEN false THEN 0 WHEN ARRAY(7)[1]=0 THEN 1 ELSE id END AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_first_required_second_condition",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "executed_before_collect",
+      "observation_key": "before_collect",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-id"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "4168c8cc8b594ebcea8d78f67e77a1c82577fc0677589bab97fd6bcd4f334a25",
+      "sql": "SELECT CASE WHEN false THEN 0 WHEN ARRAY(7)[1]=0 THEN 1 ELSE id END AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_first_required_second_condition",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "executed",
+      "observation_key": "physical_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-id"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "4168c8cc8b594ebcea8d78f67e77a1c82577fc0677589bab97fd6bcd4f334a25",
+      "sql": "SELECT CASE WHEN false THEN 0 WHEN ARRAY(7)[1]=0 THEN 1 ELSE id END AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_and_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "ed4bad0f6ea331ad7e5d742855c455eb9cc8d824927a26eb505bebf8abdd2fc5",
+      "sql": "SELECT (id=1 AND ARRAY(7)[1]=0) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "false_and_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "d2fc6f2396fa8aeae384ae82f317bd0397929bdd2f6aad741a5f8944985909a3",
+      "sql": "SELECT (false AND ARRAY(7)[1]=0) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "true_or_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "1950e93e7032ea775b2c675ff3d3483972c99097032200298d4552ee46280631",
+      "sql": "SELECT (true OR ARRAY(7)[1]=0) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1000,
+      "stage": "analyzed",
+      "observation_key": "public_schema",
+      "json_pointer": "/fields/0/nullable",
+      "spark": false,
+      "inherited_dar": true,
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "optimized",
+      "observation_key": "optimized_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "executed_before_collect",
+      "observation_key": "before_collect",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "executed",
+      "observation_key": "physical_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "54e573a6004f06d1e574941bed3c5be29f561544780e45905f1571dfd7966182",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": false,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "optimized",
+      "observation_key": "optimized_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "43ce69448e564f38caf2088078d83ebf7d5c365dfd1743ed3c428960ddd6c136",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": false,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "executed_before_collect",
+      "observation_key": "before_collect",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "43ce69448e564f38caf2088078d83ebf7d5c365dfd1743ed3c428960ddd6c136",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    },
+    {
+      "fixture": "conditional-boundaries-spark.jsonl",
+      "id": "provider_coalesce_bounds",
+      "ansi": false,
+      "batch": 32,
+      "owner": 1002,
+      "stage": "executed",
+      "observation_key": "physical_schema",
+      "json_pointer": "/fields/0/metadata",
+      "spark": {
+        "source": "971-value"
+      },
+      "inherited_dar": {},
+      "reference_case_sha256": "43ce69448e564f38caf2088078d83ebf7d5c365dfd1743ed3c428960ddd6c136",
+      "sql": "SELECT COALESCE(v,ARRAY(7)[1]) AS r FROM bounds_rows",
+      "all_other_schema_parts_match": true
+    }
+  ],
+  "cause_facets": []
+}
