@@ -996,6 +996,13 @@ order until their conversions run. This covers ARRAY_COMPACT, ARRAY and STRUCT
 checks over VALUES. Later Spark NULL pruning uses a required operand's
 declaration to answer IS NULL and IS NOT NULL before constant folding visits its
 children.
+Higher-order UDFs can opt out of constant folding, as scalar UDFs already can. Spark's
+user lambda functions (transform, filter, aggregate, exists, forall and comparator
+array_sort) opt out because Spark never folds a lambda: their results keep the declared
+field through optimization and evaluate during execution, even over constant arrays and
+constant lambda bodies. DataFusion's own higher-order functions and DAR's internal lazy
+wrappers keep folding. The [closed-lambda references](tests/fixtures/README.md#date-arithmetic-with-closed-lambda-day-operands)
+cover DATE arithmetic and plain higher-order results.
 Scalar subqueries retain their separate preparation checks, and native
 DataFusion keeps its existing evaluation order. Direct and STRUCT consumers
 still require the compacted values and retain reachable cast errors. The

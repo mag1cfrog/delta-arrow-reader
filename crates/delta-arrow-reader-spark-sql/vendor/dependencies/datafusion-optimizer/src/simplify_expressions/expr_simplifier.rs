@@ -750,6 +750,7 @@ impl<'a> ConstEvaluator<'a> {
             }
             Expr::HigherOrderFunction(HigherOrderFunction { func, .. }) => {
                 Self::volatility_ok(func.signature().volatility)
+                    && func.supports_constant_folding()
             }
             Expr::Cast(Cast { expr, field }) | Expr::TryCast(TryCast { expr, field }) => {
                 if let (Ok(DataType::Struct(source_fields)), DataType::Struct(target_fields)) =

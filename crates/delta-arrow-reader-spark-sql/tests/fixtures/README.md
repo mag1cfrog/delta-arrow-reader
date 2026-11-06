@@ -168,6 +168,18 @@ cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
 The new JSONL files are beside the copied scripts in `$date_day_capture_dir`.
 The Rust test continues to replay the committed fixtures.
 
+## DATE arithmetic with closed lambda day operands
+
+`date-day-closed-lambda-fields/date-day-closed-lambda-fields-spark.jsonl` contains
+314 Spark 4.2.0 observations of DATE_ADD, DATEADD and DATE_SUB whose day operand is
+a closed higher-order expression (#831), with literal, NULL, registered-column,
+empty-table and near-maximum starts, literal-day controls and plain higher-order
+results, including constant lambda bodies, in both ANSI modes.
+`date_day_closed_lambda_fields.rs` compares names, fields at each stage, typed
+values and failing stages at batch sizes 1 and 32. See the [closed-lambda fixture
+notes](date-day-closed-lambda-fields/README.md) for the retained difference and the
+capture command.
+
 ## Parallel errors
 
 A single capture cannot specify which unordered partition finishes first.

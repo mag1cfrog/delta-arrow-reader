@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -755,6 +756,14 @@ pub trait HigherOrderUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
         false
     }
 
+    /// Returns true if the planner may evaluate this function during optimization when
+    /// all of its arguments and lambda bodies are constant. Functions whose results must
+    /// keep their declared field until execution, such as Spark's user lambdas, return
+    /// false.
+    fn supports_constant_folding(&self) -> bool {
+        true
+    }
+
     /// Determines which of the arguments passed to *this higher-order function*
     /// are evaluated eagerly and which may be evaluated lazily. Note that this
     /// does *not* applies to the arguments that *lambda functions* pass to it's
@@ -986,6 +995,13 @@ impl HigherOrderUDF {
         self.inner.short_circuits()
     }
 
+    /// Returns true if the planner may fold this function over constant inputs.
+    ///
+    /// See [`HigherOrderUDFImpl::supports_constant_folding`] for more details.
+    pub fn supports_constant_folding(&self) -> bool {
+        self.inner.supports_constant_folding()
+    }
+
     /// Returns which arguments are evaluated eagerly vs lazily.
     ///
     /// See [`HigherOrderUDFImpl::conditional_arguments`] for more details.
@@ -1091,6 +1107,10 @@ impl HigherOrderUDFImpl for AliasedHigherOrderUDFImpl {
 
     fn short_circuits(&self) -> bool {
         self.inner.short_circuits()
+    }
+
+    fn supports_constant_folding(&self) -> bool {
+        self.inner.supports_constant_folding()
     }
 
     fn conditional_arguments<'a>(

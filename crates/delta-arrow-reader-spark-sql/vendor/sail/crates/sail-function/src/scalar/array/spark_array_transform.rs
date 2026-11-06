@@ -74,6 +74,12 @@ impl SparkArrayTransform {
 }
 
 impl HigherOrderUDFImpl for SparkArrayTransform {
+    /// Spark never folds a lambda function, so the result keeps its declared field and is
+    /// evaluated during execution.
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "transform"
     }
@@ -413,5 +419,41 @@ mod tests {
 
         assert_eq!(actual, &expected);
         Ok(())
+    }
+
+    /// Spark never folds its user lambdas, while DataFusion's own lambdas and DAR's internal
+    /// lazy wrappers keep constant folding.
+    #[test]
+    fn only_spark_user_lambdas_skip_constant_folding() {
+        use datafusion_expr::HigherOrderUDFImpl;
+        use datafusion_functions_nested::array_transform::ArrayTransform;
+
+        use crate::scalar::array::spark_array_aggregate::SparkArrayAggregate;
+        use crate::scalar::array::spark_array_exists::SparkArrayExists;
+        use crate::scalar::array::spark_array_filter::SparkArrayFilter;
+        use crate::scalar::array::spark_array_forall::SparkArrayForall;
+        use crate::scalar::array::spark_array_sort::SparkArraySort;
+        use crate::scalar::datetime::convert_tz::{ConvertTz, ConvertTzLazy};
+        use crate::scalar::string::spark_substring::SparkSubstring;
+
+        let user_lambdas: [&dyn HigherOrderUDFImpl; 6] = [
+            &SparkArrayTransform::new(),
+            &SparkArrayFilter::new(),
+            &SparkArrayAggregate::new(),
+            &SparkArrayExists::new(),
+            &SparkArrayForall::new(),
+            &SparkArraySort::new(),
+        ];
+        assert!(
+            user_lambdas
+                .iter()
+                .all(|function| !function.supports_constant_folding())
+        );
+        assert!(ArrayTransform::new().supports_constant_folding());
+        assert!(ConvertTzLazy::new(ConvertTz::new(false)).supports_constant_folding());
+        assert!(SparkSubstring::new().supports_constant_folding());
+        assert!(
+            !HigherOrderUDF::new_from_impl(SparkArrayTransform::new()).supports_constant_folding()
+        );
     }
 }
