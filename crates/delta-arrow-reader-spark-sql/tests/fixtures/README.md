@@ -709,6 +709,20 @@ schemas at each stage and failing stages at batch sizes 1 and 32. See the
 [separator fixture notes](timestamp-separators/README.md) for the inputs,
 encoding and capture command.
 
+## DATEDIFF fields
+
+`date-diff/date-diff-spark.jsonl` contains 216 Spark 4.2.0 observations of
+`datediff` and `date_diff` result fields and day counts for DATE, TIMESTAMP and
+TIMESTAMP_NTZ arguments at calendar boundaries and the DATE extremes, in both
+ANSI modes and in UTC and America/Los_Angeles. `date_diff.rs` compares names,
+fields and typed values at batch sizes 1 and 32. See the [DATEDIFF fixture
+notes](date-diff/README.md) for the encoding, the retained difference and its
+owner, and the capture command. `reviewed-corrections.json` replaces the four
+historical BIGINT DATEDIFF outcomes in the accepted runtime replay
+(`focused-arithmetic-cases/216` and `217`, both ANSI modes) with Spark's INT,
+recorded for their exact SQL as `history_date_add` and `history_date_sub`; only
+the result type changes.
+
 ## Interval qualifiers and generated names
 
 `interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1948 Spark 4.2.0

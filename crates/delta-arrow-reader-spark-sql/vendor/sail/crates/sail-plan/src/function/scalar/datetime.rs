@@ -408,6 +408,19 @@ fn date_days_arithmetic(dt1: Expr, dt2: Expr, op: Operator) -> Expr {
     })
 }
 
+/// Spark's `DateDiff`: the INT number of days from `start` to `end`, computed as a Java `int`
+/// subtraction, which wraps at the DATE limits. TIMESTAMP arguments are cast to DATE. The
+/// three-argument DAY form instead uses `date_days_arithmetic`, which returns a BIGINT.
+fn date_diff_days(end: Expr, start: Expr) -> Expr {
+    let days = |date: Expr| cast(cast(date, DataType::Date32), DataType::Int32);
+    // A native integer subtraction wraps rather than failing on overflow.
+    Expr::BinaryExpr(BinaryExpr {
+        left: Box::new(days(end)),
+        op: Operator::Minus,
+        right: Box::new(days(start)),
+    })
+}
+
 fn timestamp_micros(expr: Expr) -> Expr {
     cast(
         cast(expr, DataType::Timestamp(TimeUnit::Microsecond, None)),
@@ -489,9 +502,9 @@ fn datediff(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let args = input.arguments;
     match args.len() {
         2 => {
-            let [start, end] = <[Expr; 2]>::try_from(args)
+            let [end, start] = <[Expr; 2]>::try_from(args)
                 .map_err(|_| PlanError::invalid("datediff requires 2 or 3 arguments"))?;
-            Ok(date_days_arithmetic(start, end, Operator::Minus))
+            Ok(date_diff_days(end, start))
         }
         3 => {
             let [unit, start, end] = <[Expr; 3]>::try_from(args)

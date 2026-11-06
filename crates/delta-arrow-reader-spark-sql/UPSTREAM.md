@@ -474,6 +474,13 @@ cover the full Date32 boundary, string coercion and invalid inputs. Month/year
 intervals, three-argument timestamp forms and the Sail-only ADD_DAYS keep their
 existing paths.
 
+Two-argument DATEDIFF/DATE_DIFF return Spark's INT day count, subtracting the
+DATE days as a native INT subtraction that wraps at the DATE limits like Spark's
+`int` arithmetic; TIMESTAMP arguments are cast to DATE in their TIMESTAMP type's
+zone, which is the session time zone for Spark-typed values. The three-argument
+`datediff(unit, start, end)` form keeps its BIGINT TIMESTAMPDIFF path. The
+[DATEDIFF references](tests/fixtures/date-diff/README.md) record the checks.
+
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
 typed-NULL, IF and simple-CASE controls, and replace sixteen invalid historical
