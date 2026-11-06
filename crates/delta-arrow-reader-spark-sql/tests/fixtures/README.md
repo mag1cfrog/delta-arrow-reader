@@ -3851,14 +3851,17 @@ observations, with only the independently required public nullable repair in an
 expected copy. They remain strict Spark differences.
 
 The value replay preserves all 352 `floating-integer-values/spark.jsonl` records
-at both batch sizes. Its gate requires 668 strict comparisons out of 704 and
-exactly 36 retained differences: 28 checked endpoint contexts (#1020), four DIV
-diagnostics (#865), and four later substring failures with extra native Fields
-(#1031). The immutable historical facet file keeps its original owner IDs; the
-current gate requires the added primitive overflow context without changing the
-original causes, Fields, rows or failure stages. A separate 24-context NULL
-inspection gate requires strict comparisons and exact native causes for its
-eight ANSI overflow contexts.
+at both batch sizes. Its gate requires 672 strict comparisons out of 704 and
+32 retained differences: 28 checked endpoint contexts (#1020) and four DIV
+diagnostics (#865). The four literal ANSI substring contexts require preparation
+overflow with the recorded cause and no optimized or physical declaration.
+`substring-literal-preparation-current-native.json` keeps their complete measured
+native observations and the 12 connected substring observations as mutation
+controls. Its grading labels retain their original capture-source meaning.
+The immutable historical facet file retains all 260 contexts, including the
+36 historically retained differences and their original owner IDs. A separate
+24-context NULL inspection gate requires strict comparisons and exact native
+causes for its eight ANSI overflow contexts.
 
 The 110-record REGEXP_REPLACE position fixture requires all 660 comparisons to
 match its recorded contract. Its original 60 primitive-overflow contexts also
