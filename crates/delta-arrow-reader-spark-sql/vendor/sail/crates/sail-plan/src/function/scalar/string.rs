@@ -1103,8 +1103,12 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
                 lit("ab"),
                 lit("(a)"),
                 cast(
-                    ScalarUDF::from(SparkCastNumericToInteger::try_new(DataType::Int32, true, true)?)
-                        .call(vec![lit(4294967296_i64)]),
+                    ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                        DataType::Int32,
+                        true,
+                        true,
+                    )?)
+                    .call(vec![lit(4294967296_i64)]),
                     DataType::Int64,
                 ),
             ],
