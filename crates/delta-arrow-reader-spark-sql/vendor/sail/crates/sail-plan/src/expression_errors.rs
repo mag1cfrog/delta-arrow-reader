@@ -1160,9 +1160,7 @@ fn preserve_local_string_arguments(plan: LogicalPlan) -> Result<LogicalPlan> {
 
 // Restore conditional substring casts only after LIMIT pruning has produced
 // an actual empty input. A false filter or empty provider is not that boundary.
-fn lower_substrings_over_pruned_empty_input(
-    node: LogicalPlan,
-) -> Result<Transformed<LogicalPlan>> {
+fn lower_substrings_over_pruned_empty_input(node: LogicalPlan) -> Result<Transformed<LogicalPlan>> {
     let mut input: &LogicalPlan = match &node {
         LogicalPlan::Projection(project) => &project.input,
         LogicalPlan::Filter(filter) => &filter.input,
@@ -1192,51 +1190,88 @@ fn lower_substrings_over_pruned_empty_input(
 
 #[test]
 fn substring_empty_input_lowering_keeps_boundaries_and_callbacks() -> Result<()> {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use datafusion::arrow::datatypes::Field;
     use datafusion_common::{JoinType, Spans};
-    use datafusion_expr::{LogicalPlanBuilder, ScalarUDF, Volatility, cast, col, create_udf};
     use datafusion_expr::logical_plan::{EmptyRelation, Projection, Subquery};
+    use datafusion_expr::{LogicalPlanBuilder, ScalarUDF, Volatility, cast, col, create_udf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
-        Field::new("s", DataType::Utf8, true),
-    ]))?);
-    let relation = |produce_one_row| LogicalPlan::EmptyRelation(EmptyRelation {
-        produce_one_row,
-        schema: Arc::clone(&schema),
-    });
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
+        "s",
+        DataType::Utf8,
+        true,
+    )]))?);
+    let relation = |produce_one_row| {
+        LogicalPlan::EmptyRelation(EmptyRelation {
+            produce_one_row,
+            schema: Arc::clone(&schema),
+        })
+    };
     let empty = relation(false);
     let alias = LogicalPlanBuilder::from(empty.clone())
-        .project([col("s")])?.alias("t")?.build()?;
-    let filtered = LogicalPlanBuilder::from(relation(true)).filter(lit(false))?.build()?;
-    let aggregate = LogicalPlanBuilder::from(empty.clone())
-        .aggregate(Vec::<Expr>::new(), [datafusion::functions_aggregate::expr_fn::count(lit(1))])?
+        .project([col("s")])?
+        .alias("t")?
         .build()?;
-    let left = LogicalPlanBuilder::from(empty.clone()).alias("left")?.build()?;
-    let right = LogicalPlanBuilder::from(relation(true)).alias("right")?.build()?;
+    let filtered = LogicalPlanBuilder::from(relation(true))
+        .filter(lit(false))?
+        .build()?;
+    let aggregate = LogicalPlanBuilder::from(empty.clone())
+        .aggregate(
+            Vec::<Expr>::new(),
+            [datafusion::functions_aggregate::expr_fn::count(lit(1))],
+        )?
+        .build()?;
+    let left = LogicalPlanBuilder::from(empty.clone())
+        .alias("left")?
+        .build()?;
+    let right = LogicalPlanBuilder::from(relation(true))
+        .alias("right")?
+        .build()?;
     let join = LogicalPlanBuilder::from(left)
-        .join(right, JoinType::Full, (Vec::<String>::new(), Vec::<String>::new()), Some(lit(true)))?
+        .join(
+            right,
+            JoinType::Full,
+            (Vec::<String>::new(), Vec::<String>::new()),
+            Some(lit(true)),
+        )?
         .build()?;
     let subquery = LogicalPlan::Subquery(Subquery {
         subquery: Arc::new(empty.clone()),
         outer_ref_columns: vec![],
         spans: Spans::new(),
     });
-    let filtered_aggregate = LogicalPlanBuilder::from(aggregate.clone()).filter(lit(false))?.build()?;
-    let filtered_join = LogicalPlanBuilder::from(join.clone()).filter(lit(false))?.build()?;
-    let filtered_subquery = LogicalPlanBuilder::from(subquery.clone()).filter(lit(false))?.build()?;
+    let filtered_aggregate = LogicalPlanBuilder::from(aggregate.clone())
+        .filter(lit(false))?
+        .build()?;
+    let filtered_join = LogicalPlanBuilder::from(join.clone())
+        .filter(lit(false))?
+        .build()?;
+    let filtered_subquery = LogicalPlanBuilder::from(subquery.clone())
+        .filter(lit(false))?
+        .build()?;
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&calls);
-    let callback = create_udf("empty_substring_sibling", vec![], DataType::Int64,
-        Volatility::Immutable, Arc::new(move |_| {
+    let callback = create_udf(
+        "empty_substring_sibling",
+        vec![],
+        DataType::Int64,
+        Volatility::Immutable,
+        Arc::new(move |_| {
             observed.fetch_add(1, Ordering::SeqCst);
             Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(7))))
-        }));
+        }),
+    );
     let position = ScalarUDF::from(SparkCastNumericToInteger::try_new(
-        DataType::Int32, true, false,
-    )?).call(vec![lit(f32::NAN)]);
-    let substring = ScalarUDF::from(SparkSubstring::new().with_logical_arguments())
-        .call(vec![lit("abcdef"), cast(position, DataType::Int64), lit(2_i64)]);
+        DataType::Int32,
+        true,
+        false,
+    )?)
+    .call(vec![lit(f32::NAN)]);
+    let substring = ScalarUDF::from(SparkSubstring::new().with_logical_arguments()).call(vec![
+        lit("abcdef"),
+        cast(position, DataType::Int64),
+        lit(2_i64),
+    ]);
     for (input, changes) in [
         (empty, true),
         (alias, true),
@@ -1250,7 +1285,10 @@ fn substring_empty_input_lowering_keeps_boundaries_and_callbacks() -> Result<()>
         (filtered_subquery, false),
     ] {
         let node = LogicalPlan::Projection(Projection::try_new(
-            vec![substring.clone().alias("r"), callback.call(vec![]).alias("sibling")],
+            vec![
+                substring.clone().alias("r"),
+                callback.call(vec![]).alias("sibling"),
+            ],
             Arc::new(input),
         )?);
         let prepared = lower_substrings_over_pruned_empty_input(node.clone())?;
@@ -2875,7 +2913,8 @@ impl Prepare {
             .transform_down(|node| self.prune_limit_zero(node, is_spark_query))?
             .data;
         let plan = if is_spark_query {
-            plan.transform_up(lower_substrings_over_pruned_empty_input)?.data
+            plan.transform_up(lower_substrings_over_pruned_empty_input)?
+                .data
         } else {
             plan
         };

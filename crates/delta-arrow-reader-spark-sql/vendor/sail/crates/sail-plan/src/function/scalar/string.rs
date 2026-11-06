@@ -447,7 +447,10 @@ pub(crate) fn lower_runtime_substring(
         let expr::Expr::ScalarFunction(function) = &expression else {
             return Ok(Transformed::no(expression));
         };
-        if !function.func.inner().downcast_ref::<SparkSubstring>()
+        if !function
+            .func
+            .inner()
+            .downcast_ref::<SparkSubstring>()
             .is_some_and(SparkSubstring::has_logical_arguments)
             || !literal_substring_overflow(&function.args)?
         {
