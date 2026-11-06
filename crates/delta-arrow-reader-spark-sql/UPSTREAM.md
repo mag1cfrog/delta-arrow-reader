@@ -1222,8 +1222,10 @@ code unit. Invalid operator escapes report INVALID_ESC; function arguments
 report INVALID_ESCAPE_CHAR and retain their original expression display name.
 ILIKE retains the original escape while LOWER runs on both operands
 before escape validation. The [LIKE references](tests/fixtures/README.md#like-escapes-and-pattern-evaluation)
-record literal initialization, row-dependent validation, the remaining generated
-name and arity-diagnostic gaps, and shared RAND/STRING-cast declarations.
+record literal initialization and row-dependent validation. Current generated
+LIKE names and LIKE/ILIKE arity diagnostics must match Spark; their earlier
+incompatible observations remain frozen as history. Shared RAND/STRING-cast
+declarations remain current differences.
 
 
 ### REGEXP_REPLACE position INT coercion

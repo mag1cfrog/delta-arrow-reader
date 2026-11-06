@@ -204,36 +204,6 @@ fn pattern_errors_require_the_recorded_pattern_and_cause() -> TestResult {
     Ok(())
 }
 
-// Keep the exact remaining LIKE label difference visible in the mixed query.
-fn known_like_name(actual: &Value, expected: &Value, id: &str) -> bool {
-    if id != "unaliased_pattern_names" || actual["rows"] != expected["rows"] {
-        return false;
-    }
-    for phase in ["analyzed_schema", "physical_schema"] {
-        let (Some(actual), Some(expected)) = (
-            actual[phase]["fields"].as_array(),
-            expected[phase]["fields"].as_array(),
-        ) else {
-            return false;
-        };
-        if actual.len() != expected.len() {
-            return false;
-        }
-        for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
-            let name_matches = actual["name"] == expected["name"]
-                || (index == 0 && actual["name"] == "like(a, %)" && expected["name"] == "a LIKE %");
-            if !name_matches
-                || actual["nullable"] != expected["nullable"]
-                || actual["type"] != expected["type"]
-                || actual["metadata"] != expected["metadata"]
-            {
-                return false;
-            }
-        }
-    }
-    true
-}
-
 #[tokio::test]
 async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestResult {
     let mut compared = 0;
@@ -335,8 +305,6 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                     } else if !regexp_capability::has_recorded_case(fixture_name, case)?
                         && physical_comparison != "difference" && error.is_some_and(|error| required_error_outcome_matches(error, analyzed_schema, expected)) {
                         if expected.get("analyzed_schema").is_some() { "required_error" } else { "required_admission_error" }
-                    } else if error.is_none() && known_like_name(&observed, expected, id) {
-                        "external_like_name_791"
                     } else if (id == "regexp_replace_literal_named_group" && error.is_none()
                         && observed["analyzed_schema"] == expected["analyzed_schema"] && observed["physical_schema"] == expected["physical_schema"]
                         && observed["rows"] == json!([["a-b"]]) && expected["rows"] == json!([["-b"]]))
@@ -404,8 +372,7 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
             "full_compatibility_pass":reference_mismatches == 0})
     );
     assert_eq!(compared, (94 + 138 + 14 + 20 + 252) * 6);
-    assert_eq!(reference_mismatches, 96);
-    assert_eq!(external.get("external_like_name_791"), Some(&12));
+    assert_eq!(reference_mismatches, 84);
     assert_eq!(required_error_fields_compared, (52 + 42) * 6);
     assert_eq!(external_error_fields_compared, 6 * 6);
     assert_eq!(admission_errors_compared, (24 + 4) * 6);

@@ -625,6 +625,20 @@ impl SparkPlanFormatter {
                 let (left, right) = arguments.two()?;
                 Ok(format!("({left} {} {right})", name.to_uppercase()))
             }
+            "like" => {
+                let (value, pattern, escape) = if arguments.len() == 2 {
+                    let (value, pattern) = arguments.two()?;
+                    (value, pattern, "\\")
+                } else {
+                    arguments.three()?
+                };
+                let suffix = if escape == "\\" {
+                    String::new()
+                } else {
+                    format!(" ESCAPE '{}'", escape.replace('\'', "\\'"))
+                };
+                Ok(format!("{value} LIKE {pattern}{suffix}"))
+            }
             "isnull" => Ok(format!("({} IS NULL)", arguments.one()?)),
             "isnotnull" => Ok(format!("({} IS NOT NULL)", arguments.one()?)),
             "in" => {
@@ -949,6 +963,34 @@ mod tests {
 
     use super::*;
     use crate::error::PlanResult;
+
+    #[test]
+    fn like_names_use_infix_and_sql_quoted_nondefault_escape() -> PlanResult<()> {
+        for (name, arguments, expected) in [
+            ("like", vec!["a", "%"], "a LIKE %"),
+            ("LIKE", vec!["s", "pattern"], "s LIKE pattern"),
+            ("like", vec!["a%b", "a\\%b", "\\"], "a%b LIKE a\\%b"),
+            ("like", vec!["s", "a!%b", "!"], "s LIKE a!%b ESCAPE '!'"),
+            (
+                "like",
+                vec!["a%b", "a'%b", "'"],
+                "a%b LIKE a'%b ESCAPE '\\''",
+            ),
+            ("ilike", vec!["A", "a"], "ilike(A, a)"),
+            ("rlike", vec!["ab", "(a)"], "RLIKE(ab, (a))"),
+            (
+                "regexp_replace",
+                vec!["ab", "a", "x"],
+                "regexp_replace(ab, a, x, 1)",
+            ),
+        ] {
+            assert_eq!(
+                SparkPlanFormatter.function_to_string_with_types(name, arguments, false, &[])?,
+                expected
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn null_arithmetic_names_follow_resolved_interval_and_timestamp_rules() -> PlanResult<()> {

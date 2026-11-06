@@ -3604,12 +3604,28 @@ compatibility incomplete.
 `like-escapes-spark.jsonl` retains all 196 LIKE/ILIKE observations from the
 independent string/binary capture, with complete case records and expected
 outputs unchanged. The selection header records the original SHA-256. The
-unaliased mixed-function control retains the generated LIKE label gap in #791
-as an explicit incompatible observation. Its generated metadata matches the
-reference at both analyzed and physical stages.
+unaliased mixed-function control requires exact LIKE, ILIKE and regexp labels,
+types, nullability and generated metadata at both analyzed and physical stages,
+along with all ordered rows.
 The argument-count controls require Spark's WRONG_NUM_ARGS condition, function
 identity and expected/actual counts at native resolution. Their earlier generic
 native errors remain preserved as incompatible historical observations.
+
+`like-names-spark.jsonl` adds 24 independent observations for LIKE result names
+in both ANSI modes. It pairs operator and function calls for literals, required
+and nullable provider columns, escaped percent/underscore patterns, and custom,
+default and quote escapes. Alias, source metadata, ILIKE, regexp and nested
+NOT/IS NULL controls compare complete fields and ordered rows through the same
+replay. The 24 observation records are copied byte for byte from the independent
+C06 capture. Its header records the raw capture SHA-256 and runtime provenance;
+direct SQLConf getters verify every requested SQL setting, including the internal
+case sensitivity and escaped string literal settings. SparkContext settings
+separately record the master and default parallelism.
+
+The regexp control preserves the REGEXP operator's explicit `regexp_alias`
+and the other five expressions' unaliased names. The unaliased REGEXP operator's
+default name remains a separate #1060 difference: DAR uses `REGEXP(ab, (a))`,
+while Spark uses `RLIKE(ab, (a))`.
 
 `like-evaluation-spark.jsonl` adds 288 independent observations for mixed,
 all-NULL and empty registered inputs. It distinguishes literal from
@@ -3721,14 +3737,15 @@ skipped optimizer failures, zero optimizer passes and both settings together,
 comparing complete fields, rows and precise physical-stage causes. These 32
 observations supplement the original 760-reference matrix and 480 clock contexts.
 
-The fixtures record Spark 4.2.0 revision
-`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1+0, Python 3.12.14,
-loaded JAR hashes, UTC settings, exact inputs and separate analyzed, optimized
-and physical result schemas. The replayer ignores expected results and collects
-fresh Spark observations from recorded inputs and SQL.
+The original 760 references record Spark 4.2.0 revision
+`32f7299601108917fb01920a54e084595b7b3bf8`, Java 17.0.20.1+0 and Python 3.12.14.
+The supplemental naming capture records the same Spark revision and JAR hashes,
+Java 21.0.8+9-LTS and Python 3.12.15. All captures retain UTC settings, exact inputs
+and separate analyzed, optimized and physical result schemas. The replayer ignores
+expected results and collects fresh Spark observations from recorded inputs and SQL.
 
-`like_escapes.rs` replays all 760 references across Utf8, LargeUtf8 and Utf8View
-at batch sizes 1 and 32, producing 4,560 observations. It compares every actual
+`like_escapes.rs` replays all 784 references across Utf8, LargeUtf8 and Utf8View
+at batch sizes 1 and 32, producing 4,704 observations. It compares every actual
 result with the unchanged Spark reference. The recorded R3 baseline has
 532 strict success references and 198 precise error references, producing
 3,192 successful-result and 1,188 error comparisons, or 4,380 strict matches.
@@ -3742,11 +3759,13 @@ the #915 LIKE/ILIKE arity condition and function/parameter differences. The
 flag remains false. No field, nullable declaration or expected Spark output is
 adjusted. The earlier generated-name allowance has been removed.
 
-The preservation gate keeps the 108 #791/#875 current negative observations equal
+The preservation gate keeps the 96 #875 current negative observations equal
 to their complete frozen native objects, including raw analyzed/physical fields,
-rows, exact error text/stage and availability. The 72 #915 profiles retain their
+rows, exact error text/stage and availability. The 12 #791 profiles retain their
 historical negative objects and comparisons, while their current queries must
-match Spark's condition, function identity and counts. Independent class and
+match Spark's complete fields and ordered rows. The 72 #915 profiles also retain
+their historical negative objects and comparisons, while their current queries
+must match Spark's condition, function identity and counts. Independent class and
 parameter checks keep the old generic cause incompatible. All other observations
 must match Spark's applicable fields, values and meaningful error cause. The
 profile header records actual source identities and receipt hashes; it is native regression evidence,
@@ -3757,13 +3776,15 @@ bounded contract. #771 remains open.
 
 Including the 480 clock controls and 32 independent host references, the recorded
 R3 baseline has 4,892 strict matches among 5,072 comparisons: 3,496 successful
-results and 1,396 precise errors. The current gate requires 4,964 of 5,072
-comparisons to match strictly, including all 72 arity contexts. The remaining
-108 current name/field observations and all 180 historical negative profiles
-remain incompatible.
-The complete 5,216-record raw collector also retains 144 diagnostics without
-Spark oracle credit, including its 24 native clock-value witnesses. These counts
-describe the recorded contexts and do not establish family-wide compatibility.
+results and 1,396 precise errors. The current gate requires 5,120 strict matches
+among 5,216 comparisons: 4,704 main, 480 clock and 32 host comparisons. All 72
+arity contexts and 12 LIKE name contexts must match strictly. The remaining 96
+current #875 RAND/STRING field observations remain incompatible. All 180 negative
+profiles retain their historical incompatible flags and complete observations.
+Separately, the historical R3 raw collector retained 5,216 records, including 144
+diagnostics without Spark oracle credit and its 24 native clock-value witnesses.
+These historical counts describe the recorded contexts and do not establish
+family-wide compatibility.
 
 Errors require the precise
 escape condition, pattern, offending character and DAR failure stage. Spark
