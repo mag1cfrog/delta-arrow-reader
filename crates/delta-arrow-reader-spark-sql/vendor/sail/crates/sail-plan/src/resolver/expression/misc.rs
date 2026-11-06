@@ -287,7 +287,7 @@ impl PlanResolver<'_> {
                         ),
                     ]);
                     let error = cast(
-                        ScalarUDF::from(RaiseError::new()).call(vec![message]),
+                        ScalarUDF::from(RaiseError::new_array_index_error()).call(vec![message]),
                         field.data_type().clone(),
                     );
                     let out_of_bounds = match index {

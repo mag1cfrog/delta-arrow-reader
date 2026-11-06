@@ -40,6 +40,7 @@ use crate::function::scalar::{
     preserve_local_case_conversion, simplify_projected_case_conversions,
 };
 use datafusion::functions::math::round::RoundFunc;
+use datafusion_expr::simplify::SparkArrayIndexError;
 use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::math::spark_abs::SparkAbs;
@@ -49,6 +50,7 @@ use sail_function::scalar::math::{
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
     spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
+use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
@@ -214,6 +216,47 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
     ))
 }
 
+fn array_index_error_candidate(expr: &Expr) -> Result<bool> {
+    expr.exists(|expr| {
+        Ok(matches!(expr, Expr::ScalarFunction(function)
+        if function.func.inner().downcast_ref::<RaiseError>()
+            .is_some_and(RaiseError::is_array_index_error)))
+    })
+}
+
+fn preparation_error_candidate(
+    expr: &Expr,
+    schema: &DFSchemaRef,
+    spark_array_index_errors: bool,
+) -> Result<bool> {
+    Ok(arithmetic_candidate(expr, schema)?
+        || (spark_array_index_errors && array_index_error_candidate(expr)?))
+}
+
+fn permits_constant_preparation(expr: &Expr) -> Result<bool> {
+    Ok(!expr.exists(|expr| {
+        Ok(expr.is_volatile_node()
+            || matches!(expr, Expr::ScalarFunction(function)
+            if !function.func.inner().supports_constant_folding()))
+    })?)
+}
+
+fn input_permits_array_index_preparation(plan: &LogicalPlan) -> Result<bool> {
+    let mut allowed = true;
+    plan.apply(|node| {
+        node.apply_expressions(|expr| {
+            allowed &= permits_constant_preparation(expr)?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(if allowed {
+            TreeNodeRecursion::Continue
+        } else {
+            TreeNodeRecursion::Stop
+        })
+    })?;
+    Ok(allowed)
+}
+
 // Spark reduces Boolean literals before pulling correlations, but folds
 // comparisons and CAST(NULL AS BOOLEAN) later.
 fn simplify_literal_boolean_predicate(predicate: Expr) -> Result<Transformed<Expr>> {
@@ -317,7 +360,7 @@ impl PrepareSparkExpressions {
             plan
         };
         let mut found = false;
-        let mut check_arithmetic = false;
+        let mut check_preparation_errors = false;
         let mut check_cast = false;
         let mut has_correlated_scalar = false;
         let mut check_groups = false;
@@ -351,7 +394,7 @@ impl PrepareSparkExpressions {
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
                 })?;
-                check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
+                check_preparation_errors |= preparation_error_candidate(expr, node.schema(), is_spark_query)?;
                 has_slice_parameters |= expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<SparkArraySlice>()))
                 })?;
@@ -360,14 +403,14 @@ impl PrepareSparkExpressions {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
+            Ok(if found && check_preparation_errors && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
             })
         })?;
         if !found
-            && !check_arithmetic
+            && !check_preparation_errors
             && !check_cast
             && !has_correlated_scalar
             && !check_groups
@@ -389,6 +432,7 @@ impl PrepareSparkExpressions {
             props,
             has_groups,
             has_null_sensitive_comparison,
+            spark_array_index_errors: is_spark_query,
         };
         let plan = if has_constant_struct || has_coalesce_declaration_casts {
             prepare.prepare_nested_result_declarations(plan)?
@@ -401,7 +445,7 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        let plan = if check_cast || check_arithmetic {
+        let plan = if check_cast || check_preparation_errors {
             plan.transform_down_up_with_subqueries(|node| {
                 // Correlated EXISTS drops unused filter subqueries before their preparation.
                 let simplified = if is_spark_query {
@@ -501,8 +545,8 @@ impl PrepareSparkExpressions {
                                 _ => None,
                             };
                             if let Some(subquery) = predicate {
-                                if check_arithmetic {
-                                    prepare.check_arithmetic_expressions(&subquery.subquery, true)?;
+                                if check_preparation_errors {
+                                    prepare.check_preparation_error_expressions(&subquery.subquery, true)?;
                                 }
                                 let prepared = prepare.cast_reachability(
                                     Arc::unwrap_or_clone(Arc::clone(&subquery.subquery)),
@@ -516,8 +560,8 @@ impl PrepareSparkExpressions {
                                     datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation::new()
                                         .rewrite(node, &config)
                                 })?.data;
-                                if check_arithmetic {
-                                    prepare.check_arithmetic_plan(&prepared, options, true)?;
+                                if check_preparation_errors {
+                                    prepare.check_preparation_error_plan(&prepared, options, true)?;
                                 }
                                 subquery.subquery = Arc::new(prepared);
                                 if let Expr::InSubquery(in_subquery) = &mut expr
@@ -548,8 +592,8 @@ impl PrepareSparkExpressions {
                                 }
                                 // Preserve local arithmetic errors before CAST
                                 // preparation removes unused or empty projections.
-                                if check_arithmetic {
-                                    prepare.check_arithmetic_plan(&subquery.subquery, options, false)?;
+                                if check_preparation_errors {
+                                    prepare.check_preparation_error_plan(&subquery.subquery, options, false)?;
                                 }
                                 subquery.subquery = Arc::new(prepare.cast_reachability(
                                     Arc::unwrap_or_clone(subquery.subquery),
@@ -601,7 +645,7 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        if check_arithmetic {
+        if check_preparation_errors {
             // CAST preparation already checked these scalar plans before pruning.
             if !check_cast {
                 // Spark prepares subqueries before pruning their outer expressions.
@@ -614,7 +658,7 @@ impl PrepareSparkExpressions {
                                 // its arithmetic still follows the outer NULL/CASE rules.
                                 && one_row_exprs(&subquery.subquery)?.is_none()
                             {
-                                prepare.check_arithmetic_plan(
+                                prepare.check_preparation_error_plan(
                                     &subquery.subquery,
                                     options,
                                     false,
@@ -625,12 +669,12 @@ impl PrepareSparkExpressions {
                     })
                 })?;
             }
-            prepare.check_arithmetic_plan(&plan, options, false)?;
+            prepare.check_preparation_error_plan(&plan, options, false)?;
         }
 
         let plan = if check_cast {
             prepare.cast_reachability(plan, options, false)?
-        } else if check_arithmetic {
+        } else if check_preparation_errors {
             let prepared = prepare.prepare_distinct_limits(plan, 0)?;
             if prepared.transformed || has_groups || has_null_sensitive_comparison {
                 let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
@@ -874,6 +918,7 @@ struct Prepare {
     props: ExecutionProps,
     has_groups: bool,
     has_null_sensitive_comparison: bool,
+    spark_array_index_errors: bool,
 }
 
 // Preserve the early local row-evaluation boundary before logical folding.
@@ -948,6 +993,7 @@ pub(crate) fn prune_retained_local_like_limits(
         props: props.clone(),
         has_groups: false,
         has_null_sensitive_comparison: false,
+        spark_array_index_errors: false,
     };
     Ok(plan
         .transform_down_with_subqueries(|node| {
@@ -1023,6 +1069,7 @@ pub(crate) fn try_check_local_row_errors(
         props: props.clone(),
         has_groups: false,
         has_null_sensitive_comparison: false,
+        spark_array_index_errors: false,
     };
     let Some(batch) = prepare.local_batch(&input)? else {
         return Ok(false);
@@ -1186,6 +1233,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
         props,
         has_groups: false,
         has_null_sensitive_comparison: false,
+        spark_array_index_errors: false,
     };
     let source = datafusion_expr::expr_fn::when(lit(true), lit(ScalarValue::Utf8(None)))
         .otherwise(col("s"))?;
@@ -2300,7 +2348,7 @@ impl Prepare {
                 // Do not simplify arithmetic or Boolean parents before checking it.
                 if !local
                     && matches!(expr, Expr::Case(_))
-                    && !arithmetic_candidate(&expr, schema)?
+                    && !preparation_error_candidate(&expr, schema, self.spark_array_index_errors)?
                     && let Ok(simplified) = ExprSimplifier::new(info.clone()).simplify(expr.clone())
                 {
                     return Ok(Transformed::yes(simplified));
@@ -2310,7 +2358,7 @@ impl Prepare {
             .data)
     }
 
-    fn check_arithmetic_plan(
+    fn check_preparation_error_plan(
         &self,
         plan: &LogicalPlan,
         options: &ConfigOptions,
@@ -2318,7 +2366,8 @@ impl Prepare {
     ) -> Result<()> {
         // Local VALUES are evaluated before column pruning and LIMIT 0.
         // Successful constants need no extra copy, simplification or pruning.
-        if self.check_arithmetic_expressions(plan, true)? {
+        let requires_pruned_check = self.check_preparation_error_expressions(plan, true)?;
+        if requires_pruned_check {
             let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
             // NULL parents and unused columns disappear before constant folding,
             // but Boolean/filter simplification must not erase arithmetic failures.
@@ -2340,15 +2389,20 @@ impl Prepare {
                 self.prepare_distinct_limits(pruned, 0)?.data
             };
             let pruned = self.prune_projections(pruned, &config, false)?;
-            self.check_arithmetic_expressions(&pruned, false)?;
+            self.check_preparation_error_expressions(&pruned, false)?;
         }
         Ok(())
     }
 
-    fn check_arithmetic_expressions(&self, plan: &LogicalPlan, local: bool) -> Result<bool> {
+    // True requests a second constant check after pruning; it is not an error verdict.
+    fn check_preparation_error_expressions(
+        &self,
+        plan: &LogicalPlan,
+        check_local_inputs: bool,
+    ) -> Result<bool> {
         let mut needs_pruning = false;
         plan.apply(|node| {
-            if !local
+            if !check_local_inputs
                 && let LogicalPlan::Limit(limit) = node
                 && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(0)
                 && !known_empty(&limit.input)
@@ -2357,7 +2411,21 @@ impl Prepare {
             }
             let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
             node.apply_expressions(|expr| {
-                if !arithmetic_candidate(expr, &schema)? {
+                let arithmetic = arithmetic_candidate(expr, &schema)?;
+                let array_index =
+                    self.spark_array_index_errors && array_index_error_candidate(expr)?;
+                if !arithmetic && !array_index {
+                    return Ok(TreeNodeRecursion::Continue);
+                }
+                if !arithmetic
+                    && array_index
+                    && (!permits_constant_preparation(expr)?
+                        || !node.inputs().iter().try_fold(true, |allowed, input| {
+                            Ok::<_, datafusion_common::DataFusionError>(
+                                allowed && input_permits_array_index_preparation(input)?,
+                            )
+                        })?)
+                {
                     return Ok(TreeNodeRecursion::Continue);
                 }
                 let local_node =
@@ -2370,7 +2438,11 @@ impl Prepare {
                     None
                 };
                 match batch {
-                    Some(batch) if local && batch.num_rows() > 0 && row_expression(expr, true)? => {
+                    Some(batch)
+                        if check_local_inputs
+                            && batch.num_rows() > 0
+                            && row_expression(expr, true)? =>
+                    {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
                         let error = match create_physical_expr(&expr, &schema, &self.props)?
                             .evaluate(&batch)
@@ -2378,6 +2450,12 @@ impl Prepare {
                             Ok(_) => return Ok(TreeNodeRecursion::Continue),
                             Err(error) => error,
                         };
+                        if !arithmetic {
+                            if SparkArrayIndexError::is(&error) {
+                                return Err(error);
+                            }
+                            return Ok(TreeNodeRecursion::Continue);
+                        }
                         // Match Spark's strict string-to-integer trimming
                         // only for this discarded local evaluation. The
                         // runtime expression and its physical plan stay intact.
@@ -2428,10 +2506,16 @@ impl Prepare {
                     }
                     None => {
                         let expr = self.precheck_expression(expr.clone(), &schema, false)?;
-                        if local {
-                            needs_pruning |= self.check_expr(&expr, true).is_err();
+                        let checked = match self.check_expr(&expr, true) {
+                            Err(error) if arithmetic || SparkArrayIndexError::is(&error) => {
+                                Err(error)
+                            }
+                            _ => Ok(()),
+                        };
+                        if check_local_inputs {
+                            needs_pruning |= checked.is_err();
                         } else {
-                            self.check_expr(&expr, true)?;
+                            checked?;
                         }
                     }
                     // Local projection/filter conversion consumes even empty inputs.
