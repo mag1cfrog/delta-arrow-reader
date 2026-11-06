@@ -708,13 +708,17 @@ ranges retain Spark's Java INT arithmetic and zero padding through a small
 native adapter, preserving Binary, LargeBinary and BinaryView results. An omitted
 length is INT_MAX for both strings and binary values.
 Position and length use the mode-aware STRING and Decimal integer casts and the
-shared BIGINT-to-INT conversion before widening to the value kernel's Int64 inputs.
+shared numeric-to-INT conversion before widening to the value kernel's Int64 inputs.
 Row-dependent calls use native scalar NULL selection while retaining ordinary
 logical CSE. Whole constant and early local calls retain the private closed-lambda
 adapter for conditional folding and preparation. Its selection/scatter helpers
 remain in use.
 Async arguments retain their existing extraction and eager scalar evaluation path.
-General numeric CAST declarations and non-finite values remain with #796 and #897.
+The shared FLOAT/DOUBLE conversion covers TINYINT, SMALLINT, INT and BIGINT.
+Legacy conversion maps NaN to zero, saturates at INT/LONG bounds, and narrows
+TINYINT/SMALLINT from the INT result. Analyzed CAST declarations (#796), checked
+overflow identity (#922), and the checked +2^63 BIGINT endpoint (#1020) remain
+separate.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
 retain all 656 references and 3,936 native observations, plus the separate
 84-observation competing-error supplement, native SQL and fixed-binary controls.
@@ -1156,10 +1160,11 @@ New coercion paths reject custom operands that disable constant folding before
 literal evaluation. The existing INT position path is unchanged.
 
 The focused position fixture retains 110 independent Spark references and all
-660 native configurations. BIGINT narrowing uses the shared INT conversion;
-nonfinite conversion and CAST declarations remain with #897 and #796. No numeric
-parser, overflow policy, replacement kernel or native DataFusion SQL behavior is
-changed here.
+660 native configurations. BIGINT narrowing and FLOAT/DOUBLE positions use the
+shared numeric INT conversion. Its Legacy floating policy covers all four signed
+integer targets; CAST declarations (#796), checked overflow identity (#922), and
+the checked +2^63 BIGINT endpoint (#1020) retain separate contracts. The
+replacement kernel and native DataFusion SQL behavior remain unchanged.
 
 REGEXP_REPLACE constructs that INT coercion before testing position foldability,
 so unsupported types report `UNEXPECTED_INPUT_TYPE` even for provider expressions

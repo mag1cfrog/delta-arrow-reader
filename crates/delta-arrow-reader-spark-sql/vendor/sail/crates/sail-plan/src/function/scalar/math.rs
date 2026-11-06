@@ -47,7 +47,7 @@ use sail_function::scalar::math::spark_try_subtract::SparkTrySubtract;
 use sail_function::scalar::math::spark_unhex::SparkUnHex;
 use sail_function::scalar::math::spark_uniform::SparkUniform;
 use sail_function::scalar::misc::raise_error::RaiseError;
-use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
@@ -531,7 +531,7 @@ fn is_zero_literal(expr: &Expr) -> bool {
         }
         Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkDecimalCast>()
-                || f.func.inner().is::<SparkCastBigintToInt>() =>
+                || f.func.inner().is::<SparkCastNumericToInteger>() =>
         {
             matches!(f.args.as_slice(), [Expr::Literal(scalar, _)] if is_scalar_zero(scalar))
         }
@@ -1524,7 +1524,7 @@ pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
                 .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi)
                 || f.func.inner().downcast_ref::<SparkCastStringToInteger>()
                     .is_some_and(|cast| cast.mode() == StringIntegerCastMode::Ansi)
-                || f.func.inner().downcast_ref::<SparkCastBigintToInt>()
+                || f.func.inner().downcast_ref::<SparkCastNumericToInteger>()
                     .is_some_and(|cast| !cast.is_try()) =>
         {
             matches!(f.args.as_slice(), [expr] if matches!(without_metadata_annotations(expr), Expr::Column(_)) || column_cast(expr, schema))
@@ -1556,7 +1556,7 @@ pub(crate) fn guard_cast_arithmetic(
             Expr::Alias(alias) => simple(&alias.expr),
             Expr::ScalarFunction(f)
                 if f.func.inner().is::<SparkDecimalCast>()
-                    || f.func.inner().is::<SparkCastBigintToInt>() =>
+                    || f.func.inner().is::<SparkCastNumericToInteger>() =>
             {
                 matches!(f.args.as_slice(), [expr] if simple(expr))
             }

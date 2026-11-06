@@ -217,6 +217,66 @@ async fn regexp_replace_position_preserves_folding_permissions() -> TestResult {
     }
     assert_eq!(observed, 36);
     assert_eq!(host_contract_differences, 2);
+    // Exercise the shared numeric conversion without permitting speculative callbacks.
+    for ansi_mode in [true, false] {
+        for source in ["FLOAT", "DOUBLE"] {
+            let session = SessionContext::new_with_state(
+                configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+            );
+            session.register_udf(ScalarUDF::from(PositionCallback { folding: false }));
+            let argument = format!("position_callback(CAST(1.9 AS {source}))");
+            for (sql, expected) in [
+                (format!("SELECT CAST({argument} AS INT) AS r"), "1"),
+                (format!("SELECT substring('abcd',{argument},2) AS r"), "ab"),
+            ] {
+                CALLS.store(0, Ordering::SeqCst);
+                let query = plan_query(
+                    &session,
+                    &sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                assert_eq!(CALLS.load(Ordering::SeqCst), 0, "resolve: {sql}");
+                let physical = query.create_physical_plan(&session).await?;
+                assert_eq!(CALLS.load(Ordering::SeqCst), 0, "prepare: {sql}");
+                let batches =
+                    datafusion::physical_plan::collect(physical, session.task_ctx()).await?;
+                assert_eq!(CALLS.load(Ordering::SeqCst), 1, "collect: {sql}");
+                assert_eq!(batches.len(), 1, "{sql}");
+                assert_eq!(batches[0].num_rows(), 1, "{sql}");
+                assert_eq!(
+                    array_value_to_string(batches[0].column(0).as_ref(), 0)?,
+                    expected,
+                    "{sql}"
+                );
+            }
+            CALLS.store(0, Ordering::SeqCst);
+            let sql = format!("SELECT regexp_replace('a1a','a','X',{argument}) AS r");
+            let error = match plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode,
+                    ..Default::default()
+                },
+            )
+            .await
+            {
+                Ok(_) => return Err(format!("accepted a nonfoldable position: {sql}").into()),
+                Err(error) => error,
+            };
+            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
+            assert!(
+                error.to_string().ends_with(
+                    "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] regexp_replace position must be a foldable INT expression"
+                ),
+                "{sql}: {error}"
+            );
+        }
+    }
     eprintln!(
         "c06 position callback summary: {}",
         json!({

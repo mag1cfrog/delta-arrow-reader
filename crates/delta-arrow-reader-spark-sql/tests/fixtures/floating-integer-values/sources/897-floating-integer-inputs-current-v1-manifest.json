@@ -1,0 +1,3465 @@
+{
+  "format_version": 1,
+  "issue": 897,
+  "status": "Input preparation only; no captured result and no runtime acceptance.",
+  "fixtures_root": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "input_encoding": "Integers are decimal strings; FLOAT/DOUBLE use exact IEEE hex via the existing Decimal typed codec. Inputs contain no expected results.",
+  "settings": {
+    "spark.ui.enabled": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1"
+  },
+  "native": {
+    "batch_sizes": [
+      1,
+      32
+    ],
+    "target_partitions": 2,
+    "input_partitions": 2,
+    "sliced_hidden_rows": [
+      [
+        "-1",
+        "7fc00001",
+        "7ff8000000000001"
+      ],
+      [
+        "2147483647",
+        "7f800000",
+        "7ff0000000000000"
+      ]
+    ]
+  },
+  "source_types": [
+    "FLOAT",
+    "DOUBLE"
+  ],
+  "target_types": [
+    "TINYINT",
+    "SMALLINT",
+    "INT",
+    "BIGINT"
+  ],
+  "value_roles": [
+    {
+      "name": "positive_zero",
+      "f": "00000000",
+      "d": "0000000000000000"
+    },
+    {
+      "name": "negative_zero",
+      "f": "80000000",
+      "d": "8000000000000000"
+    },
+    {
+      "name": "positive_fraction",
+      "f": "3ff33333",
+      "d": "3ffe666666666666"
+    },
+    {
+      "name": "negative_fraction",
+      "f": "bff33333",
+      "d": "bffe666666666666"
+    },
+    {
+      "name": "positive_subnormal",
+      "f": "00000001",
+      "d": "0000000000000001"
+    },
+    {
+      "name": "negative_subnormal",
+      "f": "80000001",
+      "d": "8000000000000001"
+    },
+    {
+      "name": "nan",
+      "f": "7fc00000",
+      "d": "7ff8000000000000"
+    },
+    {
+      "name": "positive_infinity",
+      "f": "7f800000",
+      "d": "7ff0000000000000"
+    },
+    {
+      "name": "negative_infinity",
+      "f": "ff800000",
+      "d": "fff0000000000000"
+    },
+    {
+      "name": "tinyint_upper_predecessor",
+      "f": "42ffffff",
+      "d": "405fffffffffffff"
+    },
+    {
+      "name": "tinyint_upper_cutoff",
+      "f": "43000000",
+      "d": "4060000000000000"
+    },
+    {
+      "name": "tinyint_upper_successor",
+      "f": "43000001",
+      "d": "4060000000000001"
+    },
+    {
+      "name": "tinyint_lower_toward_zero",
+      "f": "c2ffffff",
+      "d": "c05fffffffffffff"
+    },
+    {
+      "name": "tinyint_lower_cutoff",
+      "f": "c3000000",
+      "d": "c060000000000000"
+    },
+    {
+      "name": "tinyint_lower_away_zero",
+      "f": "c3000001",
+      "d": "c060000000000001"
+    },
+    {
+      "name": "smallint_upper_predecessor",
+      "f": "46ffffff",
+      "d": "40dfffffffffffff"
+    },
+    {
+      "name": "smallint_upper_cutoff",
+      "f": "47000000",
+      "d": "40e0000000000000"
+    },
+    {
+      "name": "smallint_upper_successor",
+      "f": "47000001",
+      "d": "40e0000000000001"
+    },
+    {
+      "name": "smallint_lower_toward_zero",
+      "f": "c6ffffff",
+      "d": "c0dfffffffffffff"
+    },
+    {
+      "name": "smallint_lower_cutoff",
+      "f": "c7000000",
+      "d": "c0e0000000000000"
+    },
+    {
+      "name": "smallint_lower_away_zero",
+      "f": "c7000001",
+      "d": "c0e0000000000001"
+    },
+    {
+      "name": "int_upper_predecessor",
+      "f": "4effffff",
+      "d": "41dfffffffffffff"
+    },
+    {
+      "name": "int_upper_cutoff",
+      "f": "4f000000",
+      "d": "41e0000000000000"
+    },
+    {
+      "name": "int_upper_successor",
+      "f": "4f000001",
+      "d": "41e0000000000001"
+    },
+    {
+      "name": "int_lower_toward_zero",
+      "f": "ceffffff",
+      "d": "c1dfffffffffffff"
+    },
+    {
+      "name": "int_lower_cutoff",
+      "f": "cf000000",
+      "d": "c1e0000000000000"
+    },
+    {
+      "name": "int_lower_away_zero",
+      "f": "cf000001",
+      "d": "c1e0000000000001"
+    },
+    {
+      "name": "bigint_upper_predecessor",
+      "f": "5effffff",
+      "d": "43dfffffffffffff"
+    },
+    {
+      "name": "bigint_upper_cutoff",
+      "f": "5f000000",
+      "d": "43e0000000000000"
+    },
+    {
+      "name": "bigint_upper_successor",
+      "f": "5f000001",
+      "d": "43e0000000000001"
+    },
+    {
+      "name": "bigint_lower_toward_zero",
+      "f": "deffffff",
+      "d": "c3dfffffffffffff"
+    },
+    {
+      "name": "bigint_lower_cutoff",
+      "f": "df000000",
+      "d": "c3e0000000000000"
+    },
+    {
+      "name": "bigint_lower_away_zero",
+      "f": "df000001",
+      "d": "c3e0000000000001"
+    },
+    {
+      "name": "positive_max_finite",
+      "f": "7f7fffff",
+      "d": "7fefffffffffffff"
+    },
+    {
+      "name": "negative_max_finite",
+      "f": "ff7fffff",
+      "d": "ffefffffffffffff"
+    },
+    {
+      "name": "positive_byte_wrap_fraction",
+      "f": "4380e000",
+      "d": "40701c0000000000"
+    },
+    {
+      "name": "negative_byte_wrap_fraction",
+      "f": "c380e000",
+      "d": "c0701c0000000000"
+    },
+    {
+      "name": "positive_short_wrap_fraction",
+      "f": "478000e0",
+      "d": "40f0001c00000000"
+    },
+    {
+      "name": "negative_short_wrap_fraction",
+      "f": "c78000e0",
+      "d": "c0f0001c00000000"
+    },
+    {
+      "name": "positive_int_wrap_rounding",
+      "f": "4f800000",
+      "d": "41f0000000100000"
+    },
+    {
+      "name": "negative_int_wrap_rounding",
+      "f": "cf800000",
+      "d": "c1f0000000100000"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "floating_integer_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "1",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "2",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "3",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "4",
+          "00000001",
+          "0000000000000001"
+        ],
+        [
+          "5",
+          "80000001",
+          "8000000000000001"
+        ],
+        [
+          "6",
+          "7fc00000",
+          "7ff8000000000000"
+        ],
+        [
+          "7",
+          "7f800000",
+          "7ff0000000000000"
+        ],
+        [
+          "8",
+          "ff800000",
+          "fff0000000000000"
+        ],
+        [
+          "9",
+          "42ffffff",
+          "405fffffffffffff"
+        ],
+        [
+          "10",
+          "43000000",
+          "4060000000000000"
+        ],
+        [
+          "11",
+          "43000001",
+          "4060000000000001"
+        ],
+        [
+          "12",
+          "c2ffffff",
+          "c05fffffffffffff"
+        ],
+        [
+          "13",
+          "c3000000",
+          "c060000000000000"
+        ],
+        [
+          "14",
+          "c3000001",
+          "c060000000000001"
+        ],
+        [
+          "15",
+          "46ffffff",
+          "40dfffffffffffff"
+        ],
+        [
+          "16",
+          "47000000",
+          "40e0000000000000"
+        ],
+        [
+          "17",
+          "47000001",
+          "40e0000000000001"
+        ],
+        [
+          "18",
+          "c6ffffff",
+          "c0dfffffffffffff"
+        ],
+        [
+          "19",
+          "c7000000",
+          "c0e0000000000000"
+        ],
+        [
+          "20",
+          "c7000001",
+          "c0e0000000000001"
+        ],
+        [
+          "21",
+          "4effffff",
+          "41dfffffffffffff"
+        ],
+        [
+          "22",
+          "4f000000",
+          "41e0000000000000"
+        ],
+        [
+          "23",
+          "4f000001",
+          "41e0000000000001"
+        ],
+        [
+          "24",
+          "ceffffff",
+          "c1dfffffffffffff"
+        ],
+        [
+          "25",
+          "cf000000",
+          "c1e0000000000000"
+        ],
+        [
+          "26",
+          "cf000001",
+          "c1e0000000000001"
+        ],
+        [
+          "27",
+          "5effffff",
+          "43dfffffffffffff"
+        ],
+        [
+          "28",
+          "5f000000",
+          "43e0000000000000"
+        ],
+        [
+          "29",
+          "5f000001",
+          "43e0000000000001"
+        ],
+        [
+          "30",
+          "deffffff",
+          "c3dfffffffffffff"
+        ],
+        [
+          "31",
+          "df000000",
+          "c3e0000000000000"
+        ],
+        [
+          "32",
+          "df000001",
+          "c3e0000000000001"
+        ],
+        [
+          "33",
+          "7f7fffff",
+          "7fefffffffffffff"
+        ],
+        [
+          "34",
+          "ff7fffff",
+          "ffefffffffffffff"
+        ],
+        [
+          "35",
+          "4380e000",
+          "40701c0000000000"
+        ],
+        [
+          "36",
+          "c380e000",
+          "c0701c0000000000"
+        ],
+        [
+          "37",
+          "478000e0",
+          "40f0001c00000000"
+        ],
+        [
+          "38",
+          "c78000e0",
+          "c0f0001c00000000"
+        ],
+        [
+          "39",
+          "4f800000",
+          "41f0000000100000"
+        ],
+        [
+          "40",
+          "cf800000",
+          "c1f0000000100000"
+        ]
+      ],
+      "native_slice": false
+    },
+    {
+      "name": "floating_integer_nullable_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ],
+        [
+          "1",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "2",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "3",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "4",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "5",
+          "00000001",
+          "0000000000000001"
+        ],
+        [
+          "6",
+          "80000001",
+          "8000000000000001"
+        ],
+        [
+          "7",
+          "7fc00000",
+          "7ff8000000000000"
+        ],
+        [
+          "8",
+          null,
+          null
+        ],
+        [
+          "9",
+          "7f800000",
+          "7ff0000000000000"
+        ],
+        [
+          "10",
+          "ff800000",
+          "fff0000000000000"
+        ],
+        [
+          "11",
+          "42ffffff",
+          "405fffffffffffff"
+        ],
+        [
+          "12",
+          "43000000",
+          "4060000000000000"
+        ],
+        [
+          "13",
+          "43000001",
+          "4060000000000001"
+        ],
+        [
+          "14",
+          "c2ffffff",
+          "c05fffffffffffff"
+        ],
+        [
+          "15",
+          "c3000000",
+          "c060000000000000"
+        ],
+        [
+          "16",
+          "c3000001",
+          "c060000000000001"
+        ],
+        [
+          "17",
+          "46ffffff",
+          "40dfffffffffffff"
+        ],
+        [
+          "18",
+          "47000000",
+          "40e0000000000000"
+        ],
+        [
+          "19",
+          "47000001",
+          "40e0000000000001"
+        ],
+        [
+          "20",
+          "c6ffffff",
+          "c0dfffffffffffff"
+        ],
+        [
+          "21",
+          "c7000000",
+          "c0e0000000000000"
+        ],
+        [
+          "22",
+          "c7000001",
+          "c0e0000000000001"
+        ],
+        [
+          "23",
+          "4effffff",
+          "41dfffffffffffff"
+        ],
+        [
+          "24",
+          "4f000000",
+          "41e0000000000000"
+        ],
+        [
+          "25",
+          "4f000001",
+          "41e0000000000001"
+        ],
+        [
+          "26",
+          "ceffffff",
+          "c1dfffffffffffff"
+        ],
+        [
+          "27",
+          "cf000000",
+          "c1e0000000000000"
+        ],
+        [
+          "28",
+          "cf000001",
+          "c1e0000000000001"
+        ],
+        [
+          "29",
+          "5effffff",
+          "43dfffffffffffff"
+        ],
+        [
+          "30",
+          "5f000000",
+          "43e0000000000000"
+        ],
+        [
+          "31",
+          "5f000001",
+          "43e0000000000001"
+        ],
+        [
+          "32",
+          "deffffff",
+          "c3dfffffffffffff"
+        ],
+        [
+          "33",
+          "df000000",
+          "c3e0000000000000"
+        ],
+        [
+          "34",
+          "df000001",
+          "c3e0000000000001"
+        ],
+        [
+          "35",
+          "7f7fffff",
+          "7fefffffffffffff"
+        ],
+        [
+          "36",
+          "ff7fffff",
+          "ffefffffffffffff"
+        ],
+        [
+          "37",
+          "4380e000",
+          "40701c0000000000"
+        ],
+        [
+          "38",
+          "c380e000",
+          "c0701c0000000000"
+        ],
+        [
+          "39",
+          "478000e0",
+          "40f0001c00000000"
+        ],
+        [
+          "40",
+          "c78000e0",
+          "c0f0001c00000000"
+        ],
+        [
+          "41",
+          "4f800000",
+          "41f0000000100000"
+        ],
+        [
+          "42",
+          "cf800000",
+          "c1f0000000100000"
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "floating_integer_fitting_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "1",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "2",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "3",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "4",
+          "00000001",
+          "0000000000000001"
+        ],
+        [
+          "5",
+          "80000001",
+          "8000000000000001"
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "floating_integer_all_null_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ],
+        [
+          "1",
+          null,
+          null
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "floating_integer_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [],
+      "native_slice": false
+    }
+  ],
+  "original_references": [
+    {
+      "path": "substring-arguments-spark.jsonl",
+      "sha256": "d885d1fa134a047b0eb5f73e87866795d53b186cc17ae39f284d94a62f3664eb",
+      "header_sha256": "262bb2541146b7ba3d46e22b2970b2907f042b70a2d079864656f3fad80a7534",
+      "selected_records": [
+        {
+          "line": 84,
+          "sha256": "43e8f94580b5b8a797224549311e40bf27d09ec65a21de755607e7618ad72312",
+          "id": "float_nan_direct_cast",
+          "ansi": true
+        },
+        {
+          "line": 85,
+          "sha256": "ba42c094a5a7e2a9de1a09b1dd1516b966a22b0fe48d0ba7860698949d05e087",
+          "id": "float_nan_direct_cast",
+          "ansi": false
+        },
+        {
+          "line": 86,
+          "sha256": "7a4963a05344200300dd36762565dbf330176f309281ca3dc1ea59ab0a1d8a45",
+          "id": "float_nan_substring",
+          "ansi": true
+        },
+        {
+          "line": 87,
+          "sha256": "5798b8454ab3cc9ca88109c20a29e064d3aa98c98fc1a6f8b799595bbcc2cadd",
+          "id": "float_nan_substring",
+          "ansi": false
+        },
+        {
+          "line": 88,
+          "sha256": "26cbe3dce1ec5a62d395a2d3e3e57efac5a5e77bc397fc4fed6a5ff30c13781e",
+          "id": "double_infinity_direct_cast",
+          "ansi": true
+        },
+        {
+          "line": 89,
+          "sha256": "0a15bf8bff5c226b08e993323f72f8db8e028f796947452925e3e0245961b634",
+          "id": "double_infinity_direct_cast",
+          "ansi": false
+        },
+        {
+          "line": 90,
+          "sha256": "64d79d231ac266ea41339465db0286b1635845c23ea0fc6483f86a87449e1dab",
+          "id": "double_infinity_substring",
+          "ansi": true
+        },
+        {
+          "line": 91,
+          "sha256": "b9a2ceb1eeeb2026309be55a621e49faada017e3a4accccc70dd49c673d7c79e",
+          "id": "double_infinity_substring",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "path": "regexp-replace-position-int-spark.jsonl",
+      "sha256": "38e946032eab4b4d912f13c4a13695c21cf0f4aed43e6feeab911be3cd9728f0",
+      "header_sha256": "625c79547756b6ddb9af8bc9077e119449de715d2a499834f5f613b59e4c3ff4",
+      "selected_records": [
+        {
+          "line": 25,
+          "sha256": "6fe6982cb3ccfe978610e2093820744a1d1fbb7d0a7ab6d638f8223cbc5b7c16",
+          "id": "double_nan",
+          "ansi": true
+        },
+        {
+          "line": 26,
+          "sha256": "bd2137b2c1f5c4a3beef5962ad02f0af08af60c05488aa7ba2ab6425786ac086",
+          "id": "double_infinity",
+          "ansi": true
+        },
+        {
+          "line": 56,
+          "sha256": "6f31596ae69a5ba7d9dd7b87441363e83102fffc76e6ecd98c87362f5c02f98e",
+          "id": "direct_double_nan",
+          "ansi": true
+        },
+        {
+          "line": 80,
+          "sha256": "63b6bcb2407f6d1d793004d373f36c8cca62d4b4c77e299e6145b7b235598ebd",
+          "id": "double_nan",
+          "ansi": false
+        },
+        {
+          "line": 81,
+          "sha256": "0c9065dc06b73ae62027b15fe15b05c48a6429fafd3cf8c9e39055cc2fc60a5d",
+          "id": "double_infinity",
+          "ansi": false
+        },
+        {
+          "line": 111,
+          "sha256": "61389762d4e6e8172f8b429a30fcd3020a9e014ee746ab3e538812a3994e0763",
+          "id": "direct_double_nan",
+          "ansi": false
+        }
+      ]
+    }
+  ],
+  "preserved_reference_files": [
+    {
+      "path": "substring-original-spark.jsonl",
+      "sha256": "fb98aa9cc3309f3d19ee8ff8c37cd0951822a48336f9e2505ff336fb769df2c2"
+    },
+    {
+      "path": "substring-boundaries-spark.jsonl",
+      "sha256": "545ee0b1a4aef1051f97de505a1e6d249560ab57c203d3a976c4211b1e1b319f"
+    },
+    {
+      "path": "substring-arguments-spark.jsonl",
+      "sha256": "d885d1fa134a047b0eb5f73e87866795d53b186cc17ae39f284d94a62f3664eb"
+    },
+    {
+      "path": "regexp-replace-position-int-spark.jsonl",
+      "sha256": "38e946032eab4b4d912f13c4a13695c21cf0f4aed43e6feeab911be3cd9728f0"
+    },
+    {
+      "path": "regexp-replace-position-native.jsonl",
+      "sha256": "54ff22a74a88351c49b8d26a9e84ad73d196c75b21835f3e929aa1a2221c8ea4"
+    },
+    {
+      "path": "bigint-int-narrowing/original-cast-controls-spark.jsonl",
+      "sha256": "b625d0f2c384cacc353cea0e1a5a3fddfe4ccc0ec00ee3262a65c6a1fa732738"
+    },
+    {
+      "path": "numeric-cast-nullability/spark.jsonl",
+      "sha256": "a3eb1ef942dcc01b0f076abefc6b8158a6c2a395c22930e9a07ad7cecb92959a"
+    }
+  ],
+  "helper_sources": {
+    "bigint-int-narrowing/capture_bigint_int_narrowing.py": "793a798e9a3e6e5fe2b59b1c3630db61782fbcbeac27342c7af0be998c96420f",
+    "recapture_string_binary_spark.py": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8",
+    "decimal-integer-cast/capture_decimal_to_integer_declarations.py": "c087cc168026d8742a3e5257506542dfeb05e2942978bbc699ec0c13e6f662a7"
+  },
+  "case_count": 176,
+  "observations": 352,
+  "native_comparisons": 704,
+  "case_counts": {
+    "literal_boundary": 88,
+    "scalar_basic": 8,
+    "column_matrix": 32,
+    "provider_control": 3,
+    "integer_function": 6,
+    "generated_names": 2,
+    "evaluation_order": 22,
+    "original_c06": 7,
+    "literal_try": 8
+  },
+  "cases": [
+    {
+      "id": "float_tinyint_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "7fc00000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "float_tinyint_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "7f800000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "float_tinyint_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "ff800000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "float_tinyint_literal_tinyint_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('127.99999237060547' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "42ffffff",
+      "discriminator": "tinyint_upper_predecessor"
+    },
+    {
+      "id": "float_tinyint_literal_tinyint_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('128.0' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "43000000",
+      "discriminator": "tinyint_upper_cutoff"
+    },
+    {
+      "id": "float_tinyint_literal_tinyint_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('128.00001525878906' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "43000001",
+      "discriminator": "tinyint_upper_successor"
+    },
+    {
+      "id": "float_tinyint_literal_tinyint_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-127.99999237060547' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "c2ffffff",
+      "discriminator": "tinyint_lower_toward_zero"
+    },
+    {
+      "id": "float_tinyint_literal_tinyint_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-128.0' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "c3000000",
+      "discriminator": "tinyint_lower_cutoff"
+    },
+    {
+      "id": "float_tinyint_literal_tinyint_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-128.00001525878906' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "c3000001",
+      "discriminator": "tinyint_lower_away_zero"
+    },
+    {
+      "id": "float_tinyint_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "7f7fffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "float_tinyint_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "source_bits": "ff7fffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "float_tinyint_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS FLOAT) AS TINYINT) AS positive_zero,CAST(CAST('-0.0' AS FLOAT) AS TINYINT) AS negative_zero,CAST(CAST('1.899999976158142' AS FLOAT) AS TINYINT) AS positive_fraction,CAST(CAST('-1.899999976158142' AS FLOAT) AS TINYINT) AS negative_fraction,CAST(CAST('1.401298464324817e-45' AS FLOAT) AS TINYINT) AS positive_subnormal,CAST(CAST('-1.401298464324817e-45' AS FLOAT) AS TINYINT) AS negative_subnormal,CAST(CAST(NULL AS FLOAT) AS TINYINT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT"
+    },
+    {
+      "id": "float_tinyint_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_tinyint_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS TINYINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_tinyint_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_tinyint_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS TINYINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_smallint_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "7fc00000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "float_smallint_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "7f800000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "float_smallint_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "ff800000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "float_smallint_literal_smallint_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('32767.998046875' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "46ffffff",
+      "discriminator": "smallint_upper_predecessor"
+    },
+    {
+      "id": "float_smallint_literal_smallint_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('32768.0' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "47000000",
+      "discriminator": "smallint_upper_cutoff"
+    },
+    {
+      "id": "float_smallint_literal_smallint_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('32768.00390625' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "47000001",
+      "discriminator": "smallint_upper_successor"
+    },
+    {
+      "id": "float_smallint_literal_smallint_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-32767.998046875' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "c6ffffff",
+      "discriminator": "smallint_lower_toward_zero"
+    },
+    {
+      "id": "float_smallint_literal_smallint_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-32768.0' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "c7000000",
+      "discriminator": "smallint_lower_cutoff"
+    },
+    {
+      "id": "float_smallint_literal_smallint_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-32768.00390625' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "c7000001",
+      "discriminator": "smallint_lower_away_zero"
+    },
+    {
+      "id": "float_smallint_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "7f7fffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "float_smallint_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "source_bits": "ff7fffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "float_smallint_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS FLOAT) AS SMALLINT) AS positive_zero,CAST(CAST('-0.0' AS FLOAT) AS SMALLINT) AS negative_zero,CAST(CAST('1.899999976158142' AS FLOAT) AS SMALLINT) AS positive_fraction,CAST(CAST('-1.899999976158142' AS FLOAT) AS SMALLINT) AS negative_fraction,CAST(CAST('1.401298464324817e-45' AS FLOAT) AS SMALLINT) AS positive_subnormal,CAST(CAST('-1.401298464324817e-45' AS FLOAT) AS SMALLINT) AS negative_subnormal,CAST(CAST(NULL AS FLOAT) AS SMALLINT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT"
+    },
+    {
+      "id": "float_smallint_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS SMALLINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_smallint_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS SMALLINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_smallint_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS SMALLINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_smallint_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS SMALLINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_int_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "7fc00000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "float_int_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "7f800000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "float_int_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "ff800000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "float_int_literal_int_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('2147483520.0' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "4effffff",
+      "discriminator": "int_upper_predecessor"
+    },
+    {
+      "id": "float_int_literal_int_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('2147483648.0' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "4f000000",
+      "discriminator": "int_upper_cutoff"
+    },
+    {
+      "id": "float_int_literal_int_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('2147483904.0' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "4f000001",
+      "discriminator": "int_upper_successor"
+    },
+    {
+      "id": "float_int_literal_int_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-2147483520.0' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "ceffffff",
+      "discriminator": "int_lower_toward_zero"
+    },
+    {
+      "id": "float_int_literal_int_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-2147483648.0' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "cf000000",
+      "discriminator": "int_lower_cutoff"
+    },
+    {
+      "id": "float_int_literal_int_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-2147483904.0' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "cf000001",
+      "discriminator": "int_lower_away_zero"
+    },
+    {
+      "id": "float_int_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "7f7fffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "float_int_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "source_bits": "ff7fffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "float_int_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS FLOAT) AS INT) AS positive_zero,CAST(CAST('-0.0' AS FLOAT) AS INT) AS negative_zero,CAST(CAST('1.899999976158142' AS FLOAT) AS INT) AS positive_fraction,CAST(CAST('-1.899999976158142' AS FLOAT) AS INT) AS negative_fraction,CAST(CAST('1.401298464324817e-45' AS FLOAT) AS INT) AS positive_subnormal,CAST(CAST('-1.401298464324817e-45' AS FLOAT) AS INT) AS negative_subnormal,CAST(CAST(NULL AS FLOAT) AS INT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_int_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_int_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_int_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_int_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "INT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_bigint_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "7fc00000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "float_bigint_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "7f800000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "float_bigint_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "ff800000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "float_bigint_literal_bigint_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('9.223371487098962e+18' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "5effffff",
+      "discriminator": "bigint_upper_predecessor"
+    },
+    {
+      "id": "float_bigint_literal_bigint_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('9.223372036854776e+18' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "5f000000",
+      "discriminator": "bigint_upper_cutoff"
+    },
+    {
+      "id": "float_bigint_literal_bigint_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('9.223373136366404e+18' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "5f000001",
+      "discriminator": "bigint_upper_successor"
+    },
+    {
+      "id": "float_bigint_literal_bigint_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-9.223371487098962e+18' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "deffffff",
+      "discriminator": "bigint_lower_toward_zero"
+    },
+    {
+      "id": "float_bigint_literal_bigint_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-9.223372036854776e+18' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "df000000",
+      "discriminator": "bigint_lower_cutoff"
+    },
+    {
+      "id": "float_bigint_literal_bigint_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-9.223373136366404e+18' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "df000001",
+      "discriminator": "bigint_lower_away_zero"
+    },
+    {
+      "id": "float_bigint_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "7f7fffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "float_bigint_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "source_bits": "ff7fffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "float_bigint_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS FLOAT) AS BIGINT) AS positive_zero,CAST(CAST('-0.0' AS FLOAT) AS BIGINT) AS negative_zero,CAST(CAST('1.899999976158142' AS FLOAT) AS BIGINT) AS positive_fraction,CAST(CAST('-1.899999976158142' AS FLOAT) AS BIGINT) AS negative_fraction,CAST(CAST('1.401298464324817e-45' AS FLOAT) AS BIGINT) AS positive_subnormal,CAST(CAST('-1.401298464324817e-45' AS FLOAT) AS BIGINT) AS negative_subnormal,CAST(CAST(NULL AS FLOAT) AS BIGINT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT"
+    },
+    {
+      "id": "float_bigint_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS BIGINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_bigint_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS BIGINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "float_bigint_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(f AS BIGINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "float_bigint_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(f AS BIGINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_tinyint_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "7ff8000000000000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "double_tinyint_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "7ff0000000000000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "double_tinyint_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "fff0000000000000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "double_tinyint_literal_tinyint_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('127.99999999999999' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "405fffffffffffff",
+      "discriminator": "tinyint_upper_predecessor"
+    },
+    {
+      "id": "double_tinyint_literal_tinyint_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('128.0' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "4060000000000000",
+      "discriminator": "tinyint_upper_cutoff"
+    },
+    {
+      "id": "double_tinyint_literal_tinyint_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('128.00000000000003' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "4060000000000001",
+      "discriminator": "tinyint_upper_successor"
+    },
+    {
+      "id": "double_tinyint_literal_tinyint_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-127.99999999999999' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "c05fffffffffffff",
+      "discriminator": "tinyint_lower_toward_zero"
+    },
+    {
+      "id": "double_tinyint_literal_tinyint_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-128.0' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "c060000000000000",
+      "discriminator": "tinyint_lower_cutoff"
+    },
+    {
+      "id": "double_tinyint_literal_tinyint_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-128.00000000000003' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "c060000000000001",
+      "discriminator": "tinyint_lower_away_zero"
+    },
+    {
+      "id": "double_tinyint_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "7fefffffffffffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "double_tinyint_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS TINYINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "source_bits": "ffefffffffffffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "double_tinyint_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS DOUBLE) AS TINYINT) AS positive_zero,CAST(CAST('-0.0' AS DOUBLE) AS TINYINT) AS negative_zero,CAST(CAST('1.9' AS DOUBLE) AS TINYINT) AS positive_fraction,CAST(CAST('-1.9' AS DOUBLE) AS TINYINT) AS negative_fraction,CAST(CAST('5e-324' AS DOUBLE) AS TINYINT) AS positive_subnormal,CAST(CAST('-5e-324' AS DOUBLE) AS TINYINT) AS negative_subnormal,CAST(CAST(NULL AS DOUBLE) AS TINYINT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT"
+    },
+    {
+      "id": "double_tinyint_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS TINYINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_tinyint_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS TINYINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_tinyint_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS TINYINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_tinyint_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS TINYINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_smallint_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "7ff8000000000000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "double_smallint_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "7ff0000000000000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "double_smallint_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "fff0000000000000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "double_smallint_literal_smallint_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('32767.999999999996' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "40dfffffffffffff",
+      "discriminator": "smallint_upper_predecessor"
+    },
+    {
+      "id": "double_smallint_literal_smallint_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('32768.0' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "40e0000000000000",
+      "discriminator": "smallint_upper_cutoff"
+    },
+    {
+      "id": "double_smallint_literal_smallint_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('32768.00000000001' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "40e0000000000001",
+      "discriminator": "smallint_upper_successor"
+    },
+    {
+      "id": "double_smallint_literal_smallint_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-32767.999999999996' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "c0dfffffffffffff",
+      "discriminator": "smallint_lower_toward_zero"
+    },
+    {
+      "id": "double_smallint_literal_smallint_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-32768.0' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "c0e0000000000000",
+      "discriminator": "smallint_lower_cutoff"
+    },
+    {
+      "id": "double_smallint_literal_smallint_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-32768.00000000001' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "c0e0000000000001",
+      "discriminator": "smallint_lower_away_zero"
+    },
+    {
+      "id": "double_smallint_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "7fefffffffffffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "double_smallint_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS SMALLINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "source_bits": "ffefffffffffffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "double_smallint_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS DOUBLE) AS SMALLINT) AS positive_zero,CAST(CAST('-0.0' AS DOUBLE) AS SMALLINT) AS negative_zero,CAST(CAST('1.9' AS DOUBLE) AS SMALLINT) AS positive_fraction,CAST(CAST('-1.9' AS DOUBLE) AS SMALLINT) AS negative_fraction,CAST(CAST('5e-324' AS DOUBLE) AS SMALLINT) AS positive_subnormal,CAST(CAST('-5e-324' AS DOUBLE) AS SMALLINT) AS negative_subnormal,CAST(CAST(NULL AS DOUBLE) AS SMALLINT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT"
+    },
+    {
+      "id": "double_smallint_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS SMALLINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_smallint_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS SMALLINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_smallint_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS SMALLINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_smallint_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS SMALLINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_int_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "7ff8000000000000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "double_int_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "7ff0000000000000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "double_int_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "fff0000000000000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "double_int_literal_int_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('2147483647.9999998' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "41dfffffffffffff",
+      "discriminator": "int_upper_predecessor"
+    },
+    {
+      "id": "double_int_literal_int_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('2147483648.0' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "41e0000000000000",
+      "discriminator": "int_upper_cutoff"
+    },
+    {
+      "id": "double_int_literal_int_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('2147483648.0000005' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "41e0000000000001",
+      "discriminator": "int_upper_successor"
+    },
+    {
+      "id": "double_int_literal_int_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-2147483647.9999998' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "c1dfffffffffffff",
+      "discriminator": "int_lower_toward_zero"
+    },
+    {
+      "id": "double_int_literal_int_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-2147483648.0' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "c1e0000000000000",
+      "discriminator": "int_lower_cutoff"
+    },
+    {
+      "id": "double_int_literal_int_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-2147483648.0000005' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "c1e0000000000001",
+      "discriminator": "int_lower_away_zero"
+    },
+    {
+      "id": "double_int_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "7fefffffffffffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "double_int_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "source_bits": "ffefffffffffffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "double_int_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS DOUBLE) AS INT) AS positive_zero,CAST(CAST('-0.0' AS DOUBLE) AS INT) AS negative_zero,CAST(CAST('1.9' AS DOUBLE) AS INT) AS positive_fraction,CAST(CAST('-1.9' AS DOUBLE) AS INT) AS negative_fraction,CAST(CAST('5e-324' AS DOUBLE) AS INT) AS positive_subnormal,CAST(CAST('-5e-324' AS DOUBLE) AS INT) AS negative_subnormal,CAST(CAST(NULL AS DOUBLE) AS INT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_int_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_int_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_int_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_int_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "INT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_bigint_literal_nan",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "7ff8000000000000",
+      "discriminator": "nan"
+    },
+    {
+      "id": "double_bigint_literal_positive_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('Infinity' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "7ff0000000000000",
+      "discriminator": "positive_infinity"
+    },
+    {
+      "id": "double_bigint_literal_negative_infinity",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-Infinity' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "fff0000000000000",
+      "discriminator": "negative_infinity"
+    },
+    {
+      "id": "double_bigint_literal_bigint_upper_predecessor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('9.223372036854775e+18' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "43dfffffffffffff",
+      "discriminator": "bigint_upper_predecessor"
+    },
+    {
+      "id": "double_bigint_literal_bigint_upper_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('9.223372036854776e+18' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "43e0000000000000",
+      "discriminator": "bigint_upper_cutoff"
+    },
+    {
+      "id": "double_bigint_literal_bigint_upper_successor",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('9.223372036854778e+18' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "43e0000000000001",
+      "discriminator": "bigint_upper_successor"
+    },
+    {
+      "id": "double_bigint_literal_bigint_lower_toward_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-9.223372036854775e+18' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "c3dfffffffffffff",
+      "discriminator": "bigint_lower_toward_zero"
+    },
+    {
+      "id": "double_bigint_literal_bigint_lower_cutoff",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-9.223372036854776e+18' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "c3e0000000000000",
+      "discriminator": "bigint_lower_cutoff"
+    },
+    {
+      "id": "double_bigint_literal_bigint_lower_away_zero",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-9.223372036854778e+18' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "c3e0000000000001",
+      "discriminator": "bigint_lower_away_zero"
+    },
+    {
+      "id": "double_bigint_literal_positive_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "7fefffffffffffff",
+      "discriminator": "positive_max_finite"
+    },
+    {
+      "id": "double_bigint_literal_negative_max_finite",
+      "domain": "literal_boundary",
+      "sql": "SELECT CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS BIGINT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "source_bits": "ffefffffffffffff",
+      "discriminator": "negative_max_finite"
+    },
+    {
+      "id": "double_bigint_scalar_basics",
+      "domain": "scalar_basic",
+      "sql": "SELECT CAST(CAST('0.0' AS DOUBLE) AS BIGINT) AS positive_zero,CAST(CAST('-0.0' AS DOUBLE) AS BIGINT) AS negative_zero,CAST(CAST('1.9' AS DOUBLE) AS BIGINT) AS positive_fraction,CAST(CAST('-1.9' AS DOUBLE) AS BIGINT) AS negative_fraction,CAST(CAST('5e-324' AS DOUBLE) AS BIGINT) AS positive_subnormal,CAST(CAST('-5e-324' AS DOUBLE) AS BIGINT) AS negative_subnormal,CAST(CAST(NULL AS DOUBLE) AS BIGINT) AS typed_null",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT"
+    },
+    {
+      "id": "double_bigint_floating_integer_required_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS BIGINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_bigint_floating_integer_required_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS BIGINT) AS r FROM floating_integer_required ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "double_bigint_floating_integer_nullable_sliced_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,CAST(d AS BIGINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "operation": "CAST"
+    },
+    {
+      "id": "double_bigint_floating_integer_nullable_sliced_try_cast",
+      "domain": "column_matrix",
+      "sql": "SELECT id,TRY_CAST(d AS BIGINT) AS r FROM floating_integer_nullable_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT",
+      "operation": "TRY_CAST"
+    },
+    {
+      "id": "floating_integer_fitting_sliced_all_targets",
+      "domain": "provider_control",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS f_tinyint_cast,TRY_CAST(f AS TINYINT) AS f_tinyint_try_cast,CAST(f AS SMALLINT) AS f_smallint_cast,TRY_CAST(f AS SMALLINT) AS f_smallint_try_cast,CAST(f AS INT) AS f_int_cast,TRY_CAST(f AS INT) AS f_int_try_cast,CAST(f AS BIGINT) AS f_bigint_cast,TRY_CAST(f AS BIGINT) AS f_bigint_try_cast,CAST(d AS TINYINT) AS d_tinyint_cast,TRY_CAST(d AS TINYINT) AS d_tinyint_try_cast,CAST(d AS SMALLINT) AS d_smallint_cast,TRY_CAST(d AS SMALLINT) AS d_smallint_try_cast,CAST(d AS INT) AS d_int_cast,TRY_CAST(d AS INT) AS d_int_try_cast,CAST(d AS BIGINT) AS d_bigint_cast,TRY_CAST(d AS BIGINT) AS d_bigint_try_cast FROM floating_integer_fitting_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "floating_integer_all_null_sliced_all_targets",
+      "domain": "provider_control",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS f_tinyint_cast,TRY_CAST(f AS TINYINT) AS f_tinyint_try_cast,CAST(f AS SMALLINT) AS f_smallint_cast,TRY_CAST(f AS SMALLINT) AS f_smallint_try_cast,CAST(f AS INT) AS f_int_cast,TRY_CAST(f AS INT) AS f_int_try_cast,CAST(f AS BIGINT) AS f_bigint_cast,TRY_CAST(f AS BIGINT) AS f_bigint_try_cast,CAST(d AS TINYINT) AS d_tinyint_cast,TRY_CAST(d AS TINYINT) AS d_tinyint_try_cast,CAST(d AS SMALLINT) AS d_smallint_cast,TRY_CAST(d AS SMALLINT) AS d_smallint_try_cast,CAST(d AS INT) AS d_int_cast,TRY_CAST(d AS INT) AS d_int_try_cast,CAST(d AS BIGINT) AS d_bigint_cast,TRY_CAST(d AS BIGINT) AS d_bigint_try_cast FROM floating_integer_all_null_sliced ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "floating_integer_empty_all_targets",
+      "domain": "provider_control",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS f_tinyint_cast,TRY_CAST(f AS TINYINT) AS f_tinyint_try_cast,CAST(f AS SMALLINT) AS f_smallint_cast,TRY_CAST(f AS SMALLINT) AS f_smallint_try_cast,CAST(f AS INT) AS f_int_cast,TRY_CAST(f AS INT) AS f_int_try_cast,CAST(f AS BIGINT) AS f_bigint_cast,TRY_CAST(f AS BIGINT) AS f_bigint_try_cast,CAST(d AS TINYINT) AS d_tinyint_cast,TRY_CAST(d AS TINYINT) AS d_tinyint_try_cast,CAST(d AS SMALLINT) AS d_smallint_cast,TRY_CAST(d AS SMALLINT) AS d_smallint_try_cast,CAST(d AS INT) AS d_int_cast,TRY_CAST(d AS INT) AS d_int_try_cast,CAST(d AS BIGINT) AS d_bigint_cast,TRY_CAST(d AS BIGINT) AS d_bigint_try_cast FROM floating_integer_empty ORDER BY id",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": true
+    },
+    {
+      "id": "float_integer_functions_nan",
+      "domain": "integer_function",
+      "sql": "SELECT TINYINT(CAST('NaN' AS FLOAT)) AS b,SMALLINT(CAST('NaN' AS FLOAT)) AS s,INT(CAST('NaN' AS FLOAT)) AS i,BIGINT(CAST('NaN' AS FLOAT)) AS l",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "source_bits": "7fc00000",
+      "target_types": [
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "BIGINT"
+      ]
+    },
+    {
+      "id": "float_integer_functions_positive_infinity",
+      "domain": "integer_function",
+      "sql": "SELECT TINYINT(CAST('Infinity' AS FLOAT)) AS b,SMALLINT(CAST('Infinity' AS FLOAT)) AS s,INT(CAST('Infinity' AS FLOAT)) AS i,BIGINT(CAST('Infinity' AS FLOAT)) AS l",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "source_bits": "7f800000",
+      "target_types": [
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "BIGINT"
+      ]
+    },
+    {
+      "id": "float_integer_functions_negative_infinity",
+      "domain": "integer_function",
+      "sql": "SELECT TINYINT(CAST('-Infinity' AS FLOAT)) AS b,SMALLINT(CAST('-Infinity' AS FLOAT)) AS s,INT(CAST('-Infinity' AS FLOAT)) AS i,BIGINT(CAST('-Infinity' AS FLOAT)) AS l",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "source_bits": "ff800000",
+      "target_types": [
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "BIGINT"
+      ]
+    },
+    {
+      "id": "float_generated_names",
+      "domain": "generated_names",
+      "sql": "SELECT CAST(CAST('1.9' AS FLOAT) AS TINYINT),CAST(CAST('1.9' AS FLOAT) AS SMALLINT),CAST(CAST('1.9' AS FLOAT) AS INT),CAST(CAST('1.9' AS FLOAT) AS BIGINT),TRY_CAST(CAST('NaN' AS FLOAT) AS TINYINT),TRY_CAST(CAST('NaN' AS FLOAT) AS SMALLINT),TRY_CAST(CAST('NaN' AS FLOAT) AS INT),TRY_CAST(CAST('NaN' AS FLOAT) AS BIGINT)",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT"
+    },
+    {
+      "id": "float_order_dead_case",
+      "domain": "evaluation_order",
+      "sql": "SELECT CASE WHEN false THEN CAST(CAST('NaN' AS FLOAT) AS INT) ELSE 7 END AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_unused_coalesce",
+      "domain": "evaluation_order",
+      "sql": "SELECT COALESCE(7,CAST(CAST('NaN' AS FLOAT) AS INT)) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_foldable_over_empty",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) AS r FROM floating_integer_empty",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_column_where_false",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(f AS INT) AS r FROM floating_integer_required WHERE false",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_column_limit_zero",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(f AS INT) AS r FROM floating_integer_required LIMIT 0",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_input_limit_zero",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(f AS INT) AS r FROM (SELECT f FROM floating_integer_required LIMIT 0) t",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_unused_projection",
+      "domain": "evaluation_order",
+      "sql": "SELECT 7 AS r FROM (SELECT CAST(f AS INT) AS unused FROM floating_integer_required) t",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_null_dividend",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(NULL AS INT) DIV CAST(CAST('NaN' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_null_divisor",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) DIV CAST(NULL AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_cast_before_divide_zero",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) + (10 DIV 0) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_order_divide_zero_before_cast",
+      "domain": "evaluation_order",
+      "sql": "SELECT (10 DIV 0) + CAST(CAST('NaN' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_integer_functions_nan",
+      "domain": "integer_function",
+      "sql": "SELECT TINYINT(CAST('NaN' AS DOUBLE)) AS b,SMALLINT(CAST('NaN' AS DOUBLE)) AS s,INT(CAST('NaN' AS DOUBLE)) AS i,BIGINT(CAST('NaN' AS DOUBLE)) AS l",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "source_bits": "7ff8000000000000",
+      "target_types": [
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "BIGINT"
+      ]
+    },
+    {
+      "id": "double_integer_functions_positive_infinity",
+      "domain": "integer_function",
+      "sql": "SELECT TINYINT(CAST('Infinity' AS DOUBLE)) AS b,SMALLINT(CAST('Infinity' AS DOUBLE)) AS s,INT(CAST('Infinity' AS DOUBLE)) AS i,BIGINT(CAST('Infinity' AS DOUBLE)) AS l",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "source_bits": "7ff0000000000000",
+      "target_types": [
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "BIGINT"
+      ]
+    },
+    {
+      "id": "double_integer_functions_negative_infinity",
+      "domain": "integer_function",
+      "sql": "SELECT TINYINT(CAST('-Infinity' AS DOUBLE)) AS b,SMALLINT(CAST('-Infinity' AS DOUBLE)) AS s,INT(CAST('-Infinity' AS DOUBLE)) AS i,BIGINT(CAST('-Infinity' AS DOUBLE)) AS l",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "source_bits": "fff0000000000000",
+      "target_types": [
+        "TINYINT",
+        "SMALLINT",
+        "INT",
+        "BIGINT"
+      ]
+    },
+    {
+      "id": "double_generated_names",
+      "domain": "generated_names",
+      "sql": "SELECT CAST(CAST('1.9' AS DOUBLE) AS TINYINT),CAST(CAST('1.9' AS DOUBLE) AS SMALLINT),CAST(CAST('1.9' AS DOUBLE) AS INT),CAST(CAST('1.9' AS DOUBLE) AS BIGINT),TRY_CAST(CAST('NaN' AS DOUBLE) AS TINYINT),TRY_CAST(CAST('NaN' AS DOUBLE) AS SMALLINT),TRY_CAST(CAST('NaN' AS DOUBLE) AS INT),TRY_CAST(CAST('NaN' AS DOUBLE) AS BIGINT)",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE"
+    },
+    {
+      "id": "double_order_dead_case",
+      "domain": "evaluation_order",
+      "sql": "SELECT CASE WHEN false THEN CAST(CAST('NaN' AS DOUBLE) AS INT) ELSE 7 END AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_unused_coalesce",
+      "domain": "evaluation_order",
+      "sql": "SELECT COALESCE(7,CAST(CAST('NaN' AS DOUBLE) AS INT)) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_foldable_over_empty",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS INT) AS r FROM floating_integer_empty",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_column_where_false",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(d AS INT) AS r FROM floating_integer_required WHERE false",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_column_limit_zero",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(d AS INT) AS r FROM floating_integer_required LIMIT 0",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_input_limit_zero",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(d AS INT) AS r FROM (SELECT d FROM floating_integer_required LIMIT 0) t",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_unused_projection",
+      "domain": "evaluation_order",
+      "sql": "SELECT 7 AS r FROM (SELECT CAST(d AS INT) AS unused FROM floating_integer_required) t",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_null_dividend",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(NULL AS INT) DIV CAST(CAST('NaN' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_null_divisor",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS INT) DIV CAST(NULL AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_cast_before_divide_zero",
+      "domain": "evaluation_order",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS INT) + (10 DIV 0) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_order_divide_zero_before_cast",
+      "domain": "evaluation_order",
+      "sql": "SELECT (10 DIV 0) + CAST(CAST('NaN' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_nan_direct_cast",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "substring-arguments-spark.jsonl"
+    },
+    {
+      "id": "float_nan_substring",
+      "domain": "original_c06",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "substring-arguments-spark.jsonl"
+    },
+    {
+      "id": "double_infinity_direct_cast",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(CAST('Infinity' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "substring-arguments-spark.jsonl"
+    },
+    {
+      "id": "double_infinity_substring",
+      "domain": "original_c06",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "substring-arguments-spark.jsonl"
+    },
+    {
+      "id": "double_nan",
+      "domain": "original_c06",
+      "sql": "SELECT regexp_replace('a1a','a','X',CAST('NaN' AS DOUBLE)) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "regexp-replace-position-int-spark.jsonl"
+    },
+    {
+      "id": "double_infinity",
+      "domain": "original_c06",
+      "sql": "SELECT regexp_replace('a1a','a','X',CAST('Infinity' AS DOUBLE)) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "regexp-replace-position-int-spark.jsonl"
+    },
+    {
+      "id": "direct_double_nan",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(CAST('NaN' AS DOUBLE) AS INT) AS r",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "original_fixture": "regexp-replace-position-int-spark.jsonl"
+    },
+    {
+      "id": "float_tinyint_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS FLOAT) AS TINYINT) AS nan,TRY_CAST(CAST('Infinity' AS FLOAT) AS TINYINT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS FLOAT) AS TINYINT) AS negative_infinity,TRY_CAST(CAST('127.99999237060547' AS FLOAT) AS TINYINT) AS tinyint_upper_predecessor,TRY_CAST(CAST('128.0' AS FLOAT) AS TINYINT) AS tinyint_upper_cutoff,TRY_CAST(CAST('128.00001525878906' AS FLOAT) AS TINYINT) AS tinyint_upper_successor,TRY_CAST(CAST('-127.99999237060547' AS FLOAT) AS TINYINT) AS tinyint_lower_toward_zero,TRY_CAST(CAST('-128.0' AS FLOAT) AS TINYINT) AS tinyint_lower_cutoff,TRY_CAST(CAST('-128.00001525878906' AS FLOAT) AS TINYINT) AS tinyint_lower_away_zero,TRY_CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS TINYINT) AS positive_max_finite,TRY_CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS TINYINT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "TINYINT"
+    },
+    {
+      "id": "float_smallint_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS FLOAT) AS SMALLINT) AS nan,TRY_CAST(CAST('Infinity' AS FLOAT) AS SMALLINT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS FLOAT) AS SMALLINT) AS negative_infinity,TRY_CAST(CAST('32767.998046875' AS FLOAT) AS SMALLINT) AS smallint_upper_predecessor,TRY_CAST(CAST('32768.0' AS FLOAT) AS SMALLINT) AS smallint_upper_cutoff,TRY_CAST(CAST('32768.00390625' AS FLOAT) AS SMALLINT) AS smallint_upper_successor,TRY_CAST(CAST('-32767.998046875' AS FLOAT) AS SMALLINT) AS smallint_lower_toward_zero,TRY_CAST(CAST('-32768.0' AS FLOAT) AS SMALLINT) AS smallint_lower_cutoff,TRY_CAST(CAST('-32768.00390625' AS FLOAT) AS SMALLINT) AS smallint_lower_away_zero,TRY_CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS SMALLINT) AS positive_max_finite,TRY_CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS SMALLINT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "SMALLINT"
+    },
+    {
+      "id": "float_int_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS FLOAT) AS INT) AS nan,TRY_CAST(CAST('Infinity' AS FLOAT) AS INT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS FLOAT) AS INT) AS negative_infinity,TRY_CAST(CAST('2147483520.0' AS FLOAT) AS INT) AS int_upper_predecessor,TRY_CAST(CAST('2147483648.0' AS FLOAT) AS INT) AS int_upper_cutoff,TRY_CAST(CAST('2147483904.0' AS FLOAT) AS INT) AS int_upper_successor,TRY_CAST(CAST('-2147483520.0' AS FLOAT) AS INT) AS int_lower_toward_zero,TRY_CAST(CAST('-2147483648.0' AS FLOAT) AS INT) AS int_lower_cutoff,TRY_CAST(CAST('-2147483904.0' AS FLOAT) AS INT) AS int_lower_away_zero,TRY_CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS INT) AS positive_max_finite,TRY_CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS INT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "INT"
+    },
+    {
+      "id": "float_bigint_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS FLOAT) AS BIGINT) AS nan,TRY_CAST(CAST('Infinity' AS FLOAT) AS BIGINT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS FLOAT) AS BIGINT) AS negative_infinity,TRY_CAST(CAST('9.223371487098962e+18' AS FLOAT) AS BIGINT) AS bigint_upper_predecessor,TRY_CAST(CAST('9.223372036854776e+18' AS FLOAT) AS BIGINT) AS bigint_upper_cutoff,TRY_CAST(CAST('9.223373136366404e+18' AS FLOAT) AS BIGINT) AS bigint_upper_successor,TRY_CAST(CAST('-9.223371487098962e+18' AS FLOAT) AS BIGINT) AS bigint_lower_toward_zero,TRY_CAST(CAST('-9.223372036854776e+18' AS FLOAT) AS BIGINT) AS bigint_lower_cutoff,TRY_CAST(CAST('-9.223373136366404e+18' AS FLOAT) AS BIGINT) AS bigint_lower_away_zero,TRY_CAST(CAST('3.4028234663852886e+38' AS FLOAT) AS BIGINT) AS positive_max_finite,TRY_CAST(CAST('-3.4028234663852886e+38' AS FLOAT) AS BIGINT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "FLOAT",
+      "target_type": "BIGINT"
+    },
+    {
+      "id": "double_tinyint_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS DOUBLE) AS TINYINT) AS nan,TRY_CAST(CAST('Infinity' AS DOUBLE) AS TINYINT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS DOUBLE) AS TINYINT) AS negative_infinity,TRY_CAST(CAST('127.99999999999999' AS DOUBLE) AS TINYINT) AS tinyint_upper_predecessor,TRY_CAST(CAST('128.0' AS DOUBLE) AS TINYINT) AS tinyint_upper_cutoff,TRY_CAST(CAST('128.00000000000003' AS DOUBLE) AS TINYINT) AS tinyint_upper_successor,TRY_CAST(CAST('-127.99999999999999' AS DOUBLE) AS TINYINT) AS tinyint_lower_toward_zero,TRY_CAST(CAST('-128.0' AS DOUBLE) AS TINYINT) AS tinyint_lower_cutoff,TRY_CAST(CAST('-128.00000000000003' AS DOUBLE) AS TINYINT) AS tinyint_lower_away_zero,TRY_CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS TINYINT) AS positive_max_finite,TRY_CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS TINYINT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "TINYINT"
+    },
+    {
+      "id": "double_smallint_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS DOUBLE) AS SMALLINT) AS nan,TRY_CAST(CAST('Infinity' AS DOUBLE) AS SMALLINT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS DOUBLE) AS SMALLINT) AS negative_infinity,TRY_CAST(CAST('32767.999999999996' AS DOUBLE) AS SMALLINT) AS smallint_upper_predecessor,TRY_CAST(CAST('32768.0' AS DOUBLE) AS SMALLINT) AS smallint_upper_cutoff,TRY_CAST(CAST('32768.00000000001' AS DOUBLE) AS SMALLINT) AS smallint_upper_successor,TRY_CAST(CAST('-32767.999999999996' AS DOUBLE) AS SMALLINT) AS smallint_lower_toward_zero,TRY_CAST(CAST('-32768.0' AS DOUBLE) AS SMALLINT) AS smallint_lower_cutoff,TRY_CAST(CAST('-32768.00000000001' AS DOUBLE) AS SMALLINT) AS smallint_lower_away_zero,TRY_CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS SMALLINT) AS positive_max_finite,TRY_CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS SMALLINT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "SMALLINT"
+    },
+    {
+      "id": "double_int_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS DOUBLE) AS INT) AS nan,TRY_CAST(CAST('Infinity' AS DOUBLE) AS INT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS DOUBLE) AS INT) AS negative_infinity,TRY_CAST(CAST('2147483647.9999998' AS DOUBLE) AS INT) AS int_upper_predecessor,TRY_CAST(CAST('2147483648.0' AS DOUBLE) AS INT) AS int_upper_cutoff,TRY_CAST(CAST('2147483648.0000005' AS DOUBLE) AS INT) AS int_upper_successor,TRY_CAST(CAST('-2147483647.9999998' AS DOUBLE) AS INT) AS int_lower_toward_zero,TRY_CAST(CAST('-2147483648.0' AS DOUBLE) AS INT) AS int_lower_cutoff,TRY_CAST(CAST('-2147483648.0000005' AS DOUBLE) AS INT) AS int_lower_away_zero,TRY_CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS INT) AS positive_max_finite,TRY_CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS INT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "INT"
+    },
+    {
+      "id": "double_bigint_literal_try_matrix",
+      "domain": "literal_try",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS DOUBLE) AS BIGINT) AS nan,TRY_CAST(CAST('Infinity' AS DOUBLE) AS BIGINT) AS positive_infinity,TRY_CAST(CAST('-Infinity' AS DOUBLE) AS BIGINT) AS negative_infinity,TRY_CAST(CAST('9.223372036854775e+18' AS DOUBLE) AS BIGINT) AS bigint_upper_predecessor,TRY_CAST(CAST('9.223372036854776e+18' AS DOUBLE) AS BIGINT) AS bigint_upper_cutoff,TRY_CAST(CAST('9.223372036854778e+18' AS DOUBLE) AS BIGINT) AS bigint_upper_successor,TRY_CAST(CAST('-9.223372036854775e+18' AS DOUBLE) AS BIGINT) AS bigint_lower_toward_zero,TRY_CAST(CAST('-9.223372036854776e+18' AS DOUBLE) AS BIGINT) AS bigint_lower_cutoff,TRY_CAST(CAST('-9.223372036854778e+18' AS DOUBLE) AS BIGINT) AS bigint_lower_away_zero,TRY_CAST(CAST('1.7976931348623157e+308' AS DOUBLE) AS BIGINT) AS positive_max_finite,TRY_CAST(CAST('-1.7976931348623157e+308' AS DOUBLE) AS BIGINT) AS negative_max_finite",
+      "ansi_modes": [
+        true,
+        false
+      ],
+      "ordered": false,
+      "source_type": "DOUBLE",
+      "target_type": "BIGINT"
+    }
+  ],
+  "diagnostic922_preserved_records": [
+    {
+      "line": 20,
+      "sha256": "fc5caabea6b3a3dadfafaa650e1bbecec5287682d5cab5892d37ac4ee8c176db",
+      "id": "bigint_above",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 21,
+      "sha256": "ab541c6c0af5eb36b1852c6237151a78c4909f48981dd627c85c6e8e70c47a9f",
+      "id": "bigint_below",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 22,
+      "sha256": "70fac655fb7f13ebd0642a81c82626cbaaad84e097b5912416b431b7131f60c6",
+      "id": "bigint_wrap_zero",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 23,
+      "sha256": "5faed21269e0e562d417864b80e327be50a1c7f702f1c3438989a91886e52f0c",
+      "id": "bigint_wrap_one",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 25,
+      "sha256": "6fe6982cb3ccfe978610e2093820744a1d1fbb7d0a7ab6d638f8223cbc5b7c16",
+      "id": "double_nan",
+      "ansi": true,
+      "source_type": "\"DOUBLE\""
+    },
+    {
+      "line": 26,
+      "sha256": "bd2137b2c1f5c4a3beef5962ad02f0af08af60c05488aa7ba2ab6425786ac086",
+      "id": "double_infinity",
+      "ansi": true,
+      "source_type": "\"DOUBLE\""
+    },
+    {
+      "line": 44,
+      "sha256": "06d5a2369e682867c82704fd8cf06239bbee1d7b19c5632aec496dbc140279a5",
+      "id": "null_overflow",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 45,
+      "sha256": "057a9f75e9db6ae685902c8dc683c3d7170aa2604a38dad720e7372f44f31531",
+      "id": "no_match_overflow",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 54,
+      "sha256": "f7bb5862d19a68dadf66fae516cc4d7ef6406e83d2b57ef9d880b4670da3b0aa",
+      "id": "direct_bigint",
+      "ansi": true,
+      "source_type": "\"BIGINT\""
+    },
+    {
+      "line": 56,
+      "sha256": "6f31596ae69a5ba7d9dd7b87441363e83102fffc76e6ecd98c87362f5c02f98e",
+      "id": "direct_double_nan",
+      "ansi": true,
+      "source_type": "\"DOUBLE\""
+    }
+  ],
+  "preparation_source_head": "83924271c761979616842f7ea731bf0bd9aab120",
+  "preparation_accepted_staging": "e6a8074fe3a08398b67d917b90084d21ee0c19fb"
+}

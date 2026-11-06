@@ -24,7 +24,7 @@ use datafusion_spark::function::string::format_string::FormatStringFunc;
 use datafusion_spark::function::string::length::SparkLengthFunc;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_integer::{
     SparkCastStringToInteger, StringIntegerCastMode,
 };
@@ -147,15 +147,13 @@ fn cast_string_function_int(
             ScalarUDF::from(SparkDecimalCast::to_integer(DataType::Int32, mode)?)
                 .call(vec![argument])
         }
-        DataType::Int64 => {
-            ScalarUDF::from(SparkCastBigintToInt::new(ansi_mode, false)).call(vec![argument])
+        DataType::Int64 | DataType::Float32 | DataType::Float64 => ScalarUDF::from(
+            SparkCastNumericToInteger::try_new(DataType::Int32, ansi_mode, false)?,
+        )
+        .call(vec![argument]),
+        DataType::Null | DataType::Int8 | DataType::Int16 | DataType::Int32 => {
+            cast(argument, DataType::Int32)
         }
-        DataType::Null
-        | DataType::Int8
-        | DataType::Int16
-        | DataType::Int32
-        | DataType::Float32
-        | DataType::Float64 => cast(argument, DataType::Int32),
         data_type => {
             return Err(PlanError::invalid(format!(
                 "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {parameter} requires INT, got {data_type}"
