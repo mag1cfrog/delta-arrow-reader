@@ -6,8 +6,9 @@ use arrow::compute::CastOptions;
 use arrow::datatypes::{
     DataType, Field, FieldRef, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type,
 };
+use arrow::error::ArrowError;
 use datafusion_common::utils::take_function_args;
-use datafusion_common::{Result, exec_err, plan_err};
+use datafusion_common::{DataFusionError, Result, exec_err, plan_err};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion_expr::{
     ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
@@ -23,7 +24,8 @@ enum CastMode {
     Try,
 }
 
-/// Mode-aware floating-to-integer conversion and legacy BIGINT-to-INT narrowing.
+/// Mode-aware FLOAT/DOUBLE-to-integer and BIGINT-to-INT conversion.
+/// Spark conservatively declares analyzed floating casts nullable; folding may refine them later.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkCastNumericToInteger {
     target: DataType,
@@ -65,13 +67,26 @@ impl SparkCastNumericToInteger {
     pub fn cast_value(&self, value: &ColumnarValue) -> Result<ColumnarValue> {
         self.return_type(&[value.data_type()])?;
         if self.mode != CastMode::Legacy {
-            return value.cast_to(
-                &self.target,
-                Some(&CastOptions {
-                    safe: self.is_try(),
-                    ..Default::default()
-                }),
-            );
+            return value
+                .cast_to(
+                    &self.target,
+                    Some(&CastOptions {
+                        safe: self.is_try(),
+                        ..Default::default()
+                    }),
+                )
+                .map_err(|error| match &error {
+                    DataFusionError::ArrowError(cause, _)
+                        if self.mode == CastMode::Ansi
+                            && matches!(
+                                cause.as_ref(),
+                                ArrowError::CastError(_) | ArrowError::ArithmeticOverflow(_)
+                            ) =>
+                    {
+                        error.context("[CAST_OVERFLOW]")
+                    }
+                    _ => error,
+                });
         }
         let target = self.target.clone();
         make_scalar_function(
@@ -170,7 +185,9 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
         Ok(Arc::new(Field::new(
             self.name(),
             self.target.clone(),
-            input.is_nullable() || self.is_try(),
+            matches!(input.data_type(), DataType::Float32 | DataType::Float64)
+                || input.is_nullable()
+                || self.is_try(),
         )))
     }
 
@@ -194,7 +211,7 @@ impl ScalarUDFImpl for SparkCastNumericToInteger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrow::array::{Float32Array, Float64Array};
+    use arrow::array::{Float32Array, Float64Array, Int64Array};
     use datafusion_common::{ScalarValue, config::ConfigOptions};
     use datafusion_expr::col;
 
@@ -227,7 +244,10 @@ mod tests {
                             scalar_arguments: &[None],
                         })?;
                         assert_eq!(result.data_type(), &target);
-                        assert_eq!(result.is_nullable(), nullable || is_try);
+                        assert_eq!(
+                            result.is_nullable(),
+                            source != DataType::Int64 || nullable || is_try
+                        );
                         assert!(result.metadata().is_empty());
                     }
                 }
@@ -239,6 +259,12 @@ mod tests {
                 ] {
                     assert!(cast.coerce_types(&[source]).is_err());
                 }
+                let Err(error) = cast.cast_value(&ColumnarValue::Scalar(ScalarValue::Utf8(Some(
+                    "not a numeric source".into(),
+                )))) else {
+                    return exec_err!("unsupported numeric CAST source was admitted");
+                };
+                assert!(!error.to_string().contains("[CAST_OVERFLOW]"));
                 assert!(cast.coerce_types(&[]).is_err());
                 assert!(
                     cast.coerce_types(&[DataType::Float64, DataType::Float64])
@@ -357,6 +383,7 @@ mod tests {
                     error.find_root().to_string(),
                     "Arrow error: Cast error: Can't cast value 4294967296 to type Int32"
                 );
+                assert!(error.to_string().contains("[CAST_OVERFLOW]"));
             } else {
                 assert!(matches!(
                     cast.cast_value(&bigint)?,
@@ -376,6 +403,7 @@ mod tests {
                         error.find_root().to_string(),
                         format!("Arrow error: Cast error: Can't cast value {cause} to type Int32")
                     );
+                    assert!(error.to_string().contains("[CAST_OVERFLOW]"));
                 } else {
                     assert!(
                         matches!(result?, ColumnarValue::Scalar(ScalarValue::Int32(Some(value))) if value == legacy)
@@ -414,6 +442,75 @@ mod tests {
                     let result = cast.cast_value(&ColumnarValue::Scalar(source))?;
                     assert!(
                         matches!(result, ColumnarValue::Scalar(value) if value == ScalarValue::try_new_null(&target)?)
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ansi_numeric_integer_overflow_preserves_arrow_root_cause() -> Result<()> {
+        for target in [
+            DataType::Int8,
+            DataType::Int16,
+            DataType::Int32,
+            DataType::Int64,
+        ] {
+            let cast = SparkCastNumericToInteger::try_new(target.clone(), true, false)?;
+            for (source, value) in [
+                (ScalarValue::Float32(Some(f32::NAN)), "NaN"),
+                (ScalarValue::Float64(Some(f64::NAN)), "NaN"),
+                (ScalarValue::Float32(Some(f32::INFINITY)), "inf"),
+                (ScalarValue::Float64(Some(f64::INFINITY)), "inf"),
+                (ScalarValue::Float32(Some(f32::NEG_INFINITY)), "-inf"),
+                (ScalarValue::Float64(Some(f64::NEG_INFINITY)), "-inf"),
+                (ScalarValue::Float32(Some(1e30)), "1e30"),
+                (ScalarValue::Float64(Some(1e100)), "1e100"),
+                (ScalarValue::Int64(Some(4294967296)), "4294967296"),
+            ] {
+                if source.data_type() == DataType::Int64 && target != DataType::Int32 {
+                    continue;
+                }
+                let storage: ArrayRef = match &source {
+                    ScalarValue::Float32(value) => Arc::new(Float32Array::from(vec![
+                        Some(f32::NAN),
+                        None,
+                        *value,
+                        Some(f32::INFINITY),
+                    ])),
+                    ScalarValue::Float64(value) => Arc::new(Float64Array::from(vec![
+                        Some(f64::NAN),
+                        None,
+                        *value,
+                        Some(f64::INFINITY),
+                    ])),
+                    ScalarValue::Int64(value) => {
+                        Arc::new(Int64Array::from(vec![Some(i64::MAX), None, *value]))
+                    }
+                    _ => return exec_err!("unexpected numeric overflow source"),
+                };
+                let cause =
+                    format!("Arrow error: Cast error: Can't cast value {value} to type {target}");
+                for result in [
+                    cast.cast_value(&ColumnarValue::Scalar(source.clone()))
+                        .map(|_| ()),
+                    cast.cast_value(&ColumnarValue::Array(storage.slice(1, 2)))
+                        .map(|_| ()),
+                    cast.simplify(vec![lit(source)], &SimplifyContext::default())
+                        .map(|_| ()),
+                ] {
+                    let Err(error) = result else {
+                        return exec_err!("expected ANSI overflow to {target}");
+                    };
+                    assert!(matches!(
+                        error.find_root(),
+                        DataFusionError::ArrowError(_, _)
+                    ));
+                    assert_eq!(error.find_root().to_string(), cause);
+                    assert_eq!(
+                        error.to_string(),
+                        format!("[CAST_OVERFLOW]\ncaused by\n{cause}")
                     );
                 }
             }

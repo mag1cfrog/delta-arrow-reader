@@ -1,0 +1,786 @@
+{
+  "format_version": 1,
+  "issue": 796,
+  "purpose": "Observation-only CAST IS NULL preservation witness. Does not authorize or implement897 conversion changes.",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "fixtures_root": "/home/hanbo/repo/delta-arrow-reader-spark-sql/crates/delta-arrow-reader-spark-sql/tests/fixtures",
+  "input_encoding": "Integers are decimal strings; FLOAT/DOUBLE use exact IEEE hex via the existing Decimal typed codec. Inputs contain no expected results.",
+  "settings": {
+    "spark.ui.enabled": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1"
+  },
+  "native": {
+    "batch_sizes": [
+      1,
+      32
+    ],
+    "target_partitions": 2,
+    "input_partitions": 2,
+    "sliced_hidden_rows": [
+      [
+        "-1",
+        "7fc00001",
+        "7ff8000000000001"
+      ],
+      [
+        "2147483647",
+        "7f800000",
+        "7ff0000000000000"
+      ]
+    ]
+  },
+  "inputs": [
+    {
+      "name": "floating_integer_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "1",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "2",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "3",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "4",
+          "00000001",
+          "0000000000000001"
+        ],
+        [
+          "5",
+          "80000001",
+          "8000000000000001"
+        ],
+        [
+          "6",
+          "7fc00000",
+          "7ff8000000000000"
+        ],
+        [
+          "7",
+          "7f800000",
+          "7ff0000000000000"
+        ],
+        [
+          "8",
+          "ff800000",
+          "fff0000000000000"
+        ],
+        [
+          "9",
+          "42ffffff",
+          "405fffffffffffff"
+        ],
+        [
+          "10",
+          "43000000",
+          "4060000000000000"
+        ],
+        [
+          "11",
+          "43000001",
+          "4060000000000001"
+        ],
+        [
+          "12",
+          "c2ffffff",
+          "c05fffffffffffff"
+        ],
+        [
+          "13",
+          "c3000000",
+          "c060000000000000"
+        ],
+        [
+          "14",
+          "c3000001",
+          "c060000000000001"
+        ],
+        [
+          "15",
+          "46ffffff",
+          "40dfffffffffffff"
+        ],
+        [
+          "16",
+          "47000000",
+          "40e0000000000000"
+        ],
+        [
+          "17",
+          "47000001",
+          "40e0000000000001"
+        ],
+        [
+          "18",
+          "c6ffffff",
+          "c0dfffffffffffff"
+        ],
+        [
+          "19",
+          "c7000000",
+          "c0e0000000000000"
+        ],
+        [
+          "20",
+          "c7000001",
+          "c0e0000000000001"
+        ],
+        [
+          "21",
+          "4effffff",
+          "41dfffffffffffff"
+        ],
+        [
+          "22",
+          "4f000000",
+          "41e0000000000000"
+        ],
+        [
+          "23",
+          "4f000001",
+          "41e0000000000001"
+        ],
+        [
+          "24",
+          "ceffffff",
+          "c1dfffffffffffff"
+        ],
+        [
+          "25",
+          "cf000000",
+          "c1e0000000000000"
+        ],
+        [
+          "26",
+          "cf000001",
+          "c1e0000000000001"
+        ],
+        [
+          "27",
+          "5effffff",
+          "43dfffffffffffff"
+        ],
+        [
+          "28",
+          "5f000000",
+          "43e0000000000000"
+        ],
+        [
+          "29",
+          "5f000001",
+          "43e0000000000001"
+        ],
+        [
+          "30",
+          "deffffff",
+          "c3dfffffffffffff"
+        ],
+        [
+          "31",
+          "df000000",
+          "c3e0000000000000"
+        ],
+        [
+          "32",
+          "df000001",
+          "c3e0000000000001"
+        ],
+        [
+          "33",
+          "7f7fffff",
+          "7fefffffffffffff"
+        ],
+        [
+          "34",
+          "ff7fffff",
+          "ffefffffffffffff"
+        ],
+        [
+          "35",
+          "4380e000",
+          "40701c0000000000"
+        ],
+        [
+          "36",
+          "c380e000",
+          "c0701c0000000000"
+        ],
+        [
+          "37",
+          "478000e0",
+          "40f0001c00000000"
+        ],
+        [
+          "38",
+          "c78000e0",
+          "c0f0001c00000000"
+        ],
+        [
+          "39",
+          "4f800000",
+          "41f0000000100000"
+        ],
+        [
+          "40",
+          "cf800000",
+          "c1f0000000100000"
+        ]
+      ],
+      "native_slice": false
+    },
+    {
+      "name": "floating_integer_nullable_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ],
+        [
+          "1",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "2",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "3",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "4",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "5",
+          "00000001",
+          "0000000000000001"
+        ],
+        [
+          "6",
+          "80000001",
+          "8000000000000001"
+        ],
+        [
+          "7",
+          "7fc00000",
+          "7ff8000000000000"
+        ],
+        [
+          "8",
+          null,
+          null
+        ],
+        [
+          "9",
+          "7f800000",
+          "7ff0000000000000"
+        ],
+        [
+          "10",
+          "ff800000",
+          "fff0000000000000"
+        ],
+        [
+          "11",
+          "42ffffff",
+          "405fffffffffffff"
+        ],
+        [
+          "12",
+          "43000000",
+          "4060000000000000"
+        ],
+        [
+          "13",
+          "43000001",
+          "4060000000000001"
+        ],
+        [
+          "14",
+          "c2ffffff",
+          "c05fffffffffffff"
+        ],
+        [
+          "15",
+          "c3000000",
+          "c060000000000000"
+        ],
+        [
+          "16",
+          "c3000001",
+          "c060000000000001"
+        ],
+        [
+          "17",
+          "46ffffff",
+          "40dfffffffffffff"
+        ],
+        [
+          "18",
+          "47000000",
+          "40e0000000000000"
+        ],
+        [
+          "19",
+          "47000001",
+          "40e0000000000001"
+        ],
+        [
+          "20",
+          "c6ffffff",
+          "c0dfffffffffffff"
+        ],
+        [
+          "21",
+          "c7000000",
+          "c0e0000000000000"
+        ],
+        [
+          "22",
+          "c7000001",
+          "c0e0000000000001"
+        ],
+        [
+          "23",
+          "4effffff",
+          "41dfffffffffffff"
+        ],
+        [
+          "24",
+          "4f000000",
+          "41e0000000000000"
+        ],
+        [
+          "25",
+          "4f000001",
+          "41e0000000000001"
+        ],
+        [
+          "26",
+          "ceffffff",
+          "c1dfffffffffffff"
+        ],
+        [
+          "27",
+          "cf000000",
+          "c1e0000000000000"
+        ],
+        [
+          "28",
+          "cf000001",
+          "c1e0000000000001"
+        ],
+        [
+          "29",
+          "5effffff",
+          "43dfffffffffffff"
+        ],
+        [
+          "30",
+          "5f000000",
+          "43e0000000000000"
+        ],
+        [
+          "31",
+          "5f000001",
+          "43e0000000000001"
+        ],
+        [
+          "32",
+          "deffffff",
+          "c3dfffffffffffff"
+        ],
+        [
+          "33",
+          "df000000",
+          "c3e0000000000000"
+        ],
+        [
+          "34",
+          "df000001",
+          "c3e0000000000001"
+        ],
+        [
+          "35",
+          "7f7fffff",
+          "7fefffffffffffff"
+        ],
+        [
+          "36",
+          "ff7fffff",
+          "ffefffffffffffff"
+        ],
+        [
+          "37",
+          "4380e000",
+          "40701c0000000000"
+        ],
+        [
+          "38",
+          "c380e000",
+          "c0701c0000000000"
+        ],
+        [
+          "39",
+          "478000e0",
+          "40f0001c00000000"
+        ],
+        [
+          "40",
+          "c78000e0",
+          "c0f0001c00000000"
+        ],
+        [
+          "41",
+          "4f800000",
+          "41f0000000100000"
+        ],
+        [
+          "42",
+          "cf800000",
+          "c1f0000000100000"
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "floating_integer_fitting_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "1",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "2",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "3",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "4",
+          "00000001",
+          "0000000000000001"
+        ],
+        [
+          "5",
+          "80000001",
+          "8000000000000001"
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "floating_integer_all_null_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ],
+        [
+          "1",
+          null,
+          null
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "floating_integer_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [],
+      "native_slice": false
+    }
+  ],
+  "helper_sources": {
+    "bigint-int-narrowing/capture_bigint_int_narrowing.py": "793a798e9a3e6e5fe2b59b1c3630db61782fbcbeac27342c7af0be998c96420f",
+    "recapture_string_binary_spark.py": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8",
+    "decimal-integer-cast/capture_decimal_to_integer_declarations.py": "c087cc168026d8742a3e5257506542dfeb05e2942978bbc699ec0c13e6f662a7"
+  },
+  "source_manifest": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/897-floating-integer-inputs-current-v1-manifest.json",
+    "sha256": "49a514c85966cebdaf2ff9b574bd4032e153b61c678af30565845332819b3c2e"
+  },
+  "immutable_existing_evidence": [
+    {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/897-floating-integer-inputs-current-v1-manifest.json",
+      "sha256": "49a514c85966cebdaf2ff9b574bd4032e153b61c678af30565845332819b3c2e"
+    },
+    {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/897-floating-integer-spark-current-v1.jsonl",
+      "sha256": "e8945dc1ab19cd6148fc506eec6381c91c9f98a9cfe9c1407b79740420618857"
+    },
+    {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/897-independent-spark-audit-current-v1.json",
+      "sha256": "773b60d15b10c5a94ad0f11f4a334960a2f67840095db2e50585b8cebdb05b29"
+    },
+    {
+      "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-window-completion-2026-11-02/897-floating-integer-policy-current-v1.json",
+      "sha256": "df05ba993e0e751161bc45d41fc3366eabcbb925626e07a853313650e94a05f8"
+    }
+  ],
+  "case_count": 6,
+  "observations": 12,
+  "native_observations": 24,
+  "cases": [
+    {
+      "id": "double_huge_literal_is_null",
+      "domain": "796_preservation_is_null",
+      "source_type": "DOUBLE",
+      "source_form": "literal",
+      "sql": "SELECT CAST(1e100 AS INT) IS NULL AS r",
+      "ordered": false,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_nan_literal_is_null",
+      "domain": "796_preservation_is_null",
+      "source_type": "FLOAT",
+      "source_form": "literal",
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) IS NULL AS r",
+      "ordered": false,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_required_column_is_null",
+      "domain": "796_preservation_is_null",
+      "source_type": "FLOAT",
+      "source_form": "column",
+      "sql": "SELECT id,CAST(f AS INT) IS NULL AS r FROM floating_integer_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_required_column_is_null",
+      "domain": "796_preservation_is_null",
+      "source_type": "DOUBLE",
+      "source_form": "column",
+      "sql": "SELECT id,CAST(d AS INT) IS NULL AS r FROM floating_integer_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_nan_try_is_null",
+      "domain": "796_preservation_is_null",
+      "source_type": "DOUBLE",
+      "source_form": "literal",
+      "sql": "SELECT TRY_CAST(CAST('NaN' AS DOUBLE) AS INT) IS NULL AS r",
+      "ordered": false,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_fraction_literal_is_null",
+      "domain": "796_preservation_is_null",
+      "source_type": "DOUBLE",
+      "source_form": "literal",
+      "sql": "SELECT CAST(CAST(1.9 AS DOUBLE) AS INT) IS NULL AS r",
+      "ordered": false,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    }
+  ]
+}

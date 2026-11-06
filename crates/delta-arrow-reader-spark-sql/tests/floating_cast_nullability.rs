@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::error::Error;
+use std::path::Path;
 
 use arrow::array::{Array, AsArray};
 use arrow::datatypes::{DataType, Float32Type, Float64Type};
@@ -20,6 +21,375 @@ mod spark_inputs;
 mod spark_results;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
+
+fn matches_retained_type_function_names(
+    case: &Value,
+    observation: &Value,
+    batch_size: usize,
+    controls: &Value,
+) -> TestResult<Option<bool>> {
+    let control = controls["controls"]
+        .as_array()
+        .ok_or("missing retained name controls")?
+        .iter()
+        .find(|control| {
+            control["id"] == case["id"]
+                && control["reference"]["sql"] == case["sql"]
+                && control["ansi"] == case["ansi"]
+                && control["batch"] == batch_size
+        });
+    let Some(control) = control else {
+        return Ok(None);
+    };
+    let mut expected = control.clone();
+    let public = expected["observation"]["public_schema"]["fields"]
+        .as_array_mut()
+        .ok_or("missing retained public Fields")?;
+    let spark = case["schema_stages"]["analyzed"]["fields"]
+        .as_array()
+        .ok_or("missing independent public Fields")?;
+    if public.len() != 4 || spark.len() != 4 {
+        return Ok(Some(false));
+    }
+    for (field, spark) in public.iter_mut().zip(spark) {
+        if field["nullable"] != false || spark["nullable"] != true {
+            return Ok(Some(false));
+        }
+        field["nullable"] = spark["nullable"].clone();
+    }
+    let mut comparison = observation.clone();
+    comparison["batch"] = json!(batch_size);
+    Ok(Some(spark_results::matches_inherited_query_observation(
+        case,
+        &comparison,
+        &expected,
+    )))
+}
+
+#[test]
+fn retained_type_function_names_require_the_nullable_repair_and_full_observation() -> TestResult {
+    let controls: Value = serde_json::from_str(include_str!(
+        "fixtures/numeric-cast-nullability/retained-type-function-names.json"
+    ))?;
+    let control = &controls["controls"][0];
+    let case = &control["reference"];
+    let batch = control["batch"].as_u64().ok_or("missing batch")? as usize;
+    let mut repaired = control["observation"].clone();
+    for index in 0..4 {
+        repaired["public_schema"]["fields"][index]["nullable"] =
+            case["schema_stages"]["analyzed"]["fields"][index]["nullable"].clone();
+    }
+    assert_eq!(
+        matches_retained_type_function_names(case, &repaired, batch, &controls)?,
+        Some(true)
+    );
+    assert_eq!(
+        matches_retained_type_function_names(case, &control["observation"], batch, &controls)?,
+        Some(false)
+    );
+    for (pointer, value) in [
+        ("/public_schema/fields/0/name", json!("unrelated")),
+        ("/public_schema/fields/0/type", json!("long")),
+        ("/public_schema/fields/0/nullable", json!(false)),
+        (
+            "/public_schema/fields/0/metadata",
+            json!({"new":"metadata"}),
+        ),
+        ("/optimized_schema/fields/0/nullable", json!(true)),
+        ("/before_collect/fields/0/name", json!("unrelated")),
+        ("/physical_schema", Value::Null),
+        ("/rows", json!([["2", "1", "1", "1"]])),
+        ("/rows_raw", Value::Null),
+        ("/error", json!("unrelated failure")),
+        ("/optimized_matches", json!(true)),
+    ] {
+        let mut changed = repaired.clone();
+        *changed
+            .pointer_mut(pointer)
+            .ok_or("missing mutation path")? = value;
+        assert_eq!(
+            matches_retained_type_function_names(case, &changed, batch, &controls)?,
+            Some(false),
+            "{pointer}"
+        );
+    }
+    let mut different_sql = case.clone();
+    different_sql["sql"] = json!("SELECT 1");
+    assert_eq!(
+        matches_retained_type_function_names(&different_sql, &repaired, batch, &controls)?,
+        None
+    );
+    let mut different_id = case.clone();
+    different_id["id"] = json!("another_case");
+    assert_eq!(
+        matches_retained_type_function_names(&different_id, &repaired, batch, &controls)?,
+        None
+    );
+    let mut different_ansi = case.clone();
+    different_ansi["ansi"] = json!(!case["ansi"].as_bool().ok_or("missing ANSI mode")?);
+    assert_ne!(
+        matches_retained_type_function_names(&different_ansi, &repaired, batch, &controls)?,
+        Some(true)
+    );
+    assert_eq!(
+        matches_retained_type_function_names(case, &repaired, 64, &controls)?,
+        None
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn floating_integer_cast_fields_match_recorded_stages() -> TestResult {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "fixtures/numeric-cast-nullability/manifest.json"
+    ))?;
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/numeric-cast-nullability/spark.jsonl");
+    let records = std::fs::read_to_string(path)?
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 264);
+    let header = &records[0];
+    assert_eq!(header["spark_version"], "4.2.0");
+    assert_eq!(
+        header["spark_build"]["SPARK_REVISION"]["value"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(header["timezone"], "UTC");
+    assert_eq!(header["selection"], "all");
+    assert_eq!(
+        header["manifest_sha256"],
+        "c5b970e8239fcb61637d52b9a7d45484f76865bffe136169609f329b9d37d4bc"
+    );
+    assert_eq!(header["inputs"], manifest["inputs"]);
+    assert_eq!(header["native"], manifest["native"]);
+    let definitions = manifest["cases"].as_array().ok_or("missing cases")?;
+    let mut expected_identities = BTreeSet::new();
+    for case in definitions {
+        for ansi in [true, false] {
+            expected_identities.insert((case["id"].to_string(), ansi));
+        }
+    }
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        let ansi = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
+        assert!(identities.insert((case["id"].to_string(), ansi)));
+        let definition = definitions
+            .iter()
+            .find(|definition| definition["id"] == case["id"])
+            .ok_or("undeclared captured case")?;
+        for key in ["id", "domain", "sql", "ordered", "original_fixture"] {
+            assert_eq!(case[key], definition[key], "{key}: {}", case["id"]);
+        }
+        assert_eq!(case["settings"]["spark.sql.session.timeZone"], "UTC");
+        assert_eq!(case["settings"]["spark.sql.ansi.enabled"], ansi.to_string());
+        if case["expected"].get("rows").is_some() {
+            assert_eq!(
+                case["expected"]["schema"],
+                case["schema_stages"]["analyzed"]
+            );
+            for stage in [
+                "analyzed",
+                "optimized",
+                "executed_before_collect",
+                "executed",
+            ] {
+                assert!(case["schema_stages"][stage].is_object(), "{stage}: {case}");
+            }
+        }
+    }
+    assert_eq!(identities, expected_identities);
+    let mut original_count = 0;
+    for (fixture, source) in [
+        (
+            "trim-case-connected-spark.jsonl",
+            include_str!("fixtures/trim-case-connected-spark.jsonl"),
+        ),
+        (
+            "substring-arguments-spark.jsonl",
+            include_str!("fixtures/substring-arguments-spark.jsonl"),
+        ),
+        (
+            "regexp-replace-position-int-spark.jsonl",
+            include_str!("fixtures/regexp-replace-position-int-spark.jsonl"),
+        ),
+    ] {
+        let original = source
+            .lines()
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        for case in records[1..]
+            .iter()
+            .filter(|case| case["original_fixture"] == fixture)
+        {
+            let original = original[1..]
+                .iter()
+                .find(|original| original["id"] == case["id"] && original["ansi"] == case["ansi"])
+                .ok_or("missing original consumer")?;
+            assert_eq!(case["sql"], original["sql"]);
+            assert_eq!(
+                case["expected"]["schema"],
+                original["expected"]["analyzed_schema"]
+            );
+            assert_eq!(case["expected"]["rows"], original["expected"]["rows"]);
+            assert_eq!(
+                case["schema_stages"]["executed"],
+                original["expected"]["physical_schema"]
+            );
+            if let Some(optimized) = original["expected"].get("optimized_schema") {
+                assert_eq!(&case["schema_stages"]["optimized"], optimized);
+            }
+            original_count += 1;
+        }
+    }
+    assert_eq!(original_count, 18);
+    let retained_names: Value = serde_json::from_str(include_str!(
+        "fixtures/numeric-cast-nullability/retained-type-function-names.json"
+    ))?;
+    assert_eq!(retained_names["issue"], 1019);
+    assert_eq!(
+        retained_names["baseline_head"],
+        "83924271c761979616842f7ea731bf0bd9aab120"
+    );
+    assert_eq!(retained_names["controls"].as_array().map(Vec::len), Some(4));
+
+    let mut differences = Vec::new();
+    let mut comparisons = 0;
+    let mut retained_contexts = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        spark_inputs::register_recorded_inputs_with_slices(&session, header, batch_size)?;
+        for case in &records[1..] {
+            let actual =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await?;
+            // The shared observer reports optimized Fields separately from its base match.
+            let matches = actual["matches"] == true && actual["optimized_matches"] == true;
+            let retained_name_contract =
+                matches_retained_type_function_names(case, &actual, batch_size, &retained_names)?;
+            let scoped_matches = if let Some(retained) = retained_name_contract {
+                retained_contexts += 1;
+                retained && !matches
+            } else {
+                matches
+            };
+            if !scoped_matches {
+                differences.push(format!(
+                    "{} ANSI={} batch={batch_size}: {actual}",
+                    case["id"], case["ansi"]
+                ));
+            }
+            eprintln!(
+                "NUMERIC_CAST_FIELD_RESULT {}",
+                json!({"id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "domain":case["domain"],"reference":case,"observation":actual,
+                    "all_stages_match":matches,"retained_1019_contract_match":retained_name_contract,
+                    "scoped_796_and_retained_contract_match":scoped_matches})
+            );
+            comparisons += 1;
+        }
+    }
+    assert_eq!(comparisons, 528);
+    assert_eq!(retained_contexts, 4);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn floating_integer_cast_null_inspection_matches_recorded_contracts() -> TestResult {
+    let records = include_str!("fixtures/numeric-cast-nullability/null-inspection-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let facets: Value = serde_json::from_str(include_str!(
+        "fixtures/numeric-cast-nullability/null-inspection-retained-facets.json"
+    ))?;
+    assert_eq!(records.len() - 1, 12);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_build"]["SPARK_REVISION"]["value"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    assert_eq!(records[0]["timezone"], "UTC");
+    assert_eq!(
+        facets["proof_head"],
+        "8d317f38798ad9b6393e783b2529f6f2bfc2daa9"
+    );
+    assert_eq!(
+        facets["spark_reference_sha256"],
+        "d38a3a81ed7ba724785eb9415fc66964e86fcad65f6f5466289649d580c030eb"
+    );
+    assert_eq!(facets["contexts"].as_array().map(Vec::len), Some(8));
+    let mut identities = BTreeSet::new();
+    for case in &records[1..] {
+        assert!(identities.insert((case["id"].to_string(), case["ansi"].to_string())));
+    }
+    let mut comparisons = 0;
+    let mut strict_successes = 0;
+    let mut required_overflow_contexts = 0;
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        spark_inputs::register_recorded_inputs_with_slices(&session, &records[0], batch_size)?;
+        for case in &records[1..] {
+            let actual =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await?;
+            let strict = actual["matches"] == true && actual["optimized_matches"] == true;
+            if case["expected"].get("rows").is_some() {
+                assert!(
+                    strict,
+                    "{} ANSI={} batch={batch_size}: {actual}",
+                    case["id"], case["ansi"]
+                );
+                strict_successes += 1;
+            } else {
+                assert_eq!(case["ansi"], true);
+                assert!(strict, "{} batch={batch_size}: {actual}", case["id"]);
+                assert!(
+                    floating_integer_scoped_contract_matches(case, &actual, batch_size, &facets)?,
+                    "{} batch={batch_size}: {actual}",
+                    case["id"]
+                );
+                required_overflow_contexts += 1;
+            }
+            eprintln!(
+                "FLOATING_INTEGER_NULL_INSPECTION_RESULT {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,"reference":case,
+                    "observation":actual,"strict_reference_match":strict,
+                })
+            );
+            comparisons += 1;
+        }
+    }
+    assert_eq!(comparisons, 24);
+    assert_eq!(strict_successes, 16);
+    assert_eq!(required_overflow_contexts, 8);
+    Ok(())
+}
 
 #[tokio::test]
 async fn floating_integer_conversion_evaluates_its_input_once() -> TestResult {
@@ -85,7 +455,117 @@ async fn floating_integer_conversion_evaluates_its_input_once() -> TestResult {
 }
 
 #[tokio::test]
-async fn floating_try_cast_propagates_producer_errors() -> TestResult {
+async fn ansi_numeric_integer_cast_overflow_keeps_condition_and_root_cause() -> TestResult {
+    use arrow::datatypes::{Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::{DataFusionError, ScalarValue};
+    use std::sync::Arc;
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for (name, source, value) in [
+        ("float_nan", ScalarValue::Float32(Some(f32::NAN)), "NaN"),
+        ("double_nan", ScalarValue::Float64(Some(f64::NAN)), "NaN"),
+        (
+            "float_inf",
+            ScalarValue::Float32(Some(f32::INFINITY)),
+            "inf",
+        ),
+        (
+            "double_inf",
+            ScalarValue::Float64(Some(f64::INFINITY)),
+            "inf",
+        ),
+        (
+            "float_neg_inf",
+            ScalarValue::Float32(Some(f32::NEG_INFINITY)),
+            "-inf",
+        ),
+        (
+            "double_neg_inf",
+            ScalarValue::Float64(Some(f64::NEG_INFINITY)),
+            "-inf",
+        ),
+        (
+            "float_finite_overflow",
+            ScalarValue::Float32(Some(1e30)),
+            "1e30",
+        ),
+        (
+            "double_finite_overflow",
+            ScalarValue::Float64(Some(1e100)),
+            "1e100",
+        ),
+        (
+            "bigint_overflow",
+            ScalarValue::Int64(Some(4294967296)),
+            "4294967296",
+        ),
+    ] {
+        session.register_batch(
+            name,
+            RecordBatch::try_new(
+                Arc::new(Schema::new(vec![Field::new(
+                    "v",
+                    source.data_type(),
+                    false,
+                )])),
+                vec![source.to_array_of_size(1)?],
+            )?,
+        )?;
+        for (target, data_type) in [
+            ("TINYINT", DataType::Int8),
+            ("SMALLINT", DataType::Int16),
+            ("INT", DataType::Int32),
+            ("BIGINT", DataType::Int64),
+        ] {
+            if source.data_type() == DataType::Int64 && data_type != DataType::Int32 {
+                continue;
+            }
+            let sql = format!("SELECT CAST(v AS {target}) AS r FROM {name}");
+            let query = plan_query(
+                &session,
+                &sql,
+                &SparkSqlOptions {
+                    ansi_mode: true,
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            let field = query.logical_plan.schema().field(0);
+            assert_eq!(field.data_type(), &data_type, "{sql}");
+            assert_eq!(
+                field.is_nullable(),
+                source.data_type() != DataType::Int64,
+                "{sql}"
+            );
+            let physical = query.create_physical_plan(&session).await?;
+            let error = collect(physical, session.task_ctx())
+                .await
+                .err()
+                .ok_or("ANSI column CAST must overflow")?;
+            assert!(
+                matches!(error.find_root(), DataFusionError::ArrowError(_, _)),
+                "{sql}: {error}"
+            );
+            assert_eq!(
+                error.find_root().to_string(),
+                format!("Arrow error: Cast error: Can't cast value {value} to type {data_type}"),
+                "{sql}"
+            );
+            assert!(
+                error.to_string().contains("[CAST_OVERFLOW]"),
+                "{sql}: {error}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn floating_integer_casts_propagate_producer_errors() -> TestResult {
+    use arrow::error::ArrowError;
     use datafusion::common::DataFusionError;
     use datafusion::logical_expr::{Volatility, create_udf};
     use std::sync::Arc;
@@ -95,9 +575,11 @@ async fn floating_try_cast_propagates_producer_errors() -> TestResult {
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
     let calls = Arc::new(AtomicUsize::new(0));
-    for (name, source) in [
-        ("failing_float_producer", DataType::Float32),
-        ("failing_double_producer", DataType::Float64),
+    for (name, source, typed_arrow) in [
+        ("failing_float_producer", DataType::Float32, false),
+        ("failing_double_producer", DataType::Float64, false),
+        ("failing_float_arrow_producer", DataType::Float32, true),
+        ("failing_double_arrow_producer", DataType::Float64, true),
     ] {
         let observed_calls = Arc::clone(&calls);
         session.register_udf(create_udf(
@@ -107,34 +589,48 @@ async fn floating_try_cast_propagates_producer_errors() -> TestResult {
             Volatility::Volatile,
             Arc::new(move |_| {
                 observed_calls.fetch_add(1, Ordering::SeqCst);
-                Err(DataFusionError::Execution(format!(
-                    "{name} failed before conversion"
-                )))
+                let message = format!("{name} failed before conversion");
+                Err(if typed_arrow {
+                    DataFusionError::ArrowError(Box::new(ArrowError::CastError(message)), None)
+                } else {
+                    DataFusionError::Execution(message)
+                })
             }),
         ));
         for ansi_mode in [true, false] {
-            for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
-                let before = calls.load(Ordering::SeqCst);
-                let query = plan_query(
-                    &session,
-                    &format!("SELECT TRY_CAST({name}() AS {target}) AS r"),
-                    &SparkSqlOptions {
-                        ansi_mode,
-                        ..SparkSqlOptions::default()
-                    },
-                )
-                .await?;
-                let physical = query.create_physical_plan(&session).await?;
-                assert_eq!(calls.load(Ordering::SeqCst), before);
-                let error = collect(physical, session.task_ctx())
-                    .await
-                    .err()
-                    .ok_or("TRY_CAST swallowed a producer error")?;
-                assert!(
-                    matches!(error.find_root(), DataFusionError::Execution(message)
-                    if message == &format!("{name} failed before conversion"))
-                );
-                assert_eq!(calls.load(Ordering::SeqCst), before + 1);
+            for function in ["CAST", "TRY_CAST"] {
+                for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
+                    let before = calls.load(Ordering::SeqCst);
+                    let query = plan_query(
+                        &session,
+                        &format!("SELECT {function}({name}() AS {target}) AS r"),
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    assert_eq!(calls.load(Ordering::SeqCst), before);
+                    let error = collect(physical, session.task_ctx())
+                        .await
+                        .err()
+                        .ok_or("numeric CAST swallowed a producer error")?;
+                    if typed_arrow {
+                        assert!(
+                            matches!(error.find_root(), DataFusionError::ArrowError(cause, _)
+                            if matches!(cause.as_ref(), ArrowError::CastError(message)
+                            if message == &format!("{name} failed before conversion")))
+                        );
+                    } else {
+                        assert!(
+                            matches!(error.find_root(), DataFusionError::Execution(message)
+                            if message == &format!("{name} failed before conversion"))
+                        );
+                    }
+                    assert!(!error.to_string().contains("[CAST_OVERFLOW]"));
+                    assert_eq!(calls.load(Ordering::SeqCst), before + 1);
+                }
             }
         }
     }
@@ -189,13 +685,34 @@ fn floating_integer_scoped_contract_matches(
         return Ok(false);
     }
     let mut normalized = actual.clone();
+    // #1031 retains only these exact later substring failures and extra native Fields.
+    let later_substring_error = case["ansi"] == true
+        && matches!(
+            case["id"].as_str(),
+            Some("float_nan_substring" | "double_infinity_substring")
+        );
     for kind in ["fields", "availability", "rows"] {
         for facet in control[kind].as_array().ok_or("missing retained facets")? {
             let key = facet["key"].as_str().ok_or("missing observed key")?;
             let owner = facet["owner"].as_u64().ok_or("missing facet owner")?;
             if kind == "availability" {
                 assert!(matches!(owner, 922 | 1020));
-                if normalized[key] != facet["inherited_dar"] {
+                let mut expected_native = facet["inherited_dar"].clone();
+                if owner == 922 && later_substring_error {
+                    assert!(matches!(
+                        key,
+                        "optimized_schema" | "before_collect" | "physical_schema"
+                    ));
+                    assert_eq!(
+                        expected_native,
+                        json!({"type":"struct","fields":[{
+                            "name":"r","type":"string","nullable":false,"metadata":{}
+                        }]})
+                    );
+                    // Spark has no later schema here; retain the native boundary with the repaired declaration.
+                    expected_native["fields"][0]["nullable"] = json!(true);
+                }
+                if normalized[key] != expected_native {
                     return Ok(false);
                 }
                 normalized[key] = facet["spark"].clone();
@@ -207,6 +724,10 @@ fn floating_integer_scoped_contract_matches(
             if kind == "fields" {
                 assert!(matches!(owner, 796 | 1020));
                 assert!(pointer.ends_with("/nullable"));
+                // The old796 leaves remain history; the final schema comparison now requires Spark.
+                if owner == 796 {
+                    continue;
+                }
             } else {
                 assert_eq!(owner, 1020);
                 assert!(matches!(key, "rows" | "rows_raw"));
@@ -241,12 +762,32 @@ fn floating_integer_scoped_contract_matches(
             retained_error["owner"].as_u64(),
             Some(865 | 922 | 1020)
         ));
+        let mut expected_error = retained_error.clone();
+        if matches!(retained_error["owner"].as_u64(), Some(922 | 1020)) {
+            for key in ["error", "optimized_error"] {
+                if let Some(error) = retained_error[key].as_str() {
+                    assert!(!error.contains("[CAST_OVERFLOW]"));
+                    assert_eq!(error.matches("Arrow error: Cast error: ").count(), 1);
+                    expected_error[key] = json!(error.replacen(
+                        "Arrow error: Cast error: ",
+                        "[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: ",
+                        1,
+                    ));
+                }
+            }
+        }
+        if later_substring_error {
+            assert_eq!(retained_error["owner"], 922);
+            assert_eq!(retained_error["native_phase"], "collect");
+            assert_eq!(case["spark_error_phase"], "optimized");
+        }
+        let error_matches = retained_error["owner"] == 922 && !later_substring_error;
         if ["error", "native_phase", "optimized_error"]
             .into_iter()
-            .any(|key| actual[key] != retained_error[key])
+            .any(|key| actual[key] != expected_error[key])
             || !actual["rows"].is_null()
             || !actual["rows_raw"].is_null()
-            || actual["error_matches"] != false
+            || actual["error_matches"] != error_matches
         {
             return Ok(false);
         }
@@ -279,7 +820,7 @@ fn floating_integer_scoped_contract_matches(
         }
     }
     if actual["optimized_observation"].is_null() {
-        if actual["optimized_matches"] != false || retained_error.is_null() {
+        if actual["optimized_matches"] != actual["error_matches"] || retained_error.is_null() {
             return Ok(false);
         }
     } else {
@@ -404,6 +945,30 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         "raw_schema":actual["optimized_schema"],"schema":actual["optimized_schema"],
         "names_match":true,
     });
+    assert!(!floating_integer_scoped_contract_matches(
+        case, &actual, 1, &facets
+    )?);
+    let inherited = actual.clone();
+    for (key, stage) in [
+        ("public_schema", "analyzed"),
+        ("optimized_schema", "optimized"),
+        ("before_collect", "executed_before_collect"),
+        ("physical_schema", "executed"),
+    ] {
+        actual[key] = case["schema_stages"][stage].clone();
+    }
+    for flag in [
+        "public_matches",
+        "optimized_matches",
+        "before_matches",
+        "physical_matches",
+        "matches",
+    ] {
+        actual[flag] = json!(true);
+    }
+    actual["optimized_observation"] = json!({
+        "raw_schema":actual["optimized_schema"],"schema":actual["optimized_schema"],"names_match":true,
+    });
     assert!(floating_integer_scoped_contract_matches(
         case, &actual, 1, &facets
     )?);
@@ -419,7 +984,7 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         ("/before_collect", Value::Null),
         ("/native_phase", json!("collect")),
         ("/optimized_error", json!("unrelated error")),
-        ("/matches", json!(true)),
+        ("/matches", json!(false)),
     ] {
         let mut changed = actual.clone();
         *changed
@@ -451,7 +1016,7 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         case, &changed, 1, &facets
     )?);
     assert!(!floating_integer_scoped_contract_matches(
-        case, &actual, 2, &facets
+        case, &inherited, 2, &facets
     )?);
     for (key, value) in [
         ("sql", json!("SELECT 99")),
@@ -461,41 +1026,161 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         let mut changed = case.clone();
         changed[key] = value;
         assert!(!floating_integer_scoped_contract_matches(
-            &changed, &actual, 1, &facets
+            &changed, &inherited, 1, &facets
+        )?);
+    }
+
+    for id in [
+        "float_tinyint_literal_nan",
+        "float_bigint_literal_bigint_upper_cutoff",
+    ] {
+        let case = records
+            .iter()
+            .find(|case| case["id"] == id && case["ansi"] == true)
+            .ok_or("missing checked cause control")?;
+        let mut error = facets["contexts"]
+            .as_array()
+            .ok_or("missing retained contexts")?
+            .iter()
+            .find(|control| {
+                control["id"] == case["id"]
+                    && control["ansi"] == case["ansi"]
+                    && control["batch"] == 1
+            })
+            .ok_or("missing exact cause")?["error"]
+            .clone();
+        for key in ["error", "optimized_error"] {
+            error[key] = json!(
+                error[key]
+                    .as_str()
+                    .ok_or("missing checked error")?
+                    .replacen(
+                        "Arrow error: ",
+                        "[CAST_OVERFLOW]\ncaused by\nArrow error: ",
+                        1
+                    )
+            );
+        }
+        let condition_matches = error["owner"] == 922;
+        let actual = json!({
+            "public_schema":case["schema_stages"]["analyzed"],
+            "optimized_schema":null,"before_collect":null,"physical_schema":null,
+            "rows":null,"rows_raw":null,"native_phase":error["native_phase"],
+            "error":error["error"],"optimized_error":error["optimized_error"],
+            "public_matches":true,
+            "before_matches":case["schema_stages"]["executed_before_collect"].is_null(),
+            "physical_matches":case["schema_stages"]["executed"].is_null(),
+            "rows_match":case["expected"].get("rows").is_none(),"ordered_rows_match":true,
+            "error_matches":condition_matches,"matches":condition_matches,
+            "optimized_matches":condition_matches,"optimized_observation":null,
+        });
+        assert!(floating_integer_scoped_contract_matches(
+            case, &actual, 1, &facets
+        )?);
+        for key in ["error", "optimized_error", "native_phase"] {
+            let mut changed = actual.clone();
+            changed[key] = json!("[CAST_OVERFLOW] a different cause or stage");
+            assert!(!floating_integer_scoped_contract_matches(
+                case, &changed, 1, &facets
+            )?);
+        }
+        let mut missing_marker = actual.clone();
+        for key in ["error", "optimized_error"] {
+            missing_marker[key] = json!(
+                actual[key]
+                    .as_str()
+                    .ok_or("missing checked error")?
+                    .replace("[CAST_OVERFLOW]", "")
+            );
+        }
+        assert!(!floating_integer_scoped_contract_matches(
+            case,
+            &missing_marker,
+            1,
+            &facets
+        )?);
+        let mut wrong_flags = actual.clone();
+        for key in ["error_matches", "matches", "optimized_matches"] {
+            wrong_flags[key] = json!(!condition_matches);
+        }
+        assert!(!floating_integer_scoped_contract_matches(
+            case,
+            &wrong_flags,
+            1,
+            &facets
         )?);
     }
 
     let case = records
         .iter()
-        .find(|case| case["id"] == "float_tinyint_literal_nan" && case["ansi"] == true)
-        .ok_or("missing checked cause control")?;
-    let error = facets["contexts"]
+        .find(|case| case["id"] == "double_infinity_substring" && case["ansi"] == true)
+        .ok_or("missing later native schema control")?;
+    let control = facets["contexts"]
         .as_array()
         .ok_or("missing retained contexts")?
         .iter()
         .find(|control| {
             control["id"] == case["id"] && control["ansi"] == case["ansi"] && control["batch"] == 1
         })
-        .ok_or("missing exact cause")?["error"]
-        .clone();
-    let actual = json!({
+        .ok_or("missing exact native schema boundary")?;
+    let error = &control["error"];
+    let mut actual = json!({
         "public_schema":case["schema_stages"]["analyzed"],
         "optimized_schema":null,"before_collect":null,"physical_schema":null,
         "rows":null,"rows_raw":null,"native_phase":error["native_phase"],
-        "error":error["error"],"optimized_error":error["optimized_error"],
+        "error":format!("[CAST_OVERFLOW]\ncaused by\n{}", error["error"].as_str().ok_or("missing later cause")?),
+        "optimized_error":error["optimized_error"],
         "public_matches":true,"before_matches":true,"physical_matches":true,
         "rows_match":true,"ordered_rows_match":true,"error_matches":false,
         "matches":false,"optimized_matches":false,"optimized_observation":null,
     });
+    for facet in control["availability"]
+        .as_array()
+        .ok_or("missing stage controls")?
+    {
+        let key = facet["key"].as_str().ok_or("missing native schema key")?;
+        actual[key] = facet["inherited_dar"].clone();
+        actual[key]["fields"][0]["nullable"] = json!(true);
+    }
+    actual["optimized_observation"] = json!({
+        "raw_schema":actual["optimized_schema"],"schema":actual["optimized_schema"],"names_match":true,
+    });
     assert!(floating_integer_scoped_contract_matches(
         case, &actual, 1, &facets
     )?);
-    for key in ["error", "optimized_error", "native_phase"] {
+    let mut missing_marker = actual.clone();
+    missing_marker["error"] = json!(
+        actual["error"]
+            .as_str()
+            .ok_or("missing later cause")?
+            .replace("[CAST_OVERFLOW]", "")
+    );
+    assert!(!floating_integer_scoped_contract_matches(
+        case,
+        &missing_marker,
+        1,
+        &facets
+    )?);
+    for (pointer, wrong) in [
+        ("/physical_schema/fields/0/nullable", json!(false)),
+        ("/physical_schema/fields/0/name", json!("wrong")),
+        ("/physical_schema/fields/0/type", json!("integer")),
+        (
+            "/physical_schema/fields/0/metadata",
+            json!({"wrong":"metadata"}),
+        ),
+        ("/before_collect", Value::Null),
+        ("/native_phase", json!("create_physical_plan")),
+        ("/error", json!("[CAST_OVERFLOW] unrelated cause")),
+    ] {
         let mut changed = actual.clone();
-        changed[key] = json!("[CAST_OVERFLOW] a different cause or stage");
-        assert!(!floating_integer_scoped_contract_matches(
-            case, &changed, 1, &facets
-        )?);
+        *changed
+            .pointer_mut(pointer)
+            .ok_or("missing stage mutation")? = wrong;
+        assert!(
+            !floating_integer_scoped_contract_matches(case, &changed, 1, &facets)?,
+            "accepted changed later native schema boundary at {pointer}"
+        );
     }
 
     let case = records
@@ -711,13 +1396,32 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
         .as_array()
         .ok_or("missing retained contexts")?;
     assert_eq!(contexts.len(), 260);
+    let mut historical_keys = BTreeSet::new();
     let mut retained_keys = BTreeSet::new();
     for control in contexts {
-        assert!(retained_keys.insert((
+        let key = (
             control["id"].to_string(),
             control["ansi"].to_string(),
-            control["batch"].as_u64().ok_or("missing batch")?
-        )));
+            control["batch"].as_u64().ok_or("missing batch")?,
+        );
+        assert!(historical_keys.insert(key.clone()));
+        if (!control["error"].is_null() && control["error"]["owner"] != 922)
+            || !control["availability"]
+                .as_array()
+                .ok_or("missing availability")?
+                .is_empty()
+            || !control["rows"]
+                .as_array()
+                .ok_or("missing retained rows")?
+                .is_empty()
+            || control["fields"]
+                .as_array()
+                .ok_or("missing retained fields")?
+                .iter()
+                .any(|field| field["owner"] != 796)
+        {
+            assert!(retained_keys.insert(key));
+        }
         let case = records[1..]
             .iter()
             .find(|case| case["id"] == control["id"] && case["ansi"] == control["ansi"])
@@ -850,12 +1554,15 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
         }
     }
     assert_eq!(comparisons, 704);
-    assert_eq!(retained_contexts, 260);
+    assert_eq!(historical_keys.len(), 260);
+    assert_eq!(retained_contexts, 36);
+    assert_eq!(strict_matches, 668);
     eprintln!(
         "FLOATING_INTEGER_VALUE_SUMMARY {}",
         json!({
             "comparisons":comparisons,"strict_reference_matches":strict_matches,
-            "retained_contexts":retained_contexts,"unexpected_differences":differences.len(),
+            "historical_contexts":historical_keys.len(),"retained_contexts":retained_contexts,
+            "unexpected_differences":differences.len(),
             "full_compatibility_pass":strict_matches==comparisons,
         })
     );
@@ -1058,21 +1765,22 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
     let mut controls = vec![
-        "SELECT CAST('1.5' AS DOUBLE) AS r",
-        "SELECT TRY_CAST('bad' AS FLOAT) AS r",
-        "SELECT CAST(NULL AS FLOAT) AS r",
-        "SELECT CAST(CAST(4294967296 AS BIGINT) AS INT) AS r",
+        ("SELECT CAST('1.5' AS DOUBLE) AS r", false),
+        ("SELECT TRY_CAST('bad' AS FLOAT) AS r", false),
+        ("SELECT CAST(NULL AS FLOAT) AS r", false),
+        ("SELECT CAST(CAST(4294967296 AS BIGINT) AS INT) AS r", true),
     ]
     .into_iter()
-    .map(str::to_owned)
+    .map(|(sql, fails)| (sql.to_owned(), fails))
     .collect::<Vec<_>>();
     for source in ["FLOAT", "DOUBLE"] {
         for cast in ["CAST", "TRY_CAST"] {
             for value in ["1.9", "'NaN'", "'Infinity'"] {
                 if cast == "CAST" && value != "1.9" {
                     for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
-                        controls.push(format!(
-                            "SELECT CAST(CAST({value} AS {source}) AS {target}) AS r"
+                        controls.push((
+                            format!("SELECT CAST(CAST({value} AS {source}) AS {target}) AS r"),
+                            true,
                         ));
                     }
                     continue;
@@ -1085,19 +1793,29 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
-                controls.push(format!("SELECT {outputs}"));
+                controls.push((format!("SELECT {outputs}"), false));
             }
         }
     }
     let mut before = Vec::new();
-    for sql in &controls {
+    for (sql, fails) in &controls {
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
         let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        if *fails {
+            for observation in [&expected, &actual] {
+                assert!(
+                    observation["error"]
+                        .as_str()
+                        .is_some_and(|error| !error.contains("[CAST_OVERFLOW]")),
+                    "before Spark planning: {sql}: {observation}"
+                );
+            }
+        }
         assert_eq!(actual, expected, "before Spark planning: {sql}");
         before.push(actual);
     }
     for ansi_mode in [true, false] {
-        for sql in &controls {
+        for (sql, _) in &controls {
             if sql.contains("1.9") || sql.contains("TRY_CAST(CAST('NaN'") {
                 let query = plan_query(
                     &configured,
@@ -1117,9 +1835,19 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
             }
         }
     }
-    for (sql, before) in controls.iter().zip(before) {
+    for ((sql, fails), before) in controls.iter().zip(before) {
         let expected = spark_results::capture_native_query_observation(&native, sql).await?;
         let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        if *fails {
+            for observation in [&expected, &actual] {
+                assert!(
+                    observation["error"]
+                        .as_str()
+                        .is_some_and(|error| !error.contains("[CAST_OVERFLOW]")),
+                    "after Spark planning: {sql}: {observation}"
+                );
+            }
+        }
         assert_eq!(actual, expected, "after Spark planning: {sql}");
         assert_eq!(
             actual, before,

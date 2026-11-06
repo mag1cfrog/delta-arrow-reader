@@ -11,8 +11,9 @@ pub(crate) fn meaningful_error(case: &Value, error: &str) -> bool {
             .as_str()
             .map(|value| value.trim_end_matches('L'))
             .is_some_and(|value| {
-                error.contains(&format!("Can't cast value {value} to type Int32"))
-                    || error.contains(&format!("value of {value} is out of range Int32"))
+                error.contains("[CAST_OVERFLOW]")
+                    && (error.contains(&format!("Can't cast value {value} to type Int32"))
+                        || error.contains(&format!("value of {value} is out of range Int32")))
             }),
         Some("CAST_INVALID_INPUT") if parameters["targetType"] == "\"INT\"" => {
             parameters["expression"].as_str().is_some_and(|value| {
@@ -164,30 +165,6 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
     }
     if matches!(
         id,
-        "double_fraction_direct_cast"
-            | "double_negative_fraction_direct_cast"
-            | "float_fraction_direct_cast"
-            | "double_fraction_substring"
-            | "double_negative_fraction_substring"
-            | "float_fraction_substring"
-    ) && expected["status"] == "ok"
-        && actual.get("error").is_none()
-        && actual["rows"] == expected["rows"]
-        && actual["physical_schema"] == expected["physical_schema"]
-    {
-        let kind = if id.ends_with("direct_cast") {
-            "integer"
-        } else {
-            "string"
-        };
-        if single_field(&expected["analyzed_schema"], kind, true)
-            && single_field(&actual["analyzed_schema"], kind, false)
-        {
-            return Some("open_796_float_integer_analyzed_nullable");
-        }
-    }
-    if matches!(
-        id,
         "double_infinity_direct_cast" | "double_infinity_substring"
     ) && ansi
     {
@@ -203,19 +180,21 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
             (
                 "physical",
                 format!(
-                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
                 ),
             )
         } else {
             (
                 "execute",
-                format!("execute: Arrow error: Cast error: Can't cast value {value} to type Int32"),
+                format!(
+                    "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+                ),
             )
         };
         let physical_matches = if direct {
             actual["physical_schema"].is_null()
         } else {
-            single_field(&actual["physical_schema"], "string", false)
+            single_field(&actual["physical_schema"], "string", true)
         };
         if expected_matches
             && single_field(&expected["analyzed_schema"], kind, true)

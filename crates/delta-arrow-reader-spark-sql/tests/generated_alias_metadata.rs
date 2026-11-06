@@ -901,8 +901,7 @@ async fn historical_local_errors_precede_outer_null_pruning() -> TestResult {
         );
         for case in &records[1..] {
             let result = compare_case(&session, case).await;
-            // Check the required failure condition through the existing Arrow
-            // diagnostic representation; public Spark error identifiers remain #149.
+            // Retain historical STRING/DIV diagnostics while requiring the repaired numeric identifier.
             let matches = match (case["expected"]["condition"].as_str(), &result) {
                 (None, Ok(())) => true,
                 (Some(condition), Err(error))
@@ -914,10 +913,7 @@ async fn historical_local_errors_precede_outer_null_pruning() -> TestResult {
                             message.contains("[CAST_INVALID_INPUT]")
                                 || message.contains("Cannot cast string 'bad' to value of Int")
                         }
-                        "CAST_OVERFLOW" => {
-                            message.contains("[CAST_OVERFLOW]")
-                                || message.contains("Can't cast value NaN to type Int")
-                        }
+                        "CAST_OVERFLOW" => message.contains("[CAST_OVERFLOW]"),
                         "ARITHMETIC_OVERFLOW" => message.contains("[ARITHMETIC_OVERFLOW]"),
                         "DIVIDE_BY_ZERO" => {
                             message.contains("[DIVIDE_BY_ZERO]")
