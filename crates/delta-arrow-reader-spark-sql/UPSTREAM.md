@@ -725,6 +725,9 @@ Row-dependent calls use native scalar NULL selection while retaining ordinary
 logical CSE. Whole constant and early local calls retain the private closed-lambda
 adapter for conditional folding and preparation. Its selection/scatter helpers
 remain in use.
+A literal NULL length retains scalar NULL propagation before local lowering,
+so unused source and position work is discarded after type validation. A NULL
+read from a column retains reached conversion checks.
 Pure literal calls keep the scalar path when the shared floating-to-INT cast
 overflows and neither integer argument can return NULL, unless early LIMIT 0
 pruning has already made the input empty. The scalar path retains the public

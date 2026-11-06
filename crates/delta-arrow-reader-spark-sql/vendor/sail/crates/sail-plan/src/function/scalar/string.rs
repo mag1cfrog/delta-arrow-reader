@@ -328,6 +328,13 @@ fn substring_lambdas(
     })? {
         return Ok(Transformed::no(expression));
     }
+    // Keep scalar NULL propagation before local source/position preparation.
+    // A NULL read from a column retains the existing argument path.
+    if literal_value_without_evaluation(&function.args[2])
+        .is_some_and(|value| value.is_null())
+    {
+        return Ok(Transformed::no(expression));
+    }
     if !pruned_empty_input && literal_substring_overflow(&function.args)? {
         // Keep the checked cast visible to ordinary optimization. Resolving
         // the call must still return its real public declaration first.
@@ -1683,18 +1690,14 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
                 lit(ScalarValue::Int64(None)),
                 position.clone(),
             ],
-            vec![
-                lit("abcdef"),
-                position.clone(),
-                lit(ScalarValue::Int64(None)),
-            ],
             vec![col("s"), position.clone(), length.clone()],
+            vec![lit("abcdef"), position.clone(), col("n")],
             vec![lit("abcdef"), integer(false, false)?, length.clone()],
             vec![lit("abcdef"), integer(true, true)?, length.clone()],
             vec![lit("abcdef"), nullable_position, position.clone()],
             vec![
                 lit("abcdef"),
-                position,
+                position.clone(),
                 drop_inherited_column_metadata(permitted.call(vec![lit(2_i64)])),
             ],
         ] {
@@ -1703,6 +1706,22 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
                     .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
                     .transformed
             );
+        }
+        for unused_position in [
+            position,
+            drop_inherited_column_metadata(permitted.call(vec![lit(2_i64)])),
+        ] {
+            let scalar = function.call(vec![
+                lit("abcdef"),
+                unused_position,
+                cast(cast(lit(ScalarValue::Int32(None)), DataType::Int32), DataType::Int64),
+            ]);
+            let lowered = substring_lambdas(scalar.clone(), false)
+                .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
+            assert!(!lowered.transformed);
+            assert_eq!(lowered.data, scalar);
+            let simplified = ExprSimplifier::new(info.clone()).simplify(lowered.data)?;
+            assert!(matches!(simplified, Expr::Literal(value, _) if value.is_null()));
         }
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
