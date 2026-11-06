@@ -378,7 +378,18 @@ fn contract_and_tracked_facets_match(
             .is_some_and(|owners| owners.contains(&json!(982)))
             && public_preserved);
     // Accept a real Spark improvement, or only these exact inherited stage/error facets.
-    let tracked_matches = if facet["kind"] == "observation" {
+    let tracked_matches = if case["id"] == "c06_extract_implicit" && facet["owners"] == json!([788])
+    {
+        let mut tagged = facet["observation"].clone();
+        let prefix = "Execution error: Spark `regexp_extract` function: ";
+        let cause = tagged["error"]
+            .as_str()
+            .and_then(|error| error.strip_prefix(prefix))
+            .ok_or("unexpected frozen extraction error")?;
+        let error = format!("{prefix}[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] {cause}");
+        tagged["error"] = json!(error);
+        observation == &tagged
+    } else if facet["kind"] == "observation" {
         let stages_preserved = [
             "before_collect",
             "physical_schema",
@@ -935,19 +946,84 @@ fn tracked_facets_keep_conversion_and_unlisted_differences_required() -> TestRes
     let facets = baseline["facets"]
         .as_array()
         .ok_or("missing tracked facets")?;
-    let whole = facets
+    let mut extraction_profiles = 0;
+    for whole in facets
         .iter()
-        .find(|facet| {
-            facet["id"] == "c06_extract_implicit" && facet["ansi"] == false && facet["batch"] == 1
-        })
-        .ok_or("missing extraction profile")?;
-    let case = &whole["reference"];
-    let actual = &whole["observation"];
-    assert!(contract_and_tracked_facets_match(case, actual, 1, &baseline)?.0);
-    assert!(!required_contract_matches(case, actual));
-    let mut changed = actual.clone();
-    changed["error"] = json!("Execution error: a different failure");
-    assert!(!contract_and_tracked_facets_match(case, &changed, 1, &baseline)?.0);
+        .filter(|facet| facet["id"] == "c06_extract_implicit")
+    {
+        extraction_profiles += 1;
+        let case = &whole["reference"];
+        let batch = whole["batch"].as_u64().ok_or("missing extraction batch")? as usize;
+        let historical = &whole["observation"];
+        assert!(!contract_and_tracked_facets_match(case, historical, batch, &baseline)?.0);
+        assert!(!required_contract_matches(case, historical));
+        let error = "Execution error: Spark `regexp_extract` function: [INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] Expects group index between 0 and 1, but got 4294967296";
+        let mut tagged = historical.clone();
+        tagged["error"] = json!(error);
+        let (accepted, tracked) =
+            contract_and_tracked_facets_match(case, &tagged, batch, &baseline)?;
+        assert!(accepted);
+        assert!(!required_contract_matches(case, &tagged));
+        assert_eq!(tracked["exact_observation_preserved"], false);
+        assert_eq!(tracked["bounded_spark_contract_matches"], false);
+        assert_eq!(
+            tracked["source_profile_is_spark_compatibility_credit"],
+            false
+        );
+        for changed_error in [
+            error.replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", ""),
+            error.replace("REGEX_GROUP_INDEX", "PATTERN"),
+            error.replace("between 0 and 1", "between 0 and 11"),
+            error.replace("4294967296", "4294967297"),
+            error.replace("`regexp_extract`", "`regexp_extract_all`"),
+            format!("{error} (different cause)"),
+        ] {
+            let mut changed = tagged.clone();
+            changed["error"] = json!(changed_error);
+            assert!(!contract_and_tracked_facets_match(case, &changed, batch, &baseline)?.0);
+        }
+        for stage in [
+            "public_schema",
+            "before_collect",
+            "physical_schema",
+            "optimized_schema",
+        ] {
+            for (key, value) in [
+                ("name", json!("changed")),
+                ("type", json!("integer")),
+                ("nullable", json!(true)),
+                ("metadata", json!({"unexpected":"value"})),
+            ] {
+                let mut changed = tagged.clone();
+                changed[stage]["fields"][0][key] = value;
+                assert!(!contract_and_tracked_facets_match(case, &changed, batch, &baseline)?.0);
+            }
+        }
+        for key in ["raw_schema", "schema"] {
+            let mut changed = tagged.clone();
+            changed["optimized_observation"][key]["fields"][0]["metadata"] =
+                json!({"unexpected":"value"});
+            assert!(!contract_and_tracked_facets_match(case, &changed, batch, &baseline)?.0);
+        }
+        for (key, value) in [
+            ("native_phase", json!("create_physical_plan")),
+            ("rows", json!([["unexpected"]])),
+            ("rows_raw", json!([["unexpected"]])),
+            ("matches", json!(true)),
+            ("unexpected", json!(true)),
+        ] {
+            let mut changed = tagged.clone();
+            changed[key] = value;
+            assert!(!contract_and_tracked_facets_match(case, &changed, batch, &baseline)?.0);
+        }
+        let mut changed = tagged.clone();
+        changed
+            .as_object_mut()
+            .ok_or("missing observation")?
+            .remove("optimized_error");
+        assert!(!contract_and_tracked_facets_match(case, &changed, batch, &baseline)?.0);
+    }
+    assert_eq!(extraction_profiles, 4);
 
     let declaration = facets
         .iter()
