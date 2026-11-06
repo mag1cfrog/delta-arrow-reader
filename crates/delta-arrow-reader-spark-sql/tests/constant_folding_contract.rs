@@ -473,7 +473,7 @@ fn concat_constant_descendants_keep_native_conditional_reachability() -> Result<
 }
 
 #[tokio::test]
-async fn mixed_numeric_array_preparation_reports_existing_callback_policy() -> Result<()> {
+async fn mixed_numeric_array_preparation_preserves_inherited_callback_limit() -> Result<()> {
     use datafusion::execution::SessionStateBuilder;
     use datafusion::physical_plan::collect;
     use datafusion::prelude::{SessionConfig, SessionContext};

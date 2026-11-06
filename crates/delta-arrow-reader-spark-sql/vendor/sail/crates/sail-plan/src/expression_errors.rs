@@ -257,8 +257,11 @@ fn input_permits_array_index_preparation(plan: &LogicalPlan) -> Result<bool> {
     Ok(allowed)
 }
 
-// Inline only closed Projection/Alias bindings on an ARRAY preparation copy; other inputs stay opaque.
-fn inline_projected_constants_for_array_check(expr: Expr, input: &LogicalPlan) -> Result<Expr> {
+// Follow aliases or already-closed values on a preparation copy; dependent computations stay opaque.
+fn inline_closed_projection_bindings_for_array_check(
+    expr: Expr,
+    input: &LogicalPlan,
+) -> Result<Expr> {
     Ok(expr
         .transform_up(|expr| {
             let Expr::Column(column) = &expr else {
@@ -266,14 +269,31 @@ fn inline_projected_constants_for_array_check(expr: Expr, input: &LogicalPlan) -
             };
             let index = input.schema().index_of_column(column)?;
             let source = match input {
-                LogicalPlan::Projection(project) => inline_projected_constants_for_array_check(
-                    project.expr[index].clone(),
-                    &project.input,
-                )?,
-                LogicalPlan::SubqueryAlias(alias) => inline_projected_constants_for_array_check(
-                    Expr::Column(alias.input.schema().columns()[index].clone()),
-                    &alias.input,
-                )?,
+                LogicalPlan::Projection(project) => {
+                    let source = &project.expr[index];
+                    let mut body = source;
+                    while let Expr::Alias(alias) = body {
+                        body = &alias.expr;
+                    }
+                    if matches!(body, Expr::Column(_)) {
+                        inline_closed_projection_bindings_for_array_check(
+                            source.clone(),
+                            &project.input,
+                        )?
+                    } else if row_expression(source, false)?
+                        && permits_constant_preparation(source)?
+                    {
+                        source.clone()
+                    } else {
+                        return Ok(Transformed::no(expr));
+                    }
+                }
+                LogicalPlan::SubqueryAlias(alias) => {
+                    inline_closed_projection_bindings_for_array_check(
+                        Expr::Column(alias.input.schema().columns()[index].clone()),
+                        &alias.input,
+                    )?
+                }
                 _ => return Ok(Transformed::no(expr)),
             };
             if row_expression(&source, false)? && permits_constant_preparation(&source)? {
@@ -1451,6 +1471,82 @@ fn preserve_local_case_conversions(plan: LogicalPlan) -> Result<LogicalPlan> {
 }
 
 #[test]
+fn array_binding_lookup_does_not_expand_dependent_projection_chains() -> Result<()> {
+    use datafusion::arrow::datatypes::Field;
+    use datafusion::datasource::{MemTable, TableProvider, provider_as_source};
+    use datafusion_expr::logical_plan::{Projection, SubqueryAlias};
+    use datafusion_expr::{LogicalPlanBuilder, ScalarUDF, col};
+    use sail_function::scalar::array::spark_array::SparkArray;
+
+    let provider: Arc<dyn TableProvider> = Arc::new(MemTable::try_new(
+        Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
+        vec![vec![]],
+    )?);
+    let scan =
+        LogicalPlanBuilder::scan("bounds_source", provider_as_source(provider), None)?.build()?;
+    let base = Arc::new(LogicalPlan::Projection(Projection::try_new(
+        vec![lit(1_i32).alias("v")],
+        Arc::new(scan),
+    )?));
+    let consumer = ScalarUDF::from(SparkArray::new()).call(vec![col("v")]);
+    let node_count = |expr: &Expr| -> Result<usize> {
+        let mut nodes = 0;
+        expr.apply(|_| {
+            nodes += 1;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(nodes)
+    };
+
+    let depth = 10;
+    let mut dependent = Arc::clone(&base);
+    for _ in 0..depth {
+        let alias = LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(dependent, "q")?);
+        dependent = Arc::new(LogicalPlan::Projection(Projection::try_new(
+            vec![(col("v") + col("v")).alias("v")],
+            Arc::new(alias),
+        )?));
+    }
+    let mut input_nodes = 0;
+    dependent.apply(|node| {
+        node.apply_expressions(|expr| {
+            input_nodes += node_count(expr)?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    assert_eq!(input_nodes, depth * 4 + 2);
+    let work = inline_closed_projection_bindings_for_array_check(consumer.clone(), &dependent)?;
+    assert!(
+        node_count(&work)? <= input_nodes,
+        "dependent projections expanded into the work copy"
+    );
+    assert_eq!(work, consumer, "dependent computations must remain opaque");
+
+    let alias_depth = 24;
+    let mut aliases = base;
+    for _ in 0..alias_depth {
+        let alias = LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(aliases, "q")?);
+        aliases = Arc::new(LogicalPlan::Projection(Projection::try_new(
+            vec![col("v").alias("v")],
+            Arc::new(alias),
+        )?));
+    }
+    let closed = inline_closed_projection_bindings_for_array_check(consumer, &aliases)?;
+    assert!(!closed.any_column_refs());
+    assert!(node_count(&closed)? <= alias_depth + 4);
+    let mut values = Vec::new();
+    closed.apply(|expr| {
+        if let Expr::Literal(value, _) = expr {
+            values.push(value.clone());
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    assert_eq!(values, vec![ScalarValue::Int32(Some(1))]);
+    Ok(())
+}
+
+#[test]
 fn case_foldability_does_not_expand_projection_chains()
 -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::sync::{
@@ -2537,7 +2633,7 @@ impl Prepare {
                             && array_index
                             && let LogicalPlan::Projection(project) = node
                         {
-                            inline_projected_constants_for_array_check(
+                            inline_closed_projection_bindings_for_array_check(
                                 expr.clone(),
                                 &project.input,
                             )?

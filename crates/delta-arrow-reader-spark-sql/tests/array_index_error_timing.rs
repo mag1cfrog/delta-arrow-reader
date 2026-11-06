@@ -459,6 +459,32 @@ async fn independently_captured_binding_boundaries_match_each_stage() -> TestRes
     replay(&records, "binding-boundaries-spark.jsonl").await
 }
 
+#[tokio::test]
+async fn independently_captured_opaque_conditional_arms_match_each_stage() -> TestResult {
+    let records = records(include_str!(
+        "fixtures/array-index-error-timing/opaque-conditional-arms-spark.jsonl"
+    ))?;
+    assert_eq!(records.len() - 1, 8);
+    assert_eq!(records[0]["observations"], 8);
+    assert_eq!(records[0]["expected_outcomes_from_spark_only"], true);
+    assert_eq!(
+        records[0]["source_captures"]
+            .as_array()
+            .ok_or("missing opaque captures")?
+            .len(),
+        2
+    );
+    assert_eq!(
+        records[0]["source_captures"][0]["raw_sha256"],
+        "f75c81832f7cec3d41b238961125b94637fe80aae4b6fcbdad376c1a0d0a178b"
+    );
+    assert_eq!(
+        records[0]["source_captures"][1]["raw_sha256"],
+        "b8aea75b15ada1b6cfb3183bc521c55141ce40d36daadef10aeb2adb58452100"
+    );
+    replay(&records, "opaque-conditional-arms-spark.jsonl").await
+}
+
 #[test]
 fn ordinary_internal_and_user_raise_error_simplification_stays_deferred() -> TestResult {
     use std::sync::Arc;
@@ -693,61 +719,81 @@ async fn array_preparation_honors_output_and_local_producer_permissions() -> Tes
         ] {
             CALLS.store(0, Ordering::SeqCst);
             let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "{sql}, {volatility:?}, fold={fold}"
+            );
             let physical = query.create_physical_plan(&session).await?;
-            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
+            let preparation_calls = CALLS.load(Ordering::SeqCst);
+            if matches!(volatility, Volatility::Volatile)
+                && fold
+                && sql == "SELECT ARRAY(bounds_producer(7))[1] AS r"
+            {
+                // #1007: native physical CASE schema probing measured 2 calls; see 971-native-case-producer-proof-current-v2.log.
+                assert!(
+                    preparation_calls <= 2,
+                    "physical CASE probe callbacks increased: {preparation_calls}"
+                );
+            } else {
+                assert_eq!(preparation_calls, 0, "{sql}, {volatility:?}, fold={fold}");
+            }
             let result = collect(physical, session.task_ctx()).await;
             if live {
                 let error = result
                     .err()
                     .ok_or("live ARRAY bounds validation was lost")?;
                 assert!(
-                    error.to_string().contains("[INVALID_ARRAY_INDEX]"),
+                    error.to_string().ends_with("[INVALID_ARRAY_INDEX] The index 1 is out of bounds. The array has 1 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead."),
                     "{error}"
                 );
-                assert!(CALLS.load(Ordering::SeqCst) > 0, "{sql}");
+                assert!(CALLS.load(Ordering::SeqCst) > preparation_calls, "{sql}");
             } else {
                 result?;
-                assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
+                assert_eq!(
+                    CALLS.load(Ordering::SeqCst),
+                    0,
+                    "{sql}, {volatility:?}, fold={fold}"
+                );
             }
         }
         for sql in [
             "SELECT CASE WHEN true THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",
             "SELECT CASE WHEN true THEN CASE WHEN true THEN ARRAY(7)[1] ELSE bounds_producer(7) END ELSE bounds_producer(7) END AS r",
-        ] {
-            CALLS.store(0, Ordering::SeqCst);
-            let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-            let error = query
-                .create_physical_plan(&session)
-                .await
-                .err()
-                .ok_or("selected ARRAY error became NULL because of a dead producer")?;
-            assert!(
-                error.to_string().contains("[INVALID_ARRAY_INDEX]"),
-                "{error}"
-            );
-            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
-        }
-        for sql in [
             "SELECT CASE WHEN CAST(true AS BOOLEAN) THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",
             "SELECT CASE WHEN 1=1 THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",
         ] {
             CALLS.store(0, Ordering::SeqCst);
             let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
-            let planned = query.create_physical_plan(&session).await;
-            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
-            // A dead host producer must not erase selected bounds validation; phase is unrestricted.
-            let error = match planned {
-                Err(error) => error,
-                Ok(physical) => collect(physical, session.task_ctx())
-                    .await
-                    .err()
-                    .ok_or("computed CASE erased selected ARRAY bounds validation")?,
-            };
-            assert!(
-                error.to_string().contains("[INVALID_ARRAY_INDEX]"),
-                "{error}"
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "{sql}, {volatility:?}, fold={fold}"
             );
-            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
+            let physical = query.create_physical_plan(&session).await?;
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "{sql}, {volatility:?}, fold={fold}"
+            );
+            // Independent Spark captures return NULL even with literal guards and dead RAND arms.
+            let batches = collect(physical, session.task_ctx()).await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1,
+                "{sql}"
+            );
+            assert!(
+                batches
+                    .iter()
+                    .all(|batch| batch.column(0).null_count() == batch.num_rows()),
+                "{sql}"
+            );
+            assert_eq!(
+                CALLS.load(Ordering::SeqCst),
+                0,
+                "{sql}, {volatility:?}, fold={fold}"
+            );
         }
     }
     Ok(())

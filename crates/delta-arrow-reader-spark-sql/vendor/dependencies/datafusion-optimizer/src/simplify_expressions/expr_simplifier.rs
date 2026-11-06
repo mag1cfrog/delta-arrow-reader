@@ -243,7 +243,6 @@ impl ExprSimplifier {
         let mut num_cycles = 0;
         let mut has_transformed = false;
         loop {
-            const_evaluator.branch_pruning_attempted = num_cycles > 0;
             let Transformed {
                 data, transformed, ..
             } = expr
@@ -506,8 +505,6 @@ struct ConstEvaluator<'a> {
     conditional: Vec<bool>,
     // Failed ARRAY constants become NULL only beneath nonfoldable CASE/COALESCE parents.
     array_error_becomes_null: Vec<bool>,
-    // Let the existing algebraic pass discard dead arms before replacing failed constants.
-    branch_pruning_attempted: bool,
     preserve_local_input_errors: bool,
     /// `can_evaluate` is used during the depth-first-search of the
     /// `Expr` tree to track if any siblings (or their descendants) were
@@ -640,9 +637,6 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                         && SparkArrayIndexError::is(&err)
                     {
                         if array_error_becomes_null {
-                            if !self.branch_pruning_attempted {
-                                return Ok(Transformed::yes(expr));
-                            }
                             let (_, field) = expr.to_field(self.info.schema().as_ref())?;
                             let metadata = (!field.metadata().is_empty())
                                 .then(|| FieldMetadata::from(field.as_ref()));
@@ -711,7 +705,6 @@ impl<'a> ConstEvaluator<'a> {
             info,
             conditional: vec![],
             array_error_becomes_null: vec![],
-            branch_pruning_attempted: false,
             can_evaluate: vec![],
             preserve_local_input_errors: false,
             execution_props,
