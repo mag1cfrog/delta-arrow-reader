@@ -747,6 +747,17 @@ historical BIGINT DATEDIFF outcomes in the accepted runtime replay
 recorded for their exact SQL as `history_date_add` and `history_date_sub`; only
 the result type changes.
 
+## TIMESTAMPDIFF units
+
+`timestamp-diff/timestamp-diff-spark.jsonl` contains 1,868 Spark 4.2.0 observations of
+TIMESTAMPDIFF and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings (#1006). They
+cover every unit; TIMESTAMP, TIMESTAMP_NTZ, DATE, STRING and NULL arguments; registered
+columns; DST transitions; the TIMESTAMP extremes; unit spellings; and constant-failure
+stages. Every query runs in both ANSI modes in UTC and America/Los_Angeles.
+`timestamp_diff.rs` compares names, fields at each stage, typed values and failing stages
+at batch sizes 1 and 32. See the [TIMESTAMPDIFF fixture notes](timestamp-diff/README.md) for
+the retained differences and the capture command.
+
 ## Temporal formatting, parsing and type contracts
 
 `temporal-contracts/temporal-contracts-spark.jsonl` contains 6,020 Spark 4.2.0

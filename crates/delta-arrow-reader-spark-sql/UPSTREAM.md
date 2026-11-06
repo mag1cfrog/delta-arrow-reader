@@ -490,8 +490,34 @@ Two-argument DATEDIFF/DATE_DIFF return Spark's INT day count, subtracting the
 DATE days as a native INT subtraction that wraps at the DATE limits like Spark's
 `int` arithmetic; TIMESTAMP arguments are cast to DATE in their TIMESTAMP type's
 zone, which is the session time zone for Spark-typed values. The three-argument
-`datediff(unit, start, end)` form keeps its BIGINT TIMESTAMPDIFF path. The
-[DATEDIFF references](tests/fixtures/date-diff/README.md) record the checks.
+form is TIMESTAMPDIFF. The [DATEDIFF references](tests/fixtures/date-diff/README.md)
+record the checks.
+
+TIMESTAMPDIFF, and its three-argument DATEDIFF, DATE_DIFF and TIMEDIFF spellings, first
+convert both arguments to TIMESTAMP in the session time zone:
+- DATE and TIMESTAMP_NTZ with Spark's gap and overlap rules;
+- STRING with Spark's parser.
+
+It then counts whole units between the two local date-times, as Java's
+`LocalDateTime.until` does. For instants beyond Chrono's range, the offset comes from the
+same position in a nearer 400-year calendar cycle.
+
+Only Spark's unit keywords become a unit. Any other first argument behaves as in Spark:
+- a string unit fails as Spark's parser does;
+- under TIMESTAMPDIFF and TIMEDIFF it names no routine;
+- under DATEDIFF and DATE_DIFF it stays an ordinary argument.
+
+DAYOFYEAR fails for each evaluated row.
+
+Scalar UDFs can opt in to raising constant evaluation errors during optimization, as
+literal CASTs already do outside conditional branches. TIMESTAMPDIFF opts in, so its unit,
+overflow and STRING conversion errors keep Spark's optimization stage.
+
+Two differences remain, each with an owner:
+- `timestamp_diff` still resolves as an alias (#1051);
+- the zone table applies no DST after 2099 (#1052).
+
+The [TIMESTAMPDIFF references](tests/fixtures/timestamp-diff/README.md) record the checks.
 
 Searched CASE conditions must have BOOLEAN type before branch simplification.
 The [condition references](tests/fixtures/README.md#case-condition-types) retain
