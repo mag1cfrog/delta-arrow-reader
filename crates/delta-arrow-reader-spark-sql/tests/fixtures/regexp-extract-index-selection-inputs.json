@@ -1,0 +1,382 @@
+{
+  "meaning": "Unobserved custom Rust index-selection callback inputs. No expected counters/results and no Apache Spark credit.",
+  "references": 32,
+  "observations": 32,
+  "fixtures": [],
+  "capture_helper": {
+    "crate_relative_path": "tests/support/string_binary.rs",
+    "sha256": "609461db92671f8044bf710a960e99728af566616d341635b62e970bba6abba0"
+  },
+  "registered_inputs": [
+    {
+      "name": "rp788",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i_text",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i_long",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          null,
+          "(a)",
+          "bad-source",
+          "4294967296"
+        ],
+        [
+          "2",
+          "a",
+          null,
+          "bad-pattern",
+          "4294967297"
+        ],
+        [
+          "3",
+          "a",
+          "[",
+          null,
+          null
+        ],
+        [
+          "4",
+          "a",
+          "(a)",
+          "1",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "rp788_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "p",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i_text",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "i_long",
+            "type": "long",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    }
+  ],
+  "cases": [
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": true,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": true,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": true,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS a, regexp_extract(s,p,index_callback(i_text)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": true,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_text) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": false,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": false,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": false,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS a, regexp_extract(s,p,index_callback(i_text)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": true,
+      "ansi": false,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_text) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": true,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": true,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": true,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS a, regexp_extract(s,p,index_callback(i_text)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": true,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_text) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": false,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": false,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": false,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_text)) AS a, regexp_extract(s,p,index_callback(i_text)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "string",
+      "folding": false,
+      "ansi": false,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_text) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": true,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": true,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": true,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS a, regexp_extract(s,p,index_callback(i_long)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": true,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_long) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": false,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": false,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": false,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS a, regexp_extract(s,p,index_callback(i_long)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": true,
+      "ansi": false,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_long) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": true,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": true,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": true,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS a, regexp_extract(s,p,index_callback(i_long)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": true,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_long) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": false,
+      "surface": "source_pattern_null",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 WHERE id IN (1,2) ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": false,
+      "surface": "mixed_selected",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": false,
+      "surface": "repeated_extract",
+      "sql": "SELECT id, regexp_extract(s,p,index_callback(i_long)) AS a, regexp_extract(s,p,index_callback(i_long)) AS b FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    },
+    {
+      "kind": "bigint",
+      "folding": false,
+      "ansi": false,
+      "surface": "standalone_native",
+      "sql": "SELECT id, index_callback(i_long) AS r FROM rp788 ORDER BY id",
+      "spark_oracle_credit": false
+    }
+  ],
+  "sha256": {
+    "collect_selection.py": "d9375093b94a37b16e25a1b5fbdade6fcd06b0b501e2376f6c53c11ee2199ffe",
+    "audit_selection.py": "d30d8f0a81133c491c6ae8d1ae08fd6a32ce765d6fb55e28f00f5fbdc14b1ace",
+    "c06_regexp_index_selection_probe.rs": "677ad14d00e125334aa31b1d27e085dd6c74ab8072d6070f119e5c91f440d74e"
+  }
+}

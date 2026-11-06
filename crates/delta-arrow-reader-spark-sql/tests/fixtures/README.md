@@ -2247,13 +2247,93 @@ report the complete supplied index and allowed range. The two original
 Spark-valid lookbehind observations remain in the fixture and are checked
 separately as 12 native engine failures under #779; they are excluded from
 compatibility counts. The
-index references here use Spark INT values. BIGINT-to-INT argument narrowing is
-separate coercion work and is excluded from these compatibility counts.
+original index references here use Spark INT values. The separate index corpus
+below covers the function-local INT argument adapter.
 
 Kernel checks cover mixed source/pattern representations, slices, out-of-line
 view strings and NULL rows with a singular invalid pattern. Native DataFusion
 regex functions are compared before and after Spark planning. REGEXP_EXTRACT_ALL
 retains its separate implementation and existing regression.
+
+The index corpus preserves six independent Spark domains:
+
+| Fixture | Records | Domain |
+| --- | ---: | --- |
+| `regexp-extract-index-original-spark.jsonl` | 10 | Original BIGINT boundaries |
+| `regexp-extract-index-expanded-spark.jsonl` | 106 | Index types, NULLs and evaluation boundaries |
+| `regexp-extract-index-cast-controls-spark.jsonl` | 10 | Direct numeric CAST controls |
+| `regexp-extract-index-cse-spark.jsonl` | 8 | Distinct outputs sharing a cast |
+| `regexp-extract-index-local-frontier-spark.jsonl` | 18 | Local VALUES, filters and LIMIT 0 |
+| `regexp-extract-index-foldable-null-spark.jsonl` | 16 | Bare and local known-NULL calls |
+
+`regexp_extract_index.rs` compares all 168 records across three string
+representations and two batch sizes, for 1,008 contexts. Fields compare complete
+names, types, nullability and metadata against the frozen Spark declarations.
+Ordered values compare in full. Spark can refine a nullable analyzed field to a
+nonnullable physical field; the comparison retains both declarations. The native
+`analyzed_schema` label records the public resolved query schema before the
+DataFusion session analyzer and optimizer; Spark's analyzed declaration comes
+from `execution.analyzed()`. Native primary observations also expose physical
+schemas and raw Arrow fields when available. Native optimized schemas remain
+unobserved.
+Required errors retain the independently captured Spark phase, condition and
+parameters alongside the measured native stage and exact missing/null field
+availability. A reviewed native boundary does not imply phase or cause equality.
+
+Every context must match strictly or preserve its complete reviewed native
+negative object and computed false facets in
+`regexp-extract-index-current-negative.jsonl`, with observed error boundaries in
+`regexp-extract-index-current-stages.json`. Unknown errors, changed fields,
+values, SQL or context keys, and missing, duplicate or unused profiles fail the
+regression gate. Preserved differences receive no Spark-match credit and retain
+`full_compatibility_pass=false`. Preservation does not waive a lost strict match
+or a newly introduced failure.
+
+The fixed `4847e810` capture, graded with the separate `ab858ce4` test contract,
+contains 960 strict matches and 48 phase-only negatives among the 1,008 index
+contexts. All 342 existing stage and availability contracts remain unchanged.
+The earlier `68f803d8` capture retains its historical 888-match result; frozen
+observer grades retain their own source comparison contract. Current counts
+report the complete saved replay, while the regression checks every context.
+Legacy BIGINT narrowing preserves all 30 retained NULL/no-match loss contexts
+and their ANSI overflow partners. Both bad-VALUES queries require the inline-table
+wrapper, exact bad STRING-to-INT cause and resolve-stage availability across all
+12 ANSI contexts.
+
+Shared floating conversion preserves the frozen legacy NaN value and the
+required Infinity group-index cause for 2147483647. Primitive overflow and group
+identifiers now match in this replay. The remaining phase differences stay under
+#788 and its #1036 work. The original
+`regexp-extract-index-native-negative.jsonl` and
+`regexp-extract-index-native-stages.json` remain frozen historical evidence.
+
+The main capture includes 74 controls beside the index corpus: 32 selection,
+six async, 24 NoFold and 12 alias observations. The 62 native-only callback
+controls preserve complete phase counts, invocation inputs/types/fields,
+returned declarations, ordered values and exact failures, without Spark oracle
+credit. Profile keys and SQL cover each input manifest exactly. The alias checks
+retain both ANSI modes for six existing references, including the required local
+LIMIT 0 overflow.
+
+`regexp-extract-index-current-async-native.json` contains all six current whole
+async observations. Four equal the frozen be21 records; two `bigint_wrap_zero`
+errors add the exact inline group condition. The original
+`regexp-extract-index-async-native.json` and its be21 header remain unchanged.
+Whole-actual equality remains exact, with no error-prefix normalization. NoFold
+controls cover bounded local previews; the separate 24-context scalar-parent
+replay keeps the CAST-only and scalar-parent #893 gap visible. ARRAY declarations
+under #1000 and public names under #1042/#778 retain their separate acceptance
+work. These controls do not establish complete string/binary compatibility.
+
+Seed metadata erratum: the CSE, local-frontier and foldable-NULL files retain
+`input_only=true` and the original descriptions saying no expectations or
+outcomes. Those header fields describe the input seeds. Their completed captures
+contain eight, eighteen and sixteen expectation records respectively, including
+successful fields/values and required errors. The preserved runtime headers
+identify Spark 4.2.0, its build and JAR hashes, Java and Python; replay lineage
+identifies each seed and its hash. These completed per-record observations are
+the reference authority. The seed wording does not authorize rewriting the
+frozen capture bytes.
 
 ## Unicode ILIKE
 
