@@ -131,8 +131,9 @@ fn nullif_error_matches(case: &Value, error: &str) -> bool {
 async fn like_escapes_preserve_complete_observations() -> TestResult {
     let profiles = like_profiles::load()?;
     let mut retained_keys = HashSet::new();
-    let mut historical_arity_profiles = 0;
+    let mut historical_repaired_profiles = 0;
     let mut strict_arity_matches = 0;
+    let mut strict_like_name_matches = 0;
     let mut strict_incompatible = 0;
     let mut full_incompatible = 0;
     let mut differences = Vec::new();
@@ -143,6 +144,7 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
     let mut available_error_physical_fields = 0;
     for (capture, count) in [
         (include_str!("fixtures/like-escapes-spark.jsonl"), 196),
+        (include_str!("fixtures/like-names-spark.jsonl"), 24),
         (include_str!("fixtures/like-evaluation-spark.jsonl"), 288),
         (include_str!("fixtures/like-function-spark.jsonl"), 60),
         (include_str!("fixtures/like-clock-spark.jsonl"), 16),
@@ -190,13 +192,16 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                     let profile = profiles.get(&key);
                     let historical_arity =
                         profile.is_some_and(|profile| profile["owner"] == "#915");
+                    let historical_like_name =
+                        profile.is_some_and(|profile| profile["owner"] == "#791");
+                    let historical_repaired = historical_arity || historical_like_name;
                     let retained = profile.is_some_and(|profile| {
                         assert!(retained_keys.insert(key.clone()));
                         profile["sql"] == case["sql"]
                             && like_profiles::retained_matches(profile, &observed, &comparison)
                     });
-                    let historical_arity_preserved =
-                        profile.filter(|_| historical_arity).is_some_and(|profile| {
+                    let historical_repaired_preserved =
+                        profile.filter(|_| historical_repaired).is_some_and(|profile| {
                             let historical_comparison =
                                 like_profiles::compare_spark(case, &profile["actual"]);
                             profile["sql"] == case["sql"]
@@ -206,11 +211,13 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                                     &historical_comparison,
                                 )
                         });
-                    let strict_arity = historical_arity && comparison["full_compatibility"] == true;
-                    historical_arity_profiles += usize::from(historical_arity);
-                    strict_arity_matches += usize::from(strict_arity);
-                    let matches = if historical_arity {
-                        historical_arity_preserved && strict_arity
+                    let strict_repaired =
+                        historical_repaired && comparison["full_compatibility"] == true;
+                    historical_repaired_profiles += usize::from(historical_repaired);
+                    strict_arity_matches += usize::from(historical_arity && strict_repaired);
+                    strict_like_name_matches += usize::from(historical_like_name && strict_repaired);
+                    let matches = if historical_repaired {
+                        historical_repaired_preserved && strict_repaired
                     } else if profile.is_some() {
                         retained
                     } else {
@@ -219,7 +226,7 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                     eprintln!(
                         "c06 observation: {}",
                         json!({"id":case["id"],"ansi":case["ansi"],"representation":representation,"batch_size":batch_size,
-                            "classification":if historical_arity {"strict-arity-with-retained-native-history"} else if profile.is_some() {"retained-complete-native-negative-observation"} else {"strict"},
+                            "classification":if historical_repaired {"strict-with-retained-native-history"} else if profile.is_some() {"retained-complete-native-negative-observation"} else {"strict"},
                             "owner":profile.map(|profile| &profile["owner"]),
                             "schema_equivalence":{
                                 "analyzed":if expected["analyzed_schema"].is_null() {"unavailable-spark-reference"} else {"compared"},
@@ -228,9 +235,9 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
                             "strict_compatibility":comparison["strict_compatibility"],
                             "full_compatibility":comparison["full_compatibility"],
                             "retained_native_actual_matches":retained,
-                            "historical_arity_profile_preserved":historical_arity_preserved,
-                            "historical_arity_strict_compatibility":profile.filter(|_| historical_arity).map(|profile| &profile["strict_compatibility"]),
-                            "current_arity_required_strict":historical_arity,
+                            "historical_repaired_profile_preserved":historical_repaired_preserved,
+                            "historical_repaired_strict_compatibility":profile.filter(|_| historical_repaired).map(|profile| &profile["strict_compatibility"]),
+                            "current_repaired_required_strict":historical_repaired,
                             "accepted_as_compatibility":comparison["full_compatibility"],
                         })
                     );
@@ -241,18 +248,19 @@ async fn like_escapes_preserve_complete_observations() -> TestResult {
             }
         }
     }
-    assert_eq!(compared, 760 * 6);
+    assert_eq!(compared, (760 + 24) * 6);
     assert_eq!(generated_name_controls, 2 * 6);
     assert_eq!(arity_causes, 12 * 6);
     assert_eq!(nullif_causes, 10 * 6);
     assert_eq!(available_error_physical_fields, 24 * 6);
     assert_eq!(retained_keys.len(), 180);
-    assert_eq!(historical_arity_profiles, 72);
+    assert_eq!(historical_repaired_profiles, 84);
     assert_eq!(strict_arity_matches, 72);
-    assert_eq!(strict_incompatible, 108);
-    assert_eq!(full_incompatible, 108);
+    assert_eq!(strict_like_name_matches, 12);
+    assert_eq!(strict_incompatible, 96);
+    assert_eq!(full_incompatible, 96);
     eprintln!(
-        "C06 complete observations {compared}, strict incompatible {strict_incompatible}, full incompatible {full_incompatible}, retained historical profiles {}, historical arity profiles {historical_arity_profiles}, required strict arity matches {strict_arity_matches}, unexpected differences {}",
+        "C06 complete observations {compared}, strict incompatible {strict_incompatible}, full incompatible {full_incompatible}, retained historical profiles {}, historical repaired profiles {historical_repaired_profiles}, required strict arity matches {strict_arity_matches}, required strict LIKE name matches {strict_like_name_matches}, unexpected differences {}",
         retained_keys.len(),
         differences.len()
     );
