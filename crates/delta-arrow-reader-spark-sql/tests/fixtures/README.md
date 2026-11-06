@@ -2227,16 +2227,22 @@ availability. A reviewed native boundary does not imply phase or cause equality.
 
 Every context must match strictly or preserve its complete reviewed native
 negative object and computed false facets in
-`regexp-extract-index-native-negative.jsonl`. Unknown errors, changed fields,
+`regexp-extract-index-current-negative.jsonl`, with observed error boundaries in
+`regexp-extract-index-current-stages.json`. Unknown errors, changed fields,
 values, SQL or context keys, and missing, duplicate or unused profiles fail the
 regression gate. Preserved differences receive no Spark-match credit and retain
 `full_compatibility_pass=false`. Preservation does not waive a lost strict match
-or a newly introduced failure. The shared #813 dependency blocks index acceptance
-while previously correct legacy NULL/no-match results become overflow errors.
-Shared legacy BIGINT values (#813), nonfinite
-floating values (#897), primitive ANSI overflow identifiers (#922), inline
-VALUES wrappers (#722), and the remaining index validation facets (#788) stay
-explicit. A CAST cause does not establish Spark's inline VALUES wrapper.
+or a newly introduced failure. The current inventory contains 750 strict matches
+and 258 negative observations. Legacy BIGINT narrowing preserves all 30 retained
+NULL/no-match loss contexts and their ANSI overflow partners. Both bad-VALUES
+queries require the inline-table wrapper, the exact bad STRING-to-INT cause and
+resolve-stage availability across all 12 ANSI contexts.
+
+Remaining differences retain their measured facets: legacy NaN status/rows and
+Infinity cause/identifier failures (#897), primitive overflow identifiers (#922),
+and group identifiers and phase differences (#788). The original
+`regexp-extract-index-native-negative.jsonl` and
+`regexp-extract-index-native-stages.json` remain frozen historical evidence.
 
 The 62 native-only controls comprise 32 selection profiles, six async profiles
 and 24 NoFold controls. They preserve whole callback phase counts, invocation
@@ -2244,6 +2250,8 @@ inputs/types/fields, returned declarations, ordered values and precise failures.
 Profile keys and SQL must cover each input manifest exactly. These controls
 receive no Spark oracle credit. The alias regression also checks both ANSI modes
 for six existing references, including the required local LIMIT 0 overflow.
+The NoFold controls cover bounded local previews; scalar-parent and CAST-only
+planning callbacks retain the separate #893 gap.
 
 Seed metadata erratum: the CSE, local-frontier and foldable-NULL files retain
 `input_only=true` and the original descriptions saying no expectations or

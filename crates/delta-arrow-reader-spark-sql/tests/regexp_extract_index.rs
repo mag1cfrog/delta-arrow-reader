@@ -28,6 +28,14 @@ fn error_cause(actual: &Value, expected: &Value) -> bool {
             && parameters["expression"].as_str().is_some_and(|value| {
                 error.ends_with(&format!("Arrow error: Cast error: Cannot cast string {value} to value of Int32 type"))
             }),
+        Some("INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION") =>
+            parameters["sqlExpr"] == "\"CAST(CAST(bad AS INT) AS STRING)\""
+                && error.split_once(": ").is_some_and(|(_, cause)| cause == concat!(
+                    "External error: error in DataFusion: ",
+                    "[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n",
+                    "[CAST_INVALID_INPUT]\ncaused by\n",
+                    "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"
+                )),
         Some("CAST_OVERFLOW") if parameters["targetType"] == "\"INT\"" => {
             let Some(value) = parameters["value"].as_str() else { return false; };
             match parameters["sourceType"].as_str() {
@@ -295,7 +303,7 @@ fn retained_matches(profile: &Value, context: &Value, actual: &Value, comparison
 
 fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
     let source: Value = serde_json::from_str(include_str!(
-        "fixtures/regexp-extract-index-native-stages.json"
+        "fixtures/regexp-extract-index-current-stages.json"
     ))?;
     let contracts = by_context(
         source["contracts"]
@@ -328,7 +336,7 @@ fn load_contracts() -> TestResult<BTreeMap<ContextKey, Value>> {
 }
 
 fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
-    let mut lines = include_str!("fixtures/regexp-extract-index-native-negative.jsonl").lines();
+    let mut lines = include_str!("fixtures/regexp-extract-index-current-negative.jsonl").lines();
     let header: Value = serde_json::from_str(lines.next().ok_or("missing negative header")?)?;
     assert_eq!(
         header["kind"],
@@ -376,7 +384,7 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
         );
         for owner in owners.values() {
             let owner = owner.as_str().ok_or("malformed facet owner")?;
-            assert!(["#813", "#897", "#922", "#722", "#788"].contains(&owner));
+            assert!(["#897", "#922", "#788"].contains(&owner));
             *owner_counts.entry(owner).or_default() += 1;
         }
     }
@@ -419,7 +427,14 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         .values()
         .find(|profile| profile["id"] == "index_limit_zero_local" && profile["ansi"] == true)
         .ok_or("missing measured overflow")?;
-    let inline = profiles
+    let historical = by_context(
+        include_str!("fixtures/regexp-extract-index-native-negative.jsonl")
+            .lines()
+            .skip(1)
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<Value>, _>>()?,
+    )?;
+    let inline = historical
         .values()
         .find(|profile| profile["id"] == "bad_values_extract_empty")
         .ok_or("missing measured inline-table error")?;
@@ -463,16 +478,55 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
         compare(inline, &inline["actual"])?["facets"]["meaningful_cause"],
         false
     );
-    assert!(retained_matches(
-        inline,
-        inline,
-        &inline["actual"],
-        &compare(inline, &inline["actual"])?
-    ));
     assert_eq!(
         compare(inline, &inline["actual"])?["strict_compatibility"],
         false
     );
+    let corrected_inline = json!({
+        "error":"resolve: External error: error in DataFusion: [INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+        "error_stage":"resolve",
+        "analyzed_schema":null,"analyzed_arrow_schema":null,
+        "physical_schema":null,"physical_arrow_schema":null
+    });
+    assert_eq!(
+        compare(inline, &corrected_inline)?["strict_compatibility"],
+        true
+    );
+    for (before, after) in [
+        ("[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]\ncaused by\n", ""),
+        ("INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION", "INVALID_INLINE_TABLE.WRONG_CONDITION"),
+        ("[CAST_INVALID_INPUT]\ncaused by\n", ""),
+        ("External error: error in DataFusion: ", "arbitrary wrapper\ncaused by\nExternal error: error in DataFusion: "),
+        ("'bad'", "'other'"),
+        ("Int32", "Int64"),
+    ] {
+        let mut actual = corrected_inline.clone();
+        actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
+        let comparison = compare(inline, &actual)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], false);
+        assert_eq!(comparison["strict_compatibility"], false);
+    }
+    for (field, replacement) in [
+        ("error_stage", json!("physical")),
+        ("analyzed_schema", json!({"type":"struct","fields":[]})),
+        ("physical_schema", json!({"type":"struct","fields":[]})),
+        ("rows", json!([])),
+    ] {
+        let mut actual = corrected_inline.clone();
+        actual[field] = replacement;
+        assert_eq!(compare(inline, &actual)?["strict_compatibility"], false);
+    }
+    for field in [
+        "error_stage",
+        "analyzed_schema",
+        "analyzed_arrow_schema",
+        "physical_schema",
+        "physical_arrow_schema",
+    ] {
+        let mut actual = corrected_inline.clone();
+        actual.as_object_mut().unwrap().remove(field);
+        assert_eq!(compare(inline, &actual)?["strict_compatibility"], false);
+    }
     for (profile, before, after) in [
         (overflow, "4294967296", "4294967297"),
         (overflow, "Int32", "Int64"),

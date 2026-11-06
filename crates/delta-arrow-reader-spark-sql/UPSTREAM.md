@@ -743,9 +743,10 @@ match. Parser errors retain the native cause. The
 cover supported patterns, index conversion and evaluation boundaries.
 Supported index arguments use the existing shared Spark INT conversion builder,
 then widen to the Int64 input required by the regex kernel. This adaptation is
-local to REGEXP_EXTRACT; shared legacy BIGINT and nonfinite floating conversion
-limits remain under #813 and #897. Primitive ANSI overflow identifiers remain
-under #922.
+local to REGEXP_EXTRACT. Shared legacy BIGINT conversion uses Spark's low-32-bit
+narrowing, and ANSI conversion checks overflow.
+Nonfinite floating conversion limits remain under #897. Primitive ANSI overflow
+identifiers remain under #922.
 
 Local VALUES inputs retain reached source work before index conversion. Bare
 known-NULL calls can prune unused arguments after type validation. Shared casts
@@ -754,8 +755,10 @@ callback controls preserve selection and producer folding permissions; async
 arguments retain the existing scalar fallback. The references compare each
 available analyzed and physical declaration with its corresponding Spark stage,
 and preserve exact incompatible observations separately from strict matches.
-Inline VALUES wrapper differences remain under #722. Java-only pattern syntax,
-including lookbehind, remains a separate engine limitation under #779.
+Invalid constant VALUES cells retain the inline-table wrapper and underlying
+conversion cause during resolution, including when outer operators discard rows.
+Java-only pattern syntax, including lookbehind, remains a separate engine
+limitation under #779.
 
 Spark ILIKE lowers its original, jointly coerced source and pattern with the
 native LOWER value kernel, then uses ordinary case-sensitive Arrow LIKE. The
@@ -890,8 +893,9 @@ The default-true UDF folding capability is separate from volatility and delegate
 through aliases. Optimizer ancestor folding and successful Spark constant STRUCT
 preparation honor descendant opt-outs. Spark-marked ARRAY/STRUCT parents retain
 their complete child declarations before children fold; native defaults remain.
-Local cast interpretation also honors expression and input-producer opt-outs
-before physical evaluation, while retaining checks for eligible projection siblings.
+The bounded local cast preview honors expression and input-producer opt-outs
+before physical evaluation and retains checks for eligible projection siblings.
+Scalar-parent and CAST-only planning callbacks retain the separate #893 gap.
 
 The result-field adapter prepares its owned whole operands without descending
 into user conditional branches. This retains required constant cast errors even

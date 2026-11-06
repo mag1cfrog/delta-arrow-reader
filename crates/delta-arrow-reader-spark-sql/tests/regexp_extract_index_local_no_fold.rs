@@ -204,7 +204,7 @@ fn local_no_fold_contract(case: &Value, actual: &Value) -> Option<&'static str> 
             return None;
         }
     }
-    if mixed && actual.get("error").is_some() {
+    if mixed && ansi && actual.get("error").is_some() {
         let cause = "Arrow error: Cast error: Can't cast value 4294967296 to type Int32";
         let error = format!("preserve_spark_expression_errors\ncaused by\n{cause}");
         if actual["error_stage"] != "physical"
@@ -237,12 +237,7 @@ fn local_no_fold_contract(case: &Value, actual: &Value) -> Option<&'static str> 
                 return None;
             }
         }
-        // Legacy narrowing is the precise known #813 gap, not desired Spark behavior.
-        return Some(if ansi {
-            "native_required_sibling_error"
-        } else {
-            "known_general_cast_gap_813"
-        });
+        return Some("native_required_sibling_error");
     }
     let rows = if live {
         json!([[if native { "1" } else { "a" }]])
