@@ -243,6 +243,7 @@ impl ExprSimplifier {
         let mut num_cycles = 0;
         let mut has_transformed = false;
         loop {
+            const_evaluator.branch_pruning_attempted = num_cycles > 0;
             let Transformed {
                 data, transformed, ..
             } = expr
@@ -503,6 +504,10 @@ impl TreeNodeRewriter for Canonicalizer {
 struct ConstEvaluator<'a> {
     info: &'a SimplifyContext,
     conditional: Vec<bool>,
+    // Failed ARRAY constants become NULL only beneath nonfoldable CASE/COALESCE parents.
+    array_error_becomes_null: Vec<bool>,
+    // Let the existing algebraic pass discard dead arms before replacing failed constants.
+    branch_pruning_attempted: bool,
     preserve_local_input_errors: bool,
     /// `can_evaluate` is used during the depth-first-search of the
     /// `Expr` tree to track if any siblings (or their descendants) were
@@ -548,26 +553,6 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
             .extensions
             .iter()
             .any(|(prefix, _)| prefix == "dar_spark_sql_errors");
-        let inherited_conditional = self.conditional.last().copied().unwrap_or(false);
-        if spark_query
-            && pruned.data.short_circuits()
-            && !pruned.data.exists(|expr| Ok(!Self::can_evaluate(expr)))?
-            && let ConstSimplifyResult::SimplifyRuntimeError(error, _) =
-                self.evaluate_to_scalar(pruned.data.clone())
-            && SparkArrayIndexError::is(&error)
-        {
-            if !inherited_conditional {
-                return Err(error);
-            }
-            // Spark replaces a failed constant ARRAY branch with NULL under a row condition.
-            let (_, field) = pruned.data.to_field(self.info.schema().as_ref())?;
-            let metadata =
-                (!field.metadata().is_empty()).then(|| FieldMetadata::from(field.as_ref()));
-            pruned = Transformed::yes(Expr::Literal(
-                ScalarValue::try_new_null(field.data_type())?,
-                metadata,
-            ));
-        }
         let fold_nested_parent = matches!(&pruned.data, Expr::ScalarFunction(_))
             && spark_query
             && matches!(
@@ -592,6 +577,13 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
             }
         }
         let expr = pruned.data;
+        self.array_error_becomes_null.push(
+            self.array_error_becomes_null.last().copied().unwrap_or(false)
+                || (spark_query
+                    && expr.short_circuits()
+                    && !matches!(&expr, Expr::BinaryExpr(_))
+                    && expr.exists(|expr| Ok(!Self::can_evaluate(expr)))?),
+        );
         self.conditional.push(
             self.conditional.last().copied().unwrap_or(false)
                 || (expr.short_circuits() && !matches!(&expr, Expr::BinaryExpr(_))),
@@ -624,6 +616,7 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
 
     fn f_up(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
         let conditional = self.conditional.pop().unwrap_or(false);
+        let array_error_becomes_null = self.array_error_becomes_null.pop().unwrap_or(false);
         match self.can_evaluate.pop() {
             // Certain expressions such as `CASE` and `COALESCE` are short-circuiting
             // and may not evaluate all their sub expressions. Thus, if
@@ -635,8 +628,7 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                     Ok(Transformed::no(Expr::Literal(s, m)))
                 }
                 ConstSimplifyResult::SimplifyRuntimeError(err, expr) => {
-                    if !conditional
-                        && self
+                    if self
                             .info
                             .config_options()
                             .extensions
@@ -644,7 +636,21 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                             .any(|(prefix, _)| prefix == "dar_spark_sql_errors")
                         && SparkArrayIndexError::is(&err)
                     {
-                        return Err(err);
+                        if array_error_becomes_null {
+                            if !self.branch_pruning_attempted {
+                                return Ok(Transformed::yes(expr));
+                            }
+                            let (_, field) = expr.to_field(self.info.schema().as_ref())?;
+                            let metadata = (!field.metadata().is_empty())
+                                .then(|| FieldMetadata::from(field.as_ref()));
+                            return Ok(Transformed::yes(Expr::Literal(
+                                ScalarValue::try_new_null(field.data_type())?,
+                                metadata,
+                            )));
+                        }
+                        if !self.conditional.last().copied().unwrap_or(false) {
+                            return Err(err);
+                        }
                     }
                     // For CAST expressions with literal inputs, propagate the error at plan time rather than deferring to execution time.
                     // This provides clearer error messages and fails fast.
@@ -701,6 +707,8 @@ impl<'a> ConstEvaluator<'a> {
         Ok(Self {
             info,
             conditional: vec![],
+            array_error_becomes_null: vec![],
+            branch_pruning_attempted: false,
             can_evaluate: vec![],
             preserve_local_input_errors: false,
             execution_props,

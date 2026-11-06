@@ -94,6 +94,21 @@ fn retained_facets() -> TestResult<Value> {
         .as_array_mut()
         .ok_or("missing mutable Field facets")?
         .extend(fields.iter().cloned());
+    let bindings: Value = serde_json::from_str(include_str!(
+        "fixtures/array-index-error-timing/binding-retained-baseline-facets.json"
+    ))?;
+    assert_eq!(bindings["source"], "e9fa5d8e9341f785f046f2b8fb3203ce61a0c473");
+    assert_eq!(bindings["runtime_source"], facets["runtime_source"]);
+    assert_eq!(bindings["source_log_sha256"],
+        "ad152dc389f1b81ec4414049dd98cc6f2f37aa63eeda92fe3ea9e4ca3a3aa72f");
+    assert_eq!(bindings["spark_reference_sha256"],
+        "7683c84bc284d4bb9fb68dcb2124bb6bee8dc99ef6bc719cd7c39403d31bd108");
+    assert_eq!(bindings["is_spark_compatibility_credit"], false);
+    assert!(bindings["field_facets"].as_array().ok_or("missing binding Fields")?.is_empty());
+    let outcomes = bindings["cause_facets"].as_array().ok_or("missing binding outcomes")?;
+    assert_eq!(outcomes.len(), 2);
+    assert!(outcomes.iter().all(|facet| facet["owner"] == 1004));
+    facets["cause_facets"].as_array_mut().ok_or("missing mutable causes")?.extend(outcomes.iter().cloned());
     Ok(facets)
 }
 
@@ -159,6 +174,21 @@ fn scoped_contract_matches(
     cause_matches: bool,
     raw_rows_match: bool,
 ) -> TestResult<bool> {
+    for facet in facets["cause_facets"].as_array().ok_or("missing cause facets")? {
+        if facet["fixture"] == fixture && facet["id"] == case["id"]
+            && facet["ansi"] == case["ansi"] && facet["batch"] == batch
+            && facet["owner"] == 1004
+        {
+            assert_eq!(facet["sql"], case["sql"]);
+            let keys = ["public_schema", "optimized_schema", "before_collect", "physical_schema",
+                        "rows", "rows_raw", "native_phase", "error", "optimized_error"];
+            assert!(keys.iter().all(|key| facet.get(*key).is_some()));
+            // #1004 retains only the complete measured outcome; every value and Field is bound.
+            if keys.iter().all(|key| actual[*key] == facet[*key]) {
+                return Ok(true);
+            }
+        }
+    }
     for (stage, key) in [
         ("analyzed", "public_schema"),
         ("optimized", "optimized_schema"),
@@ -182,6 +212,9 @@ fn scoped_contract_matches(
             && facet["ansi"] == case["ansi"]
             && facet["batch"] == batch
         {
+            if facet["owner"] == 1004 {
+                continue;
+            }
             assert_eq!(facet["owner"], 865);
             assert_eq!(facet["sql"], case["sql"]);
             error_matches |= actual["error"] == facet["error"]
@@ -378,6 +411,19 @@ async fn independently_rechecked_conditional_boundaries_match_each_stage() -> Te
     );
     assert_eq!(records[0]["after_collect_error_fields_captured"], true);
     replay(&records, "conditional-boundaries-spark.jsonl").await
+}
+
+#[tokio::test]
+async fn independently_captured_binding_boundaries_match_each_stage() -> TestResult {
+    let records = records(include_str!(
+        "fixtures/array-index-error-timing/binding-boundaries-spark.jsonl"
+    ))?;
+    assert_eq!(records.len() - 1, 8);
+    assert_eq!(records[0]["case_count"], 4);
+    assert_eq!(records[0]["source_manifest_sha256"],
+        "4e032939d6233b003e3621644df5531bf7702296e39e6f3f03784de1e829c13e");
+    assert_eq!(records[0]["after_collect_error_fields_captured"], true);
+    replay(&records, "binding-boundaries-spark.jsonl").await
 }
 
 #[test]
@@ -631,27 +677,35 @@ async fn array_preparation_honors_output_and_local_producer_permissions() -> Tes
                 assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
             }
         }
-        if !fold {
-            // Immutable opt-outs remain eligible for the pre-existing numeric check.
+        for sql in [
+            "SELECT CASE WHEN true THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",
+            "SELECT CASE WHEN true THEN CASE WHEN true THEN ARRAY(7)[1] ELSE bounds_producer(7) END ELSE bounds_producer(7) END AS r",
+        ] {
             CALLS.store(0, Ordering::SeqCst);
-            let mixed = plan_query(
-                &session,
-                "SELECT (1 DIV 0)+ARRAY(bounds_producer(7))[1] AS r",
-                &SparkSqlOptions::default(),
-            )
-            .await?;
-            let result = mixed.create_physical_plan(&session).await;
-            assert!(result.is_err(), "existing numeric preparation was skipped");
-            assert!(
-                result
-                    .err()
-                    .ok_or("missing required numeric error")?
-                    .to_string()
-                    .to_lowercase()
-                    .contains("divid")
-            );
-            assert_eq!(CALLS.load(Ordering::SeqCst), 0);
+            let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+            let error = query.create_physical_plan(&session).await.err()
+                .ok_or("selected ARRAY error became NULL because of a dead producer")?;
+            assert!(error.to_string().contains("[INVALID_ARRAY_INDEX]"), "{error}");
+            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
         }
+        for sql in [
+            "SELECT CASE WHEN CAST(true AS BOOLEAN) THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",
+            "SELECT CASE WHEN 1=1 THEN ARRAY(7)[1] ELSE bounds_producer(7) END AS r",
+        ] {
+            CALLS.store(0, Ordering::SeqCst);
+            let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+            let planned = query.create_physical_plan(&session).await;
+            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
+            // A dead host producer must not erase selected bounds validation; phase is unrestricted.
+            let error = match planned {
+                Err(error) => error,
+                Ok(physical) => collect(physical, session.task_ctx()).await.err()
+                    .ok_or("computed CASE erased selected ARRAY bounds validation")?,
+            };
+            assert!(error.to_string().contains("[INVALID_ARRAY_INDEX]"), "{error}");
+            assert_eq!(CALLS.load(Ordering::SeqCst), 0, "{sql}");
+        }
+
     }
     Ok(())
 }
@@ -783,6 +837,32 @@ fn retained_facets_reject_unowned_field_row_and_error_changes() -> TestResult {
         "optimized_schema",
         &facets
     )?);
+    Ok(())
+}
+
+#[test]
+fn retained_union_outcome_binds_every_observable_facet() -> TestResult {
+    let facets = retained_facets()?;
+    let bindings = records(include_str!(
+        "fixtures/array-index-error-timing/binding-boundaries-spark.jsonl"
+    ))?;
+    let case = bindings.iter().find(|case| case["id"] == "union_array_binding" && case["ansi"] == true)
+        .ok_or("missing independent UNION reference")?;
+    let outcome = facets["cause_facets"].as_array().ok_or("missing retained outcomes")?.iter()
+        .find(|facet| facet["owner"] == 1004 && facet["batch"] == 1)
+        .ok_or("missing exact UNION baseline")?;
+    assert!(scoped_contract_matches(case, outcome, 1, "binding-boundaries-spark.jsonl", &facets, false, true)?);
+    for key in ["public_schema", "optimized_schema", "before_collect", "physical_schema",
+                "rows", "rows_raw", "native_phase", "error", "optimized_error"] {
+        let mut changed = outcome.clone();
+        changed[key] = json!("an unmeasured change");
+        assert!(!scoped_contract_matches(case, &changed, 1, "binding-boundaries-spark.jsonl", &facets, false, false)?, "{key}");
+    }
+    let error = case["spark_error"].as_str().ok_or("missing UNION bounds cause")?;
+    let improvement = json!({"public_schema":case["schema_stages"]["analyzed"],
+        "native_phase":"create_physical_plan","error":error,"optimized_error":error,
+        "rows_match":true,"ordered_rows_match":true,"error_matches":true});
+    assert!(scoped_contract_matches(case, &improvement, 1, "binding-boundaries-spark.jsonl", &facets, true, true)?);
     Ok(())
 }
 

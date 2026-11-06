@@ -1,0 +1,143 @@
+{
+  "source": "e9fa5d8e9341f785f046f2b8fb3203ce61a0c473",
+  "runtime_source": "834cfde424bf19daa47f06ebf22c9a04620858de",
+  "source_log_sha256": "ad152dc389f1b81ec4414049dd98cc6f2f37aa63eeda92fe3ea9e4ca3a3aa72f",
+  "source_audit_sha256": "418b0b5d4f7ac9c584a31c2519b32c348a04eb69c2b1dfbe1ea5898ebb371710",
+  "spark_reference_sha256": "7683c84bc284d4bb9fb68dcb2124bb6bee8dc99ef6bc719cd7c39403d31bd108",
+  "is_spark_compatibility_credit": false,
+  "field_facets": [],
+  "cause_facets": [
+    {
+      "fixture": "binding-boundaries-spark.jsonl",
+      "id": "union_array_binding",
+      "ansi": true,
+      "batch": 1,
+      "owner": 1004,
+      "sql": "SELECT a[1] AS r FROM (SELECT ARRAY(7) AS a WHERE false UNION ALL SELECT CAST(NULL AS ARRAY<INT>) AS a) u",
+      "reference_case_sha256": "a88fc6759850bb9006f774b5bcd36759f5d760a948c62c801819af9f0795dd83",
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "optimized_error": null
+    },
+    {
+      "fixture": "binding-boundaries-spark.jsonl",
+      "id": "union_array_binding",
+      "ansi": true,
+      "batch": 32,
+      "owner": 1004,
+      "sql": "SELECT a[1] AS r FROM (SELECT ARRAY(7) AS a WHERE false UNION ALL SELECT CAST(NULL AS ARRAY<INT>) AS a) u",
+      "reference_case_sha256": "a88fc6759850bb9006f774b5bcd36759f5d760a948c62c801819af9f0795dd83",
+      "public_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "optimized_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "before_collect": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "physical_schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "r",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null
+        ]
+      ],
+      "rows_raw": [
+        [
+          null
+        ]
+      ],
+      "native_phase": "encode",
+      "error": null,
+      "optimized_error": null
+    }
+  ]
+}

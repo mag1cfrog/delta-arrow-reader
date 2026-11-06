@@ -257,6 +257,30 @@ fn input_permits_array_index_preparation(plan: &LogicalPlan) -> Result<bool> {
     Ok(allowed)
 }
 
+// Inline only closed Projection/Alias bindings on an ARRAY preparation copy; other inputs stay opaque.
+fn inline_projected_constants_for_array_check(expr: Expr, input: &LogicalPlan) -> Result<Expr> {
+    Ok(expr.transform_up(|expr| {
+        let Expr::Column(column) = &expr else {
+            return Ok(Transformed::no(expr));
+        };
+        let index = input.schema().index_of_column(column)?;
+        let source = match input {
+            LogicalPlan::Projection(project) => inline_projected_constants_for_array_check(
+                project.expr[index].clone(), &project.input,
+            )?,
+            LogicalPlan::SubqueryAlias(alias) => inline_projected_constants_for_array_check(
+                Expr::Column(alias.input.schema().columns()[index].clone()), &alias.input,
+            )?,
+            _ => return Ok(Transformed::no(expr)),
+        };
+        if row_expression(&source, false)? && permits_constant_preparation(&source)? {
+            Ok(Transformed::yes(source))
+        } else {
+            Ok(Transformed::no(expr))
+        }
+    })?.data)
+}
+
 // Spark reduces Boolean literals before pulling correlations, but folds
 // comparisons and CAST(NULL AS BOOLEAN) later.
 fn simplify_literal_boolean_predicate(predicate: Expr) -> Result<Transformed<Expr>> {
@@ -2505,7 +2529,14 @@ impl Prepare {
                         create_physical_expr(&expr.data, &schema, &self.props)?.evaluate(&batch)?;
                     }
                     None => {
-                        let expr = self.precheck_expression(expr.clone(), &schema, false)?;
+                        let expr = if !arithmetic && array_index
+                            && let LogicalPlan::Projection(project) = node
+                        {
+                            inline_projected_constants_for_array_check(expr.clone(), &project.input)?
+                        } else {
+                            expr.clone()
+                        };
+                        let expr = self.precheck_expression(expr, &schema, false)?;
                         let checked = match self.check_expr(&expr, true) {
                             Err(error) if arithmetic || SparkArrayIndexError::is(&error) => {
                                 Err(error)
