@@ -1,4 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -36,6 +37,12 @@ pub struct PlanConfig {
     /// `spark.sql.legacy.sizeOfNull`: SIZE and CARDINALITY return -1 for NULL
     /// collections when this is true and ANSI mode is disabled.
     pub legacy_size_of_null: bool,
+    /// Expand SQL configuration references before parsing; enabled by default.
+    pub variable_substitution_enabled: bool,
+    /// Explicit configuration values for `${name}` and the Spark/Hive config prefixes.
+    /// Missing names expand to empty text. Environment and system properties are not read.
+    /// Redaction overrides use native ASCII regex syntax and fail if unsupported.
+    pub variable_substitution_values: BTreeMap<String, String>,
 }
 
 impl Default for PlanConfig {
@@ -50,6 +57,8 @@ impl Default for PlanConfig {
             cross_join_enabled: true,
             legacy_allow_parameterless_count: false,
             legacy_size_of_null: true,
+            variable_substitution_enabled: true,
+            variable_substitution_values: BTreeMap::new(),
         }
     }
 }
