@@ -699,6 +699,13 @@ impl SparkPlanFormatter {
                 let arguments = arguments.join(", ");
                 Ok(format!("{name}({arguments})"))
             }
+            // Spark parses every three-argument difference spelling as TIMESTAMPDIFF.
+            "datediff" | "date_diff" | "timestampdiff" | "timestamp_diff" | "timediff"
+                if arguments.len() == 3 =>
+            {
+                let arguments = arguments.join(", ");
+                Ok(format!("timestampdiff({arguments})"))
+            }
             "sum" | "min" | "max" => {
                 let mut args = arguments.join(", ");
                 if is_distinct {
