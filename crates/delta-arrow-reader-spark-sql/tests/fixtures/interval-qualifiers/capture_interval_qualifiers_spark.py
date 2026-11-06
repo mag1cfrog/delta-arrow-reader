@@ -4,8 +4,8 @@ The query corpus is the original #749 capture (candidate commit c54d99c3,
 script SHA256 12cc8fd6...) plus review probes for NULL coercion, signs and
 boundaries written inside interval literals and quoted unit strings, the
 #951 storage limits of every interval qualifier, the #781 and #985 scaling of
-year-month and day-time intervals by constant and column numbers, and the #957
-negation of every qualifier's limits. Values are recorded from
+year-month and day-time intervals by constant and column numbers, the #957
+negation of every qualifier's limits, and the #765 casts between interval qualifiers. Values are recorded from
 Spark's internal rows instead of string casts. Run from the crate root in the
 reference environment described in README.md; the output path must not exist.
 """
@@ -592,6 +592,58 @@ NEGATION_CONTEXTS = [
 ]
 
 
+# Interval casts to every qualifier of the same family (#765): Spark keeps only the target
+# range's units. Sources cover signs, zero, values below one target unit and the limits.
+CAST_SOURCES = [
+    ("year_month", ["'2-3'", "'-2-3'", "'0-11'", "'-0-11'", "'0-0'", "'178956970-7'",
+                    "'-178956970-8'"], "YEAR TO MONTH", ["YEAR", "YEAR TO MONTH", "MONTH"]),
+    ("day_time", ["'2 03:04:05.123456'", "'-2 03:04:05.123456'", "'0 00:00:00.000001'",
+                  "'-0 23:59:59.999999'", "'106751991 04:00:54.775807'",
+                  "'-106751991 04:00:54.775808'"], "DAY TO SECOND",
+     ["DAY", "DAY TO HOUR", "DAY TO MINUTE", "DAY TO SECOND", "HOUR", "HOUR TO MINUTE",
+      "HOUR TO SECOND", "MINUTE", "MINUTE TO SECOND", "SECOND"]),
+]
+INTERVAL_CAST_PROBES = [
+    ("null_day_time", "SELECT CAST(CAST(NULL AS INTERVAL DAY TO SECOND) AS INTERVAL HOUR) AS r"),
+    ("null_year_month", "SELECT CAST(CAST(NULL AS INTERVAL YEAR TO MONTH) AS INTERVAL YEAR) AS r"),
+    ("try_day_time", "SELECT TRY_CAST(INTERVAL '-2 03:04:05.123456' DAY TO SECOND AS INTERVAL "
+                     "MINUTE) AS r"),
+    ("try_year_month", "SELECT TRY_CAST(INTERVAL '-2-3' YEAR TO MONTH AS INTERVAL YEAR) AS r"),
+    ("unaliased", "SELECT CAST(INTERVAL '-2 03:04:05.123456' DAY TO SECOND AS INTERVAL DAY), "
+                  "CAST(INTERVAL '-2-3' YEAR TO MONTH AS INTERVAL YEAR)"),
+    ("column_year", "SELECT CAST(m AS INTERVAL YEAR) AS r FROM scale_inputs"),
+    ("column_month_year", "SELECT CAST(mo AS INTERVAL YEAR) AS r FROM scale_inputs"),
+    ("column_limits_year", "SELECT CAST(high AS INTERVAL YEAR), CAST(low AS INTERVAL YEAR) "
+                           "FROM scale_limits"),
+    ("column_day", "SELECT CAST(t AS INTERVAL DAY) AS r FROM dt_scale_inputs"),
+    ("column_limits_day", "SELECT CAST(high AS INTERVAL DAY), CAST(low AS INTERVAL HOUR), "
+                          "CAST(low AS INTERVAL MINUTE TO SECOND) FROM dt_scale_limits"),
+    ("column_scaled_minute", "SELECT CAST(t * 7000000 AS INTERVAL MINUTE) AS r "
+                             "FROM dt_scale_inputs"),
+    # Interval leaves of nested casts.
+    ("nested_array", "SELECT CAST(array(INTERVAL '2 03:04:05.123456' DAY TO SECOND) "
+                     "AS ARRAY<INTERVAL HOUR>)[0] AS r"),
+    ("nested_struct", "SELECT CAST(named_struct('a', INTERVAL '2-3' YEAR TO MONTH) "
+                      "AS STRUCT<a: INTERVAL YEAR>).a AS r"),
+    ("nested_map", "SELECT CAST(map('k', INTERVAL '2 03:04' DAY TO MINUTE) "
+                   "AS MAP<STRING, INTERVAL DAY>)['k'] AS r"),
+    ("nested_column_array", "SELECT CAST(array(high) AS ARRAY<INTERVAL MINUTE>)[0] AS r "
+                            "FROM dt_scale_limits"),
+]
+
+
+def interval_cast_definitions():
+    for family, sources, source_qualifier, targets in CAST_SOURCES:
+        for index, source in enumerate(sources):
+            for target in targets:
+                name = f"{family}_{index}_{target.lower().replace(' ', '_')}"
+                yield (f"interval_cast_{name}", "interval_cast",
+                       f"SELECT CAST(INTERVAL {source} {source_qualifier} AS INTERVAL {target}) "
+                       "AS r")
+    for name, sql in INTERVAL_CAST_PROBES:
+        yield f"interval_cast_{name}", "interval_cast", sql
+
+
 def negation_definitions():
     for name, interval in NEGATION_LIMITS:
         yield f"negation_{name}", "negation", f"SELECT -({interval}) AS r"
@@ -662,6 +714,7 @@ def definitions():
     yield from scaling_definitions()
     yield from dt_scaling_definitions()
     yield from negation_definitions()
+    yield from interval_cast_definitions()
 
 
 def encode_input(value, spark_type):
