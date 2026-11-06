@@ -760,8 +760,8 @@ pub trait HigherOrderUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
     /// lambda bodies are constant. Lambda parameters count as constant, so `x -> x` over a
     /// literal array qualifies.
     ///
-    /// Returning `false` keeps the call, and ancestors that depend on it, unevaluated until
-    /// execution without changing its volatility; constant subexpressions inside its
+    /// Returning `false` keeps the optimizer from evaluating the call, and ancestors that
+    /// depend on it, without changing its volatility; constant subexpressions inside its
     /// arguments and lambda bodies may still be simplified. Spark's user lambda functions
     /// return `false`. The default is `true`.
     fn supports_constant_folding(&self) -> bool {
