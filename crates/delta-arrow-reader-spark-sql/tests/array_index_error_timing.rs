@@ -679,9 +679,9 @@ fn string_argument_hof_preserves_reached_array_errors() -> TestResult {
     use arrow::record_batch::RecordBatch;
     use datafusion::common::{DFSchema, ScalarValue, config::ConfigOptions, tree_node::TreeNode};
     use datafusion::functions::expr_fn::coalesce;
+    use datafusion::logical_expr::execution_props::ExecutionProps;
     use datafusion::logical_expr::expr::{HigherOrderFunction, Lambda};
     use datafusion::logical_expr::expr_fn::when;
-    use datafusion::logical_expr::execution_props::ExecutionProps;
     use datafusion::logical_expr::simplify::SimplifyContext;
     use datafusion::logical_expr::{
         ColumnarValue, Expr, HigherOrderUDF, ScalarUDF, Volatility, cast, col, create_udf, lit,
