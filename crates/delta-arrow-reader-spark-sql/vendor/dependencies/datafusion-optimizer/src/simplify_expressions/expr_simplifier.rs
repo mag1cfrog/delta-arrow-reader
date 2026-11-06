@@ -38,7 +38,7 @@ use datafusion_common::{
     HashMap,
     cast::{as_large_list_array, as_list_array},
     metadata::FieldMetadata,
-    tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRewriter},
+    tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion, TreeNodeRewriter},
 };
 use datafusion_expr::expr::HigherOrderFunction;
 use datafusion_expr::{
@@ -961,6 +961,42 @@ struct Simplifier<'a> {
     preserve_local_input_errors: bool,
 }
 
+fn spark_case_result_eq(left: &Expr, right: &Expr) -> bool {
+    // Spark literal identity equates signed zero and NaN, without changing the returned bits.
+    match (left, right) {
+        (Expr::Literal(ScalarValue::Float32(Some(a)), am), Expr::Literal(ScalarValue::Float32(Some(b)), bm)) =>
+            am == bm && (a == b || (a.is_nan() && b.is_nan())),
+        (Expr::Literal(ScalarValue::Float64(Some(a)), am), Expr::Literal(ScalarValue::Float64(Some(b)), bm)) =>
+            am == bm && (a == b || (a.is_nan() && b.is_nan())),
+        _ => left == right,
+    }
+}
+
+fn spark_case_is_volatile(expr: &Expr) -> Result<bool> {
+    expr.exists(|expr| {
+        if expr.is_volatile_node() {
+            return Ok(true);
+        }
+        let subquery = match expr {
+            Expr::ScalarSubquery(subquery) => subquery,
+            Expr::Exists(exists) => &exists.subquery,
+            Expr::InSubquery(in_subquery) => &in_subquery.subquery,
+            _ => return Ok(false),
+        };
+        Ok(subquery.subquery.apply_with_subqueries(|plan| {
+            // Opaque extension nodes can hide nondeterministic producers.
+            if matches!(plan, datafusion_expr::LogicalPlan::Extension(_)) {
+                return Ok(TreeNodeRecursion::Stop);
+            }
+            plan.apply_expressions(|expr| Ok(if expr.is_volatile() {
+                TreeNodeRecursion::Stop
+            } else {
+                TreeNodeRecursion::Continue
+            }))
+        })? == TreeNodeRecursion::Stop)
+    })
+}
+
 impl<'a> Simplifier<'a> {
     pub fn new(info: &'a SimplifyContext) -> Self {
         Self {
@@ -1704,6 +1740,36 @@ impl TreeNodeRewriter for Simplifier<'_> {
                     when_then_expr: new_when_then_expr,
                     else_expr,
                 }))
+            }
+
+            // Equal results still retain the prefix through the last volatile guard.
+            Expr::Case(mut case) if case.is_spark_searched() => {
+                let fallback = match &case.else_expr {
+                    Some(fallback) => *fallback.clone(),
+                    None => Expr::Literal(
+                        ScalarValue::try_new_null(&info.get_data_type(&Expr::Case(case.clone()))?)?,
+                        None,
+                    ),
+                };
+                if !spark_case_is_volatile(&fallback)?
+                    && case.when_then_expr.iter().all(|(_, then)| spark_case_result_eq(then, &fallback))
+                {
+                    let mut retained = 0;
+                    for (index, (when, _)) in case.when_then_expr.iter().enumerate().rev() {
+                        if spark_case_is_volatile(when)? {
+                            retained = index + 1;
+                            break;
+                        }
+                    }
+                    if retained == 0 {
+                        return Ok(Transformed::yes(fallback));
+                    }
+                    if retained < case.when_then_expr.len() {
+                        case.when_then_expr.truncate(retained);
+                        return Ok(Transformed::yes(Expr::Case(case)));
+                    }
+                }
+                Transformed::no(Expr::Case(case))
             }
 
             // CASE
