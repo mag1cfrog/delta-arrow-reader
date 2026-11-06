@@ -2280,32 +2280,33 @@ Required errors retain the independently captured Spark phase, condition and
 parameters alongside the measured native stage and exact missing/null field
 availability. A reviewed native boundary does not imply phase or cause equality.
 
-Every context must match strictly or preserve its complete reviewed native
-negative object and computed false facets in
-`regexp-extract-index-current-negative.jsonl`, with observed error boundaries in
-`regexp-extract-index-current-stages.json`. Unknown errors, changed fields,
-values, SQL or context keys, and missing, duplicate or unused profiles fail the
-regression gate. Preserved differences receive no Spark-match credit and retain
-`full_compatibility_pass=false`. Preservation does not waive a lost strict match
-or a newly introduced failure.
-
-The fixed `4847e810` capture, graded with the separate `ab858ce4` test contract,
-contains 960 strict matches and 48 phase-only negatives among the 1,008 index
-contexts. All 342 existing stage and availability contracts remain unchanged.
-The earlier `68f803d8` capture retains its historical 888-match result; frozen
-observer grades retain their own source comparison contract. Current counts
-report the complete saved replay, while the regression checks every context.
+Every context must match strictly against the frozen Spark reference and the
+reviewed native boundary in `regexp-extract-index-phase-stages.json`. The active
+`regexp-extract-index-phase-negative.jsonl` contains no negative observations.
+The complete focused replay records 1,008 strict index matches. Of the 342 error
+contracts, 48 use the measured physical-preparation stage and availability; the
+other 294 retain their earlier contracts. Unknown errors, changed fields, values,
+SQL or context keys, and missing, duplicate or unused profiles fail the gate.
 Legacy BIGINT narrowing preserves all 30 retained NULL/no-match loss contexts
 and their ANSI overflow partners. Both bad-VALUES queries require the inline-table
 wrapper, exact bad STRING-to-INT cause and resolve-stage availability across all
-12 ANSI contexts.
+12 ANSI contexts. Shared floating conversion preserves the frozen legacy NaN
+value and the required Infinity group-index cause for 2147483647.
 
-Shared floating conversion preserves the frozen legacy NaN value and the
-required Infinity group-index cause for 2147483647. Primitive overflow and group
-identifiers now match in this replay. The remaining phase differences stay under
-#788 and its #1036 work. The original
+The fixed `4847e810` capture and separate `ab858ce4` comparison contract are
+historical evidence: they record 960 strict matches and 48 phase-only negatives,
+with their original 342 stage contracts. The earlier `68f803d8` capture retains
+its historical 888-match result. The index fixtures `regexp-extract-index-current-negative.jsonl`,
+`regexp-extract-index-current-stages.json`,
 `regexp-extract-index-native-negative.jsonl` and
-`regexp-extract-index-native-stages.json` remain frozen historical evidence.
+`regexp-extract-index-native-stages.json` retain those historical objects and
+source attributions. The separate literal
+preparation supplement checks 46 SQL/ANSI cases in 276 query contexts and 552
+provider receipts, with 204 strict matches and 72 complete native regression
+controls. Those controls include local VALUES group failures tracked by #1049,
+which remains required before #1036/#788 can close. Preserved differences receive
+no Spark-match credit. These focused results do not establish full C06 acceptance
+or complete raw diagnostic parity; `full_compatibility_pass` remains false.
 
 The main capture includes 74 controls beside the index corpus: 32 selection,
 six async, 24 NoFold and 12 alias observations. The 62 native-only callback
@@ -2397,9 +2398,9 @@ the full strict comparison and dependency ledger.
 
 The seven arity controls check the original Spark function/count parameters and
 precise native admission causes. They are reported separately from full Spark
-matches; they do not claim identical Spark diagnostics and do not accept #795's
-distinct zero-TRIM formatter failure. These tests add durable original coverage;
-they do not close #151 or #174, or the named dependencies.
+matches; they do not claim identical Spark diagnostics and reject the historical
+zero-argument TRIM formatter failure recorded under #795. These tests add durable
+original coverage; they do not close #151 or #174, or the named dependencies.
 
 ## Native STRING/BINARY capability boundary
 
@@ -3441,10 +3442,13 @@ require complete strict Spark fields and rows. Their old profiles cannot serve
 as current fallbacks. The gate requires 1,932 strict successful observations;
 other success differences fail.
 
-The 36 zero-argument trim contexts under #795 require the exact observed native
-formatter fingerprint and also keep both compatibility flags false. The other
-132 arity contexts check their specific resolution causes without claiming
-Spark diagnostic identifiers or complete parity. All 2,100 observations remain
+All 72 zero-argument and three-argument TRIM/LTRIM/RTRIM contexts require Spark's
+captured `WRONG_NUM_ARGS.WITHOUT_SUGGESTION` diagnostic at resolution, including
+the function name, accepted counts and actual count. Matching diagnostics set
+`strict_match` and `full_compatibility_pass` to true. The historical trim formatter
+failure receives no compatibility credit. The remaining 96 LOWER/UPPER/LCASE/UCASE
+arity contexts check their specific resolution causes without claiming Spark
+diagnostic identifiers or complete parity. All 2,100 observations remain
 in the output. A passing regression gate does not close #775 or waive its
 original complete-field/value acceptance requirements.
 

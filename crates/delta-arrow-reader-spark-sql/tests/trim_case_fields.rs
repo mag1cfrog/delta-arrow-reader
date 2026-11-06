@@ -15,9 +15,15 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
+#[allow(
+    dead_code,
+    reason = "This suite uses the shared native query observer."
+)]
+#[path = "support/spark_results.rs"]
+mod spark_results;
 #[path = "support/string_binary.rs"]
 mod string_binary;
-use string_binary::{TestResult, capture_result, register_inputs};
+use string_binary::{TestResult, capture_observation, capture_result, register_inputs};
 
 fn session(batch_size: usize) -> SessionContext {
     SessionContext::new_with_state(
@@ -54,44 +60,28 @@ fn arity_error_matches(case: &Value, error: &str) -> bool {
                 )
         };
     }
-    let native_name = if id.contains("_ltrim_") {
-        "ltrim"
-    } else if id.contains("_rtrim_") {
-        "rtrim"
-    } else if id.contains("_trim_") {
-        "btrim"
-    } else {
-        return false;
-    };
-    if id.ends_with("_zero") {
-        error.contains(&format!("'{native_name}' does not support zero arguments"))
-    } else {
-        id.ends_with("_extra")
-            && error.contains(&format!(
-                "Function '{native_name}' expects 2 arguments but received 3"
-            ))
-            && error.contains(&format!(
-                "Function '{native_name}' expects 1 arguments but received 3"
-            ))
-    }
+    trim_arity_error_matches(case, error)
 }
 
-// #795 fails while naming the expression, before native arity validation.
-// Record that precise incompatibility separately from argument-count checks.
-fn has_zero_trim_formatter_gap(case: &Value) -> bool {
+fn is_trim_arity_case(case: &Value) -> bool {
     ["trim", "ltrim", "rtrim"].iter().any(|function| {
         case["id"] == format!("admission_arity_{function}_zero")
-            && case["sql"] == format!("SELECT {function}() AS r")
-            && case["expected"]["condition"] == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION"
-            && case["expected"]["parameters"]["functionName"] == format!("`{function}`")
-            && case["expected"]["parameters"]["actualNum"] == "0"
+            || case["id"] == format!("admission_arity_{function}_extra")
     })
 }
 
-fn zero_trim_formatter_gap_matches(case: &Value, error: &str) -> bool {
-    has_zero_trim_formatter_gap(case)
-        && error
-            == "resolve: External error: error in DataFusion: Error during planning: expected at least one value, but got an empty vector"
+fn trim_arity_error_matches(case: &Value, error: &str) -> bool {
+    let expected = &case["expected"];
+    is_trim_arity_case(case)
+        && expected["status"] == "error"
+        && expected["phase"] == "sql"
+        && expected["condition"] == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION"
+        && expected["message"]
+            .as_str()
+            .and_then(|message| message.split_once(" Please,"))
+            .is_some_and(|(diagnostic, _)| {
+                error == format!("resolve: External error: invalid argument: {diagnostic}")
+            })
 }
 
 fn is_numeric_cast_regression_control(id: &str) -> bool {
@@ -102,26 +92,134 @@ fn is_numeric_cast_regression_control(id: &str) -> bool {
 }
 
 #[test]
-fn trim_zero_arity_formatter_gap_rejects_other_failures() {
-    for function in ["trim", "ltrim", "rtrim"] {
-        let mut case = json!({
-            "id":format!("admission_arity_{function}_zero"),
-            "sql":format!("SELECT {function}() AS r"),
-            "expected":{"condition":"WRONG_NUM_ARGS.WITHOUT_SUGGESTION","parameters":{"functionName":format!("`{function}`"),"actualNum":"0"}}
-        });
-        let error = "resolve: External error: error in DataFusion: Error during planning: expected at least one value, but got an empty vector";
-        assert!(zero_trim_formatter_gap_matches(&case, error));
-        assert!(!arity_error_matches(&case, error));
-        for other in [
-            error.replace("resolve:", "execute:"),
-            error.replace("empty vector", "wrong type"),
-            "resolve: CAST_INVALID_INPUT".into(),
-        ] {
-            assert!(!zero_trim_formatter_gap_matches(&case, &other));
+fn trim_arity_diagnostics_reject_wrong_counts_and_causes() -> TestResult {
+    let mut checked = 0;
+    for capture in [
+        include_str!("fixtures/trim-case-fields-spark.jsonl"),
+        include_str!("fixtures/trim-case-controls-spark.jsonl"),
+    ] {
+        for line in capture.lines().skip(1) {
+            let case: Value = serde_json::from_str(line)?;
+            if !is_trim_arity_case(&case) {
+                continue;
+            }
+            let expected = &case["expected"];
+            let (diagnostic, _) = expected["message"]
+                .as_str()
+                .and_then(|message| message.split_once(" Please,"))
+                .ok_or("missing captured trim arity diagnostic")?;
+            let error = format!("resolve: External error: invalid argument: {diagnostic}");
+            assert!(trim_arity_error_matches(&case, &error));
+            let function = expected["parameters"]["functionName"]
+                .as_str()
+                .ok_or("missing function name")?;
+            let count = expected["parameters"]["actualNum"]
+                .as_str()
+                .ok_or("missing argument count")?;
+            for other in [
+                error.replace("resolve:", "execute:"),
+                error.replace(function, "`btrim_other`"),
+                error.replace("[1, 2]", "1"),
+                error.replace(&format!("actual number is {count}"), "actual number is 4"),
+                error.replace("WRONG_NUM_ARGS.WITHOUT_SUGGESTION", "UNRESOLVED_ROUTINE"),
+                "resolve: External error: error in DataFusion: Error during planning: expected at least one value, but got an empty vector".into(),
+                "resolve: CAST_INVALID_INPUT".into(),
+            ] {
+                assert!(!trim_arity_error_matches(&case, &other));
+            }
+            checked += 1;
         }
-        case["sql"] = json!("SELECT lower() AS r");
-        assert!(!zero_trim_formatter_gap_matches(&case, error));
     }
+    assert_eq!(checked, 12);
+    Ok(())
+}
+
+#[tokio::test]
+async fn trim_arity_matches_spark_and_preserves_valid_calls() -> TestResult {
+    let mut differences = Vec::new();
+    let mut arity_observations = 0;
+    let mut valid_observations = 0;
+    for capture in [
+        include_str!("fixtures/trim-case-fields-spark.jsonl"),
+        include_str!("fixtures/trim-case-controls-spark.jsonl"),
+    ] {
+        let records = capture
+            .lines()
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(records[0]["spark_version"], "4.2.0");
+        for batch_size in [1, 32] {
+            let session = session(batch_size);
+            for case in &records[1..] {
+                let arity = is_trim_arity_case(case);
+                let id = case["id"].as_str().ok_or("missing case ID")?;
+                if !arity
+                    && ![
+                        "trim_literal_spaces",
+                        "ltrim_literal_spaces",
+                        "rtrim_literal_spaces",
+                        "trim_custom_set",
+                        "ltrim_custom_set",
+                        "rtrim_custom_set",
+                        "trim_both_sql_syntax",
+                        "trim_leading_sql_syntax",
+                        "trim_trailing_sql_syntax",
+                    ]
+                    .contains(&id)
+                {
+                    continue;
+                }
+                let expected = &case["expected"];
+                let sql = case["sql"].as_str().ok_or("missing SQL")?;
+                let mut queries = vec![sql];
+                if arity {
+                    assert_eq!(expected["parameters"]["expectedNum"], "[1, 2]");
+                    queries.push(sql.strip_suffix(" AS r").ok_or("missing explicit alias")?);
+                }
+                for sql in queries {
+                    let mut query_case = case.clone();
+                    query_case["sql"] = json!(sql);
+                    let actual = capture_observation(&session, &query_case).await?;
+                    let matches = if arity {
+                        arity_observations += 1;
+                        let error = actual["error"].as_str().unwrap_or_default();
+                        trim_arity_error_matches(case, error)
+                            && actual
+                                == json!({
+                                    "error":error,"error_stage":"resolve",
+                                    "analyzed_schema":null,"physical_schema":null,
+                                    "analyzed_arrow_schema":null,"physical_arrow_schema":null,
+                                })
+                    } else {
+                        valid_observations += 1;
+                        expected["status"] == "ok"
+                            && actual.get("error").is_none()
+                            && actual.get("error_stage").is_none()
+                            && actual["analyzed_schema"] == expected["analyzed_schema"]
+                            && actual["physical_schema"] == expected["physical_schema"]
+                            && actual["analyzed_arrow_schema"].is_string()
+                            && actual["physical_arrow_schema"].is_string()
+                            && actual["rows"] == expected["rows"]
+                    };
+                    eprintln!(
+                        "trim arity observation: {}",
+                        json!({"id":id,"ansi":case["ansi"],"sql":sql,
+                            "batch_size":batch_size,"strict_match":matches,"actual":actual})
+                    );
+                    if !matches {
+                        differences.push(format!(
+                            "{id} ANSI={} batch={batch_size} SQL={sql}: expected {expected}, observed {actual}",
+                            case["ansi"],
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(arity_observations, 48);
+    assert_eq!(valid_observations, 36);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
 }
 
 fn native_dependency_profiles() -> TestResult<Vec<Value>> {
@@ -185,7 +283,7 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
     let mut strict_matches = 0;
     let mut compared = 0;
     let mut arity_observations = 0;
-    let mut formatter_gap_observations = 0;
+    let mut trim_arity_observations = 0;
     let mut numeric_cast_observations = 0;
     let mut nested_case_observations = 0;
     for (capture, count) in [
@@ -211,16 +309,16 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
                         Err(error) => json!({"error":error.to_string()}),
                     };
                     let expected = &case["expected"];
-                    let formatter_gap = has_zero_trim_formatter_gap(case);
+                    let trim_arity = is_trim_arity_case(case);
                     let id = case["id"].as_str().ok_or("missing ID")?;
                     let numeric_cast_control = is_numeric_cast_regression_control(id);
                     let nested_case = matches!(
                         id,
                         "nested_trim_case_nullable" | "nested_trim_case_required"
                     );
-                    let classification = if formatter_gap {
-                        formatter_gap_observations += 1;
-                        "open-795-zero-arity-formatter-error"
+                    let classification = if trim_arity {
+                        trim_arity_observations += 1;
+                        "strict-795-trim-arity"
                     } else if numeric_cast_control {
                         numeric_cast_observations += 1;
                         "strict-796-numeric-cast-declarations"
@@ -233,27 +331,26 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
                     } else {
                         "strict"
                     };
-                    let strict_match = expected["status"] == "ok"
-                        && actual.as_ref().is_ok_and(|value| {
-                            value["analyzed_schema"] == expected["analyzed_schema"]
-                                && value["physical_schema"] == expected["physical_schema"]
-                                && value["rows"] == expected["rows"]
-                        });
-                    strict_matches += usize::from(strict_match);
-                    let native_profile_match = if formatter_gap {
-                        actual.as_ref().is_err_and(|error| {
-                            zero_trim_formatter_gap_matches(case, &error.to_string())
-                        })
+                    let strict_match = if trim_arity {
+                        actual
+                            .as_ref()
+                            .is_err_and(|error| trim_arity_error_matches(case, &error.to_string()))
                     } else {
-                        false
+                        expected["status"] == "ok"
+                            && actual.as_ref().is_ok_and(|value| {
+                                value["analyzed_schema"] == expected["analyzed_schema"]
+                                    && value["physical_schema"] == expected["physical_schema"]
+                                    && value["rows"] == expected["rows"]
+                            })
                     };
-                    let meaningful_arity_cause_match = !formatter_gap
+                    strict_matches += usize::from(strict_match);
+                    let meaningful_arity_cause_match = !trim_arity
                         && expected["status"] == "error"
                         && actual
                             .as_ref()
                             .is_err_and(|error| arity_error_matches(case, &error.to_string()));
                     let matches = match expected["status"].as_str() {
-                        Some("error") => native_profile_match || meaningful_arity_cause_match,
+                        Some("error") => strict_match || meaningful_arity_cause_match,
                         Some("ok") => strict_match,
                         _ => return Err("unknown Spark reference status".into()),
                     };
@@ -264,7 +361,7 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
                             "classification":classification,"actual":observed,
                             "strict_match":strict_match,
                             "full_compatibility_pass":strict_match,
-                            "native_profile_match":native_profile_match,
+                            "native_profile_match":false,
                             "meaningful_arity_cause_match":meaningful_arity_cause_match,
                             "regression_gate_pass":matches})
                     );
@@ -276,8 +373,8 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
         }
     }
     assert_eq!(compared, (208 + 76 + 66) * 6);
-    assert_eq!(arity_observations, (16 + 12 - 6) * 6);
-    assert_eq!(formatter_gap_observations, 6 * 6);
+    assert_eq!(arity_observations, 16 * 6);
+    assert_eq!(trim_arity_observations, 12 * 6);
     assert_eq!(numeric_cast_observations, 4 * 6);
     assert_eq!(nested_case_observations, 4 * 6);
     eprintln!(
@@ -285,6 +382,70 @@ async fn trim_case_fields_match_recorded_references() -> TestResult {
         differences.len()
     );
     assert!(differences.is_empty(), "{}", differences.join("\n"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn trim_arity_preserves_native_sql() -> TestResult {
+    for batch_size in [1, 32] {
+        let plain = SessionContext::new_with_config(
+            SessionConfig::new()
+                .with_batch_size(batch_size)
+                .with_target_partitions(2),
+        );
+        let configured = session(batch_size);
+        for ansi in [true, false] {
+            for function in ["trim", "ltrim", "rtrim"] {
+                for arguments in ["", "'a','a','a'"] {
+                    let sql = format!("SELECT {function}({arguments}) AS r");
+                    let plain_before =
+                        spark_results::capture_native_query_observation(&plain, &sql).await?;
+                    let configured_before =
+                        spark_results::capture_native_query_observation(&configured, &sql).await?;
+                    assert_eq!(configured_before, plain_before, "{sql}, before Spark");
+                    assert!(
+                        plan_query(
+                            &configured,
+                            &sql,
+                            &SparkSqlOptions {
+                                ansi_mode: ansi,
+                                ..Default::default()
+                            },
+                        )
+                        .await
+                        .is_err()
+                    );
+                    let plain_after =
+                        spark_results::capture_native_query_observation(&plain, &sql).await?;
+                    let configured_after =
+                        spark_results::capture_native_query_observation(&configured, &sql).await?;
+                    eprintln!(
+                        "trim arity native observation: {}",
+                        json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,
+                            "plain_before":plain_before,"configured_before":configured_before,
+                            "plain_after":plain_after,"configured_after":configured_after})
+                    );
+                    assert_eq!(plain_after, plain_before, "{sql}, plain after Spark");
+                    assert_eq!(
+                        configured_after, configured_before,
+                        "{sql}, configured after Spark"
+                    );
+                    assert_eq!(configured_after, plain_after, "{sql}, after Spark");
+                }
+            }
+            for sql in [
+                "SELECT trim('  AbC  '),ltrim('  AbC  '),rtrim('  AbC  ')",
+                "SELECT trim('abbaXba','ab') AS t,ltrim('abbaXba','ab') AS l,rtrim('abbaXba','ab') AS r",
+            ] {
+                let expected = plain.sql(sql).await?;
+                let expected_schema = expected.schema().clone();
+                let expected_rows = expected.collect().await?;
+                let actual = configured.sql(sql).await?;
+                assert_eq!(actual.schema(), &expected_schema, "{sql}");
+                assert_eq!(actual.collect().await?, expected_rows, "{sql}");
+            }
+        }
+    }
     Ok(())
 }
 

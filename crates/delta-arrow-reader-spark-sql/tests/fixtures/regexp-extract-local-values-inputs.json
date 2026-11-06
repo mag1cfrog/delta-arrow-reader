@@ -1,0 +1,210 @@
+{
+  "purpose": "Independent all-literal regexp_extract boundary probe over local VALUES topology; no expected outcomes.",
+  "source_product": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "cases": [
+    {
+      "id": "values_literal_group_error",
+      "sql": "SELECT regexp_extract('a','(a)',2) AS r FROM VALUES(1) AS t(k)",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "values_literal_group_error",
+      "sql": "SELECT regexp_extract('a','(a)',2) AS r FROM VALUES(1) AS t(k)",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "values_literal_group_error_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',2) AS r FROM VALUES(1) AS t(k) WHERE false",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "values_literal_group_error_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',2) AS r FROM VALUES(1) AS t(k) WHERE false",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "values_literal_group_error_limit_zero",
+      "sql": "SELECT regexp_extract('a','(a)',2) AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "values_literal_group_error_limit_zero",
+      "sql": "SELECT regexp_extract('a','(a)',2) AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "values_literal_double_nan",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM VALUES(1) AS t(k)",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "values_literal_double_nan",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM VALUES(1) AS t(k)",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "values_literal_double_nan_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM VALUES(1) AS t(k) WHERE false",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "values_literal_double_nan_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM VALUES(1) AS t(k) WHERE false",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "values_literal_double_nan_limit_zero",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "values_literal_double_nan_limit_zero",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM VALUES(1) AS t(k) LIMIT 0",
+      "reason": "Verify the all-literal consumer boundary over local VALUES topology. No outcome is assigned.",
+      "providers": [],
+      "ansi": false
+    }
+  ],
+  "providers": [
+    {
+      "name": "c06_re_mixed",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {}
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "p",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "i",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        }
+      ],
+      "rows": [
+        [
+          0,
+          null,
+          "[",
+          1
+        ],
+        [
+          1,
+          "a",
+          "(a)",
+          1
+        ],
+        [
+          2,
+          null,
+          "(",
+          1
+        ],
+        [
+          3,
+          "b",
+          "(a)",
+          -1
+        ],
+        [
+          4,
+          "a",
+          "[",
+          null
+        ],
+        [
+          5,
+          "",
+          "[",
+          1
+        ]
+      ],
+      "registration": "Use the existing approved register_inputs implementation with explicit StructType; do not replace with a SQL VALUES/WHERE-false view."
+    },
+    {
+      "name": "c06_re_empty",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {}
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "p",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "i",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        }
+      ],
+      "rows": [],
+      "registration": "Use the existing approved register_inputs implementation with explicit StructType; do not replace with a SQL VALUES/WHERE-false view."
+    }
+  ],
+  "settings": {
+    "spark.master": "local[1]",
+    "spark.ui.enabled": "false",
+    "spark.default.parallelism": "1",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1",
+    "spark.sql.caseSensitive": "false",
+    "spark.sql.parser.escapedStringLiterals": "false",
+    "spark.app.name": "c06-1036-local-values-probe"
+  },
+  "per_case_settings": [
+    "spark.sql.ansi.enabled"
+  ],
+  "capture_no_expected_overlay": true
+}

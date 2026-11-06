@@ -42,6 +42,7 @@ impl Default for SparkRegexpExtract {
 
 impl SparkRegexpExtract {
     pub const NAME: &'static str = "regexp_extract";
+    const DEFAULT_GROUP_INDEX: i64 = 1;
 
     pub fn new() -> Self {
         Self {
@@ -159,13 +160,47 @@ impl ScalarUDFImpl for SparkRegexpExtract {
                 None,
             )));
         }
+        let index = match args.as_slice() {
+            [_, _] => Some(Self::DEFAULT_GROUP_INDEX),
+            [_, _, Expr::Literal(ScalarValue::Int64(Some(index)), _)] => Some(*index),
+            _ => None,
+        };
+        if info
+            .config_options()
+            .extensions
+            .iter()
+            .any(|(prefix, _)| prefix == "dar_spark_sql_errors")
+            && let Some(index) = index
+            && let [
+                Expr::Literal(
+                    ScalarValue::Utf8(Some(source))
+                    | ScalarValue::LargeUtf8(Some(source))
+                    | ScalarValue::Utf8View(Some(source)),
+                    _,
+                ),
+                Expr::Literal(
+                    ScalarValue::Utf8(Some(pattern))
+                    | ScalarValue::LargeUtf8(Some(pattern))
+                    | ScalarValue::Utf8View(Some(pattern)),
+                    _,
+                ),
+                ..,
+            ] = args.as_slice()
+            && let Ok(regex) = parse_regex(Self::NAME, pattern)
+        {
+            // Preserve native parser/capability errors at execution. Only a
+            // reached match can report its existing group error here.
+            extract_first_match(Self::NAME, source, &regex, index)?;
+        }
         Ok(ExprSimplifyResult::Original(args))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ScalarFunctionArgs { mut args, .. } = args;
         if args.len() == 2 {
-            args.push(ColumnarValue::Scalar(ScalarValue::Int64(Some(1))));
+            args.push(ColumnarValue::Scalar(ScalarValue::Int64(Some(
+                Self::DEFAULT_GROUP_INDEX,
+            ))));
         }
         make_scalar_function(
             regexp_extract_inner,
