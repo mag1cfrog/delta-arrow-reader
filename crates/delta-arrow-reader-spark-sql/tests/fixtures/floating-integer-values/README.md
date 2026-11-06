@@ -38,17 +38,18 @@ overflow requires `[CAST_OVERFLOW]` while preserving the original Arrow cause,
 numeric value, target and failure stage. The checked BIGINT endpoint (#1020)
 keeps its separate value contract.
 
-`retained-baseline-facets.json` binds the exact remaining native differences to
-real accepted-runtime observations. Its 480 old #796 nullable leaves remain
-history and cannot permit an incorrect declaration. The gate requires 668 strict
-comparisons and 36 exact retained differences: 28 #1020 endpoint contexts, four
-#865 DIV diagnostics, and four #1031 substring contexts that fail later than
-Spark and expose extra native Fields. The historical file keeps its original
-owner IDs. Expected primitive errors gain only the overflow context; their
-causes and stages cannot drift. For the two ANSI substring queries, expected
-native schema copies require the corrected nullable declaration and preserve
-every other component and boundary. Their four batch contexts retain the #1031
-stage difference despite having the required overflow identifier.
+`retained-baseline-facets.json` preserves the accepted runtime observations and
+their original owner IDs. Its 480 old #796 nullable leaves and four old #1031
+late failures remain historical evidence. They cannot permit an incorrect
+declaration or restore a late substring failure.
+
+The current gate requires 672 strict comparisons and 32 exact retained
+differences: 28 #1020 endpoint contexts and four #865 DIV diagnostics. Primitive
+errors retain their original Arrow cause, value, target and required boundary.
+The two ANSI substring queries now compare their four batch contexts against
+whole measured observations in
+[`substring-literal-preparation-current-native.json`](../substring-literal-preparation-current-native.json),
+including the real public declarations and unavailable later stages.
 The #1020 endpoint links include the original TRY literal's IEEE bits and the
 matching provider input row. Non-TRY Legacy rows receive no retained-value
 allowance. Strict Spark flags remain false for retained differences; scoped
