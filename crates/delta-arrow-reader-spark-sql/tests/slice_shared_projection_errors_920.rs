@@ -23,7 +23,7 @@ use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_qu
 use futures_util::FutureExt;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
-use sail_plan::like_errors::set_spark_like_query_clock;
+use sail_plan::like_errors::set_spark_query_start_time;
 use serde_json::{Value, json};
 
 #[allow(dead_code)]
@@ -294,7 +294,7 @@ async fn plan_observation(session: &SessionContext, case: &Value) -> TestResult<
         &query.column_names,
     )?;
     let mut state = session.state();
-    set_spark_like_query_clock(&mut state);
+    set_spark_query_start_time(&mut state);
     let extensions = &mut state.config_mut().options_mut().extensions;
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());

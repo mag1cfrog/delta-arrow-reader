@@ -1363,6 +1363,36 @@ async fn array_preparation_reuses_folded_string_arguments() -> TestResult {
             [1, 0]
         );
     }
+    for sql in [
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) WHERE false) AS q",
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) WHERE 1=0) AS q",
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM (SELECT 1 AS k FROM VALUES(1) AS v(x) LIMIT 0) AS z) AS q",
+        "SELECT s,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT folded_source('kept') AS s FROM VALUES(1) AS v(x) LIMIT 0) AS q",
+    ] {
+        source_calls.store(0, Ordering::SeqCst);
+        position_calls.store(0, Ordering::SeqCst);
+        let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+        let physical = query.create_physical_plan(&session).await?;
+        eprintln!(
+            "STRING_ARRAY_EMPTY_INPUT_CALLBACK_COUNT after_prepare={} sql={sql}",
+            source_calls.load(Ordering::SeqCst)
+        );
+        assert_eq!(source_calls.load(Ordering::SeqCst), 0, "{sql}");
+        let batches = collect(physical, session.task_ctx()).await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            0,
+            "{sql}"
+        );
+        assert_eq!(
+            [
+                source_calls.load(Ordering::SeqCst),
+                position_calls.load(Ordering::SeqCst)
+            ],
+            [0, 0],
+            "{sql}"
+        );
+    }
     source_calls.store(0, Ordering::SeqCst);
     position_calls.store(0, Ordering::SeqCst);
     let query = plan_query(&session,
@@ -1435,6 +1465,23 @@ async fn array_preparation_reuses_folded_string_arguments() -> TestResult {
             position_calls.load(Ordering::SeqCst)
         ],
         [1, 0]
+    );
+    let query = plan_query(&session,
+        "SELECT ts=current_timestamp() AND ts<>TIMESTAMP '1970-01-01 00:00:00' AS same,substring(CAST(ARRAY(7)[0] AS STRING),CAST(rand() AS INT),1) AS r FROM (SELECT current_timestamp() AS ts FROM VALUES(1) AS v(x)) AS q",
+        &SparkSqlOptions::default()).await?;
+    let physical = query.create_physical_plan(&session).await?;
+    let batches = collect(physical, session.task_ctx()).await?;
+    assert_eq!(
+        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+        1
+    );
+    assert_eq!(
+        spark_results::encode_value(batches[0].column(0).as_ref(), 0)?,
+        json!("true")
+    );
+    assert_eq!(
+        spark_results::encode_value(batches[0].column(1).as_ref(), 0)?,
+        json!("7")
     );
     Ok(())
 }

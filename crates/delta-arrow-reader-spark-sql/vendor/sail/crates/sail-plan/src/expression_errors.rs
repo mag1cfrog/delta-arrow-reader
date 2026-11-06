@@ -476,6 +476,7 @@ impl PrepareSparkExpressions {
             .insert(SparkInterpretedEvaluation::default());
         let mut props = ExecutionProps::new();
         props.config_options = Some(Arc::new(evaluation_options));
+        props.query_execution_start_time = crate::like_errors::spark_query_start_time(options);
         let prepare = Prepare {
             props,
             has_groups,
@@ -2301,32 +2302,40 @@ impl Prepare {
         &self,
         input: LogicalPlan,
     ) -> Result<Transformed<LogicalPlan>> {
-        input.transform_up(|node| {
-            let schema = match &node {
-                LogicalPlan::TableScan(scan) => Arc::new(DFSchema::try_from_qualified_schema(
-                    scan.table_name.clone(),
-                    &scan.source.schema(),
-                )?),
-                _ => Arc::new(datafusion_expr::utils::merge_schema(&node.inputs())),
-            };
-            let info = datafusion_expr::simplify::SimplifyContext::builder()
-                .with_schema(schema)
-                .with_query_execution_start_time(self.props.query_execution_start_time)
-                .with_config_options(self.props.config_options.clone().unwrap_or_default())
-                .build();
-            let simplifier = ExprSimplifier::new(info).with_local_input_errors();
-            let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
-            let prepared = node.map_expressions(|expr| {
-                let name = names.save(&expr);
-                simplifier
-                    .simplify_with_cycle_count_transformed(expr)
-                    .map(|(prepared, _)| prepared.update_data(|expr| name.restore(expr)))
-            })?;
-            Ok(Transformed::new_transformed(
-                prepared.data.recompute_schema()?,
-                prepared.transformed,
-            ))
-        })
+        input.transform_down_up(
+            |node| {
+                let pruned = self.prune_limit_zero(node, true)?;
+                let recursion = if pruned.transformed {
+                    TreeNodeRecursion::Jump
+                } else {
+                    TreeNodeRecursion::Continue
+                };
+                Ok(Transformed::new(pruned.data, pruned.transformed, recursion))
+            },
+            |node| {
+                if known_empty(&node) {
+                    return Ok(Transformed::no(node));
+                }
+                let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
+                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                    .with_schema(schema)
+                    .with_query_execution_start_time(self.props.query_execution_start_time)
+                    .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                    .build();
+                let simplifier = ExprSimplifier::new(info).with_local_input_errors();
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                let prepared = node.map_expressions(|expr| {
+                    let name = names.save(&expr);
+                    simplifier
+                        .simplify_with_cycle_count_transformed(expr)
+                        .map(|(prepared, _)| prepared.update_data(|expr| name.restore(expr)))
+                })?;
+                Ok(Transformed::new_transformed(
+                    prepared.data.recompute_schema()?,
+                    prepared.transformed,
+                ))
+            },
+        )
     }
 
     fn cast_reachability(
@@ -2356,6 +2365,7 @@ impl Prepare {
                     }
                     retain_input = is_spark_query
                         && self.spark_array_index_errors
+                        && early_local_relation(&project.input)?
                         && input_permits_array_index_preparation(&project.input)?
                         && project.expr.iter().try_fold(false, |found, expr| {
                             Ok::<_, datafusion_common::DataFusionError>(
@@ -3001,7 +3011,7 @@ impl Prepare {
 
     // Evaluate only SQL VALUES and the operations Spark can perform locally.
     // Table scans, range execution, aggregates and joins are never executed.
-    // The batch is discarded; it exists to preserve early planning failures.
+    // ARRAY-bearing string preparation retains admitted local values in the actual input plan.
     fn local_batch(&self, plan: &LogicalPlan) -> Result<Option<RecordBatch>> {
         let inputs = plan
             .inputs()
