@@ -47,13 +47,15 @@ fn matches_retained_map_observation(case: &Value, observed: &Value, retained: &V
     if observed == retained {
         return true;
     }
-    if case["expected"]["condition"] != "INVALID_ARRAY_INDEX" || retained["native_phase"] != "collect"
+    if case["expected"]["condition"] != "INVALID_ARRAY_INDEX"
+        || retained["native_phase"] != "collect"
     {
         return false;
     }
-    let Some(cause) = retained["error"].as_str().and_then(|error| {
-        error.strip_prefix("Execution error: [INVALID_ARRAY_INDEX] The index ")
-    }) else {
+    let Some(cause) = retained["error"]
+        .as_str()
+        .and_then(|error| error.strip_prefix("Execution error: [INVALID_ARRAY_INDEX] The index "))
+    else {
         return false;
     };
     // The typed ARRAY carrier changes only this wrapper in the captured baseline.
@@ -80,15 +82,27 @@ fn retained_array_carrier_keeps_the_complete_observation_strict() {
         "External error: ",
         1,
     ));
-    assert!(matches_retained_map_observation(&case, &observed, &retained));
+    assert!(matches_retained_map_observation(
+        &case, &observed, &retained
+    ));
     for (key, value) in [
         (
             "error",
-            json!(observed["error"].as_str().unwrap().replace("index 0", "index 1")),
+            json!(
+                observed["error"]
+                    .as_str()
+                    .unwrap()
+                    .replace("index 0", "index 1")
+            ),
         ),
         (
             "error",
-            json!(observed["error"].as_str().unwrap().replace("0 elements", "1 elements")),
+            json!(
+                observed["error"]
+                    .as_str()
+                    .unwrap()
+                    .replace("0 elements", "1 elements")
+            ),
         ),
         (
             "error",
