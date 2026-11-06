@@ -4,6 +4,7 @@ use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
 use datafusion_expr::{EmptyRelation, Expr, ExprSchemable, LogicalPlan, expr};
+use datafusion_functions_nested::concat::ArrayConcat;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
@@ -53,6 +54,17 @@ impl PlanResolver<'_> {
         }
 
         let canonical_function_name = function_name.to_ascii_lowercase();
+        // ARRAY_CONCAT is native-only; a host registration may replace it.
+        if canonical_function_name == "array_concat"
+            && self
+                .ctx
+                .udf(&canonical_function_name)
+                .map_or(true, |udf| udf.inner().is::<ArrayConcat>())
+        {
+            return Err(PlanError::analysis(format!(
+                "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]. SQLSTATE: 42883"
+            )));
+        }
         // For functions that accept a date-part keyword as the first argument
         // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
         // to a string literal before resolution.
