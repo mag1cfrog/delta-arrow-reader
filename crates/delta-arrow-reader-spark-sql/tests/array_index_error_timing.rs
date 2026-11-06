@@ -672,6 +672,102 @@ fn whole_expression_array_errors_keep_native_generic_and_conditional_policies() 
     Ok(())
 }
 
+#[test]
+fn string_argument_hof_preserves_reached_array_errors() -> TestResult {
+    use arrow::array::{BooleanArray, StringArray};
+    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow::record_batch::RecordBatch;
+    use datafusion::common::{DFSchema, ScalarValue, config::ConfigOptions, tree_node::TreeNode};
+    use datafusion::functions::expr_fn::coalesce;
+    use datafusion::logical_expr::expr::{HigherOrderFunction, Lambda};
+    use datafusion::logical_expr::expr_fn::when;
+    use datafusion::logical_expr::execution_props::ExecutionProps;
+    use datafusion::logical_expr::simplify::SimplifyContext;
+    use datafusion::logical_expr::{
+        ColumnarValue, Expr, HigherOrderUDF, ScalarUDF, Volatility, cast, col, create_udf, lit,
+    };
+    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+    use datafusion::physical_expr::create_physical_expr;
+    use sail_function::scalar::misc::raise_error::RaiseError;
+    use sail_function::scalar::string::spark_substring::SparkSubstring;
+    use sail_plan::expression_errors::SparkSqlExpressionSemantics;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let position = create_udf(
+        "argument_position",
+        vec![],
+        DataType::Int64,
+        Volatility::Volatile,
+        Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(ColumnarValue::Scalar(ScalarValue::Int64(Some(0))))
+        }),
+    );
+    let source = cast(
+        ScalarUDF::from(RaiseError::new_array_index_error())
+            .call(vec![lit("[INVALID_ARRAY_INDEX] reached source")]),
+        DataType::Utf8,
+    );
+    let lambda = |body| Expr::Lambda(Lambda::new(vec!["unused".into()], body));
+    let arguments = Expr::HigherOrderFunction(HigherOrderFunction::new(
+        Arc::new(HigherOrderUDF::new_from_impl(SparkSubstring::new())),
+        vec![
+            lambda(source.clone()),
+            lambda(position.call(vec![])),
+            lambda(lit(1_i64)),
+        ],
+    ));
+    let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+        Field::new("selected", DataType::Boolean, false),
+        Field::new("value", DataType::Utf8, true),
+    ]))?);
+    let batch = RecordBatch::try_new(
+        Arc::new(schema.as_arrow().clone()),
+        vec![
+            Arc::new(BooleanArray::from(vec![false])),
+            Arc::new(StringArray::from(vec!["kept"])),
+        ],
+    )?;
+    for spark in [false, true] {
+        let mut options = ConfigOptions::default();
+        if spark {
+            options
+                .extensions
+                .insert(SparkSqlExpressionSemantics::default());
+        }
+        let simplifier = ExprSimplifier::new(
+            SimplifyContext::builder()
+                .with_schema(Arc::clone(&schema))
+                .with_config_options(Arc::new(options))
+                .build(),
+        );
+        assert_eq!(simplifier.simplify(arguments.clone())?, arguments);
+        for (conditional, expected) in [
+            (
+                when(col("selected"), arguments.clone()).otherwise(lit("fallback"))?,
+                "fallback",
+            ),
+            (coalesce(vec![col("value"), arguments.clone()]), "kept"),
+        ] {
+            let actual = simplifier.simplify(conditional)?;
+            assert_eq!(actual.exists(|node| Ok(node == &source))?, !spark);
+            let physical = create_physical_expr(&actual, &schema, &ExecutionProps::new())?;
+            let values = physical.evaluate(&batch)?.into_array(batch.num_rows())?;
+            assert_eq!(
+                ScalarValue::try_from_array(values.as_ref(), 0)?,
+                ScalarValue::Utf8(Some(expected.into()))
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn array_preparation_preserves_callback_boundaries_and_live_errors() -> TestResult {
     use arrow::datatypes::DataType;
