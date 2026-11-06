@@ -441,14 +441,74 @@ async fn configured_session_retains_native_cast_behavior() -> TestResult {
     let configured = SessionContext::new_with_state(
         configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
     );
-    for sql in [
+    let mut controls = vec![
         "SELECT CAST('1.5' AS DOUBLE) AS r",
         "SELECT TRY_CAST('bad' AS FLOAT) AS r",
         "SELECT CAST(NULL AS FLOAT) AS r",
-    ] {
-        let expected = native.sql(sql).await?.collect().await?;
-        let actual = configured.sql(sql).await?.collect().await?;
-        assert_eq!(actual, expected, "{sql}");
+        "SELECT CAST(CAST(4294967296 AS BIGINT) AS INT) AS r",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<Vec<_>>();
+    for source in ["FLOAT", "DOUBLE"] {
+        for cast in ["CAST", "TRY_CAST"] {
+            for value in ["1.9", "'NaN'", "'Infinity'"] {
+                if cast == "CAST" && value != "1.9" {
+                    for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
+                        controls.push(format!(
+                            "SELECT CAST(CAST({value} AS {source}) AS {target}) AS r"
+                        ));
+                    }
+                    continue;
+                }
+                let outputs = ["TINYINT", "SMALLINT", "INT", "BIGINT"]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, target)| {
+                        format!("{cast}(CAST({value} AS {source}) AS {target}) AS r{index}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                controls.push(format!("SELECT {outputs}"));
+            }
+        }
+    }
+    let mut before = Vec::new();
+    for sql in &controls {
+        let expected = spark_results::capture_native_query_observation(&native, sql).await?;
+        let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        assert_eq!(actual, expected, "before Spark planning: {sql}");
+        before.push(actual);
+    }
+    for ansi_mode in [true, false] {
+        for sql in &controls {
+            if sql.contains("1.9") || sql.contains("TRY_CAST(CAST('NaN'") {
+                let query = plan_query(
+                    &configured,
+                    sql,
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+                let physical = query.create_physical_plan(&configured).await?;
+                let batches = collect(physical, configured.task_ctx()).await?;
+                assert_eq!(
+                    batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                    1
+                );
+            }
+        }
+    }
+    for (sql, before) in controls.iter().zip(before) {
+        let expected = spark_results::capture_native_query_observation(&native, sql).await?;
+        let actual = spark_results::capture_native_query_observation(&configured, sql).await?;
+        assert_eq!(actual, expected, "after Spark planning: {sql}");
+        assert_eq!(
+            actual, before,
+            "native behavior changed after Spark planning: {sql}"
+        );
     }
     Ok(())
 }
