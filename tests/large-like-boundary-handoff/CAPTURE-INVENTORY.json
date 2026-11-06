@@ -1,0 +1,148 @@
+{
+  "role": "Fixed native helper capture inventory; expected contract, not actual large evidence",
+  "case_order": [
+    "aggregate_large_utf8",
+    "dynamic_view_expansion",
+    "scalar_view_expansion"
+  ],
+  "escape": "!",
+  "source_scalar_value": "z",
+  "source_scalar_null": false,
+  "proof_scope": "real-rewrite-and-representation-only",
+  "cases": {
+    "aggregate_large_utf8": {
+      "input_pattern": {
+        "kind": "Array",
+        "type": "LargeUtf8",
+        "rows": 2048,
+        "bytes_per_row": 1048576,
+        "all_bytes": 97,
+        "null_count": 0,
+        "total_actual_bytes": 2147483648,
+        "construction": "2048 safe real repeated Utf8View values, then actual cast to LargeUtf8"
+      },
+      "output_pattern": {
+        "kind": "Array",
+        "type": "LargeUtf8",
+        "rows": 2048,
+        "bytes_per_row": 1048576,
+        "all_bytes": 97,
+        "null_count": 0,
+        "total_actual_bytes": 2147483648,
+        "final_offset": 2147483648
+      },
+      "returned_source_type": "LargeUtf8 scalar"
+    },
+    "dynamic_view_expansion": {
+      "input_pattern": {
+        "kind": "Array",
+        "type": "Utf8View",
+        "rows": 262144,
+        "bytes_per_row": 4096,
+        "all_bytes": 92,
+        "null_count": 0,
+        "logical_bytes": 1073741824,
+        "construction": "262144 safe repeated real views of 4096 backslash bytes; actual cast materializes inside native helper"
+      },
+      "output_pattern": {
+        "kind": "Array",
+        "type": "LargeUtf8",
+        "rows": 262144,
+        "bytes_per_row": 8192,
+        "all_bytes": 92,
+        "null_count": 0,
+        "total_actual_bytes": 2147483648,
+        "final_offset": 2147483648
+      },
+      "returned_source_type": "LargeUtf8 scalar"
+    },
+    "scalar_view_expansion": {
+      "input_pattern": {
+        "kind": "Scalar",
+        "type": "Utf8View",
+        "rows": 1,
+        "actual_bytes": 1073741824,
+        "all_bytes": 92,
+        "null": false
+      },
+      "output_pattern": {
+        "kind": "Scalar",
+        "type": "Utf8View",
+        "rows": 1,
+        "actual_bytes": 2147483648,
+        "all_bytes": 92,
+        "null": false,
+        "checked_owned_view": {
+          "type": "Utf8View",
+          "rows": 1,
+          "buffer_index": 0,
+          "offset": 0,
+          "actual_length": 2147483648,
+          "actual_backing_bytes": 2147483648,
+          "uses_returned_owned_bytes": true
+        }
+      },
+      "returned_source_type": "Utf8View scalar"
+    }
+  },
+  "whole_values": {
+    "oracle": "constant ASCII a unchanged, or every ordinary backslash independently specified as two backslashes under escape !",
+    "comparison": "Every actual byte in bounded 4096-byte chunks; every row valid and exact width; all LargeUtf8 offsets checked or every real view checked; Arrow validate_full on actual arrays",
+    "no_truncation_or_sampled_value_credit": true,
+    "no_fabricated_lengths_offsets_or_unsafe_observer_constructors": true
+  },
+  "field_inventory": {
+    "sql_analyzed_fields": {
+      "available": false,
+      "reason": "private native helper has no SQL planning stage"
+    },
+    "sql_optimized_fields": {
+      "available": false,
+      "reason": "private native helper has no SQL planning stage"
+    },
+    "sql_physical_fields": {
+      "available": false,
+      "reason": "private native helper does not create a physical SQL plan"
+    },
+    "field_names_declared_nullability_and_metadata": {
+      "available": false,
+      "reason": "ColumnarValue return values contain no Arrow Field; do not infer empty metadata or a declared nullable flag"
+    },
+    "actual_scalar_or_array_type": {
+      "available_when_executed": true,
+      "capture": "native type assertions and actual output JSON"
+    },
+    "actual_nulls_and_validity": {
+      "available_when_executed": true,
+      "capture": "actual null_count/scalar non-NULL, every row validity and Arrow full validation"
+    }
+  },
+  "ansi": {
+    "exercised": false,
+    "reason": "helper has no ANSI/configuration argument; no two-mode SQL claim"
+  },
+  "layout_representation": {
+    "exercised": "exact fixed non-sliced repeated-view and actual LargeUtf8 layouts; scalar path retained",
+    "unexercised": [
+      "sliced arrays",
+      "partition-layout matrix",
+      "public Boolean match",
+      "giant regex compilation",
+      "Apache Spark oracle"
+    ]
+  },
+  "error_inventory": {
+    "expected_native_helper_error": "none for these exact valid non-NULL inputs",
+    "native_error_diagnostic_available": false,
+    "native_error_detail_reason": "unchanged v2 native_args suppresses possible giant-pattern formatting; nonzero/failed assertion still fails",
+    "resource_preflight": "unavailable without execution",
+    "timeout_budget_or_reserve_excess": "unavailable regardless of completed assertions",
+    "signal_or_OS_termination": "unavailable",
+    "build_sampler_or_observation_failure": "failure with no credit",
+    "source_index_coordination_or_lock_closeout_failure": "no credit",
+    "duplicate_missing_wrong_token_or_incomplete_payload_summary": "failure with no credit"
+  },
+  "engines_run": false,
+  "large_allocation": false,
+  "acceptance_credit": false
+}

@@ -1,0 +1,126 @@
+{
+  "role": "Historical source handoff; no large probe execution or acceptance credit",
+  "branch": "test/771-large-like-boundary-handoff",
+  "frozen_product": {
+    "commit": "028c10625608053b34b76421379b6dc2df1c5756",
+    "tree": "da82213cc6b7ab458d7f2ded0bef70e09c4551b3"
+  },
+  "frozen_observer": {
+    "commit": "5fa08928262a0dc149333685cafd185a5ebc8b40",
+    "tree": "1827f4bfeb170c750d24f8ce36f62f48779e29e5",
+    "source_pin_scope": "All 2888 files in the frozen observer tree; excludes handoff directory"
+  },
+  "append_target": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/predicate/spark_like.rs",
+  "production_prefix_sha256": "679c3f3ce0d02ff0e2e9ccc4f1f44e62130bedb5d8361d70a462aed94f2c6e33",
+  "observer_append_sha256": "5c2630e2077bbdae3e121c210f509fd9531fde1166cf01435c2f847452e781b2",
+  "instrumented_source_sha256": "66a21374ea2ab02cd060d5d71d635c6e4a3540485b8f1f52876c762104925587",
+  "exact_append": "frozen production bytes + one newline + byte-identical unit_append.rs",
+  "original_packet": {
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/771-large-helper-immutable-r2",
+    "seal_sha256": "03ed66ebba21e10eabb409b72ce4aae55fe657054c59ed4dba95f07c6dd78c6b",
+    "members_verified": 19
+  },
+  "original_independent_source_review": {
+    "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/771-large-helper-immutable-r2-independent-review",
+    "report_sha256": "e5ce7e8be01dc5cf5aa0de6c133589d36ced2d4b079fc0fdf4b6e49449fa293e",
+    "seal_sha256": "246d7d48d91d783003d4512ba22a18f4106d10e2b23287d887dc022818ed8064",
+    "conclusion": "No actionable source findings; actual execution required later eligible admission and full closeout"
+  },
+  "copied_files": {
+    "unit_append.rs": {
+      "source_member": "unit_append.rs",
+      "sha256": "5c2630e2077bbdae3e121c210f509fd9531fde1166cf01435c2f847452e781b2",
+      "bytes": 10777,
+      "byte_identical": true
+    },
+    "input-and-resource-policy.json": {
+      "source_member": "input-and-resource-policy.json",
+      "sha256": "b8b77d58593ab12c49896af96bd0b15f2823f122f123ad33ec2b1c14d3809a79",
+      "bytes": 5846,
+      "byte_identical": true
+    },
+    "CAPTURE-INVENTORY.json": {
+      "source_member": "CAPTURE-INVENTORY.json",
+      "sha256": "1770d17423a78e02107ed34198eff49b27c1407392b944e87afce3be055d45dd",
+      "bytes": 5205,
+      "byte_identical": true
+    },
+    "source-pins.json": {
+      "source_member": "source-pins.json",
+      "sha256": "e93060e4226eba06570bc19489eeb7c8920328e611c64c83e08057ba3a4dd065",
+      "bytes": 876156,
+      "byte_identical": true
+    },
+    "mac-reference/run.py": {
+      "source_member": "run.py",
+      "sha256": "b9abbb645b5ca9e1229b68f0113897777aaa43346165dede5a764f1b6af5d939",
+      "bytes": 26872,
+      "byte_identical": true
+    }
+  },
+  "policy_attribution": {
+    "sha256": "b8b77d58593ab12c49896af96bd0b15f2823f122f123ad33ec2b1c14d3809a79",
+    "historical_source_revision": "ed92991f2590d5b9c7b7f2e15680a4b4b00e3607",
+    "note": "Preserved verbatim. Its source_revision and production_pins describe the legacy policy packet, not a claim that every pin matches this frozen tree. Use source-pins.json for the frozen observer tree.",
+    "historical_arrow_cast_sha256": "a5ff95c2b7587259d4528665597d92f6d9ee86a16b1fba7b5548060f73cf1cb0",
+    "frozen_arrow_cast_sha256": "e145491dcac74f37cc96455e615862fb6267a2a8c62fe6dc25a3edf518931e1e",
+    "arrow_cast_difference": "Existing string-parser type/function re-exports only, as recorded by original ARROW-CAST-DIFF.patch",
+    "original_arrow_cast_diff_sha256": "2471bd038e9cf13a4cecc572353f989679fdf574eeb0f1b0a0aae4140e6013bd",
+    "original_arrow_cast_diff_text": "diff --git a/crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-cast/src/cast/mod.rs b/crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-cast/src/cast/mod.rs\nindex aaa31219..11bd1722 100644\n--- a/crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-cast/src/cast/mod.rs\n+++ b/crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-cast/src/cast/mod.rs\n@@ -75,7 +75,10 @@ use arrow_select::take::take;\n use num_traits::{NumCast, ToPrimitive, cast::AsPrimitive};\n \n pub use decimal::{DecimalCast, rescale_decimal};\n-pub use string::cast_single_string_to_boolean_default;\n+pub use string::{\n+    ParsedStringRows, StringParseFailure, cast_single_string_to_boolean_default,\n+    parse_string_rows_until_error,\n+};\n \n /// CastOptions provides a way to override the default cast behaviors\n #[derive(Debug, Clone, PartialEq, Eq, Hash)]\n"
+  },
+  "component_comparison": {
+    "commit": "5a29cd2fb539aafa137053276ba27c72bbd9d344",
+    "path": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/predicate/spark_like.rs",
+    "sha256": "679c3f3ce0d02ff0e2e9ccc4f1f44e62130bedb5d8361d70a462aed94f2c6e33",
+    "equals_frozen_production_file": true,
+    "scope": "This file only; no current staging whole-tree validation or execution claim"
+  },
+  "latest_mac_admission": {
+    "receipt_path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/771-quiet-resource-admission-r8/receipt.json",
+    "receipt_sha256": "1a7d603c64dbddb6709437942d085afd7340307362597362241e9cb60a0b4e64",
+    "measured_at": "2026-11-06T19:21:40.390750+00:00",
+    "physical_bytes": 19327352832,
+    "free_plus_speculative_bytes": 901595136,
+    "available_gib": 0.8396759033203125,
+    "all_cases_eligible": false,
+    "all_cases_executed": false
+  },
+  "execution_status": {
+    "aggregate_large_utf8": "UNEXECUTED",
+    "dynamic_view_expansion": "UNEXECUTED",
+    "scalar_view_expansion": "UNEXECUTED",
+    "rust_compilation": "UNVALIDATED",
+    "rustfmt": "UNVALIDATED",
+    "clippy": "UNVALIDATED",
+    "measured_native_peak_rss": "UNAVAILABLE",
+    "acceptance_credit": false
+  },
+  "archived_mac_runtime": {
+    "portable": false,
+    "original_packet": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/771-large-helper-immutable-r2",
+    "validator": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator",
+    "controller": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/mac-shared-engine-adapter/run_locked.py",
+      "sha256": "f0a6a980b163be6b126327fa6a4b44162bb72235be74db777a12eb74f7e25a49"
+    },
+    "inherited_lock": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/mac-shared-engine-adapter/inherited_lock.py",
+      "sha256": "4a120f00997626dcb64560eef12855ec1736e9a82784f25a4912d43c9fd83783"
+    },
+    "coordination": {
+      "path": "/Users/hanbowang/.local/share/delta-arrow-reader-mac/coordination.json",
+      "sha256": "8c91f6b1c7eb1d40a799e0c051dd97812d3a114f7dbe1f2b7cd8f775074fc4a6"
+    },
+    "cargo_home": "/Users/hanbowang/.cargo",
+    "rustup_home": "/Users/hanbowang/.rustup",
+    "target": "/Users/hanbowang/.cache/dar-c06-target",
+    "jobs": 6,
+    "missing_from_handoff": [
+      "complete original sealed Mac packet",
+      "controller and inherited_lock modules",
+      "host coordination and lock",
+      "installed toolchain/cache/registry sources"
+    ],
+    "rebind_required": "Review and rebind orchestration for the receiving host before any execution; the archived runner refuses relocation and requires the original inherited controller lease."
+  }
+}

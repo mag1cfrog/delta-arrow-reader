@@ -1,0 +1,76 @@
+{
+  "meaning": "Source-only real-data observer inputs and resource admission policy. No large data has been allocated and no case has run.",
+  "source_revision": "ed92991f2590d5b9c7b7f2e15680a4b4b00e3607",
+  "append_target": "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/predicate/spark_like.rs",
+  "production_prefix_sha256": "679c3f3ce0d02ff0e2e9ccc4f1f44e62130bedb5d8361d70a462aed94f2c6e33",
+  "production_pins": {
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/predicate/spark_like.rs": "679c3f3ce0d02ff0e2e9ccc4f1f44e62130bedb5d8361d70a462aed94f2c6e33",
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/src/scalar/predicate/rewrite_like_pattern.rs": "e5a2bf94ef6079ccb427dbf37ae52650876aed81f24a59d575ee81530ec8bc7f",
+    "crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-cast/src/cast/mod.rs": "a5ff95c2b7587259d4528665597d92f6d9ee86a16b1fba7b5548060f73cf1cb0",
+    "crates/delta-arrow-reader-spark-sql/vendor/sail/crates/sail-function/Cargo.toml": "dd63b504b0e6db088c9df642c59aa84fb97c3f9d60707f6a9a02695fbe5cf67a",
+    "crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-array/src/array/byte_array.rs": "30a3455bde1accb8c8bf54fe419428330142db5891f99190482a872c118d53c3",
+    "crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-array/src/array/byte_view_array.rs": "ec60117c5e60ab417f7653134a6fca70fb98fd49dc281778272927b49f67971f",
+    "crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-array/src/builder/generic_bytes_builder.rs": "df0a137fca3f1fa11e3d6257f8d411438799530ec0e4b102ee7eea363779eec0",
+    "crates/delta-arrow-reader-spark-sql/vendor/dependencies/arrow-array/src/builder/generic_bytes_view_builder.rs": "03af51a1eb35c3724248d5337cca987d8e29f4b0be5875833e426074d4454332"
+  },
+  "registry_source_pins": {
+    "datafusion-common-54.1.0/src/scalar/mod.rs": {
+      "path": "/Users/hanbowang/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datafusion-common-54.1.0/src/scalar/mod.rs",
+      "sha256": "0989385baf6e523df2cc9179b1508f199c0be3ade2dd95eebe20b3b368cc8104"
+    },
+    "datafusion-expr-common-54.1.0/src/columnar_value.rs": {
+      "path": "/Users/hanbowang/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datafusion-expr-common-54.1.0/src/columnar_value.rs",
+      "sha256": "fb98f866c1140599488b537ed56e6f22f4fc18722ddb920ae0b6228cc896bb10"
+    },
+    "arrow-buffer-58.4.0/src/buffer/mutable.rs": {
+      "path": "/Users/hanbowang/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrow-buffer-58.4.0/src/buffer/mutable.rs",
+      "sha256": "344d455292944f18f87d87d241612be935471e1d4a2fa96726575e85863e0e4d"
+    }
+  },
+  "boundary_bytes": 2147483648,
+  "i32_max": 2147483647,
+  "system_reserve_bytes": 2147483648,
+  "cases": {
+    "aggregate_large_utf8": {
+      "rows": 2048,
+      "seed_bytes": 1048576,
+      "input_real_materialized_bytes": 2147483648,
+      "output_real_materialized_bytes": 2147483648,
+      "process_budget_bytes": 8589934592,
+      "identifiable_live_payload_peak_bytes": 5368709120,
+      "independent_expected": "2048 non-NULL rows, each containing 1048576 real ASCII a bytes, remain unchanged; every offset is row * 1048576 and the final offset is 2147483648.",
+      "estimated_cumulative_payload_allocations_bytes": 6442450944
+    },
+    "dynamic_view_expansion": {
+      "rows": 262144,
+      "seed_bytes": 4096,
+      "input_real_materialized_bytes": 1073741824,
+      "output_real_materialized_bytes": 2147483648,
+      "process_budget_bytes": 7516192768,
+      "identifiable_live_payload_peak_bytes": 4294967296,
+      "independent_expected": "262144 non-NULL rows, each containing 4096 ordinary backslashes under escape !, become 8192 backslashes; every offset is row * 8192 and the final offset is 2147483648.",
+      "estimated_cumulative_payload_allocations_bytes": 5368709120
+    },
+    "scalar_view_expansion": {
+      "rows": 1,
+      "input_real_scalar_bytes": 1073741824,
+      "output_real_scalar_bytes": 2147483648,
+      "process_budget_bytes": 11811160064,
+      "identifiable_live_payload_peak_bytes": 6442450944,
+      "independent_expected": "One non-NULL Utf8View scalar containing 1073741824 ordinary backslashes under escape ! becomes 2147483648 backslashes, retains Utf8View scalar dispatch, and forms one valid Arrow view over the actual returned owned bytes.",
+      "estimated_cumulative_payload_allocations_bytes": 9663676416
+    }
+  },
+  "budget_notes": [
+    "Identifiable live peaks exclude small descriptor/scratch allocations and process/runtime overhead. They are source-derived estimates, not measurements or hard bounds.",
+    "Cumulative allowances count retained earlier geometric-growth capacities as resident. The process budget adds2GiB for descriptors, scratch, allocator rounding and runtime. Budget excess is unavailable even if the assertion finishes.",
+    "Admission requires process budget plus an additional2GiB system reserve in free+speculative pages; inactive/purgeable/compressed pages do not receive availability credit.",
+    "Scalar production cast holds rewritten String+LargeStringArray+copied result String, all2GiB. No observer clone of the1GiB scalar input is made. The final returned String is moved into a real buffer/view without another2GiB payload copy.",
+    "The memory watchdog and timeout are best effort; OS termination remains possible and never counts as a pass. No resource-policy override is offered."
+  ],
+  "reviewer_plan_sha256": "5cb736013f1e9cd82fba0e3f5f31196bb3d3959696eab0d8487f4a2b97db5ba0",
+  "no_large_regex": true,
+  "no_apache_spark_oracle": true,
+  "unsafe_constructors_in_observer": false,
+  "actual_arrow_array_sources": "Pinned to vendored production paths. The inspected registry source bytes were independently confirmed identical."
+}
