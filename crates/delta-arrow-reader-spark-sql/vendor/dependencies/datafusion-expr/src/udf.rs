@@ -596,10 +596,10 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
         true
     }
 
-    /// Whether the optimizer raises an error from evaluating a constant call to this
+    /// Whether the optimizer propagates an error from evaluating a constant call to this
     /// function instead of deferring it to execution, as Spark's constant folding does.
     /// Calls inside a conditional branch still defer their errors. The default is `false`.
-    fn raises_constant_errors(&self) -> bool {
+    fn propagates_constant_folding_errors(&self) -> bool {
         false
     }
 
@@ -1166,8 +1166,8 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
         self.inner.supports_constant_folding()
     }
 
-    fn raises_constant_errors(&self) -> bool {
-        self.inner.raises_constant_errors()
+    fn propagates_constant_folding_errors(&self) -> bool {
+        self.inner.propagates_constant_folding_errors()
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {

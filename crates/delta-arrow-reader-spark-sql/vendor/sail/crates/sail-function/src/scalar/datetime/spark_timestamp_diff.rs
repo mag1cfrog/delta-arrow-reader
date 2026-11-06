@@ -111,8 +111,8 @@ impl SparkTimestampDiff {
                 self.unit_text
             );
         };
-        let start = local_micros(start, zone)?;
-        let end = local_micros(end, zone)?;
+        let start = local_micros(start, zone);
+        let end = local_micros(end, zone);
         let value = match unit.micros() {
             // Java truncates the local difference toward zero.
             Some(length) => (end - start) / length,
@@ -128,15 +128,13 @@ impl SparkTimestampDiff {
                     end_day += 1;
                 }
                 let days = end_day - start_day;
-                let months = || -> Result<i128> {
-                    Ok((packed_month(end_day)? - packed_month(start_day)?) / 32)
-                };
+                let months = (packed_month(end_day) - packed_month(start_day)) / 32;
                 match unit {
                     TimestampDiffUnit::Day => days,
                     TimestampDiffUnit::Week => days / 7,
-                    TimestampDiffUnit::Month => months()?,
-                    TimestampDiffUnit::Quarter => months()? / 3,
-                    TimestampDiffUnit::Year => months()? / 12,
+                    TimestampDiffUnit::Month => months,
+                    TimestampDiffUnit::Quarter => months / 3,
+                    TimestampDiffUnit::Year => months / 12,
                     _ => return internal_err!("time-based unit {unit:?} has a length"),
                 }
             }
@@ -151,7 +149,7 @@ impl SparkTimestampDiff {
 
 /// The local wall-clock microseconds of an instant in `zone`, beyond the BIGINT range when
 /// the offset moves an extreme instant past it.
-fn local_micros(micros: i64, zone: &Tz) -> Result<i128> {
+fn local_micros(micros: i64, zone: &Tz) -> i128 {
     let mut probe = micros;
     let instant = loop {
         if let Some(instant) = DateTime::from_timestamp_micros(probe) {
@@ -168,20 +166,17 @@ fn local_micros(micros: i64, zone: &Tz) -> Result<i128> {
         .offset_from_utc_datetime(&instant.naive_utc())
         .fix()
         .local_minus_utc();
-    Ok(i128::from(micros) + i128::from(offset) * 1_000_000)
+    i128::from(micros) + i128::from(offset) * 1_000_000
 }
 
 /// Java's `LocalDate` month position: the proleptic month times 32 plus the day of month.
-fn packed_month(epoch_day: i128) -> Result<i128> {
-    let Ok(epoch_day) = i64::try_from(epoch_day) else {
-        return internal_err!("local day {epoch_day} is outside the supported range");
-    };
+fn packed_month(epoch_day: i128) -> i128 {
     let (year, month, day) = civil_from_days(epoch_day);
-    Ok((i128::from(year) * 12 + i128::from(month) - 1) * 32 + i128::from(day))
+    (year * 12 + month - 1) * 32 + day
 }
 
 /// The proleptic Gregorian year, month and day of an epoch day (Howard Hinnant's algorithm).
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
+fn civil_from_days(days: i128) -> (i128, i128, i128) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let day_of_era = z.rem_euclid(146_097);
@@ -195,7 +190,7 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
     } else {
         shifted_month - 9
     };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    let year = year_of_era + era * 400 + i128::from(month <= 2);
     (year, month, day)
 }
 
@@ -219,7 +214,7 @@ impl ScalarUDFImpl for SparkTimestampDiff {
     }
 
     // Spark folds a constant call during optimization, raising its unit or overflow error.
-    fn raises_constant_errors(&self) -> bool {
+    fn propagates_constant_folding_errors(&self) -> bool {
         true
     }
 
@@ -428,11 +423,11 @@ mod tests {
         // Chrono cannot represent these instants. Java places them in January of year 294247
         // (PST) and before the zone's first transition (local mean time, -07:52:58).
         assert_eq!(
-            local_micros(i64::MAX, &tz)?,
+            local_micros(i64::MAX, &tz),
             i128::from(i64::MAX) - 8 * 3_600_000_000
         );
         assert_eq!(
-            local_micros(-i64::MAX, &tz)?,
+            local_micros(-i64::MAX, &tz),
             -i128::from(i64::MAX) - 28_378_000_000
         );
         Ok(())

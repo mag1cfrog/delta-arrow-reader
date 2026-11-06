@@ -661,7 +661,7 @@ impl TreeNodeRewriter for ConstEvaluator<'_> {
                     // Functions that fold like Spark's constant folding fail during optimization
                     // unless a conditional branch may skip them.
                     if let Expr::ScalarFunction(ScalarFunction { ref func, .. }) = expr
-                        && func.inner().raises_constant_errors()
+                        && func.inner().propagates_constant_folding_errors()
                         && !conditional
                     {
                         return Err(err);
@@ -757,7 +757,8 @@ impl<'a> ConstEvaluator<'a> {
                     && func.inner().supports_constant_folding()
             }
             Expr::HigherOrderFunction(HigherOrderFunction { func, .. }) => {
-                Self::volatility_ok(func.signature().volatility) && func.supports_constant_folding()
+                Self::volatility_ok(func.signature().volatility)
+                    && func.supports_constant_folding()
             }
             Expr::Cast(Cast { expr, field }) | Expr::TryCast(TryCast { expr, field }) => {
                 if let (Ok(DataType::Struct(source_fields)), DataType::Struct(target_fields)) =

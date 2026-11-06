@@ -440,9 +440,6 @@ impl PlanResolver<'_> {
     /// For functions that accept a date-part keyword as their first argument
     /// (e.g., `DATEDIFF(DAY, start, end)`, `TIMESTAMPDIFF(HOUR, start, end)`),
     /// convert the first argument from an unresolved attribute to a string literal.
-    /// Spark's three-argument difference grammar accepts only its datetime unit keywords: a
-    /// string unit fails to parse, other TIMESTAMPDIFF and TIMEDIFF calls name no routine, and
-    /// other DATEDIFF and DATE_DIFF calls keep an ordinary first argument.
     fn convert_date_part_argument(
         function_name: &str,
         mut arguments: Vec<spec::Expr>,
@@ -458,32 +455,7 @@ impl PlanResolver<'_> {
         ];
         let function_name = function_name.trim().to_lowercase();
         if DIFF_FUNCTIONS.contains(&function_name.as_str()) && arguments.len() == 3 {
-            match &arguments[0] {
-                spec::Expr::Literal(spec::Literal::Utf8 { value: Some(unit) }) => {
-                    return Err(PlanError::invalid(format!(
-                        "[INVALID_PARAMETER_VALUE.DATETIME_UNIT] The value of parameter(s) \
-                         `unit` in `{function_name}` is invalid: expects one of the units \
-                         without quotes {}, but got the string literal '{unit}'.",
-                        TIMESTAMP_DIFF_PARSER_UNITS.join(", ")
-                    )));
-                }
-                spec::Expr::UnresolvedAttribute { name, .. } => {
-                    let parts: Vec<String> = name.clone().into();
-                    if let [unit] = parts.as_slice()
-                        && TIMESTAMP_DIFF_PARSER_UNITS.contains(&unit.to_ascii_uppercase().as_str())
-                    {
-                        arguments[0] = spec::Expr::Literal(spec::Literal::Utf8 {
-                            value: Some(unit.clone()),
-                        });
-                        return Ok(arguments);
-                    }
-                }
-                _ => {}
-            }
-            if !matches!(function_name.as_str(), "datediff" | "date_diff") {
-                return Err(unresolved_timestamp_diff_routine(&function_name));
-            }
-            return Ok(arguments);
+            return Self::resolve_timestamp_diff_unit(&function_name, arguments);
         }
         let accepts_date_part = match function_name.as_str() {
             "date_add" | "dateadd" => arguments.len() == 3,
@@ -499,6 +471,42 @@ impl PlanResolver<'_> {
             }
         }
         Ok(arguments)
+    }
+
+    /// Spark's three-argument difference grammar accepts only its datetime unit keywords: a
+    /// string unit fails to parse, other TIMESTAMPDIFF and TIMEDIFF calls name no routine, and
+    /// other DATEDIFF and DATE_DIFF calls keep an ordinary first argument.
+    fn resolve_timestamp_diff_unit(
+        function_name: &str,
+        mut arguments: Vec<spec::Expr>,
+    ) -> PlanResult<Vec<spec::Expr>> {
+        match arguments.first() {
+            Some(spec::Expr::Literal(spec::Literal::Utf8 { value: Some(unit) })) => {
+                return Err(PlanError::invalid(format!(
+                    "[INVALID_PARAMETER_VALUE.DATETIME_UNIT] The value of parameter(s) \
+                     `unit` in `{function_name}` is invalid: expects one of the units \
+                     without quotes {}, but got the string literal '{unit}'.",
+                    TIMESTAMP_DIFF_PARSER_UNITS.join(", ")
+                )));
+            }
+            Some(spec::Expr::UnresolvedAttribute { name, .. }) => {
+                let parts: Vec<String> = name.clone().into();
+                if let [unit] = parts.as_slice()
+                    && TIMESTAMP_DIFF_PARSER_UNITS.contains(&unit.to_ascii_uppercase().as_str())
+                {
+                    arguments[0] = spec::Expr::Literal(spec::Literal::Utf8 {
+                        value: Some(unit.clone()),
+                    });
+                    return Ok(arguments);
+                }
+            }
+            _ => {}
+        }
+        if matches!(function_name, "datediff" | "date_diff") {
+            Ok(arguments)
+        } else {
+            Err(unresolved_timestamp_diff_routine(function_name))
+        }
     }
 }
 

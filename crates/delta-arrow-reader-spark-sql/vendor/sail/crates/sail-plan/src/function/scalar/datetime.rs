@@ -417,9 +417,9 @@ pub(crate) fn unresolved_timestamp_diff_routine(function_name: &str) -> PlanErro
     ))
 }
 
-/// The TIMESTAMP instant Spark's implicit cast gives a TIMESTAMPDIFF argument in the session
-/// time zone.
-fn timestamp_diff_argument(
+/// Casts a TIMESTAMPDIFF argument to the TIMESTAMP instant Spark's implicit cast gives it in
+/// the session time zone.
+fn cast_timestamp_diff_argument(
     function_name: &str,
     ordinal: &str,
     expr: Expr,
@@ -431,7 +431,7 @@ fn timestamp_diff_argument(
         DataType::Timestamp(TimeUnit::Microsecond, Some(_)) => Ok(expr),
         // Spark has no dictionary encoding; Delta uses one for STRING partition columns.
         DataType::Dictionary(_, value_type) => {
-            timestamp_diff_argument(function_name, ordinal, cast(expr, *value_type), context)
+            cast_timestamp_diff_argument(function_name, ordinal, cast(expr, *value_type), context)
         }
         DataType::Timestamp(_, Some(_)) | DataType::Null => Ok(cast(expr, timestamp)),
         DataType::Timestamp(_, None) | DataType::Date32 | DataType::Date64 => {
@@ -461,7 +461,7 @@ fn timestamp_diff_argument(
 /// Spark's TIMESTAMPDIFF, also spelled as three-argument DATEDIFF, DATE_DIFF and TIMEDIFF. The
 /// resolver passes a datetime unit keyword as a string literal; any other first argument is an
 /// ordinary argument, which leaves too many for two-argument DATEDIFF.
-fn timestamp_diff(function_name: &str, input: ScalarFunctionInput) -> PlanResult<Expr> {
+fn timestamp_diff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanResult<Expr> {
     let ScalarFunctionInput {
         arguments,
         function_context,
@@ -475,8 +475,8 @@ fn timestamp_diff(function_name: &str, input: ScalarFunctionInput) -> PlanResult
              but the actual number is 3."
         )));
     };
-    let start = timestamp_diff_argument(function_name, "first", start, &function_context)?;
-    let end = timestamp_diff_argument(function_name, "second", end, &function_context)?;
+    let start = cast_timestamp_diff_argument(function_name, "first", start, &function_context)?;
+    let end = cast_timestamp_diff_argument(function_name, "second", end, &function_context)?;
     let timezone = Arc::clone(&function_context.plan_config.session_timezone);
     Ok(ScalarUDF::from(SparkTimestampDiff::new(&unit, timezone)).call(vec![start, end]))
 }
@@ -489,7 +489,7 @@ fn datediff_with_name(input: ScalarFunctionInput, function_name: &str) -> PlanRe
             })?;
             Ok(date_diff_days(end, start))
         }
-        3 => timestamp_diff(function_name, input),
+        3 => timestamp_diff_with_name(input, function_name),
         n => Err(PlanError::invalid(format!(
             "{function_name} requires 2 or 3 arguments, got {n}"
         ))),
@@ -505,11 +505,11 @@ fn date_diff(input: ScalarFunctionInput) -> PlanResult<Expr> {
 }
 
 fn timestampdiff(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    timestamp_diff("timestampdiff", input)
+    timestamp_diff_with_name(input, "timestampdiff")
 }
 
 fn timediff(input: ScalarFunctionInput) -> PlanResult<Expr> {
-    timestamp_diff("timediff", input)
+    timestamp_diff_with_name(input, "timediff")
 }
 
 fn session_timezone(input: &ScalarFunctionInput) -> Expr {
