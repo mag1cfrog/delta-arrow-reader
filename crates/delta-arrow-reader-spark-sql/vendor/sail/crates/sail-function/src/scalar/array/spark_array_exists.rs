@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 /// Spark-compatible `exists(array, predicate)` higher-order function.
 ///
 /// Spark semantics (`ArrayExists`, three-valued logic — the modern default):
@@ -51,6 +52,12 @@ impl SparkArrayExists {
 }
 
 impl HigherOrderUDFImpl for SparkArrayExists {
+    /// Spark never folds a lambda function, so the result keeps its declared field and is
+    /// evaluated during execution.
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "exists"
     }
