@@ -330,9 +330,7 @@ fn substring_lambdas(
     }
     // Keep scalar NULL propagation before local source/position preparation.
     // A NULL read from a column retains the existing argument path.
-    if literal_value_without_evaluation(&function.args[2])
-        .is_some_and(|value| value.is_null())
-    {
+    if literal_value_without_evaluation(&function.args[2]).is_some_and(|value| value.is_null()) {
         return Ok(Transformed::no(expression));
     }
     if !pruned_empty_input && literal_substring_overflow(&function.args)? {
@@ -1714,7 +1712,10 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
             let scalar = function.call(vec![
                 lit("abcdef"),
                 unused_position,
-                cast(cast(lit(ScalarValue::Int32(None)), DataType::Int32), DataType::Int64),
+                cast(
+                    cast(lit(ScalarValue::Int32(None)), DataType::Int32),
+                    DataType::Int64,
+                ),
             ]);
             let lowered = substring_lambdas(scalar.clone(), false)
                 .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
