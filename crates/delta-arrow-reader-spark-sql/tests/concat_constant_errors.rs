@@ -159,11 +159,13 @@ async fn native_observation(session: &SessionContext, sql: &str) -> TestResult<N
 async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> TestResult {
     use arrow::datatypes::DataType;
 
-    let resolution_error = |routine: &str| json!({
-        "error":format!("resolve: External error: analysis error: [UNRESOLVED_ROUTINE] Cannot resolve routine `{routine}` on search path [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]. SQLSTATE: 42883"),
-        "error_stage":"resolve","analyzed_schema":null,"physical_schema":null,
-        "analyzed_arrow_schema":null,"physical_arrow_schema":null
-    });
+    let resolution_error = |routine: &str| {
+        json!({
+            "error":format!("resolve: External error: analysis error: [UNRESOLVED_ROUTINE] Cannot resolve routine `{routine}` on search path [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]. SQLSTATE: 42883"),
+            "error_stage":"resolve","analyzed_schema":null,"physical_schema":null,
+            "analyzed_arrow_schema":null,"physical_arrow_schema":null
+        })
+    };
     let mut failures = Vec::new();
     for batch_size in [1, 32] {
         let config = SessionConfig::new()
@@ -204,9 +206,18 @@ async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> T
         ));
         for ansi in [false, true] {
             for (sql, routine) in [
-                ("SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(CAST(1/0 AS INT))) AS r", "array_concat"),
-                ("SELECT ARRAY_CONCAT(array(1),array(2)) AS r", "ARRAY_CONCAT"),
-                ("SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(array_concat_probe())) AS r", "array_concat"),
+                (
+                    "SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(CAST(1/0 AS INT))) AS r",
+                    "array_concat",
+                ),
+                (
+                    "SELECT ARRAY_CONCAT(array(1),array(2)) AS r",
+                    "ARRAY_CONCAT",
+                ),
+                (
+                    "SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(array_concat_probe())) AS r",
+                    "array_concat",
+                ),
             ] {
                 let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
                 let expected = resolution_error(routine);
@@ -220,10 +231,13 @@ async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> T
             let sql = "SELECT concat(array(1),array(2)) AS r";
             let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
             if actual["rows"] != json!([[["1", "2"]]]) {
-                failures.push(json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,"actual":actual}));
+                failures
+                    .push(json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,"actual":actual}));
             }
         }
-        for (index, (sql, (plain_before, configured_before))) in native_sql.iter().zip(before).enumerate() {
+        for (index, (sql, (plain_before, configured_before))) in
+            native_sql.iter().zip(before).enumerate()
+        {
             let plain_after = native_observation(&plain, sql).await?;
             let configured_after = native_observation(&session, sql).await?;
             let receipt = json!({"sql":sql,"batch_size":batch_size,
@@ -233,7 +247,10 @@ async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> T
             let expected_outcome = match index {
                 0 => plain_before.fields["rows"] == json!([["[1, 2, 3]"]]),
                 1 => plain_before.fields["rows"] == json!([["[1]"]]),
-                _ => plain_before.error.as_ref().is_some_and(is_native_divide_by_zero),
+                _ => plain_before
+                    .error
+                    .as_ref()
+                    .is_some_and(is_native_divide_by_zero),
             };
             if !expected_outcome
                 || !native_public_observations_match(&configured_before, &plain_before)
@@ -255,16 +272,19 @@ async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> T
             }
         }
         let counted = Arc::clone(&calls);
-        session.register_udf(create_udf(
-            "array_concat",
-            vec![DataType::Utf8],
-            DataType::Utf8,
-            Volatility::Volatile,
-            Arc::new(move |arguments| {
-                counted.fetch_add(1, Ordering::SeqCst);
-                Ok(arguments[0].clone())
-            }),
-        ).with_aliases(["registered_array_concat"]));
+        session.register_udf(
+            create_udf(
+                "array_concat",
+                vec![DataType::Utf8],
+                DataType::Utf8,
+                Volatility::Volatile,
+                Arc::new(move |arguments| {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    Ok(arguments[0].clone())
+                }),
+            )
+            .with_aliases(["registered_array_concat"]),
+        );
         for ansi in [false, true] {
             for routine in ["array_concat", "ARRAY_CONCAT", "registered_array_concat"] {
                 calls.store(0, Ordering::SeqCst);

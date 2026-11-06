@@ -158,17 +158,20 @@ fn matches_array_concat_resolution(case: &Value, actual: &Value) -> bool {
         "searchPath":"[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
     });
     let message = format!("{UNRESOLVED_ARRAY_CONCAT}; line 1 pos 7");
-    case["expected"] == json!({
-        "status":"error","phase":"sql","condition":"UNRESOLVED_ROUTINE",
-        "parameters":parameters,"sql_state":"42883","message":message,
-        "python_class":"pyspark.errors.exceptions.captured.AnalysisException",
-        "java_causes":[{"class":"org.apache.spark.sql.AnalysisException",
-            "message":message,"condition":"UNRESOLVED_ROUTINE","parameters":parameters}]
-    }) && *actual == json!({
-        "error":format!("resolve: External error: analysis error: {UNRESOLVED_ARRAY_CONCAT}"),
-        "error_stage":"resolve","analyzed_schema":null,"physical_schema":null,
-        "analyzed_arrow_schema":null,"physical_arrow_schema":null
-    })
+    case["expected"]
+        == json!({
+            "status":"error","phase":"sql","condition":"UNRESOLVED_ROUTINE",
+            "parameters":parameters,"sql_state":"42883","message":message,
+            "python_class":"pyspark.errors.exceptions.captured.AnalysisException",
+            "java_causes":[{"class":"org.apache.spark.sql.AnalysisException",
+                "message":message,"condition":"UNRESOLVED_ROUTINE","parameters":parameters}]
+        })
+        && *actual
+            == json!({
+                "error":format!("resolve: External error: analysis error: {UNRESOLVED_ARRAY_CONCAT}"),
+                "error_stage":"resolve","analyzed_schema":null,"physical_schema":null,
+                "analyzed_arrow_schema":null,"physical_arrow_schema":null
+            })
 }
 
 fn context(matrix: &str, case: &Value, representation: usize, batch_size: usize) -> Value {
@@ -566,9 +569,11 @@ fn historical_alias_profiles_reject_changed_public_results_and_contexts() -> Tes
     for case in &cases {
         for representation in 0..3 {
             for batch_size in [1, 32] {
-                assert!(expected_contexts.insert(
-                    context(FIXTURES[0].0, case, representation, batch_size).to_string()
-                ));
+                assert!(
+                    expected_contexts.insert(
+                        context(FIXTURES[0].0, case, representation, batch_size).to_string()
+                    )
+                );
             }
         }
     }
@@ -661,10 +666,20 @@ fn historical_alias_profiles_reject_changed_public_results_and_contexts() -> Tes
         assert!(!matches_retained_alias(context, case, actual, &[])?);
         let mut changed_profile = profile.clone();
         changed_profile["context"]["target_partitions"] = json!(99);
-        assert!(!matches_retained_alias(context, case, actual, &[changed_profile])?);
+        assert!(!matches_retained_alias(
+            context,
+            case,
+            actual,
+            &[changed_profile]
+        )?);
         let mut changed_profile = profile.clone();
         changed_profile["captured_observation"]["expected"]["message"] = json!("wrong message");
-        assert!(!matches_retained_alias(context, case, actual, &[changed_profile])?);
+        assert!(!matches_retained_alias(
+            context,
+            case,
+            actual,
+            &[changed_profile]
+        )?);
         let mut duplicates = profiles.to_vec();
         duplicates.push(profile.clone());
         assert!(!matches_retained_alias(context, case, actual, &duplicates)?);
@@ -717,9 +732,16 @@ async fn unresolved_routine_comparisons_reject_changed_causes_and_available_stag
         changed[key] = value;
         assert!(!matches_meaningful_contract(case, &changed)?, "{key}");
     }
-    for key in actual.as_object().ok_or("missing native resolution object")?.keys() {
+    for key in actual
+        .as_object()
+        .ok_or("missing native resolution object")?
+        .keys()
+    {
         let mut changed = actual.clone();
-        changed.as_object_mut().ok_or("missing changed observation")?.remove(key);
+        changed
+            .as_object_mut()
+            .ok_or("missing changed observation")?
+            .remove(key);
         assert!(!matches_meaningful_contract(case, &changed)?, "{key}");
     }
     for (key, value) in [
@@ -742,7 +764,10 @@ async fn unresolved_routine_comparisons_reject_changed_causes_and_available_stag
     for parameter in ["routineName", "searchPath"] {
         let mut changed = case.clone();
         changed["expected"]["parameters"][parameter] = json!("wrong parameter");
-        assert!(!matches_meaningful_contract(&changed, &actual)?, "{parameter}");
+        assert!(
+            !matches_meaningful_contract(&changed, &actual)?,
+            "{parameter}"
+        );
     }
     for key in ["class", "message", "condition", "parameters"] {
         let mut changed = case.clone();
