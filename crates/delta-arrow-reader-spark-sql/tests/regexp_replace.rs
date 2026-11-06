@@ -264,12 +264,8 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                     compared += 1;
                     let id = case["id"].as_str().ok_or("missing ID")?;
                     let expected = &case["expected"];
-                    let external_error = matches!(
-                        id,
-                        "regexp_replace_literal_bad_named_group"
-                            | "position_supplementary_3"
-                            | "nonempty_split_dot"
-                    );
+                    let external_error =
+                        matches!(id, "position_supplementary_3" | "nonempty_split_dot");
                     let observed = capture_observation(&session, case).await?;
                     let limit = regexp_capability::recorded_limit(
                         fixture_name,
@@ -300,18 +296,20 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                     if external_error {
                         external_error_fields_compared += 1;
                     }
-                    let status = if error.is_none() && complete_result_matches(&observed, expected) {
+                    let status = if error.is_none() && complete_result_matches(&observed, expected)
+                    {
                         "exact"
                     } else if !regexp_capability::has_recorded_case(fixture_name, case)?
-                        && physical_comparison != "difference" && error.is_some_and(|error| required_error_outcome_matches(error, analyzed_schema, expected)) {
-                        if expected.get("analyzed_schema").is_some() { "required_error" } else { "required_admission_error" }
-                    } else if (id == "regexp_replace_literal_named_group" && error.is_none()
-                        && observed["analyzed_schema"] == expected["analyzed_schema"] && observed["physical_schema"] == expected["physical_schema"]
-                        && observed["rows"] == json!([["a-b"]]) && expected["rows"] == json!([["-b"]]))
-                        || (id == "regexp_replace_literal_bad_named_group" && physical_comparison != "difference" && analyzed_schema == Some(&expected["analyzed_schema"]) && expected["rows"] == json!([[""]]) && error.is_some_and(|error| {
-                        error.contains("[INVALID_REGEXP_REPLACE]") && error.contains("java.lang.IllegalArgumentException: No group with name {missing}")
-                    })) {
-                        "external_sql_variable_substitution_789"
+                        && physical_comparison != "difference"
+                        && error.is_some_and(|error| {
+                            required_error_outcome_matches(error, analyzed_schema, expected)
+                        })
+                    {
+                        if expected.get("analyzed_schema").is_some() {
+                            "required_error"
+                        } else {
+                            "required_admission_error"
+                        }
                     } else if limit == Some("utf16_split_region")
                         || (id == "position_supplementary_3"
                             && case["sql"] == "SELECT regexp_replace('a😀b','.','X',3) AS r"
@@ -319,7 +317,11 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
                             && observed["physical_schema"] == expected["physical_schema"]
                             && expected["rows"] == json!([["a?XX"]])
                             && observed["error_stage"] == "execute"
-                            && error == Some("execute: Execution error: regexp_replace cannot start a native regex region inside a UTF-16 surrogate pair")) {
+                            && error
+                                == Some(
+                                    "execute: Execution error: regexp_replace cannot start a native regex region inside a UTF-16 surrogate pair",
+                                ))
+                    {
                         "external_java_utf16_region_798"
                     } else if limit == Some("utf16_optional_advancement") {
                         "external_java_utf16_empty_match_798"
@@ -372,15 +374,11 @@ async fn regexp_replace_matches_spark_and_retains_external_boundaries() -> TestR
             "full_compatibility_pass":reference_mismatches == 0})
     );
     assert_eq!(compared, (94 + 138 + 14 + 20 + 252) * 6);
-    assert_eq!(reference_mismatches, 84);
+    assert_eq!(reference_mismatches, 60);
     assert_eq!(required_error_fields_compared, (52 + 42) * 6);
-    assert_eq!(external_error_fields_compared, 6 * 6);
+    assert_eq!(external_error_fields_compared, 4 * 6);
     assert_eq!(admission_errors_compared, (24 + 4) * 6);
     assert_eq!(error_physical_reference_unavailable, (76 + 46) * 6);
-    assert_eq!(
-        external.get("external_sql_variable_substitution_789"),
-        Some(&24)
-    );
     assert_eq!(external.get("external_java_utf16_region_798"), Some(&24));
     assert_eq!(
         external.get("external_java_utf16_empty_match_798"),
@@ -686,6 +684,7 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
         r"SELECT regexp_replace('ab12cd34','([0-9]+)', E'X\\1Y','g') AS r",
         "SELECT regexp_replace('a😀b','','X','g') AS r",
         r"SELECT regexp_replace('a😀b', E'\\B','X','g') AS r",
+        "SELECT '${x}' AS literal_x,'${missing}' AS literal_missing,regexp_replace('a','(a)','${x}','g') AS r",
     ] {
         let expected = plain.sql(sql).await?.collect().await?;
         assert_eq!(session.sql(sql).await?.collect().await?, expected);
@@ -702,7 +701,226 @@ async fn regexp_replace_preserves_native_sql() -> TestResult {
         for (sql, expected) in &native {
             assert_eq!(session.sql(sql).await?.collect().await?, *expected);
         }
+        for enabled in [true, false] {
+            let actual = capture_result(&session, &json!({
+                "sql":"SELECT '${x}' AS r", "ansi":ansi,
+                "settings":{"spark.sql.variable.substitute":enabled.to_string(),"x":"configured"},
+            })).await?;
+            assert_eq!(
+                actual["rows"],
+                json!([[if enabled { "configured" } else { "${x}" }]])
+            );
+            for (sql, expected) in &native {
+                assert_eq!(session.sql(sql).await?.collect().await?, *expected);
+            }
+        }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn sql_variable_substitution_keeps_read_only_single_statement_validation() -> TestResult {
+    let session = session(32);
+    let table = "substitution_must_not_create_this_table";
+    assert!(!session.table_exist(table)?);
+    for sql in [
+        "SELECT 1; SELECT 2".to_owned(),
+        format!("CREATE TABLE {table} AS SELECT 1 AS value"),
+    ] {
+        let options = SparkSqlOptions {
+            variable_substitution_values: std::collections::BTreeMap::from([(
+                "statement".into(),
+                sql,
+            )]),
+            ..Default::default()
+        };
+        assert!(
+            plan_query(&session, "${statement}", &options)
+                .await
+                .is_err()
+        );
+        assert!(!session.table_exist(table)?);
+    }
+    Ok(())
+}
+
+fn substitution_error_matches(case: &Value, actual: &Value) -> bool {
+    let expected = &case["expected"];
+    let Some(error) = actual["error"].as_str() else {
+        return false;
+    };
+    match expected["condition"].as_str() {
+        Some("INVALID_REGEXP_REPLACE") => {
+            let [
+                Some(source),
+                Some(pattern),
+                Some(replacement),
+                Some(position),
+            ] = ["source", "pattern", "replacement", "position"]
+                .map(|key| expected["parameters"][key].as_str())
+            else {
+                return false;
+            };
+            // #1064 retains literal-error timing; compare the execution cause separately.
+            let has_recorded_execution_phase = expected["phase"] == "collect"
+                || (expected["phase"] == "optimized_schema"
+                    && matches!(
+                        case["id"].as_str(),
+                        Some(
+                            "disabled_undefined_regexp_replace_literal_bad_named_group"
+                                | "disabled_defined_regexp_replace_literal_bad_named_group"
+                                | "defined_invalid_replacement_group"
+                        )
+                    ));
+            has_recorded_execution_phase
+                && actual["error_stage"] == "execute"
+                && required_error_outcome_matches(error, actual.get("analyzed_schema"), expected)
+                && error.contains(&format!(
+                    "[INVALID_REGEXP_REPLACE] source={source:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}:"
+                ))
+                && schema_comparison(actual, expected, "physical_schema") != "difference"
+        }
+        Some("PARSE_SYNTAX_ERROR") => {
+            expected["phase"] == "sql"
+                && actual["error_stage"] == "resolve"
+                && actual["analyzed_schema"].is_null()
+                && actual["physical_schema"].is_null()
+                && match case["id"].as_str() {
+                    Some("quote_changes_sql_syntax") => {
+                        expected["parameters"]["error"] == "'''"
+                            && expected["parameters"]["hint"] == ""
+                            && error
+                                == "resolve: External error: error in SQL parser: found end of input expected any, '\\', or '''"
+                    }
+                    Some("multiple_statement_input") => {
+                        expected["parameters"]["error"] == "'SELECT'"
+                            && expected["parameters"]["hint"] == ": extra input 'SELECT'"
+                            && error
+                                == "resolve: External error: invalid argument: expected one statement"
+                    }
+                    _ => false,
+                }
+        }
+        None if matches!(
+            case["id"].as_str(),
+            Some("enabled_self_cycle" | "enabled_two_key_cycle")
+        ) =>
+        {
+            let Some(causes) = expected["java_causes"].as_array() else {
+                return false;
+            };
+            let [cause] = causes.as_slice() else {
+                return false;
+            };
+            let Some(message) = cause["message"].as_str() else {
+                return false;
+            };
+            expected["status"] == "error"
+                && expected["condition"].is_null()
+                && expected["phase"] == "sql"
+                && cause["class"] == "java.lang.IllegalArgumentException"
+                && cause["condition"].is_null()
+                && expected["message"] == message
+                && actual["error_stage"] == "resolve"
+                && actual["analyzed_schema"].is_null()
+                && actual["physical_schema"].is_null()
+                && error
+                    == format!(
+                        "resolve: External error: invalid argument: java.lang.IllegalArgumentException: {message}"
+                    )
+        }
+        _ => false,
+    }
+}
+
+#[tokio::test]
+async fn sql_variable_substitution_matches_spark_configuration_references() -> TestResult {
+    let records = include_str!("fixtures/sql-variable-substitution-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(records.len() - 1, 124);
+    assert_eq!(records[0]["spark_version"], "4.2.0");
+    assert_eq!(
+        records[0]["spark_build"]["SPARK_REVISION"]["value"],
+        "32f7299601108917fb01920a54e084595b7b3bf8"
+    );
+    let mut complete_results = 0;
+    let mut required_errors = 0;
+    let mut parse_errors = 0;
+    let mut cycle_errors = 0;
+    let mut phase_differences = 0;
+    let mut identifier_differences = 0;
+    let mut strict_matches = 0;
+    let mut differences = Vec::new();
+    eprintln!("sql substitution capture header: {}", records[0]);
+    for representation in 0..3 {
+        for batch_size in [1, 32] {
+            let session = session(batch_size);
+            register_inputs(&session, &records[0], representation, batch_size)?;
+            for case in &records[1..] {
+                let actual = capture_observation(&session, case).await?;
+                let expected = &case["expected"];
+                let complete = expected["status"] == "ok"
+                    && actual["error"].is_null()
+                    && complete_result_matches(&actual, expected);
+                let required_error = substitution_error_matches(case, &actual);
+                let stages_retained = regexp_capability::completed_stages_are_retained(&actual);
+                let semantic_contract_matches = stages_retained && (complete || required_error);
+                complete_results += usize::from(complete);
+                required_errors += usize::from(required_error);
+                parse_errors +=
+                    usize::from(required_error && expected["condition"] == "PARSE_SYNTAX_ERROR");
+                cycle_errors += usize::from(required_error && expected["condition"].is_null());
+                let error_identifier_matches = expected["condition"].as_str().map(|condition| {
+                    actual["error"]
+                        .as_str()
+                        .is_some_and(|error| error.contains(&format!("[{condition}]")))
+                });
+                let phase_matches = expected["phase"].as_str().map(|phase| match phase {
+                    "sql" => actual["error_stage"] == "resolve",
+                    "optimized_schema" => actual["error_stage"] == "physical",
+                    "collect" => actual["error_stage"] == "execute",
+                    _ => false,
+                });
+                let matches_reference = semantic_contract_matches
+                    && phase_matches != Some(false)
+                    && (expected["status"] == "ok" || error_identifier_matches == Some(true));
+                phase_differences += usize::from(phase_matches == Some(false));
+                identifier_differences += usize::from(error_identifier_matches == Some(false));
+                strict_matches += usize::from(matches_reference);
+                eprintln!(
+                    "sql substitution observation: {}",
+                    json!({
+                        "id":case["id"],"ansi":case["ansi"],"settings":case["settings"],
+                        "representation":representation,"batch_size":batch_size,
+                        "sql":case["sql"],"expected":expected,"actual":actual,
+                        "schema_comparison":{"analyzed":schema_comparison(&actual,expected,"analyzed_schema"),
+                            "physical":schema_comparison(&actual,expected,"physical_schema")},
+                        "completed_stages_retained":stages_retained,"matches_reference":matches_reference,
+                        "semantic_contract_matches":semantic_contract_matches,
+                        "spark_phase_matches":phase_matches,
+                        "spark_error_identifier_matches":error_identifier_matches,
+                        "native_optimized_schema_available":false,
+                    })
+                );
+                if !semantic_contract_matches {
+                    differences.push(format!(
+                        "{} ANSI={} representation={representation} batch={batch_size}: {actual}",
+                        case["id"], case["ansi"]
+                    ));
+                }
+            }
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    assert_eq!(complete_results, 100 * 6);
+    assert_eq!(required_errors, 24 * 6);
+    assert_eq!(parse_errors, 4 * 6);
+    assert_eq!(cycle_errors, 4 * 6);
+    assert_eq!(phase_differences, 6 * 6);
+    assert_eq!(identifier_differences, 4 * 6);
+    assert_eq!(strict_matches, 110 * 6);
     Ok(())
 }
 

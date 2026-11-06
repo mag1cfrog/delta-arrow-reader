@@ -5,4 +5,5 @@ pub mod literal;
 pub mod parser;
 pub mod query;
 pub mod statement;
+pub mod substitution;
 mod value;
