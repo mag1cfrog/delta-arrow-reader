@@ -333,6 +333,50 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
         )
     });
     assert_eq!(python_udf.len(), 8);
+    // Typed Spark metadata cannot be registered through Arrow's string-valued metadata API.
+    let (typed_metadata, mut cases): (Vec<_>, Vec<_>) = cases
+        .into_iter()
+        .partition(|case| case["id"] == "aliases_metadata");
+    assert_eq!(typed_metadata.len(), 2);
+    assert_eq!(cases.len(), 30);
+    let mut input_metadata = records[0].clone();
+    input_metadata["inputs"]
+        .as_array_mut()
+        .ok_or("missing inputs")?
+        .retain(|input| input["name"] != "metadata_inputs");
+    let string_metadata = include_str!("fixtures/window-name-string-metadata-spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(string_metadata.len() - 1, 2);
+    assert_eq!(
+        string_metadata[0]["spark_revision"],
+        records[0]["spark_revision"]
+    );
+    assert!(
+        string_metadata[1..]
+            .iter()
+            .all(|case| case["id"] == "aliases_string_metadata")
+    );
+    assert_eq!(
+        string_metadata[1..]
+            .iter()
+            .filter_map(|case| case["ansi"].as_bool())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([false, true])
+    );
+    let string_inputs = string_metadata[0]["inputs"]
+        .as_array()
+        .ok_or("missing string-metadata inputs")?
+        .iter()
+        .filter(|input| input["name"] == "metadata_string_inputs")
+        .collect::<Vec<_>>();
+    assert_eq!(string_inputs.len(), 1);
+    input_metadata["inputs"]
+        .as_array_mut()
+        .ok_or("missing inputs")?
+        .push((*string_inputs[0]).clone());
+    cases.extend(&string_metadata[1..]);
     assert_eq!(cases.len(), 32);
     let mut observations = Vec::new();
     for batch_size in [1, 32] {
@@ -348,7 +392,7 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
             )
             .build(),
         );
-        register_recorded_inputs(&session, &records[0], batch_size)?;
+        register_recorded_inputs(&session, &input_metadata, batch_size)?;
         for case in &cases {
             let actual = compare_exact_spark_query_stages_with_optimized(&session, case).await;
             let matches = actual.as_ref().is_ok_and(|result| {
