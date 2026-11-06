@@ -158,7 +158,7 @@ fn spark_schema_type(data_type: &DataType) -> TestResult<Value> {
     })
 }
 
-fn capture_schema(fields: &[Arc<Field>], names: Option<&[String]>) -> TestResult<Value> {
+pub(crate) fn capture_schema(fields: &[Arc<Field>], names: Option<&[String]>) -> TestResult<Value> {
     Ok(json!({"type":"struct", "fields": fields.iter().enumerate()
         .map(|(index, field)| Ok(json!({
             "name":names.map_or(field.name(), |names| &names[index]),
