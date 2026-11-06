@@ -124,25 +124,40 @@ inventory; full Spark compatibility remains false while the external outcomes
 differ. The position and replacement rules follow the pinned
 [Spark RegExpReplace implementation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/regexpExpressions.scala#L637).
 
-`sql-variable-substitution-spark.jsonl` retains 116 independent observations:
-96 complete results and 20 errors. It pairs enabled/disabled substitution and
+`sql-variable-substitution-spark.jsonl` retains 124 independent observations:
+100 complete results and 24 errors. It pairs enabled/disabled substitution and
 defined/undefined/empty configuration values with literal and real-column
 replacement controls, raw literals, output names, namespace aliases, recursive
 values, literal dollar/backslash bytes, redaction and Java-default reference
-character classes. Expression, identifier and table substitutions pass through
-the shared SQL boundary. Provider metadata, nullable fields and replacement
+character classes. Eight separately captured controls cover self/two-key cycles,
+repeated noncyclic siblings and disabled self-cycles in both ANSI modes.
+Expression, identifier and table substitutions pass through the shared SQL
+boundary. Provider metadata, nullable fields and replacement
 errors remain intact. Only the inherited input-only header wording changed;
 every captured observation remains byte-for-byte unchanged.
 
 The shared C06 observer replays exact per-case settings across the three string
-representations and batch sizes 1/32. All 576 successful results require complete
+representations and batch sizes 1/32. All 600 successful results require complete
 analyzed/physical fields and ordered rows; 96 replacement errors require their
-recorded cause and the corresponding native physical/execution phase. The 24
-syntax errors require parser rejection before fields exist. Native parser
+recorded source, pattern, replacement, position and cause at native execution.
+Thirty-six literal-error contexts retain the separately measured timing gap:
+Spark fails during optimization and native execution fails later. Their phase
+comparison remains false under [#1064](https://github.com/mag1cfrog/delta-arrow-reader/issues/1064);
+this test changes no preparation or regex kernel. The 24 syntax errors require
+parser rejection before fields exist. Another 24 cycle errors require resolution
+failure with no fields and the exact independently
+recorded `java.lang.IllegalArgumentException` cause/message. Spark supplied no
+structured condition for those errors; none is inferred. Native parser
 diagnostic identifiers and wording differ from Spark and are reported separately.
 Absent Spark physical fields and unavailable native optimized fields receive no
-compatibility credit. Circular-reference engine evidence remains unverified;
-focused helper assertions alone do not establish that contract.
+compatibility credit. Complete Spark cycle stacks remain in the fixture; the
+native diagnostic comparison does not claim JVM-stack identity.
+
+All 744 contexts require the complete result or meaningful native cause and
+available fields. The strict reference predicate requires 660 matches. It gives
+no strict credit to the 36 phase differences, 24 parser identifier differences,
+or 24 cycle errors whose structured identifier is unavailable. These facets
+remain separate from semantic cause/field comparisons.
 
 ## Raw nonword boundary
 

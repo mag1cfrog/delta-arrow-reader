@@ -751,30 +751,83 @@ fn substitution_error_matches(case: &Value, actual: &Value) -> bool {
     };
     match expected["condition"].as_str() {
         Some("INVALID_REGEXP_REPLACE") => {
-            let stage = if expected["phase"] == "collect" {
-                "execute"
-            } else {
-                "physical"
+            let [
+                Some(source),
+                Some(pattern),
+                Some(replacement),
+                Some(position),
+            ] = ["source", "pattern", "replacement", "position"]
+                .map(|key| expected["parameters"][key].as_str())
+            else {
+                return false;
             };
-            actual["error_stage"] == stage
+            // #1064 retains literal-error timing; compare the execution cause separately.
+            let has_recorded_execution_phase = expected["phase"] == "collect"
+                || (expected["phase"] == "optimized_schema"
+                    && matches!(
+                        case["id"].as_str(),
+                        Some(
+                            "disabled_undefined_regexp_replace_literal_bad_named_group"
+                                | "disabled_defined_regexp_replace_literal_bad_named_group"
+                                | "defined_invalid_replacement_group"
+                        )
+                    ));
+            has_recorded_execution_phase
+                && actual["error_stage"] == "execute"
                 && required_error_outcome_matches(error, actual.get("analyzed_schema"), expected)
+                && error.contains(&format!(
+                    "[INVALID_REGEXP_REPLACE] source={source:?}, pattern={pattern:?}, replacement={replacement:?}, position={position}:"
+                ))
                 && schema_comparison(actual, expected, "physical_schema") != "difference"
         }
         Some("PARSE_SYNTAX_ERROR") => {
-            actual["error_stage"] == "resolve"
+            expected["phase"] == "sql"
+                && actual["error_stage"] == "resolve"
                 && actual["analyzed_schema"].is_null()
                 && actual["physical_schema"].is_null()
                 && match case["id"].as_str() {
                     Some("quote_changes_sql_syntax") => {
                         expected["parameters"]["error"] == "'''"
-                            && error.starts_with("resolve: error in SQL parser:")
+                            && expected["parameters"]["hint"] == ""
+                            && error
+                                == "resolve: External error: error in SQL parser: found end of input expected any, '\\', or '''"
                     }
                     Some("multiple_statement_input") => {
                         expected["parameters"]["error"] == "'SELECT'"
-                            && error == "resolve: invalid argument: expected one statement"
+                            && expected["parameters"]["hint"] == ": extra input 'SELECT'"
+                            && error
+                                == "resolve: External error: invalid argument: expected one statement"
                     }
                     _ => false,
                 }
+        }
+        None if matches!(
+            case["id"].as_str(),
+            Some("enabled_self_cycle" | "enabled_two_key_cycle")
+        ) =>
+        {
+            let Some(causes) = expected["java_causes"].as_array() else {
+                return false;
+            };
+            let [cause] = causes.as_slice() else {
+                return false;
+            };
+            let Some(message) = cause["message"].as_str() else {
+                return false;
+            };
+            expected["status"] == "error"
+                && expected["condition"].is_null()
+                && expected["phase"] == "sql"
+                && cause["class"] == "java.lang.IllegalArgumentException"
+                && cause["condition"].is_null()
+                && expected["message"] == message
+                && actual["error_stage"] == "resolve"
+                && actual["analyzed_schema"].is_null()
+                && actual["physical_schema"].is_null()
+                && error
+                    == format!(
+                        "resolve: External error: invalid argument: java.lang.IllegalArgumentException: {message}"
+                    )
         }
         _ => false,
     }
@@ -786,7 +839,7 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(records.len() - 1, 116);
+    assert_eq!(records.len() - 1, 124);
     assert_eq!(records[0]["spark_version"], "4.2.0");
     assert_eq!(
         records[0]["spark_build"]["SPARK_REVISION"]["value"],
@@ -795,6 +848,10 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
     let mut complete_results = 0;
     let mut required_errors = 0;
     let mut parse_errors = 0;
+    let mut cycle_errors = 0;
+    let mut phase_differences = 0;
+    let mut identifier_differences = 0;
+    let mut strict_matches = 0;
     let mut differences = Vec::new();
     eprintln!("sql substitution capture header: {}", records[0]);
     for representation in 0..3 {
@@ -809,17 +866,29 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
                     && complete_result_matches(&actual, expected);
                 let required_error = substitution_error_matches(case, &actual);
                 let stages_retained = regexp_capability::completed_stages_are_retained(&actual);
-                let matches_reference = stages_retained && (complete || required_error);
+                let semantic_contract_matches = stages_retained && (complete || required_error);
                 complete_results += usize::from(complete);
                 required_errors += usize::from(required_error);
                 parse_errors +=
                     usize::from(required_error && expected["condition"] == "PARSE_SYNTAX_ERROR");
-                let error_identifier_matches =
-                    expected["condition"].as_str().is_none_or(|condition| {
-                        actual["error"]
-                            .as_str()
-                            .is_some_and(|error| error.contains(&format!("[{condition}]")))
-                    });
+                cycle_errors += usize::from(required_error && expected["condition"].is_null());
+                let error_identifier_matches = expected["condition"].as_str().map(|condition| {
+                    actual["error"]
+                        .as_str()
+                        .is_some_and(|error| error.contains(&format!("[{condition}]")))
+                });
+                let phase_matches = expected["phase"].as_str().map(|phase| match phase {
+                    "sql" => actual["error_stage"] == "resolve",
+                    "optimized_schema" => actual["error_stage"] == "physical",
+                    "collect" => actual["error_stage"] == "execute",
+                    _ => false,
+                });
+                let matches_reference = semantic_contract_matches
+                    && phase_matches != Some(false)
+                    && (expected["status"] == "ok" || error_identifier_matches == Some(true));
+                phase_differences += usize::from(phase_matches == Some(false));
+                identifier_differences += usize::from(error_identifier_matches == Some(false));
+                strict_matches += usize::from(matches_reference);
                 eprintln!(
                     "sql substitution observation: {}",
                     json!({
@@ -829,11 +898,13 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
                         "schema_comparison":{"analyzed":schema_comparison(&actual,expected,"analyzed_schema"),
                             "physical":schema_comparison(&actual,expected,"physical_schema")},
                         "completed_stages_retained":stages_retained,"matches_reference":matches_reference,
+                        "semantic_contract_matches":semantic_contract_matches,
+                        "spark_phase_matches":phase_matches,
                         "spark_error_identifier_matches":error_identifier_matches,
                         "native_optimized_schema_available":false,
                     })
                 );
-                if !matches_reference {
+                if !semantic_contract_matches {
                     differences.push(format!(
                         "{} ANSI={} representation={representation} batch={batch_size}: {actual}",
                         case["id"], case["ansi"]
@@ -843,9 +914,13 @@ async fn sql_variable_substitution_matches_spark_configuration_references() -> T
         }
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
-    assert_eq!(complete_results, 96 * 6);
-    assert_eq!(required_errors, 20 * 6);
+    assert_eq!(complete_results, 100 * 6);
+    assert_eq!(required_errors, 24 * 6);
     assert_eq!(parse_errors, 4 * 6);
+    assert_eq!(cycle_errors, 4 * 6);
+    assert_eq!(phase_differences, 6 * 6);
+    assert_eq!(identifier_differences, 4 * 6);
+    assert_eq!(strict_matches, 110 * 6);
     Ok(())
 }
 
