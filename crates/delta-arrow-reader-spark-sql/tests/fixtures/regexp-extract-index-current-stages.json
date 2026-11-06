@@ -1,17 +1,157 @@
 {
   "format_version": 1,
-  "capture_source_head": "dbeb1e5001b42df2fd24b339c887a50b52fbde5b",
-  "capture_source_tree": "c1e616856f72fa89f1ee6a05debfa8af98c8980a",
-  "capture_execution_commit": "fd53d833fac9e4134e3aff128053462c2f44c0ba",
-  "capture_execution_tree": "53bb58bd0fd0edbe7baa1d6daa2ba53b603ba0aa",
-  "capture_role": "Current staging composition replay; exact preservation is not acceptance",
+  "capture_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+  "capture_source_tree": "e4bf7c9de537d76c1e57a87119fa9fb279f13d39",
+  "capture_execution_commit": "c6bb676636ff66824e5b1bd4770fc296642c3d14",
+  "capture_execution_tree": "e74e83fb5f932dc51726a2c6f455339ad1e2c7c6",
+  "capture_role": "Current fixed 4847 replay under separate ab858 grading; exact preservation is not acceptance",
   "capture_evidence": {
-    "candidate-manifest.json": "eadbd1ceab699e5270e762bf709907ed01ba48b017aa091fddd80a95be01008e",
-    "candidate.inventory.json": "e089ab140de2ecba761f0e560b8b3d872bb33f6ba7db3e0f6b5045f5b6bddddd",
-    "candidate.log": "47a7a44c7001333a4a4d43339546537d024b21d5f2cd61fb350e4fe788b383a3",
-    "baseline-manifest.json": "d83501f354c14019d44eab519f66e17445d9ca8bfb5137d967456a208d712cfc",
-    "baseline.inventory.json": "84468f1182d586a0795481fb04d04ef7567c82650086a246cc647e85deec336b",
-    "baseline-vs-candidate.all1082.jsonl": "c651594b2ac36b97bb592e5aed001667aaab30ed14f8e827c45628e048920530"
+    "main_baseline": {
+      "manifest": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/baseline-manifest.json",
+        "sha256": "e81cc618c0821f49b1f1129ec500c29fa8e93c1ca3d91279277132c8e29ca5b5"
+      },
+      "inventory": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/baseline.inventory.json",
+        "sha256": "eb3b4a4e6c9ea6b07404d428131c8f44b5759baf12b54733a06328467b32a7f7",
+        "total": 1082,
+        "contexts": {
+          "index": 1008,
+          "selection": 32,
+          "async": 6,
+          "local-no-fold": 24,
+          "alias": 12
+        },
+        "compatibility_or_merge_approval": false
+      },
+      "raw_log": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/baseline.log",
+        "sha256": "274e12872d305bb9c26c4c009a4c7e81db474898fe1bf8d0558204bc4290af15"
+      },
+      "product_source_head": "08b59081c12f8e7f2fd4de48160f6889d9dfed0b",
+      "execution_commit": "445f9b76509b2559824d1faf305e78f1dcec4b38",
+      "execution_tree": "c1c11a53cf4734bdd65213abe564f279e3a78cad"
+    },
+    "main_candidate": {
+      "manifest": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/candidate-manifest.json",
+        "sha256": "5e6e48dd14a013502a8da246a5d7d3c3ff159cbc77d225bddba0e8b3372dec31"
+      },
+      "inventory": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/candidate.inventory.json",
+        "sha256": "9b962921eedd807666c99cb7613e2d6862e14ec8aa211ecf0bb65133f206ad9f",
+        "total": 1082,
+        "contexts": {
+          "index": 1008,
+          "selection": 32,
+          "async": 6,
+          "local-no-fold": 24,
+          "alias": 12
+        },
+        "compatibility_or_merge_approval": false
+      },
+      "raw_log": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/candidate.log",
+        "sha256": "d441fb10105b8249f7b991226ba25a0dd22e61077d5136c488f4a1b6cdf93a0b"
+      },
+      "product_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+      "execution_commit": "c6bb676636ff66824e5b1bd4770fc296642c3d14",
+      "execution_tree": "e74e83fb5f932dc51726a2c6f455339ad1e2c7c6"
+    },
+    "scalar_baseline": {
+      "manifest": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/baseline/capture.manifest.json",
+        "sha256": "d564b24d7a776b1715ffe930fb2bb49698fb302292709bb44890c8e4ddf67251"
+      },
+      "inventory": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/baseline/capture.inventory.json",
+        "sha256": "23b77f3f6aede40b39f0cc0154f2dcde35f321a7d8cd03df4555df8db0cee8d0",
+        "total": 24,
+        "contexts": {
+          "extraction_without_scalar_parent": 8,
+          "extraction_with_scalar_parent": 8,
+          "shared_cast_only_with_scalar_parent": 4,
+          "genuine_native_control": 4
+        },
+        "compatibility_or_merge_approval": false
+      },
+      "raw_log": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/baseline/capture.log",
+        "sha256": "6bf8b7637a20cfdaa8734fc3daa1fd447954e04f437bc51f5e6971c0cb995af7"
+      },
+      "product_source_head": "08b59081c12f8e7f2fd4de48160f6889d9dfed0b",
+      "execution_commit": "4c81d6cd14c0ddac315125c82bb96ccb2cc10438",
+      "execution_tree": "c99117fab6cc424680783e2863487cde58049f73"
+    },
+    "scalar_candidate": {
+      "manifest": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/candidate/capture.manifest.json",
+        "sha256": "39f5474b0e878eefb6526f57319dc610ac422c0a0f164f72ff76c83f415ac1bb"
+      },
+      "inventory": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/candidate/capture.inventory.json",
+        "sha256": "db17fb94d6c3af1258e3c95b2cc45814188b4970eb1f494e16ef06286094fa02",
+        "total": 24,
+        "contexts": {
+          "extraction_without_scalar_parent": 8,
+          "extraction_with_scalar_parent": 8,
+          "shared_cast_only_with_scalar_parent": 4,
+          "genuine_native_control": 4
+        },
+        "compatibility_or_merge_approval": false
+      },
+      "raw_log": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/candidate/capture.log",
+        "sha256": "a3693047e96943140dfe6b2e4ac347977b28f9b049a80e9b5a19867a8245a008"
+      },
+      "product_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+      "execution_commit": "26608549111729b8d1acc8050ecf11c62fabff30",
+      "execution_tree": "c935445cd677f71958507b2978deb9869f00a527"
+    },
+    "array_baseline": {
+      "manifest": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/baseline/capture.manifest.json",
+        "sha256": "475b63775dbef3f14dbddabdca22f09bf05b5a0da0ed417e650c7a253a039a00"
+      },
+      "inventory": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/baseline/capture.inventory.json",
+        "sha256": "dd74d1e1bb4d778d5a296afead52cf0406c20a990380f79086863b6395253898",
+        "total": 8,
+        "contexts": {
+          "array_hof": 8
+        },
+        "compatibility_or_merge_approval": false
+      },
+      "raw_log": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/baseline/capture.log",
+        "sha256": "1e5a7bbdf7281aea1488b6abe85f7fef29c86289d249a431ef574af7b80dcc7f"
+      },
+      "product_source_head": "08b59081c12f8e7f2fd4de48160f6889d9dfed0b",
+      "execution_commit": "8700468e7c1aaaf337e17283229bdc56ebe3a461",
+      "execution_tree": "f08f916dff970bd634fc5a57986e1c0f9e74c90d"
+    },
+    "array_candidate": {
+      "manifest": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/candidate/capture.manifest.json",
+        "sha256": "1e8970d19c7a5c7a196b9c67f71bc84f251453ea04c77ac784ef18cad690ea6d"
+      },
+      "inventory": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/candidate/capture.inventory.json",
+        "sha256": "9fdad70877d1bbb4be36c34480c44b6776c0b617d3e2d8e03ace8b390f9a2d98",
+        "total": 8,
+        "contexts": {
+          "array_hof": 8
+        },
+        "compatibility_or_merge_approval": false
+      },
+      "raw_log": {
+        "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/candidate/capture.log",
+        "sha256": "c7bac2b148c10be69b02800ac4fa073223d98dc5996f795d6a10c8a601a1ea65"
+      },
+      "product_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+      "execution_commit": "ef3538521e71166df9589f3c8e38fc76528ba445",
+      "execution_tree": "eb5bc3096449ccecb2db691be473062568ffe05b"
+    }
   },
   "frozen_fixtures": {
     "regexp-extract-index-local-frontier-spark.jsonl": "85728027bb552b1f90791009cc372ad5923a97f2594cebd6b2c34dbd50658e6e",
@@ -8706,7 +8846,22 @@
       "rationale": "Observed native physical boundary; Spark reports optimized_schema. Exact cause, identifier and phase remain separate comparisons."
     }
   ],
-  "literal_preparation_refresh": {
+  "historical_capture_provenance": {
+    "capture_source_head": "dbeb1e5001b42df2fd24b339c887a50b52fbde5b",
+    "capture_source_tree": "c1e616856f72fa89f1ee6a05debfa8af98c8980a",
+    "capture_execution_commit": "fd53d833fac9e4134e3aff128053462c2f44c0ba",
+    "capture_execution_tree": "53bb58bd0fd0edbe7baa1d6daa2ba53b603ba0aa",
+    "capture_role": "Current staging composition replay; exact preservation is not acceptance",
+    "capture_evidence": {
+      "candidate-manifest.json": "eadbd1ceab699e5270e762bf709907ed01ba48b017aa091fddd80a95be01008e",
+      "candidate.inventory.json": "e089ab140de2ecba761f0e560b8b3d872bb33f6ba7db3e0f6b5045f5b6bddddd",
+      "candidate.log": "47a7a44c7001333a4a4d43339546537d024b21d5f2cd61fb350e4fe788b383a3",
+      "baseline-manifest.json": "d83501f354c14019d44eab519f66e17445d9ca8bfb5137d967456a208d712cfc",
+      "baseline.inventory.json": "84468f1182d586a0795481fb04d04ef7567c82650086a246cc647e85deec336b",
+      "baseline-vs-candidate.all1082.jsonl": "c651594b2ac36b97bb592e5aed001667aaab30ed14f8e827c45628e048920530"
+    }
+  },
+  "historical_literal_preparation_refresh": {
     "product_source_head": "028c10625608053b34b76421379b6dc2df1c5756",
     "product_source_tree": "da82213cc6b7ab458d7f2ded0bef70e09c4551b3",
     "previous_actual_product": "62eb816375d867fc23015b35eb36d63707f21d62",
@@ -8729,7 +8884,7 @@
     "separate_scalar_contexts": 24,
     "new_negative_or_phase_allowance": false
   },
-  "numeric_staging_verification": {
+  "historical_numeric_staging_verification": {
     "product_source_head": "d85c53a8bed053a63b717d7ea05b21579ead40aa",
     "product_source_tree": "31fa0d3a74a545f277a65d0220b114ca432dc92f",
     "formatted_source_equivalent_head": "a6b219d5c84ffb1e778fb050b2d194163d4cd381",
@@ -8852,5 +9007,188 @@
     "raw_native_plan_strings": "preserved as capture evidence; no semantic normalization",
     "full_compatibility_pass": false,
     "merge_blocker": "#1022"
+  },
+  "current_staging_verification": {
+    "captured_candidate_product": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+    "captured_candidate_tree": "e4bf7c9de537d76c1e57a87119fa9fb279f13d39",
+    "captured_candidate_execution": "c6bb676636ff66824e5b1bd4770fc296642c3d14",
+    "captured_candidate_execution_tree": "e74e83fb5f932dc51726a2c6f455339ad1e2c7c6",
+    "grading_contract": "ab858ce4352a5e9383a35ca2ba067a6c2599a7d4",
+    "grading_Rust_sha256": "d4184a8850aec30ef9a7f7962c8f48ab536d8499f23e1fc66728ff7181f0fe6a",
+    "captures": {
+      "main_baseline": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/baseline-manifest.json",
+          "sha256": "e81cc618c0821f49b1f1129ec500c29fa8e93c1ca3d91279277132c8e29ca5b5"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/baseline.inventory.json",
+          "sha256": "eb3b4a4e6c9ea6b07404d428131c8f44b5759baf12b54733a06328467b32a7f7",
+          "total": 1082,
+          "contexts": {
+            "index": 1008,
+            "selection": 32,
+            "async": 6,
+            "local-no-fold": 24,
+            "alias": 12
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/baseline.log",
+          "sha256": "274e12872d305bb9c26c4c009a4c7e81db474898fe1bf8d0558204bc4290af15"
+        },
+        "product_source_head": "08b59081c12f8e7f2fd4de48160f6889d9dfed0b",
+        "execution_commit": "445f9b76509b2559824d1faf305e78f1dcec4b38",
+        "execution_tree": "c1c11a53cf4734bdd65213abe564f279e3a78cad"
+      },
+      "main_candidate": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/candidate-manifest.json",
+          "sha256": "5e6e48dd14a013502a8da246a5d7d3c3ff159cbc77d225bddba0e8b3372dec31"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/candidate.inventory.json",
+          "sha256": "9b962921eedd807666c99cb7613e2d6862e14ec8aa211ecf0bb65133f206ad9f",
+          "total": 1082,
+          "contexts": {
+            "index": 1008,
+            "selection": 32,
+            "async": 6,
+            "local-no-fold": 24,
+            "alias": 12
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/main/candidate.log",
+          "sha256": "d441fb10105b8249f7b991226ba25a0dd22e61077d5136c488f4a1b6cdf93a0b"
+        },
+        "product_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+        "execution_commit": "c6bb676636ff66824e5b1bd4770fc296642c3d14",
+        "execution_tree": "e74e83fb5f932dc51726a2c6f455339ad1e2c7c6"
+      },
+      "scalar_baseline": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/baseline/capture.manifest.json",
+          "sha256": "d564b24d7a776b1715ffe930fb2bb49698fb302292709bb44890c8e4ddf67251"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/baseline/capture.inventory.json",
+          "sha256": "23b77f3f6aede40b39f0cc0154f2dcde35f321a7d8cd03df4555df8db0cee8d0",
+          "total": 24,
+          "contexts": {
+            "extraction_without_scalar_parent": 8,
+            "extraction_with_scalar_parent": 8,
+            "shared_cast_only_with_scalar_parent": 4,
+            "genuine_native_control": 4
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/baseline/capture.log",
+          "sha256": "6bf8b7637a20cfdaa8734fc3daa1fd447954e04f437bc51f5e6971c0cb995af7"
+        },
+        "product_source_head": "08b59081c12f8e7f2fd4de48160f6889d9dfed0b",
+        "execution_commit": "4c81d6cd14c0ddac315125c82bb96ccb2cc10438",
+        "execution_tree": "c99117fab6cc424680783e2863487cde58049f73"
+      },
+      "scalar_candidate": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/candidate/capture.manifest.json",
+          "sha256": "39f5474b0e878eefb6526f57319dc610ac422c0a0f164f72ff76c83f415ac1bb"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/candidate/capture.inventory.json",
+          "sha256": "db17fb94d6c3af1258e3c95b2cc45814188b4970eb1f494e16ef06286094fa02",
+          "total": 24,
+          "contexts": {
+            "extraction_without_scalar_parent": 8,
+            "extraction_with_scalar_parent": 8,
+            "shared_cast_only_with_scalar_parent": 4,
+            "genuine_native_control": 4
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-runtime/scalar-parent/candidate/capture.log",
+          "sha256": "a3693047e96943140dfe6b2e4ac347977b28f9b049a80e9b5a19867a8245a008"
+        },
+        "product_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+        "execution_commit": "26608549111729b8d1acc8050ecf11c62fabff30",
+        "execution_tree": "c935445cd677f71958507b2978deb9869f00a527"
+      },
+      "array_baseline": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/baseline/capture.manifest.json",
+          "sha256": "475b63775dbef3f14dbddabdca22f09bf05b5a0da0ed417e650c7a253a039a00"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/baseline/capture.inventory.json",
+          "sha256": "dd74d1e1bb4d778d5a296afead52cf0406c20a990380f79086863b6395253898",
+          "total": 8,
+          "contexts": {
+            "array_hof": 8
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/baseline/capture.log",
+          "sha256": "1e5a7bbdf7281aea1488b6abe85f7fef29c86289d249a431ef574af7b80dcc7f"
+        },
+        "product_source_head": "08b59081c12f8e7f2fd4de48160f6889d9dfed0b",
+        "execution_commit": "8700468e7c1aaaf337e17283229bdc56ebe3a461",
+        "execution_tree": "f08f916dff970bd634fc5a57986e1c0f9e74c90d"
+      },
+      "array_candidate": {
+        "manifest": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/candidate/capture.manifest.json",
+          "sha256": "1e8970d19c7a5c7a196b9c67f71bc84f251453ea04c77ac784ef18cad690ea6d"
+        },
+        "inventory": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/candidate/capture.inventory.json",
+          "sha256": "9fdad70877d1bbb4be36c34480c44b6776c0b617d3e2d8e03ace8b390f9a2d98",
+          "total": 8,
+          "contexts": {
+            "array_hof": 8
+          },
+          "compatibility_or_merge_approval": false
+        },
+        "raw_log": {
+          "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/array-hof-native-staging1041-runtime/native/candidate/capture.log",
+          "sha256": "c7bac2b148c10be69b02800ac4fa073223d98dc5996f795d6a10c8a601a1ea65"
+        },
+        "product_source_head": "4847e810a669f3de7f0f3bfa2789b67438d1895f",
+        "execution_commit": "ef3538521e71166df9589f3c8e38fc76528ba445",
+        "execution_tree": "eb5bc3096449ccecb2db691be473062568ffe05b"
+      }
+    },
+    "independent_classification": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-data-independent-review/current-data/CLASSIFICATION.json",
+      "sha256": "06a44dd2984b0f1a003f724aa842bd19071bf45be00554f18f196479b42748ad"
+    },
+    "approved_external_preparation_plan": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-data-independent-review/current-data/PROFILE-UPDATE-PLAN.json",
+      "sha256": "f9e70c518399eb8be181f49ba3c8f81ef175d726cd4311c09cd09bf620cc0fd0"
+    },
+    "main_contexts": 1082,
+    "main_providers": 99,
+    "index_contexts": 1008,
+    "strict_matches": 960,
+    "negative_observations": 48,
+    "remaining_false_facets": [
+      "phase"
+    ],
+    "phase_work": "#1036",
+    "stage_contracts": 342,
+    "stage_semantic_changes": 0,
+    "stage_proposals": 0,
+    "stage_replay": {
+      "path": "/Users/hanbowang/Documents/codex-evidence/c06-2026-11-02/788-resume-2026-11-05/staging1041-profile-proposal/STAGE-REPLAY.json",
+      "sha256": "373368046388e1c6344fbfd6ccf5f992824fee0d0f1d1fbb387bbfdb2679d321"
+    },
+    "official_audit_exit2_preserved": true,
+    "new_negative_or_phase_allowance": false,
+    "full_compatibility_pass": false
   }
 }
