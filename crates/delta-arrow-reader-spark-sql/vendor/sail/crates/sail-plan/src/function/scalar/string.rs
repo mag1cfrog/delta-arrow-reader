@@ -349,8 +349,10 @@ fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
         match expression {
             expr::Expr::Literal(_, _) => true,
             expr::Expr::Cast(cast)
-                if matches!(cast.field.data_type(),
-                    DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64) =>
+                if matches!(
+                    cast.field.data_type(),
+                    DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64
+                ) =>
             {
                 literal_cast(&cast.expr)
             }
@@ -360,8 +362,13 @@ fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
                 matches!(function.args.as_slice(), [input] if literal_cast(input))
             }
             expr::Expr::ScalarFunction(function)
-                if function.func.inner().downcast_ref::<SparkCastNumericToInteger>()
-                    .is_some_and(|cast| !cast.is_try() && cast.target_type() == &DataType::Int32) =>
+                if function
+                    .func
+                    .inner()
+                    .downcast_ref::<SparkCastNumericToInteger>()
+                    .is_some_and(|cast| {
+                        !cast.is_try() && cast.target_type() == &DataType::Int32
+                    }) =>
             {
                 matches!(function.args.as_slice(), [input] if literal_cast(input)
                     && matches!(input.get_type(&DFSchema::empty()), Ok(DataType::Float32 | DataType::Float64)))
@@ -373,19 +380,32 @@ fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
         return Ok(false);
     };
     if source.is_null()
-        || !matches!(source.data_type(), DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
-            | DataType::Binary | DataType::LargeBinary | DataType::BinaryView)
+        || !matches!(
+            source.data_type(),
+            DataType::Utf8
+                | DataType::LargeUtf8
+                | DataType::Utf8View
+                | DataType::Binary
+                | DataType::LargeBinary
+                | DataType::BinaryView
+        )
         || !literal_cast(position)
         || !literal_cast(length)
     {
         return Ok(false);
     }
-    if ![position, length].into_iter().try_fold(false, |found, argument| {
-        Ok::<_, datafusion_common::DataFusionError>(found || argument.exists(|value| {
-            Ok(matches!(value, expr::Expr::ScalarFunction(function)
+    if ![position, length]
+        .into_iter()
+        .try_fold(false, |found, argument| {
+            Ok::<_, datafusion_common::DataFusionError>(
+                found
+                    || argument.exists(|value| {
+                        Ok(matches!(value, expr::Expr::ScalarFunction(function)
                 if function.func.inner().is::<SparkCastNumericToInteger>()))
-        })?)
-    })? {
+                    })?,
+            )
+        })?
+    {
         return Ok(false);
     }
     // Preview only these built-in literal casts. Integer TRY_CAST, callbacks,
@@ -396,7 +416,9 @@ fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
         match evaluator.evaluate(argument) {
             Ok(value) if !value.is_null() => {}
             Err(error)
-                if error.to_string().starts_with("[CAST_OVERFLOW]\ncaused by\n")
+                if error
+                    .to_string()
+                    .starts_with("[CAST_OVERFLOW]\ncaused by\n")
                     && matches!(error.find_root(), datafusion_common::DataFusionError::ArrowError(cause, _)
                         if matches!(cause.as_ref(), datafusion::arrow::error::ArrowError::CastError(_)
                             | datafusion::arrow::error::ArrowError::ArithmeticOverflow(_))) =>
@@ -1351,9 +1373,15 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
         let floating = ScalarUDF::from(SparkCastStringToFloat::try_new(source_type, false)?)
             .call(vec![lit(text)]);
         let integer = |ansi, is_try| -> datafusion_common::Result<Expr> {
-            Ok(cast(ScalarUDF::from(SparkCastNumericToInteger::try_new(
-                DataType::Int32, ansi, is_try,
-            )?).call(vec![floating.clone()]), DataType::Int64))
+            Ok(cast(
+                ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                    DataType::Int32,
+                    ansi,
+                    is_try,
+                )?)
+                .call(vec![floating.clone()]),
+                DataType::Int64,
+            ))
         };
         let position = integer(true, false)?;
         let length = cast(cast(lit(2_i32), DataType::Int32), DataType::Int64);
@@ -1364,28 +1392,50 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
         assert!(!lowered.transformed);
         assert_eq!(lowered.data, literal);
         let length_overflow = function.call(vec![lit("abcdef"), length.clone(), position.clone()]);
-        assert!(!substring_lambdas(length_overflow)
-            .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
-            .transformed);
-        let nullable_float = ScalarUDF::from(SparkCastStringToFloat::try_new(
-            DataType::Float32, true,
-        )?).call(vec![lit("bad")]);
-        let nullable_position = cast(ScalarUDF::from(SparkCastNumericToInteger::try_new(
-            DataType::Int32, true, false,
-        )?).call(vec![nullable_float]), DataType::Int64);
+        assert!(
+            !substring_lambdas(length_overflow)
+                .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
+                .transformed
+        );
+        let nullable_float =
+            ScalarUDF::from(SparkCastStringToFloat::try_new(DataType::Float32, true)?)
+                .call(vec![lit("bad")]);
+        let nullable_position = cast(
+            ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32,
+                true,
+                false,
+            )?)
+            .call(vec![nullable_float]),
+            DataType::Int64,
+        );
         for arguments in [
-            vec![lit(ScalarValue::Utf8(None)), position.clone(), length.clone()],
-            vec![lit("abcdef"), lit(ScalarValue::Int64(None)), position.clone()],
-            vec![lit("abcdef"), position.clone(), lit(ScalarValue::Int64(None))],
+            vec![
+                lit(ScalarValue::Utf8(None)),
+                position.clone(),
+                length.clone(),
+            ],
+            vec![
+                lit("abcdef"),
+                lit(ScalarValue::Int64(None)),
+                position.clone(),
+            ],
+            vec![
+                lit("abcdef"),
+                position.clone(),
+                lit(ScalarValue::Int64(None)),
+            ],
             vec![col("s"), position.clone(), length.clone()],
             vec![lit("abcdef"), integer(false, false)?, length.clone()],
             vec![lit("abcdef"), integer(true, true)?, length.clone()],
             vec![lit("abcdef"), nullable_position, position.clone()],
             vec![lit("abcdef"), position, permitted.call(vec![lit(2_i64)])],
         ] {
-            assert!(substring_lambdas(function.call(arguments))
-                .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
-                .transformed);
+            assert!(
+                substring_lambdas(function.call(arguments))
+                    .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
+                    .transformed
+            );
         }
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }

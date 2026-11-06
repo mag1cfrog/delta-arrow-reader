@@ -1324,33 +1324,68 @@ async fn literal_substring_float_overflows_fail_during_preparation() -> TestResu
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    let cases = records.iter().filter(|case| case["ansi"] == true && matches!(
-        case["id"].as_str(), Some("float_nan_substring" | "double_infinity_substring")
-    )).collect::<Vec<_>>();
+    let cases = records
+        .iter()
+        .filter(|case| {
+            case["ansi"] == true
+                && matches!(
+                    case["id"].as_str(),
+                    Some("float_nan_substring" | "double_infinity_substring")
+                )
+        })
+        .collect::<Vec<_>>();
     assert_eq!(cases.len(), 2);
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
-            configure_spark_sql(SessionStateBuilder::new().with_default_features().with_config(
-                SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2),
-            )).build(),
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
         );
         for case in &cases {
-            let actual = spark_results::compare_exact_spark_query_stages_with_optimized(&session, case).await?;
-            eprintln!("LITERAL_SUBSTRING_PREPARATION_RESULT {}", json!({
-                "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
-                "reference":case,"observation":actual,
-            }));
+            let actual =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await?;
+            eprintln!(
+                "LITERAL_SUBSTRING_PREPARATION_RESULT {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "reference":case,"observation":actual,
+                })
+            );
             assert_eq!(actual["public_schema"], case["schema_stages"]["analyzed"]);
             assert_eq!(actual["native_phase"], "create_physical_plan");
-            for key in ["optimized_schema", "optimized_observation", "before_collect", "physical_schema", "rows", "rows_raw"] {
+            for key in [
+                "optimized_schema",
+                "optimized_observation",
+                "before_collect",
+                "physical_schema",
+                "rows",
+                "rows_raw",
+            ] {
                 assert_eq!(actual.get(key), Some(&Value::Null), "{key}: {actual}");
             }
-            let error = actual["error"].as_str().ok_or("missing preparation error")?;
-            let value = if case["id"] == "float_nan_substring" { "NaN" } else { "inf" };
+            let error = actual["error"]
+                .as_str()
+                .ok_or("missing preparation error")?;
+            let value = if case["id"] == "float_nan_substring" {
+                "NaN"
+            } else {
+                "inf"
+            };
             assert_eq!(error.matches("[CAST_OVERFLOW]").count(), 1, "{actual}");
-            assert!(error.ends_with(&format!(
-                "Arrow error: Cast error: Can't cast value {value} to type Int32"
-            )), "{actual}");
+            assert!(
+                error.ends_with(&format!(
+                    "Arrow error: Cast error: Can't cast value {value} to type Int32"
+                )),
+                "{actual}"
+            );
             assert_eq!(actual["optimized_error"], actual["error"]);
             assert_eq!(actual["matches"], true);
             assert_eq!(actual["optimized_matches"], true);
