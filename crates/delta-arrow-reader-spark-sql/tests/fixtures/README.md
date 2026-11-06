@@ -723,6 +723,18 @@ historical BIGINT DATEDIFF outcomes in the accepted runtime replay
 recorded for their exact SQL as `history_date_add` and `history_date_sub`; only
 the result type changes.
 
+## Temporal formatting, parsing and type contracts
+
+`temporal-contracts/temporal-contracts-spark.jsonl` contains 6,020 Spark 4.2.0
+observations of DATE_FORMAT patterns, unformatted and formatted date/timestamp
+parsing with CAST, TRY_CAST, TO_*, TRY_TO_DATE and TRY_TO_TIMESTAMP, typed
+literals and casts between DATE, TIMESTAMP and TIMESTAMP_NTZ, for literals and
+registered columns in both ANSI modes, UTC and America/Los_Angeles (#153).
+`temporal_contracts.rs` compares names, fields at each stage, typed values and
+failing stages at batch sizes 1 and 32. See the [temporal fixture
+notes](temporal-contracts/README.md) for the inputs, accepted parser messages,
+the retained differences and their owners, and the capture command.
+
 ## Interval qualifiers and generated names
 
 `interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1948 Spark 4.2.0
