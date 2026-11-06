@@ -145,15 +145,27 @@ fn trim_case_numeric_profiles_are_historical_only() -> TestResult {
         .collect::<Result<Vec<_>, _>>()?;
     let mut retired = 0;
     for profile in profiles.iter().filter(|profile| {
-        profile["id"].as_str().is_some_and(is_numeric_cast_regression_control)
+        profile["id"]
+            .as_str()
+            .is_some_and(is_numeric_cast_regression_control)
     }) {
-        let case = references[1..].iter().find(|case| {
-            case["id"] == profile["id"] && case["ansi"] == profile["ansi"]
-                && case["sql"] == profile["sql"]
-        }).ok_or("missing historical numeric CAST reference")?;
-        assert_eq!(profile["actual"]["physical_schema"], case["expected"]["physical_schema"]);
+        let case = references[1..]
+            .iter()
+            .find(|case| {
+                case["id"] == profile["id"]
+                    && case["ansi"] == profile["ansi"]
+                    && case["sql"] == profile["sql"]
+            })
+            .ok_or("missing historical numeric CAST reference")?;
+        assert_eq!(
+            profile["actual"]["physical_schema"],
+            case["expected"]["physical_schema"]
+        );
         assert_eq!(profile["actual"]["rows"], case["expected"]["rows"]);
-        assert_ne!(profile["actual"]["analyzed_schema"], case["expected"]["analyzed_schema"]);
+        assert_ne!(
+            profile["actual"]["analyzed_schema"],
+            case["expected"]["analyzed_schema"]
+        );
         let old = &profile["actual"]["analyzed_schema"]["fields"][0];
         let expected = &case["expected"]["analyzed_schema"]["fields"][0];
         for component in ["name", "type", "metadata"] {

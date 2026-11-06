@@ -124,8 +124,10 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
         assert!(substring::matches_meaningful_contract(case, &actual));
         if physical {
             for (component, wrong) in [
-                ("nullable", json!(false)), ("name", json!("wrong")),
-                ("type", json!("integer")), ("metadata", json!({"wrong":"metadata"})),
+                ("nullable", json!(false)),
+                ("name", json!("wrong")),
+                ("type", json!("integer")),
+                ("metadata", json!({"wrong":"metadata"})),
             ] {
                 let mut changed = actual.clone();
                 changed["physical_schema"]["fields"][0][component] = wrong;
