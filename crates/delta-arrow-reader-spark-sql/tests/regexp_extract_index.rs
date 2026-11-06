@@ -374,9 +374,11 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
             &comparison
         ));
         let facets = false_facets(&comparison)?;
-        assert!(facets
-            .iter()
-            .all(|facet| ["diagnostic_identifier", "phase"].contains(&facet.as_str())));
+        assert!(
+            facets
+                .iter()
+                .all(|facet| ["diagnostic_identifier", "phase"].contains(&facet.as_str()))
+        );
         let owners = profile["facet_owners"]
             .as_object()
             .ok_or("missing facet owners")?;
