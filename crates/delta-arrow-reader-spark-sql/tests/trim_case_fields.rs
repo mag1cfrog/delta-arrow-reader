@@ -15,7 +15,10 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
-#[allow(dead_code, reason = "This suite uses the shared native query observer.")]
+#[allow(
+    dead_code,
+    reason = "This suite uses the shared native query observer."
+)]
 #[path = "support/spark_results.rs"]
 mod spark_results;
 #[path = "support/string_binary.rs"]
