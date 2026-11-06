@@ -44,10 +44,10 @@ expressions run during execution.
 failing stages at batch sizes 1 and 32, in each record's session time zone. The 20 records
 that read STRING columns also run over dictionary-encoded copies of their inputs, the
 encoding Delta gives a STRING partition column. Spark has no such encoding, so the same
-record applies. An error
-matches Spark's condition, or Spark's message when Spark raises a plain Java exception such
-as `long overflow`. DAR's parser message is the accepted form of `CAST_INVALID_INPUT`, as in
-the other temporal harnesses.
+record applies. An error matches Spark's condition, or Spark's message when Spark raises a
+plain Java exception such as `long overflow`. DAR's parser message is the accepted form of
+`CAST_INVALID_INPUT`, as in the other temporal harnesses, until #1057 reports Spark's
+condition.
 
 Existing differences keep their Spark expectation in the fixture. The test replaces only
 the retained part with the current DAR result and checks each count:

@@ -513,9 +513,15 @@ DAYOFYEAR fails for each evaluated row.
 TIMESTAMPDIFF opts in to [constant folding errors](#constant-folding-errors), so its unit,
 overflow and STRING conversion errors keep Spark's optimization stage.
 
-Two differences remain, each with an owner:
+The harness pins two remaining differences, each with an owner:
 - `timestamp_diff` still resolves as an alias (#1051);
 - the zone table applies no DST after 2099 (#1052).
+
+Two more have owners but no pinned records:
+- backquoted, parenthesized and two-argument unit spellings fail differently or not at
+  all (#1056);
+- a malformed STRING argument reports DAR's parser message instead of
+  `CAST_INVALID_INPUT` (#1057).
 
 The [TIMESTAMPDIFF references](tests/fixtures/timestamp-diff/README.md) record the checks.
 
