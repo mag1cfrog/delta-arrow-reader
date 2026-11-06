@@ -749,8 +749,7 @@ impl<'a> ConstEvaluator<'a> {
                     && func.inner().supports_constant_folding()
             }
             Expr::HigherOrderFunction(HigherOrderFunction { func, .. }) => {
-                Self::volatility_ok(func.signature().volatility)
-                    && func.supports_constant_folding()
+                Self::volatility_ok(func.signature().volatility) && func.supports_constant_folding()
             }
             Expr::Cast(Cast { expr, field }) | Expr::TryCast(TryCast { expr, field }) => {
                 if let (Ok(DataType::Struct(source_fields)), DataType::Struct(target_fields)) =
@@ -964,10 +963,14 @@ struct Simplifier<'a> {
 fn spark_case_result_eq(left: &Expr, right: &Expr) -> bool {
     // Spark literal identity equates signed zero and NaN, without changing the returned bits.
     match (left, right) {
-        (Expr::Literal(ScalarValue::Float32(Some(a)), am), Expr::Literal(ScalarValue::Float32(Some(b)), bm)) =>
-            am == bm && (a == b || (a.is_nan() && b.is_nan())),
-        (Expr::Literal(ScalarValue::Float64(Some(a)), am), Expr::Literal(ScalarValue::Float64(Some(b)), bm)) =>
-            am == bm && (a == b || (a.is_nan() && b.is_nan())),
+        (
+            Expr::Literal(ScalarValue::Float32(Some(a)), am),
+            Expr::Literal(ScalarValue::Float32(Some(b)), bm),
+        ) => am == bm && (a == b || (a.is_nan() && b.is_nan())),
+        (
+            Expr::Literal(ScalarValue::Float64(Some(a)), am),
+            Expr::Literal(ScalarValue::Float64(Some(b)), bm),
+        ) => am == bm && (a == b || (a.is_nan() && b.is_nan())),
         _ => left == right,
     }
 }
@@ -988,11 +991,13 @@ fn spark_case_is_volatile(expr: &Expr) -> Result<bool> {
             if matches!(plan, datafusion_expr::LogicalPlan::Extension(_)) {
                 return Ok(TreeNodeRecursion::Stop);
             }
-            plan.apply_expressions(|expr| Ok(if expr.is_volatile() {
-                TreeNodeRecursion::Stop
-            } else {
-                TreeNodeRecursion::Continue
-            }))
+            plan.apply_expressions(|expr| {
+                Ok(if expr.is_volatile() {
+                    TreeNodeRecursion::Stop
+                } else {
+                    TreeNodeRecursion::Continue
+                })
+            })
         })? == TreeNodeRecursion::Stop)
     })
 }
@@ -1752,7 +1757,10 @@ impl TreeNodeRewriter for Simplifier<'_> {
                     ),
                 };
                 if !spark_case_is_volatile(&fallback)?
-                    && case.when_then_expr.iter().all(|(_, then)| spark_case_result_eq(then, &fallback))
+                    && case
+                        .when_then_expr
+                        .iter()
+                        .all(|(_, then)| spark_case_result_eq(then, &fallback))
                 {
                     let mut retained = 0;
                     for (index, (when, _)) in case.when_then_expr.iter().enumerate().rev() {
