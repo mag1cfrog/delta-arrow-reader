@@ -466,8 +466,16 @@ async fn ansi_numeric_integer_cast_overflow_keeps_condition_and_root_cause() -> 
     for (name, source, value) in [
         ("float_nan", ScalarValue::Float32(Some(f32::NAN)), "NaN"),
         ("double_nan", ScalarValue::Float64(Some(f64::NAN)), "NaN"),
-        ("float_inf", ScalarValue::Float32(Some(f32::INFINITY)), "inf"),
-        ("double_inf", ScalarValue::Float64(Some(f64::INFINITY)), "inf"),
+        (
+            "float_inf",
+            ScalarValue::Float32(Some(f32::INFINITY)),
+            "inf",
+        ),
+        (
+            "double_inf",
+            ScalarValue::Float64(Some(f64::INFINITY)),
+            "inf",
+        ),
         (
             "float_neg_inf",
             ScalarValue::Float32(Some(f32::NEG_INFINITY)),
@@ -497,7 +505,11 @@ async fn ansi_numeric_integer_cast_overflow_keeps_condition_and_root_cause() -> 
         session.register_batch(
             name,
             RecordBatch::try_new(
-                Arc::new(Schema::new(vec![Field::new("v", source.data_type(), false)])),
+                Arc::new(Schema::new(vec![Field::new(
+                    "v",
+                    source.data_type(),
+                    false,
+                )])),
                 vec![source.to_array_of_size(1)?],
             )?,
         )?;
@@ -541,7 +553,10 @@ async fn ansi_numeric_integer_cast_overflow_keeps_condition_and_root_cause() -> 
                 format!("Arrow error: Cast error: Can't cast value {value} to type {data_type}"),
                 "{sql}"
             );
-            assert!(error.to_string().contains("[CAST_OVERFLOW]"), "{sql}: {error}");
+            assert!(
+                error.to_string().contains("[CAST_OVERFLOW]"),
+                "{sql}: {error}"
+            );
         }
     }
     Ok(())

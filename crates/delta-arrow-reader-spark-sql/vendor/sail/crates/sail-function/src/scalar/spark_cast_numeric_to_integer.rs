@@ -503,7 +503,10 @@ mod tests {
                     let Err(error) = result else {
                         return exec_err!("expected ANSI overflow to {target}");
                     };
-                    assert!(matches!(error.find_root(), DataFusionError::ArrowError(_, _)));
+                    assert!(matches!(
+                        error.find_root(),
+                        DataFusionError::ArrowError(_, _)
+                    ));
                     assert_eq!(error.find_root().to_string(), cause);
                     assert_eq!(
                         error.to_string(),
