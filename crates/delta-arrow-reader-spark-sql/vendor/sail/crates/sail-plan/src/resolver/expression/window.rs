@@ -3,12 +3,16 @@ use std::cmp::Ordering;
 
 use arrow::datatypes::DataType;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+use datafusion_common::tree_node::TreeNode;
 use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
-use datafusion_expr::{ExprSchemable, WindowFrame, WindowFrameBound, WindowFrameUnits, expr};
+use datafusion_expr::{
+    ExprSchemable, ScalarUDF, WindowFrame, WindowFrameBound, WindowFrameUnits, expr,
+};
 use sail_common::spec::{self};
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::math::spark_negative::SparkNegative;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
@@ -168,7 +172,9 @@ impl PlanResolver<'_> {
                     };
                     let offset_display = if canonical_function_name == "lag" {
                         if let Some(offset) = arguments.get_mut(1) {
-                            *offset = expr::Expr::Negative(Box::new(required.clone()));
+                            // Reuse this fold instead of invoking the offset again during execution.
+                            *offset = ScalarUDF::from(SparkNegative::new(self.config.ansi_mode))
+                                .call(vec![required.clone()]);
                         }
                         let expr::Expr::Literal(value, _) = required else {
                             return Err(PlanError::invalid("literal LAG frame boundary expected"));
@@ -300,6 +306,10 @@ impl PlanResolver<'_> {
             || !offset.column_refs().is_empty()
             || offset.contains_outer()
             || offset.contains_scalar_subquery()
+            || offset.exists(|expression| {
+                Ok(matches!(expression, expr::Expr::ScalarFunction(function)
+                    if !function.func.inner().supports_constant_folding()))
+            })?
         {
             return Err(mismatch());
         }
@@ -309,8 +319,9 @@ impl PlanResolver<'_> {
             let context = SimplifyContextBuilder::default()
                 .with_schema(schema.clone())
                 .build();
-            let coerced = ExprSimplifier::new(context)
-                .coerce(expr::Expr::Negative(Box::new(offset)), schema)?;
+            let negative =
+                ScalarUDF::from(SparkNegative::new(self.config.ansi_mode)).call(vec![offset]);
+            let coerced = ExprSimplifier::new(context).coerce(negative, schema)?;
             Ok(expr::Expr::Literal(
                 LiteralEvaluator::new().evaluate(&coerced)?,
                 None,
