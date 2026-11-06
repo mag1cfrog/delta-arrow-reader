@@ -17,6 +17,21 @@ use string_binary::{TestResult, capture_observation, register_inputs};
 #[path = "support/regexp_extract_index_native.rs"]
 mod index_native;
 
+fn group_error_suffix_matches(error: &str, parameters: &Value, condition: Option<&str>) -> bool {
+    if parameters["functionName"] != "`regexp_extract`" {
+        return false;
+    }
+    match (parameters["groupCount"].as_str(), parameters["groupIndex"].as_str()) {
+        (Some(count), Some(index)) => {
+            let condition = condition.map_or(String::new(), |condition| format!("[{condition}] "));
+            error.ends_with(&format!(
+                "Spark `regexp_extract` function: {condition}Expects group index between 0 and {count}, but got {index}"
+            ))
+        }
+        _ => false,
+    }
+}
+
 fn error_cause(actual: &Value, expected: &Value) -> bool {
     let Some(error) = actual["error"].as_str() else {
         return false;
@@ -50,12 +65,10 @@ fn error_cause(actual: &Value, expected: &Value) -> bool {
                 _ => false,
             }
         }
-        Some("INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX") => parameters["functionName"] == "`regexp_extract`"
-            && match (parameters["groupCount"].as_str(), parameters["groupIndex"].as_str()) {
-                (Some(count), Some(index)) => error.ends_with(&format!(
-                    "Spark `regexp_extract` function: Expects group index between 0 and {count}, but got {index}")),
-                _ => false,
-            },
+        Some("INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX") => {
+            group_error_suffix_matches(error, parameters, None)
+                || group_error_suffix_matches(error, parameters, expected["condition"].as_str())
+        }
         _ => false,
     }
 }
@@ -198,7 +211,17 @@ fn reference_comparison(actual: &Value, expected: &Value, contract: Option<&Valu
             json!(expected["condition"].as_str().is_some_and(|condition| {
                 actual["error"]
                     .as_str()
-                    .is_some_and(|message| message.contains(&format!("[{condition}]")))
+                    .is_some_and(|message| {
+                        if condition == "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX" {
+                            group_error_suffix_matches(
+                                message,
+                                &expected["parameters"],
+                                Some(condition),
+                            )
+                        } else {
+                            message.contains(&format!("[{condition}]"))
+                        }
+                    })
             }));
     }
     let analyzed =
@@ -478,6 +501,54 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
             contracts.get(&key),
         ))
     };
+    // The terminal message is preserved from the source-bound 08b590 serial capture.
+    let mut tagged_group = group["actual"].clone();
+    tagged_group["error"] = json!(concat!(
+        "execute: Execution error: Spark `regexp_extract` function: ",
+        "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ",
+        "Expects group index between 0 and 1, but got -1"
+    ));
+    let comparison = compare(group, &tagged_group)?;
+    assert_eq!(comparison["facets"]["meaningful_cause"], true);
+    assert_eq!(comparison["facets"]["diagnostic_identifier"], true);
+    assert_eq!(comparison["strict_compatibility"], true);
+    for (before, after) in [
+        ("`regexp_extract`", "`regexp_extract_all`"),
+        ("between 0 and 1", "between 0 and 2"),
+        ("got -1", "got -2"),
+        ("got -1", "got -1; changed cause"),
+    ] {
+        let mut actual = tagged_group.clone();
+        actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
+        let comparison = compare(group, &actual)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], false);
+        assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
+        assert_eq!(comparison["strict_compatibility"], false);
+    }
+    for (message, meaningful_cause) in [
+        (group["actual"]["error"].as_str().unwrap().to_owned(), true),
+        (
+            tagged_group["error"]
+                .as_str()
+                .unwrap()
+                .replace("REGEX_GROUP_INDEX", "WRONG_CONDITION"),
+            false,
+        ),
+        (
+            format!(
+                "[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] {}",
+                group["actual"]["error"].as_str().unwrap()
+            ),
+            true,
+        ),
+    ] {
+        let mut actual = tagged_group.clone();
+        actual["error"] = json!(message);
+        let comparison = compare(group, &actual)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], meaningful_cause);
+        assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
+        assert_eq!(comparison["strict_compatibility"], false);
+    }
     assert_eq!(
         compare(inline, &inline["actual"])?["facets"]["meaningful_cause"],
         false
