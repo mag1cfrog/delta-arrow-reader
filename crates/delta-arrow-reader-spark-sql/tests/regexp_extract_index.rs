@@ -335,11 +335,7 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
             &comparison
         ));
         let facets = false_facets(&comparison)?;
-        assert!(
-            facets
-                .iter()
-                .all(|facet| ["diagnostic_identifier", "phase"].contains(&facet.as_str()))
-        );
+        assert_eq!(facets, vec!["phase".to_owned()]);
         let owners = profile["facet_owners"]
             .as_object()
             .ok_or("missing facet owners")?;
@@ -349,7 +345,7 @@ fn load_negatives() -> TestResult<BTreeMap<ContextKey, Value>> {
         );
         for owner in owners.values() {
             let owner = owner.as_str().ok_or("malformed facet owner")?;
-            assert!(["#922", "#788"].contains(&owner));
+            assert_eq!(owner, "#788");
             *owner_counts.entry(owner).or_default() += 1;
         }
     }
@@ -388,10 +384,6 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
     let profiles = load_negatives()?;
     let contracts = load_contracts()?;
     let references = reference_cases()?;
-    let overflow = profiles
-        .values()
-        .find(|profile| profile["id"] == "index_limit_zero_local" && profile["ansi"] == true)
-        .ok_or("missing measured overflow")?;
     let historical = by_context(
         include_str!("fixtures/regexp-extract-index-native-negative.jsonl")
             .lines()
@@ -399,14 +391,19 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
             .map(serde_json::from_str)
             .collect::<Result<Vec<Value>, _>>()?,
     )?;
+    // Frozen diagnostics remain fault seeds after these current cases pass.
+    let overflow = historical
+        .values()
+        .find(|profile| profile["id"] == "index_limit_zero_local" && profile["ansi"] == true)
+        .ok_or("missing frozen historical overflow")?;
     let inline = historical
         .values()
         .find(|profile| profile["id"] == "bad_values_extract_empty")
         .ok_or("missing measured inline-table error")?;
-    let group = profiles
+    let group = historical
         .values()
         .find(|profile| profile["id"] == "index_long_negative_group")
-        .ok_or("missing measured group error")?;
+        .ok_or("missing frozen historical group error")?;
     for group in ["facets", "evidence"] {
         for malformed in [Value::Null, json!([])] {
             let mut comparison = overflow["comparison"].clone();
@@ -439,6 +436,32 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
             contracts.get(&key),
         ))
     };
+    let current = profiles
+        .values()
+        .next()
+        .ok_or("missing measured phase-only profile")?;
+    assert_eq!(current["false_facets"], json!(["phase"]));
+    let mut untagged = current["actual"].clone();
+    untagged["error"] = json!(
+        untagged["error"]
+            .as_str()
+            .unwrap()
+            .replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", "")
+    );
+    let comparison = compare(current, &untagged)?;
+    assert_eq!(comparison["facets"]["meaningful_cause"], true);
+    assert_eq!(comparison["facets"]["diagnostic_identifier"], false);
+    assert!(!retained_matches(current, current, &untagged, &comparison));
+    let mut stale_stage = current["actual"].clone();
+    stale_stage["error_stage"] = json!("resolve");
+    let comparison = compare(current, &stale_stage)?;
+    assert_eq!(comparison["evidence"]["completed_stages"], false);
+    assert!(!retained_matches(
+        current,
+        current,
+        &stale_stage,
+        &comparison
+    ));
     // The terminal message is preserved from the source-bound 08b590 serial capture.
     let mut tagged_group = group["actual"].clone();
     tagged_group["error"] = json!(concat!(
@@ -556,12 +579,9 @@ fn index_profiles_reject_changed_data_diagnostics_and_inventories() -> TestResul
     ] {
         let mut actual = profile["actual"].clone();
         actual["error"] = json!(actual["error"].as_str().unwrap().replace(before, after));
-        assert!(!retained_matches(
-            profile,
-            profile,
-            &actual,
-            &compare(profile, &actual)?
-        ));
+        let comparison = compare(profile, &actual)?;
+        assert_eq!(comparison["facets"]["meaningful_cause"], false);
+        assert!(!retained_matches(profile, profile, &actual, &comparison));
     }
     for key in ["error_stage", "analyzed_arrow_schema", "physical_schema"] {
         let mut actual = overflow["actual"].clone();
@@ -831,16 +851,15 @@ async fn regexp_extract_index_checks_aliased_local_indices_before_limit_zero() -
             assert_eq!(actual["error_stage"], "physical");
             assert_eq!(
                 actual["error"],
-                "physical: preserve_spark_expression_errors\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
+                "physical: preserve_spark_expression_errors\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 4294967296 to type Int32"
             );
             assert!(error_cause(&actual, expected));
             assert_eq!(availability(&actual, "physical_schema"), "null");
             assert_eq!(availability(&actual, "physical_arrow_schema"), "null");
             assert_eq!(availability(&actual, "rows"), "absent");
-            // The missing Spark identifier remains a strict diagnostic difference under #922.
-            actual["error"]
-                .as_str()
-                .is_some_and(|error| error.contains("[CAST_OVERFLOW]"))
+            let comparison = reference_comparison(&actual, expected, None);
+            assert_eq!(comparison["facets"]["diagnostic_identifier"], true);
+            true
         } else {
             assert_eq!(expected["status"], "ok");
             assert!(actual.get("error").is_none() && actual.get("error_stage").is_none());

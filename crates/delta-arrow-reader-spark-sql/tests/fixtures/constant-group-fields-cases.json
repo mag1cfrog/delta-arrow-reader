@@ -1,0 +1,983 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "float_scalar_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "80000000",
+          "0"
+        ],
+        [
+          "00000000",
+          "1"
+        ],
+        [
+          "80000000",
+          "2"
+        ],
+        [
+          "3fc00000",
+          "3"
+        ],
+        [
+          "3fc00000",
+          "4"
+        ],
+        [
+          "c0000000",
+          "5"
+        ],
+        [
+          null,
+          "6"
+        ],
+        [
+          "7fc01234",
+          "7"
+        ],
+        [
+          "ffc04321",
+          "8"
+        ],
+        [
+          "7fc01234",
+          "9"
+        ],
+        [
+          "7f800000",
+          "10"
+        ],
+        [
+          "ff800000",
+          "11"
+        ],
+        [
+          null,
+          "12"
+        ]
+      ]
+    },
+    {
+      "name": "float_scalar_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null,
+          "0"
+        ],
+        [
+          null,
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "float_scalar_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "float_scalar_negative_zero",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "80000000",
+          "0"
+        ],
+        [
+          "80000000",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "double_scalar_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "8000000000000000",
+          "0"
+        ],
+        [
+          "0000000000000000",
+          "1"
+        ],
+        [
+          "8000000000000000",
+          "2"
+        ],
+        [
+          "3ff8000000000000",
+          "3"
+        ],
+        [
+          "3ff8000000000000",
+          "4"
+        ],
+        [
+          "c000000000000000",
+          "5"
+        ],
+        [
+          null,
+          "6"
+        ],
+        [
+          "7ff8000000001234",
+          "7"
+        ],
+        [
+          "fff8000000004321",
+          "8"
+        ],
+        [
+          "7ff8000000001234",
+          "9"
+        ],
+        [
+          "7ff0000000000000",
+          "10"
+        ],
+        [
+          "fff0000000000000",
+          "11"
+        ],
+        [
+          null,
+          "12"
+        ]
+      ]
+    },
+    {
+      "name": "double_scalar_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null,
+          "0"
+        ],
+        [
+          null,
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "double_scalar_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "double_scalar_negative_zero",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "8000000000000000",
+          "0"
+        ],
+        [
+          "8000000000000000",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "float_metadata",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "constant-group-fields"
+            }
+          },
+          {
+            "name": "record",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "reading",
+                  "type": "float",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "signed-zero"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "nested-group-field"
+            }
+          },
+          {
+            "name": "values",
+            "type": {
+              "type": "array",
+              "elementType": "float",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "array-group-field"
+            }
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "80000000",
+          [
+            "80000000"
+          ],
+          [
+            "80000000",
+            null
+          ],
+          "0"
+        ],
+        [
+          null,
+          [
+            null
+          ],
+          [],
+          "1"
+        ],
+        [
+          null,
+          null,
+          null,
+          "2"
+        ]
+      ]
+    },
+    {
+      "name": "double_metadata",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "constant-group-fields"
+            }
+          },
+          {
+            "name": "record",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "reading",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "signed-zero"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "nested-group-field"
+            }
+          },
+          {
+            "name": "values",
+            "type": {
+              "type": "array",
+              "elementType": "double",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "array-group-field"
+            }
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "8000000000000000",
+          [
+            "8000000000000000"
+          ],
+          [
+            "8000000000000000",
+            null
+          ],
+          "0"
+        ],
+        [
+          null,
+          [
+            null
+          ],
+          [],
+          "1"
+        ],
+        [
+          null,
+          null,
+          null,
+          "2"
+        ]
+      ]
+    }
+  ],
+  "original_reference": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-floating-distinct-2026-11-02/expanded-floating-group-keys-spark.jsonl",
+    "sha256": "1d401c9571661c66530324ad034e0ffee373ec116e5332295a53d63ce7411e58",
+    "ids": [
+      "double_scalar_mixed_constant_array",
+      "double_scalar_mixed_constant_scalar",
+      "float_scalar_mixed_constant_array",
+      "float_scalar_mixed_constant_scalar"
+    ]
+  },
+  "case_count": 98,
+  "observations": 196,
+  "cases": [
+    {
+      "id": "float_mixed_scalar",
+      "sql": "SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('-0.0' AS float)",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_nulls_scalar",
+      "sql": "SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_nulls GROUP BY CAST('-0.0' AS float)",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_empty_scalar",
+      "sql": "SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST('-0.0' AS float)",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_mixed_scalar_outer",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('-0.0' AS float)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_mixed_scalar_predicate",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('-0.0' AS float)) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "float_mixed_scalar_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('-0.0' AS float)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_empty_scalar_outer",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST('-0.0' AS float)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_empty_scalar_predicate",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST('-0.0' AS float)) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "float_empty_scalar_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT CAST('-0.0' AS float) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST('-0.0' AS float)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_scalar_grouping_sets",
+      "sql": "SELECT CAST('-0.0' AS float) AS key,GROUPING(CAST('-0.0' AS float)) AS total,COUNT(*) AS n FROM float_scalar_mixed GROUP BY GROUPING SETS ((CAST('-0.0' AS float)),())",
+      "category": "grouping_sets"
+    },
+    {
+      "id": "float_scalar_payload",
+      "sql": "SELECT CAST('-0.0' AS float) AS key,SORT_ARRAY(COLLECT_LIST(CAST(k AS STRING))) AS originals,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('-0.0' AS float)",
+      "category": "payload"
+    },
+    {
+      "id": "float_scalar_generated_name",
+      "sql": "SELECT CAST('-0.0' AS float),COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('-0.0' AS float)",
+      "category": "generated_name"
+    },
+    {
+      "id": "float_mixed_array",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_nulls_array",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_nulls GROUP BY ARRAY(CAST('-0.0' AS float))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_empty_array",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS float))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_mixed_array_outer",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_mixed_array_predicate",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "float_mixed_array_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_empty_array_outer",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS float))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_empty_array_predicate",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS float))) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "float_empty_array_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS float))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_array_grouping_sets",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS float)) AS key,GROUPING(ARRAY(CAST('-0.0' AS float))) AS total,COUNT(*) AS n FROM float_scalar_mixed GROUP BY GROUPING SETS ((ARRAY(CAST('-0.0' AS float))),())",
+      "category": "grouping_sets"
+    },
+    {
+      "id": "float_array_payload",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS float)) AS key,SORT_ARRAY(COLLECT_LIST(CAST(k AS STRING))) AS originals,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))",
+      "category": "payload"
+    },
+    {
+      "id": "float_array_generated_name",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS float)),COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))",
+      "category": "generated_name"
+    },
+    {
+      "id": "float_array_element_consumer",
+      "sql": "SELECT key[0] AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS float))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "float_mixed_struct",
+      "sql": "SELECT NAMED_STRUCT('value',CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY NAMED_STRUCT('value',CAST('-0.0' AS float))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_nulls_struct",
+      "sql": "SELECT NAMED_STRUCT('value',CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_nulls GROUP BY NAMED_STRUCT('value',CAST('-0.0' AS float))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_empty_struct",
+      "sql": "SELECT NAMED_STRUCT('value',CAST('-0.0' AS float)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY NAMED_STRUCT('value',CAST('-0.0' AS float))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_mixed_nested",
+      "sql": "SELECT ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS float))) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS float)))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_nulls_nested",
+      "sql": "SELECT ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS float))) AS key,COUNT(*) AS n FROM float_scalar_nulls GROUP BY ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS float)))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_empty_nested",
+      "sql": "SELECT ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS float))) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS float)))",
+      "category": "constant_group"
+    },
+    {
+      "id": "float_null",
+      "sql": "SELECT CAST(NULL AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(NULL AS float)",
+      "category": "literal_control"
+    },
+    {
+      "id": "float_array_null",
+      "sql": "SELECT ARRAY(CAST(NULL AS float)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST(NULL AS float))",
+      "category": "literal_control"
+    },
+    {
+      "id": "float_numeric_literal",
+      "sql": "SELECT CAST(-0.0 AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(-0.0 AS float)",
+      "category": "literal_control"
+    },
+    {
+      "id": "float_mixed_live_cast",
+      "sql": "SELECT CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS float)",
+      "category": "cast_error"
+    },
+    {
+      "id": "float_empty_live_cast",
+      "sql": "SELECT CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS float) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS float)",
+      "category": "cast_error"
+    },
+    {
+      "id": "float_mixed_folded_bad_cast",
+      "sql": "SELECT CAST('bad' AS float) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('bad' AS float)",
+      "category": "cast_error"
+    },
+    {
+      "id": "float_empty_folded_bad_cast",
+      "sql": "SELECT CAST('bad' AS float) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST('bad' AS float)",
+      "category": "cast_error"
+    },
+    {
+      "id": "float_mixed_dead_cast",
+      "sql": "SELECT IF(id<0,CAST('bad' AS float),k) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY IF(id<0,CAST('bad' AS float),k)",
+      "category": "cast_control"
+    },
+    {
+      "id": "float_empty_dead_cast",
+      "sql": "SELECT IF(id<0,CAST('bad' AS float),k) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY IF(id<0,CAST('bad' AS float),k)",
+      "category": "cast_control"
+    },
+    {
+      "id": "float_metadata_k",
+      "sql": "SELECT k AS key,COUNT(*) AS n FROM float_metadata GROUP BY k",
+      "category": "metadata"
+    },
+    {
+      "id": "float_metadata_record",
+      "sql": "SELECT record AS key,COUNT(*) AS n FROM float_metadata GROUP BY record",
+      "category": "metadata"
+    },
+    {
+      "id": "float_metadata_values",
+      "sql": "SELECT values AS key,COUNT(*) AS n FROM float_metadata GROUP BY values",
+      "category": "metadata"
+    },
+    {
+      "id": "float_raw_column_payload",
+      "sql": "SELECT k,SORT_ARRAY(COLLECT_LIST(CAST(k AS STRING))) AS originals,COUNT(*) AS n FROM float_scalar_negative_zero GROUP BY k",
+      "category": "payload"
+    },
+    {
+      "id": "double_mixed_scalar",
+      "sql": "SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('-0.0' AS double)",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_nulls_scalar",
+      "sql": "SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_nulls GROUP BY CAST('-0.0' AS double)",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_empty_scalar",
+      "sql": "SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY CAST('-0.0' AS double)",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_mixed_scalar_outer",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('-0.0' AS double)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_mixed_scalar_predicate",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('-0.0' AS double)) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "double_mixed_scalar_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('-0.0' AS double)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_empty_scalar_outer",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY CAST('-0.0' AS double)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_empty_scalar_predicate",
+      "sql": "SELECT key,n FROM (SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY CAST('-0.0' AS double)) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "double_empty_scalar_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT CAST('-0.0' AS double) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY CAST('-0.0' AS double)) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_scalar_grouping_sets",
+      "sql": "SELECT CAST('-0.0' AS double) AS key,GROUPING(CAST('-0.0' AS double)) AS total,COUNT(*) AS n FROM double_scalar_mixed GROUP BY GROUPING SETS ((CAST('-0.0' AS double)),())",
+      "category": "grouping_sets"
+    },
+    {
+      "id": "double_scalar_payload",
+      "sql": "SELECT CAST('-0.0' AS double) AS key,SORT_ARRAY(COLLECT_LIST(CAST(k AS STRING))) AS originals,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('-0.0' AS double)",
+      "category": "payload"
+    },
+    {
+      "id": "double_scalar_generated_name",
+      "sql": "SELECT CAST('-0.0' AS double),COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('-0.0' AS double)",
+      "category": "generated_name"
+    },
+    {
+      "id": "double_mixed_array",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_nulls_array",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_nulls GROUP BY ARRAY(CAST('-0.0' AS double))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_empty_array",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS double))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_mixed_array_outer",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_mixed_array_predicate",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "double_mixed_array_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_empty_array_outer",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS double))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_empty_array_predicate",
+      "sql": "SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS double))) grouped WHERE key IS NULL OR key IS NOT NULL",
+      "category": "consumer"
+    },
+    {
+      "id": "double_empty_array_count",
+      "sql": "SELECT COUNT(key) AS keys,COUNT(*) AS groups FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS double))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_array_grouping_sets",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS double)) AS key,GROUPING(ARRAY(CAST('-0.0' AS double))) AS total,COUNT(*) AS n FROM double_scalar_mixed GROUP BY GROUPING SETS ((ARRAY(CAST('-0.0' AS double))),())",
+      "category": "grouping_sets"
+    },
+    {
+      "id": "double_array_payload",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS double)) AS key,SORT_ARRAY(COLLECT_LIST(CAST(k AS STRING))) AS originals,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))",
+      "category": "payload"
+    },
+    {
+      "id": "double_array_generated_name",
+      "sql": "SELECT ARRAY(CAST('-0.0' AS double)),COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))",
+      "category": "generated_name"
+    },
+    {
+      "id": "double_array_element_consumer",
+      "sql": "SELECT key[0] AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS double))) grouped",
+      "category": "consumer"
+    },
+    {
+      "id": "double_mixed_struct",
+      "sql": "SELECT NAMED_STRUCT('value',CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY NAMED_STRUCT('value',CAST('-0.0' AS double))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_nulls_struct",
+      "sql": "SELECT NAMED_STRUCT('value',CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_nulls GROUP BY NAMED_STRUCT('value',CAST('-0.0' AS double))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_empty_struct",
+      "sql": "SELECT NAMED_STRUCT('value',CAST('-0.0' AS double)) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY NAMED_STRUCT('value',CAST('-0.0' AS double))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_mixed_nested",
+      "sql": "SELECT ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS double))) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS double)))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_nulls_nested",
+      "sql": "SELECT ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS double))) AS key,COUNT(*) AS n FROM double_scalar_nulls GROUP BY ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS double)))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_empty_nested",
+      "sql": "SELECT ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS double))) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY ARRAY(NAMED_STRUCT('value',CAST('-0.0' AS double)))",
+      "category": "constant_group"
+    },
+    {
+      "id": "double_null",
+      "sql": "SELECT CAST(NULL AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST(NULL AS double)",
+      "category": "literal_control"
+    },
+    {
+      "id": "double_array_null",
+      "sql": "SELECT ARRAY(CAST(NULL AS double)) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY ARRAY(CAST(NULL AS double))",
+      "category": "literal_control"
+    },
+    {
+      "id": "double_numeric_literal",
+      "sql": "SELECT CAST(-0.0 AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST(-0.0 AS double)",
+      "category": "literal_control"
+    },
+    {
+      "id": "double_mixed_live_cast",
+      "sql": "SELECT CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS double)",
+      "category": "cast_error"
+    },
+    {
+      "id": "double_empty_live_cast",
+      "sql": "SELECT CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS double) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY CAST(CASE WHEN id=0 THEN 'bad' ELSE '1.0' END AS double)",
+      "category": "cast_error"
+    },
+    {
+      "id": "double_mixed_folded_bad_cast",
+      "sql": "SELECT CAST('bad' AS double) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY CAST('bad' AS double)",
+      "category": "cast_error"
+    },
+    {
+      "id": "double_empty_folded_bad_cast",
+      "sql": "SELECT CAST('bad' AS double) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY CAST('bad' AS double)",
+      "category": "cast_error"
+    },
+    {
+      "id": "double_mixed_dead_cast",
+      "sql": "SELECT IF(id<0,CAST('bad' AS double),k) AS key,COUNT(*) AS n FROM double_scalar_mixed GROUP BY IF(id<0,CAST('bad' AS double),k)",
+      "category": "cast_control"
+    },
+    {
+      "id": "double_empty_dead_cast",
+      "sql": "SELECT IF(id<0,CAST('bad' AS double),k) AS key,COUNT(*) AS n FROM double_scalar_empty GROUP BY IF(id<0,CAST('bad' AS double),k)",
+      "category": "cast_control"
+    },
+    {
+      "id": "double_metadata_k",
+      "sql": "SELECT k AS key,COUNT(*) AS n FROM double_metadata GROUP BY k",
+      "category": "metadata"
+    },
+    {
+      "id": "double_metadata_record",
+      "sql": "SELECT record AS key,COUNT(*) AS n FROM double_metadata GROUP BY record",
+      "category": "metadata"
+    },
+    {
+      "id": "double_metadata_values",
+      "sql": "SELECT values AS key,COUNT(*) AS n FROM double_metadata GROUP BY values",
+      "category": "metadata"
+    },
+    {
+      "id": "double_raw_column_payload",
+      "sql": "SELECT k,SORT_ARRAY(COLLECT_LIST(CAST(k AS STRING))) AS originals,COUNT(*) AS n FROM double_scalar_negative_zero GROUP BY k",
+      "category": "payload"
+    },
+    {
+      "id": "nonfloating_mixed_integer_literal",
+      "sql": "SELECT CAST(7 AS INT) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(7 AS INT)",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_empty_integer_literal",
+      "sql": "SELECT CAST(7 AS INT) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST(7 AS INT)",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_mixed_integer_cast",
+      "sql": "SELECT CAST('7' AS INT) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST('7' AS INT)",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_empty_integer_cast",
+      "sql": "SELECT CAST('7' AS INT) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST('7' AS INT)",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_mixed_integer_array",
+      "sql": "SELECT ARRAY(CAST('7' AS INT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('7' AS INT))",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_empty_integer_array",
+      "sql": "SELECT ARRAY(CAST('7' AS INT)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(CAST('7' AS INT))",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_mixed_string_literal",
+      "sql": "SELECT 'fixed' AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY 'fixed'",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_empty_string_literal",
+      "sql": "SELECT 'fixed' AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY 'fixed'",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_mixed_string_null",
+      "sql": "SELECT CAST(NULL AS STRING) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(NULL AS STRING)",
+      "category": "nonfloating"
+    },
+    {
+      "id": "nonfloating_empty_string_null",
+      "sql": "SELECT CAST(NULL AS STRING) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY CAST(NULL AS STRING)",
+      "category": "nonfloating"
+    }
+  ]
+}

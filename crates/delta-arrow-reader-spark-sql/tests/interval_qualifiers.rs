@@ -333,8 +333,6 @@ const NESTED_CAST_SOURCES: [(&str, &str); 4] = [
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #727: an unaliased window keeps its function-call name.
-    WindowName,
     /// #947: RANGE offsets are not typed against the ORDER BY key.
     RangeOffsetTyping,
     /// #955: a literal at or past a storage limit fails without Spark's error condition.
@@ -353,19 +351,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         }
         "window" | "window_alias" if id.starts_with("range_numeric") => {
             Some(RetainedDifference::RangeOffsetTyping)
-        }
-        "window"
-            if [
-                "range_day",
-                "range_hour",
-                "range_day_hour",
-                "range_day_second",
-                "range_year",
-                "range_month",
-            ]
-            .contains(&id) =>
-        {
-            Some(RetainedDifference::WindowName)
         }
         "date_window"
             if ["date_range_day", "date_range_hour", "date_range_day_hour"].contains(&id) =>
@@ -389,11 +374,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::WindowName => {
-            for stage in ["analyzed", "optimized", "executed"] {
-                current["schema_stages"][stage]["fields"][1]["name"] = json!("SUM(v)");
-            }
-        }
         RetainedDifference::RangeOffsetTyping => {
             current
                 .as_object_mut()
@@ -439,7 +419,6 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
             (RetainedDifference::LimitErrorCondition, 54),
             (RetainedDifference::DivideByZeroCondition, 12),

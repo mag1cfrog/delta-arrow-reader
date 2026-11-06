@@ -113,7 +113,7 @@ async fn regexp_extract_preserves_native_async_source_controls() -> TestResult {
         "fixtures/regexp-extract-index-async-inputs.json"
     ))?;
     let profiles: Value = serde_json::from_str(include_str!(
-        "fixtures/regexp-extract-index-async-native.json"
+        "fixtures/regexp-extract-index-current-async-native.json"
     ))?;
     let controls = profiles["controls"]
         .as_array()

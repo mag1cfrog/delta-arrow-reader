@@ -138,8 +138,9 @@ missing-column errors, keeping their planning stage and original message prefix.
 `date_day_arithmetic.rs` compares complete rows, field names, types, nullability
 and metadata for all 432 observations at batch sizes 1 and 32, giving 864
 comparisons. DATE results use the resolved declaration
-for comparison with Spark's analyzed schema. Physical fields may become
-nonnullable after folding; every returned NULL must fit both declarations.
+for comparison with Spark's analyzed schema. Where a record keeps Spark's executed
+schema, the physical field must match it exactly. Otherwise physical fields may
+become nonnullable after folding; every returned NULL must fit both declarations.
 The seven unchanged calendar/timestamp controls retain conservative resolved
 fields and compare their physical fields with the reference. This does not
 establish analyzed nullability parity for those controls. With `--nocapture`,
@@ -167,6 +168,18 @@ cargo test --locked --workspace --test date_day_arithmetic -- --nocapture
 
 The new JSONL files are beside the copied scripts in `$date_day_capture_dir`.
 The Rust test continues to replay the committed fixtures.
+
+## DATE arithmetic with closed lambda day operands
+
+`date-day-closed-lambda-fields/date-day-closed-lambda-fields-spark.jsonl` contains
+366 Spark 4.2.0 observations of DATE_ADD, DATEADD and DATE_SUB whose day operand is
+a closed higher-order expression (#831), with literal, NULL, registered-column,
+empty-table and near-maximum starts, literal-day controls and plain higher-order
+results, including constant lambda bodies, in both ANSI modes.
+`date_day_closed_lambda_fields.rs` compares names, fields at each stage, typed
+values and failing stages at batch sizes 1 and 32. See the [closed-lambda fixture
+notes](date-day-closed-lambda-fields/README.md) for the retained differences and the
+capture command.
 
 ## Parallel errors
 
@@ -2274,27 +2287,43 @@ negative object and computed false facets in
 values, SQL or context keys, and missing, duplicate or unused profiles fail the
 regression gate. Preserved differences receive no Spark-match credit and retain
 `full_compatibility_pass=false`. Preservation does not waive a lost strict match
-or a newly introduced failure. The current inventory contains 756 strict matches
-and 252 negative observations. Legacy BIGINT narrowing preserves all 30 retained
-NULL/no-match loss contexts and their ANSI overflow partners. Both bad-VALUES
-queries require the inline-table wrapper, the exact bad STRING-to-INT cause and
-resolve-stage availability across all 12 ANSI contexts.
+or a newly introduced failure.
 
-Shared floating index conversion preserves the frozen legacy NaN value and
-the required Infinity group-index cause for 2147483647. Remaining differences
-are primitive ANSI overflow identifiers (#922), group identifiers and phase
-differences (#788). The original
+The fixed `4847e810` capture, graded with the separate `ab858ce4` test contract,
+contains 960 strict matches and 48 phase-only negatives among the 1,008 index
+contexts. All 342 existing stage and availability contracts remain unchanged.
+The earlier `68f803d8` capture retains its historical 888-match result; frozen
+observer grades retain their own source comparison contract. Current counts
+report the complete saved replay, while the regression checks every context.
+Legacy BIGINT narrowing preserves all 30 retained NULL/no-match loss contexts
+and their ANSI overflow partners. Both bad-VALUES queries require the inline-table
+wrapper, exact bad STRING-to-INT cause and resolve-stage availability across all
+12 ANSI contexts.
+
+Shared floating conversion preserves the frozen legacy NaN value and the
+required Infinity group-index cause for 2147483647. Primitive overflow and group
+identifiers now match in this replay. The remaining phase differences stay under
+#788 and its #1036 work. The original
 `regexp-extract-index-native-negative.jsonl` and
 `regexp-extract-index-native-stages.json` remain frozen historical evidence.
 
-The 62 native-only controls comprise 32 selection profiles, six async profiles
-and 24 NoFold controls. They preserve whole callback phase counts, invocation
-inputs/types/fields, returned declarations, ordered values and precise failures.
-Profile keys and SQL must cover each input manifest exactly. These controls
-receive no Spark oracle credit. The alias regression also checks both ANSI modes
-for six existing references, including the required local LIMIT 0 overflow.
-The NoFold controls cover bounded local previews; scalar-parent and CAST-only
-planning callbacks retain the separate #893 gap.
+The main capture includes 74 controls beside the index corpus: 32 selection,
+six async, 24 NoFold and 12 alias observations. The 62 native-only callback
+controls preserve complete phase counts, invocation inputs/types/fields,
+returned declarations, ordered values and exact failures, without Spark oracle
+credit. Profile keys and SQL cover each input manifest exactly. The alias checks
+retain both ANSI modes for six existing references, including the required local
+LIMIT 0 overflow.
+
+`regexp-extract-index-current-async-native.json` contains all six current whole
+async observations. Four equal the frozen be21 records; two `bigint_wrap_zero`
+errors add the exact inline group condition. The original
+`regexp-extract-index-async-native.json` and its be21 header remain unchanged.
+Whole-actual equality remains exact, with no error-prefix normalization. NoFold
+controls cover bounded local previews; the separate 24-context scalar-parent
+replay keeps the CAST-only and scalar-parent #893 gap visible. ARRAY declarations
+under #1000 and public names under #1042/#778 retain their separate acceptance
+work. These controls do not establish complete string/binary compatibility.
 
 Seed metadata erratum: the CSE, local-frontier and foldable-NULL files retain
 `input_only=true` and the original descriptions saying no expectations or

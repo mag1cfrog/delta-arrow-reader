@@ -22,6 +22,7 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
         Some("short") => DataType::Int16,
         Some("integer") => DataType::Int32,
         Some("long") => DataType::Int64,
+        Some("boolean") => DataType::Boolean,
         Some("string") => DataType::Utf8,
         Some("binary") => DataType::Binary,
         Some("date") => DataType::Date32,
@@ -140,6 +141,11 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
         DataType::Duration(TimeUnit::Microsecond) => ScalarValue::DurationMicrosecond(Some(
             value.as_str().ok_or("missing microsecond count")?.parse()?,
         )),
+        DataType::Boolean => ScalarValue::Boolean(Some(match value.as_str() {
+            Some("True" | "true") => true,
+            Some("False" | "false") => false,
+            _ => return Err(format!("unexpected recorded boolean: {value}").into()),
+        })),
         DataType::Decimal128(precision, scale) => ScalarValue::Decimal128(
             Some(arrow::compute::kernels::cast_utils::parse_decimal::<
                 Decimal128Type,
@@ -290,6 +296,35 @@ pub(crate) fn register_recorded_inputs_with_partition_count(
             input["name"].as_str().ok_or("missing table name")?,
             Arc::new(MemTable::try_new(schema, partitions)?),
         )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn recorded_booleans_preserve_null_and_reject_other_values() -> TestResult {
+    use serde_json::json;
+
+    assert_eq!(
+        decode_recorded_data_type(&json!("boolean"))?,
+        DataType::Boolean
+    );
+    for (encoded, value) in [
+        ("True", true),
+        ("true", true),
+        ("False", false),
+        ("false", false),
+    ] {
+        assert_eq!(
+            decode_recorded_value(&json!(encoded), &DataType::Boolean)?,
+            ScalarValue::Boolean(Some(value))
+        );
+    }
+    assert_eq!(
+        decode_recorded_value(&Value::Null, &DataType::Boolean)?,
+        ScalarValue::Boolean(None)
+    );
+    for encoded in [json!("yes"), json!("1"), json!(1), json!(true)] {
+        assert!(decode_recorded_value(&encoded, &DataType::Boolean).is_err());
     }
     Ok(())
 }

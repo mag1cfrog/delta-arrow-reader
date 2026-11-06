@@ -1,0 +1,600 @@
+{
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "inputs": [
+    {
+      "name": "float_scalar_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "80000000",
+          "0"
+        ],
+        [
+          "00000000",
+          "1"
+        ],
+        [
+          "80000000",
+          "2"
+        ],
+        [
+          "3fc00000",
+          "3"
+        ],
+        [
+          "3fc00000",
+          "4"
+        ],
+        [
+          "c0000000",
+          "5"
+        ],
+        [
+          null,
+          "6"
+        ],
+        [
+          "7fc01234",
+          "7"
+        ],
+        [
+          "ffc04321",
+          "8"
+        ],
+        [
+          "7fc01234",
+          "9"
+        ],
+        [
+          "7f800000",
+          "10"
+        ],
+        [
+          "ff800000",
+          "11"
+        ],
+        [
+          null,
+          "12"
+        ]
+      ]
+    },
+    {
+      "name": "float_scalar_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null,
+          "0"
+        ],
+        [
+          null,
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "float_scalar_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "float_scalar_negative_zero",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "80000000",
+          "0"
+        ],
+        [
+          "80000000",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "double_scalar_mixed",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "8000000000000000",
+          "0"
+        ],
+        [
+          "0000000000000000",
+          "1"
+        ],
+        [
+          "8000000000000000",
+          "2"
+        ],
+        [
+          "3ff8000000000000",
+          "3"
+        ],
+        [
+          "3ff8000000000000",
+          "4"
+        ],
+        [
+          "c000000000000000",
+          "5"
+        ],
+        [
+          null,
+          "6"
+        ],
+        [
+          "7ff8000000001234",
+          "7"
+        ],
+        [
+          "fff8000000004321",
+          "8"
+        ],
+        [
+          "7ff8000000001234",
+          "9"
+        ],
+        [
+          "7ff0000000000000",
+          "10"
+        ],
+        [
+          "fff0000000000000",
+          "11"
+        ],
+        [
+          null,
+          "12"
+        ]
+      ]
+    },
+    {
+      "name": "double_scalar_nulls",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          null,
+          "0"
+        ],
+        [
+          null,
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "double_scalar_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "double_scalar_negative_zero",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "8000000000000000",
+          "0"
+        ],
+        [
+          "8000000000000000",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "float_metadata",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "constant-group-fields"
+            }
+          },
+          {
+            "name": "record",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "reading",
+                  "type": "float",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "signed-zero"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "nested-group-field"
+            }
+          },
+          {
+            "name": "values",
+            "type": {
+              "type": "array",
+              "elementType": "float",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "array-group-field"
+            }
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "80000000",
+          [
+            "80000000"
+          ],
+          [
+            "80000000",
+            null
+          ],
+          "0"
+        ],
+        [
+          null,
+          [
+            null
+          ],
+          [],
+          "1"
+        ],
+        [
+          null,
+          null,
+          null,
+          "2"
+        ]
+      ]
+    },
+    {
+      "name": "double_metadata",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "constant-group-fields"
+            }
+          },
+          {
+            "name": "record",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "reading",
+                  "type": "double",
+                  "nullable": true,
+                  "metadata": {
+                    "unit": "signed-zero"
+                  }
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "nested-group-field"
+            }
+          },
+          {
+            "name": "values",
+            "type": {
+              "type": "array",
+              "elementType": "double",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {
+              "source": "array-group-field"
+            }
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          "8000000000000000",
+          [
+            "8000000000000000"
+          ],
+          [
+            "8000000000000000",
+            null
+          ],
+          "0"
+        ],
+        [
+          null,
+          [
+            null
+          ],
+          [],
+          "1"
+        ],
+        [
+          null,
+          null,
+          null,
+          "2"
+        ]
+      ]
+    },
+    {
+      "name": "float_array_zeros",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": {
+              "type": "array",
+              "elementType": "float",
+              "containsNull": true
+            },
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {}
+          }
+        ]
+      },
+      "rows": [
+        [
+          [
+            "80000000",
+            null
+          ],
+          "0"
+        ],
+        [
+          [
+            "00000000",
+            null
+          ],
+          "1"
+        ],
+        [
+          [
+            "80000000",
+            null
+          ],
+          "2"
+        ]
+      ]
+    }
+  ],
+  "original_reference": {
+    "path": "/home/hanbo/.local/share/delta-arrow-reader-review/spark-floating-distinct-2026-11-02/expanded-floating-group-keys-spark.jsonl",
+    "sha256": "1d401c9571661c66530324ad034e0ffee373ec116e5332295a53d63ce7411e58",
+    "ids": [
+      "double_scalar_mixed_constant_array",
+      "double_scalar_mixed_constant_scalar",
+      "float_scalar_mixed_constant_array",
+      "float_scalar_mixed_constant_scalar"
+    ]
+  },
+  "case_count": 12,
+  "observations": 24,
+  "cases": [
+    {
+      "id": "qualified_alias_chain",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT key,n FROM (SELECT ARRAY(CAST('-0.0' AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS FLOAT))) producer) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "null_element",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT ARRAY(CAST(NULL AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST(NULL AS FLOAT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "null_array",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT CAST(NULL AS ARRAY<FLOAT>) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(NULL AS ARRAY<FLOAT>)) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "empty_array",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT CAST(ARRAY() AS ARRAY<FLOAT>) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY CAST(ARRAY() AS ARRAY<FLOAT>)) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "null_index",
+      "sql": "SELECT consumer.key[NULL] AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS FLOAT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "negative_index",
+      "sql": "SELECT consumer.key[-1] AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS FLOAT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "out_of_bounds",
+      "sql": "SELECT consumer.key[1] AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS FLOAT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "empty_group_input",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_empty GROUP BY ARRAY(CAST('-0.0' AS FLOAT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "nested_array",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT ARRAY(ARRAY(CAST('-0.0' AS FLOAT))) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(ARRAY(CAST('-0.0' AS FLOAT)))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "unreachable_out_of_bounds",
+      "sql": "SELECT CASE WHEN false THEN consumer.key[1] ELSE CAST(2 AS FLOAT) END AS element,n FROM (SELECT ARRAY(CAST('-0.0' AS FLOAT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('-0.0' AS FLOAT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "nonfloating_element",
+      "sql": "SELECT consumer.key[0] AS element,n FROM (SELECT ARRAY(CAST('7' AS INT)) AS key,COUNT(*) AS n FROM float_scalar_mixed GROUP BY ARRAY(CAST('7' AS INT))) consumer",
+      "category": "literal_consumer_boundary"
+    },
+    {
+      "id": "column_array_stays_nullable",
+      "sql": "SELECT consumer.key[0] AS element FROM (SELECT k AS key FROM float_array_zeros) consumer",
+      "category": "literal_consumer_boundary"
+    }
+  ]
+}

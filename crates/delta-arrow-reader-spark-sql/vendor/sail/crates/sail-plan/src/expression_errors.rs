@@ -24,7 +24,7 @@ use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator,
 use crate::function::SparkStringTemporalComparisonCast;
 use crate::function::common::{
     NormalizeFloatArrayForSparkComparison, SparkComparisonFloat, materialize_metadata_literals,
-    restore_inlined_scalar_metadata, without_metadata_annotations,
+    restore_inlined_scalar_metadata, set_result_metadata, without_metadata_annotations,
 };
 use crate::function::float_keys::NormalizeNestedFloatKeys;
 use crate::function::result_coercion::{
@@ -43,6 +43,7 @@ use crate::function::scalar::{
 use datafusion::functions::math::round::RoundFunc;
 use datafusion_expr::simplify::SparkArrayIndexError;
 use sail_function::scalar::array::array_contains::ArrayContains;
+use sail_function::scalar::array::spark_array::SparkArray;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::math::spark_abs::SparkAbs;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
@@ -494,8 +495,10 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        let plan = if check_groups {
-            plan.transform_up_with_subqueries(|plan| prepare_foldable_groups(plan, options))?
+        let plan = if check_groups && is_spark_query {
+            plan.transform_down_with_subqueries(prepare_literal_group_consumers)?
+                .data
+                .transform_up_with_subqueries(|plan| prepare_foldable_groups(plan, options))?
                 .data
         } else {
             plan
@@ -884,6 +887,108 @@ impl datafusion_expr::ScalarUDFImpl for NullAfterSubqueries {
             &self.data_type,
         )?))
     }
+}
+
+fn literal_group_constructor(expr: &Expr) -> bool {
+    match without_metadata_annotations(expr) {
+        Expr::Alias(alias) => literal_group_constructor(&alias.expr),
+        Expr::Literal(_, _) => true,
+        Expr::Cast(cast) => literal_group_constructor(&cast.expr),
+        Expr::TryCast(cast) => literal_group_constructor(&cast.expr),
+        Expr::Negative(value) => literal_group_constructor(value),
+        Expr::ScalarFunction(function)
+            if function.func.signature().volatility == datafusion_expr::Volatility::Immutable
+                && function.func.inner().supports_constant_folding()
+                && (function.func.inner().is::<SparkArray>()
+                    || function.func.inner().is::<SparkCastStringToFloat>()
+                    || function.func.inner().is::<SparkCastStringToInteger>()
+                    || function.func.inner().is::<SparkCastStringToDecimal>()
+                    || function.func.inner().is::<SparkDecimalCast>()) =>
+        {
+            function.args.iter().all(literal_group_constructor)
+        }
+        _ => false,
+    }
+}
+
+fn projected_literal_group_constructor(plan: &LogicalPlan, index: usize) -> Result<Option<Expr>> {
+    let value = match plan {
+        LogicalPlan::Projection(projection) => {
+            let Some(mut expression) = projection.expr.get(index) else {
+                return Ok(None);
+            };
+            while let Expr::Alias(alias) = expression {
+                expression = &alias.expr;
+            }
+            let Expr::Column(column) = expression else {
+                return Ok(None);
+            };
+            let Some(index) = projection.input.schema().maybe_index_of_column(column) else {
+                return Ok(None);
+            };
+            projected_literal_group_constructor(&projection.input, index)?
+        }
+        LogicalPlan::SubqueryAlias(alias) => {
+            projected_literal_group_constructor(&alias.input, index)?
+        }
+        LogicalPlan::Aggregate(aggregate)
+            if !aggregate
+                .group_expr
+                .iter()
+                .any(|expr| matches!(expr, Expr::GroupingSet(_))) =>
+        {
+            datafusion_expr::utils::grouping_set_to_exprlist(&aggregate.group_expr)?
+                .into_iter()
+                .nth(index)
+                .filter(|expr| literal_group_constructor(expr))
+                .cloned()
+        }
+        _ => None,
+    };
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Some(field) = plan.schema().fields().get(index) else {
+        return Ok(None);
+    };
+    if value.get_type(plan.schema())? != *field.data_type() {
+        return Ok(None);
+    }
+    Ok(Some(value))
+}
+
+// Bind consumers before native folding erases computed SELECT producers' provenance.
+fn prepare_literal_group_consumers(plan: LogicalPlan) -> Result<Transformed<LogicalPlan>> {
+    let LogicalPlan::Projection(projection) = &plan else {
+        return Ok(Transformed::no(plan));
+    };
+    let input = Arc::clone(&projection.input);
+    let names = datafusion_expr::expr_rewriter::NamePreserver::new(&plan);
+    plan.map_expressions(|expr| {
+        let mut body = &expr;
+        while let Expr::Alias(alias) = body {
+            body = &alias.expr;
+        }
+        if matches!(body, Expr::Column(_)) {
+            return Ok(Transformed::no(expr));
+        }
+        let name = names.save(&expr);
+        expr.transform_down(|expr| {
+            if let Expr::Column(column) = &expr
+                && let Some(index) = input.schema().maybe_index_of_column(column)
+                && let Some(value) = projected_literal_group_constructor(&input, index)?
+            {
+                let metadata = input.schema().field(index).metadata().clone();
+                return Ok(Transformed::new(
+                    set_result_metadata(value.unalias(), metadata.into_iter().collect()),
+                    true,
+                    TreeNodeRecursion::Jump,
+                ));
+            }
+            Ok(Transformed::no(expr))
+        })
+        .map(|expr| expr.update_data(|expr| name.restore(expr)))
+    })
 }
 
 // Keep foldable outputs available for live uses, but do not evaluate them

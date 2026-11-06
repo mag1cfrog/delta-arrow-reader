@@ -6,6 +6,7 @@ use datafusion::arrow::array::Array;
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit};
 use datafusion_common::{Result, ScalarValue, not_impl_err, plan_err};
+use datafusion_expr::expr;
 use half::f16;
 use sail_common::spec::IntervalFieldType;
 use sail_common_datafusion::formatter::{
@@ -556,6 +557,33 @@ impl SparkPlanFormatter {
                 not_impl_err!("RunEndEncoded scalar value is not supported in SQL")
             }
         }
+    }
+
+    pub fn window_expression_to_string(
+        &self,
+        function_display: &str,
+        partition_display: &[String],
+        order_by: &[(&str, &expr::Sort)],
+        frame_display: &str,
+    ) -> String {
+        let mut clauses = Vec::new();
+        if !partition_display.is_empty() {
+            clauses.push(format!("PARTITION BY {}", partition_display.join(", ")));
+        }
+        if !order_by.is_empty() {
+            let order_by = order_by
+                .iter()
+                .map(|(name, sort)| {
+                    let direction = if sort.asc { "ASC" } else { "DESC" };
+                    let nulls = if sort.nulls_first { "FIRST" } else { "LAST" };
+                    format!("{name} {direction} NULLS {nulls}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            clauses.push(format!("ORDER BY {order_by}"));
+        }
+        clauses.push(frame_display.to_string());
+        format!("{function_display} OVER ({})", clauses.join(" "))
     }
 
     pub fn function_to_string(
