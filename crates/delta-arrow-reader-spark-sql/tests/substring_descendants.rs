@@ -549,15 +549,52 @@ fn descendant_comparisons_reject_changed_fields_rows_causes_and_stages() -> Test
 
 #[test]
 fn historical_alias_profiles_reject_changed_public_results_and_contexts() -> TestResult {
-    let records = records(include_str!(
+    let profile_records = records(include_str!(
         "fixtures/substring-descendant-native-negative-profiles.jsonl"
     ))?;
-    let profiles = &records[1..];
+    let references = records(FIXTURES[0].2)?;
+    let cases = references[1..]
+        .iter()
+        .filter(|case| is_array_concat_reference(case))
+        .collect::<Vec<_>>();
+    assert_eq!(references[0]["spark_version"], "4.2.0");
+    assert_eq!(references[0]["timezone"], "UTC");
+    assert_eq!(cases.len(), 2);
+    assert!(cases.iter().any(|case| case["ansi"] == false));
+    assert!(cases.iter().any(|case| case["ansi"] == true));
+    let mut expected_contexts = HashSet::new();
+    for case in &cases {
+        for representation in 0..3 {
+            for batch_size in [1, 32] {
+                assert!(expected_contexts.insert(
+                    context(FIXTURES[0].0, case, representation, batch_size).to_string()
+                ));
+            }
+        }
+    }
+    let profiles = &profile_records[1..];
+    let profile_contexts = profiles
+        .iter()
+        .map(|profile| profile["context"].to_string())
+        .collect::<HashSet<_>>();
+    assert_eq!(profile_records[0]["profile_count"], 12);
+    assert_eq!(
+        profile_records[0]["spark_reference_sha256"],
+        "5929b4eaba7f058a23160ef41ac6f216177af27b8f6fa987a5ece87195fbd4b3"
+    );
     assert_eq!(profiles.len(), 12);
+    assert_eq!(profile_contexts.len(), 12);
+    assert_eq!(profile_contexts, expected_contexts);
     for profile in profiles {
         let context = &profile["context"];
-        let case = &profile["captured_observation"];
-        let actual = &case["actual"];
+        let case = cases
+            .iter()
+            .copied()
+            .find(|case| case["id"] == context["id"] && case["ansi"] == context["ansi"])
+            .ok_or("missing authoritative historical alias reference")?;
+        let captured = &profile["captured_observation"];
+        assert_eq!(captured["expected"], case["expected"]);
+        let actual = &captured["actual"];
         assert!(!matches_meaningful_contract(case, actual)?);
         assert!(matches_retained_alias(context, case, actual, profiles)?);
         for stage in ["analyzed_schema", "physical_schema"] {
@@ -622,6 +659,12 @@ fn historical_alias_profiles_reject_changed_public_results_and_contexts() -> Tes
             profiles
         )?);
         assert!(!matches_retained_alias(context, case, actual, &[])?);
+        let mut changed_profile = profile.clone();
+        changed_profile["context"]["target_partitions"] = json!(99);
+        assert!(!matches_retained_alias(context, case, actual, &[changed_profile])?);
+        let mut changed_profile = profile.clone();
+        changed_profile["captured_observation"]["expected"]["message"] = json!("wrong message");
+        assert!(!matches_retained_alias(context, case, actual, &[changed_profile])?);
         let mut duplicates = profiles.to_vec();
         duplicates.push(profile.clone());
         assert!(!matches_retained_alias(context, case, actual, &duplicates)?);
