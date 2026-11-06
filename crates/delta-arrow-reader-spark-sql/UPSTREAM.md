@@ -510,8 +510,7 @@ Only Spark's unit keywords become a unit. Any other first argument behaves as in
 
 DAYOFYEAR fails for each evaluated row.
 
-Scalar UDFs can opt in to raising constant evaluation errors during optimization, as
-literal CASTs already do outside conditional branches. TIMESTAMPDIFF opts in, so its unit,
+TIMESTAMPDIFF opts in to [constant folding errors](#constant-folding-errors), so its unit,
 overflow and STRING conversion errors keep Spark's optimization stage.
 
 Two differences remain, each with an owner:
@@ -1055,6 +1054,16 @@ Spark plans it as a lambda over a default comparator (#1038). A LIMIT over an
 unfolded lambda now fails during physical planning, where Spark rejects it during
 analysis (#1039). The [closed-lambda references](tests/fixtures/README.md#date-arithmetic-with-closed-lambda-day-operands)
 cover DATE arithmetic, plain higher-order results and both retained differences.
+
+### Constant folding errors
+
+DataFusion's constant evaluator defers an error from a constant scalar call to
+execution, so a branch that never runs cannot fail the query. Spark instead fails while
+folding, during optimization. A scalar UDF can return `true` from
+`propagates_constant_folding_errors` (default `false`) to fail during optimization, as
+literal CASTs already do. A call inside a short-circuiting expression other than AND and
+OR, such as CASE or COALESCE, still defers its error. `AliasedScalarUDFImpl` forwards the
+choice. Only TIMESTAMPDIFF opts in.
 
 ### ARRAY_COMPACT result fields
 
