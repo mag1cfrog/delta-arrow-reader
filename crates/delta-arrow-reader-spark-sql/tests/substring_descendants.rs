@@ -247,7 +247,8 @@ fn session(batch_size: usize) -> SessionContext {
                 .with_config(
                     SessionConfig::new()
                         .with_batch_size(batch_size)
-                        .with_target_partitions(2),
+                        .with_target_partitions(2)
+                        .with_default_catalog_and_schema("spark_catalog", "default"),
                 ),
         )
         .build(),

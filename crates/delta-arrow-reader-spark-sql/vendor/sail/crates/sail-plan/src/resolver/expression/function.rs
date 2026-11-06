@@ -61,8 +61,12 @@ impl PlanResolver<'_> {
                 .udf(&canonical_function_name)
                 .map_or(true, |udf| udf.inner().is::<ArrayConcat>())
         {
+            let state = self.ctx.state();
+            let catalog = &state.config().options().catalog;
+            let catalog_name = catalog.default_catalog.replace('`', "``");
+            let schema_name = catalog.default_schema.replace('`', "``");
             return Err(PlanError::analysis(format!(
-                "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]. SQLSTATE: 42883"
+                "[UNRESOLVED_ROUTINE] Cannot resolve routine `{function_name}` on search path [`system`.`builtin`, `system`.`session`, `{catalog_name}`.`{schema_name}`]. SQLSTATE: 42883"
             )));
         }
         // For functions that accept a date-part keyword as the first argument
