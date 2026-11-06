@@ -1,0 +1,388 @@
+{
+  "purpose": "Independent #1036 literal preparation supplement; input specification only; no expected outcomes or Fields",
+  "source_product": "68f803d83e7171677b92abbea412545918deef13",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "cases": [
+    {
+      "id": "double_nan_bare",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Bare-call phase/value complement and DOUBLE NaN reference",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_bare",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Bare-call phase/value complement and DOUBLE NaN reference",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "group_no_match",
+      "sql": "SELECT regexp_extract('b','(a)',CAST('-1.9' AS DOUBLE)) AS r",
+      "reason": "New literal-cast route must retain after-match group validation",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "group_no_match",
+      "sql": "SELECT regexp_extract('b','(a)',CAST('-1.9' AS DOUBLE)) AS r",
+      "reason": "New literal-cast route must retain after-match group validation",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_empty_source",
+      "sql": "SELECT regexp_extract('','(a)',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Empty source with the newly admitted nonfinite conversion",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_empty_source",
+      "sql": "SELECT regexp_extract('','(a)',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Empty source with the newly admitted nonfinite conversion",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "group_empty_provider",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS r FROM c06_re_empty",
+      "reason": "Literal call above a real registered empty input",
+      "providers": [
+        "c06_re_empty"
+      ],
+      "ansi": true
+    },
+    {
+      "id": "group_empty_provider",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS r FROM c06_re_empty",
+      "reason": "Literal call above a real registered empty input",
+      "providers": [
+        "c06_re_empty"
+      ],
+      "ansi": false
+    },
+    {
+      "id": "group_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS r WHERE false",
+      "reason": "Bare literal call discarded by a false filter",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "group_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS r WHERE false",
+      "reason": "Bare literal call discarded by a false filter",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "group_limit0",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS r LIMIT 0",
+      "reason": "Bare literal call under LIMIT 0",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "group_limit0",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS r LIMIT 0",
+      "reason": "Bare literal call under LIMIT 0",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "group_unused",
+      "sql": "SELECT 1 AS r FROM (SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS unused) AS q",
+      "reason": "Unused projected literal call",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "group_unused",
+      "sql": "SELECT 1 AS r FROM (SELECT regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) AS unused) AS q",
+      "reason": "Unused projected literal call",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "group_case_never",
+      "sql": "SELECT CASE WHEN k < 0 THEN regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE whose literal branch is never selected",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": true
+    },
+    {
+      "id": "group_case_never",
+      "sql": "SELECT CASE WHEN k < 0 THEN regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE whose literal branch is never selected",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": false
+    },
+    {
+      "id": "group_case_reached",
+      "sql": "SELECT CASE WHEN k = 0 THEN regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE with one selected literal branch",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": true
+    },
+    {
+      "id": "group_case_reached",
+      "sql": "SELECT CASE WHEN k = 0 THEN regexp_extract('a','(a)',CAST('-1.9' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE with one selected literal branch",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_empty_provider",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM c06_re_empty",
+      "reason": "Literal call above a real registered empty input",
+      "providers": [
+        "c06_re_empty"
+      ],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_empty_provider",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r FROM c06_re_empty",
+      "reason": "Literal call above a real registered empty input",
+      "providers": [
+        "c06_re_empty"
+      ],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r WHERE false",
+      "reason": "Bare literal call discarded by a false filter",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_where_false",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r WHERE false",
+      "reason": "Bare literal call discarded by a false filter",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_limit0",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r LIMIT 0",
+      "reason": "Bare literal call under LIMIT 0",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_limit0",
+      "sql": "SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS r LIMIT 0",
+      "reason": "Bare literal call under LIMIT 0",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_unused",
+      "sql": "SELECT 1 AS r FROM (SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS unused) AS q",
+      "reason": "Unused projected literal call",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_unused",
+      "sql": "SELECT 1 AS r FROM (SELECT regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) AS unused) AS q",
+      "reason": "Unused projected literal call",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_case_never",
+      "sql": "SELECT CASE WHEN k < 0 THEN regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE whose literal branch is never selected",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_case_never",
+      "sql": "SELECT CASE WHEN k < 0 THEN regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE whose literal branch is never selected",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_case_reached",
+      "sql": "SELECT CASE WHEN k = 0 THEN regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE with one selected literal branch",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_case_reached",
+      "sql": "SELECT CASE WHEN k = 0 THEN regexp_extract('a','(a)',CAST('NaN' AS DOUBLE)) ELSE 'ok' END AS r FROM c06_re_mixed ORDER BY k",
+      "reason": "Dynamic CASE with one selected literal branch",
+      "providers": [
+        "c06_re_mixed"
+      ],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_malformed_pattern",
+      "sql": "SELECT regexp_extract('a','[',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Measure shared cast preparation versus malformed native pattern error order",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_malformed_pattern",
+      "sql": "SELECT regexp_extract('a','[',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Measure shared cast preparation versus malformed native pattern error order",
+      "providers": [],
+      "ansi": false
+    },
+    {
+      "id": "double_nan_java_pattern",
+      "sql": "SELECT regexp_extract('ab','(?<=a)(b)',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Measure shared cast preparation beside native-unsupported Java syntax",
+      "providers": [],
+      "ansi": true
+    },
+    {
+      "id": "double_nan_java_pattern",
+      "sql": "SELECT regexp_extract('ab','(?<=a)(b)',CAST('NaN' AS DOUBLE)) AS r",
+      "reason": "Measure shared cast preparation beside native-unsupported Java syntax",
+      "providers": [],
+      "ansi": false
+    }
+  ],
+  "providers": [
+    {
+      "name": "c06_re_mixed",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {}
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "p",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "i",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        }
+      ],
+      "rows": [
+        [
+          0,
+          null,
+          "[",
+          1
+        ],
+        [
+          1,
+          "a",
+          "(a)",
+          1
+        ],
+        [
+          2,
+          null,
+          "(",
+          1
+        ],
+        [
+          3,
+          "b",
+          "(a)",
+          -1
+        ],
+        [
+          4,
+          "a",
+          "[",
+          null
+        ],
+        [
+          5,
+          "",
+          "[",
+          1
+        ]
+      ],
+      "registration": "Use the existing approved register_inputs implementation with explicit StructType; do not replace with a SQL VALUES/WHERE-false view."
+    },
+    {
+      "name": "c06_re_empty",
+      "fields": [
+        {
+          "name": "k",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {}
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "p",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "i",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        }
+      ],
+      "rows": [],
+      "registration": "Use the existing approved register_inputs implementation with explicit StructType; do not replace with a SQL VALUES/WHERE-false view."
+    }
+  ],
+  "settings": {
+    "spark.master": "local[1]",
+    "spark.ui.enabled": "false",
+    "spark.default.parallelism": "1",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1",
+    "spark.sql.caseSensitive": "false",
+    "spark.sql.parser.escapedStringLiterals": "false",
+    "spark.app.name": "c06-1036-literal-supplement"
+  },
+  "per_case_settings": [
+    "spark.sql.ansi.enabled"
+  ],
+  "capture_no_expected_overlay": true
+}
