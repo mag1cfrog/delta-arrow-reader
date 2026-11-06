@@ -7,6 +7,21 @@ use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
 
+pub(super) fn sort_order_options(
+    direction: spec::SortDirection,
+    null_ordering: spec::NullOrdering,
+) -> (bool, bool) {
+    use spec::{NullOrdering, SortDirection};
+
+    let asc = !matches!(direction, SortDirection::Descending);
+    let nulls_first = match null_ordering {
+        NullOrdering::NullsFirst => true,
+        NullOrdering::NullsLast => false,
+        NullOrdering::Unspecified => asc,
+    };
+    (asc, nulls_first)
+}
+
 impl PlanResolver<'_> {
     pub(super) async fn resolve_expression_sort_order(
         &self,
@@ -25,23 +40,12 @@ impl PlanResolver<'_> {
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<expr::Sort> {
-        use spec::{NullOrdering, SortDirection};
-
         let spec::SortOrder {
             child,
             direction,
             null_ordering,
         } = sort;
-        let asc = match direction {
-            SortDirection::Ascending => true,
-            SortDirection::Descending => false,
-            SortDirection::Unspecified => true,
-        };
-        let nulls_first = match null_ordering {
-            NullOrdering::NullsFirst => true,
-            NullOrdering::NullsLast => false,
-            NullOrdering::Unspecified => asc,
-        };
+        let (asc, nulls_first) = sort_order_options(direction, null_ordering);
 
         match child.as_ref() {
             spec::Expr::Literal(literal) if resolve_literals => {

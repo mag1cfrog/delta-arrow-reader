@@ -19,7 +19,9 @@ mod spark_inputs;
 #[path = "support/spark_results.rs"]
 mod spark_results;
 use spark_inputs::register_recorded_inputs;
-use spark_results::{TestResult, compare_exact_spark_query_stages_with_optimized};
+use spark_results::{
+    TestResult, capture_native_query_observation, compare_exact_spark_query_stages_with_optimized,
+};
 
 fn window_name_references() -> TestResult<Vec<Value>> {
     let staged = include_str!("fixtures/window-name-stages-spark.jsonl")
@@ -334,6 +336,28 @@ async fn window_names_do_not_evaluate_value_or_default_arguments() -> TestResult
             ))
         }),
     ));
+    let observed = calls.clone();
+    session.register_udf(create_udf(
+        "observed_key",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(move |arguments| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(arguments[0].clone())
+        }),
+    ));
+    let observed = calls.clone();
+    session.register_udf(create_udf(
+        "observed_filter",
+        vec![DataType::Boolean],
+        DataType::Boolean,
+        Volatility::Immutable,
+        Arc::new(move |arguments| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(arguments[0].clone())
+        }),
+    ));
     for ansi_mode in [true, false] {
         let query = plan_query(&session,
             "SELECT SUM(observed_value(v)) OVER (ORDER BY id),LAG(observed_value(v),1,observed_default()) OVER (ORDER BY id) FROM VALUES(1,2),(2,3) inputs(id,v)",
@@ -341,6 +365,22 @@ async fn window_names_do_not_evaluate_value_or_default_arguments() -> TestResult
         ).await?;
         assert!(query.column_names[0].contains("observed_value(v)"));
         assert!(query.column_names[1].contains("observed_default()"));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        let query = plan_query(&session,
+            "SELECT SUM(v) FILTER (WHERE observed_filter(p)) OVER (PARTITION BY observed_key(g) ORDER BY observed_key(id)) FROM VALUES(1,1,2,true),(2,1,3,false) inputs(id,g,v,p)",
+            &SparkSqlOptions { ansi_mode, ..SparkSqlOptions::default() },
+        ).await?;
+        for display in [
+            "observed_filter(p)",
+            "PARTITION BY observed_key(g)",
+            "ORDER BY observed_key(id) ASC NULLS FIRST",
+        ] {
+            assert!(
+                query.column_names[0].contains(display),
+                "{}",
+                query.column_names[0]
+            );
+        }
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
     Ok(())
@@ -361,28 +401,60 @@ async fn generated_window_names_leave_native_sql_unchanged() -> TestResult {
     for session in [&native, &configured] {
         register_recorded_inputs(session, &metadata, 2)?;
     }
-    for sql in [
+    let sqls = [
         "SELECT id,ROW_NUMBER() OVER (ORDER BY id),LAG(v) OVER (ORDER BY id),SUM(v) OVER (PARTITION BY g) FROM inputs ORDER BY id",
         "SELECT SUM(v),CAST(v AS BIGINT),ABS(v) FROM inputs GROUP BY v ORDER BY v",
+        "SELECT SUM(v) AS total,CAST(v AS BIGINT) AS converted,ABS(v) AS magnitude FROM inputs GROUP BY v ORDER BY v",
         "SELECT id,SUM(v) OVER (ORDER BY id) FROM empty_inputs ORDER BY id",
-    ] {
-        let mut results = Vec::new();
-        for session in [&native, &configured] {
-            let frame = session.sql(sql).await?;
-            let logical = frame.schema().clone();
-            let physical = frame.create_physical_plan().await?;
-            for (index, field) in physical.schema().fields().iter().enumerate() {
-                assert_eq!(logical.field(index).as_ref(), field.as_ref());
-            }
-            let schema = physical.schema();
-            let batches = collect(physical, session.task_ctx()).await?;
-            results.push((
-                logical,
-                schema.clone(),
-                arrow::compute::concat_batches(&schema, &batches)?,
-            ));
+    ];
+    let mut observations = Vec::new();
+    for after_spark_query in [false, true] {
+        if after_spark_query {
+            let query = plan_query(
+                &configured,
+                "SELECT ROW_NUMBER() OVER (ORDER BY id),SUM(v) OVER (PARTITION BY g) FROM inputs",
+                &SparkSqlOptions::default(),
+            )
+            .await?;
+            let physical = query.create_physical_plan(&configured).await?;
+            collect(physical, configured.task_ctx()).await?;
         }
-        assert_eq!(results[0], results[1], "{sql}");
+        for sql in sqls {
+            let native = capture_native_query_observation(&native, sql).await?;
+            let configured = capture_native_query_observation(&configured, sql).await?;
+            observations.push(json!({"sql":sql,"after_spark_query":after_spark_query,
+                "native":native,"configured":configured}));
+        }
+    }
+    eprintln!("native isolation observations: {}", json!(observations));
+    for (index, observation) in observations.iter().enumerate() {
+        assert_eq!(
+            observation["native"], observation["configured"],
+            "{observation}"
+        );
+        let actual = &observation["native"];
+        if index % sqls.len() == 1 {
+            assert!(actual["error"].as_str().is_some_and(|error| error.contains(
+                "Projections require unique expression names but the expression \"CAST(inputs.v AS Int64)\" at position 1 and \"inputs.v\" at position 3 have the same name."
+            )), "original duplicate-name query: {observation}");
+        } else {
+            assert!(actual["error"].is_null(), "{observation}");
+            assert_eq!(
+                actual["public_schema"], actual["before_collect"],
+                "{observation}"
+            );
+            assert_eq!(
+                actual["public_schema"], actual["physical_schema"],
+                "{observation}"
+            );
+        }
+        if index >= sqls.len() {
+            assert_eq!(
+                observations[index - sqls.len()]["native"],
+                actual,
+                "{observation}"
+            );
+        }
     }
     Ok(())
 }
