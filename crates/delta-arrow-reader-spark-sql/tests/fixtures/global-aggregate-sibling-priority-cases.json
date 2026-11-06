@@ -1,0 +1,59 @@
+{
+  "input_version": 2,
+  "capture_kind": "aggregate_sibling_structure_priority",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "registered_udf": {
+    "name": "observed_arg",
+    "return_type": "double",
+    "volatility": "nondeterministic",
+    "constant_result": 0.5
+  },
+  "cases": [
+    {
+      "id": "volatile_before_nested",
+      "scope": "sibling_structure_priority",
+      "sql": "SELECT COUNT(RAND()) AS a,SUM(SUM(v)) AS b FROM VALUES(1),(2)t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS a,SUM(SUM(v)) AS b FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_before_volatile",
+      "scope": "sibling_structure_priority",
+      "sql": "SELECT SUM(SUM(v)) AS b,COUNT(RAND()) AS a FROM VALUES(1),(2)t(v)",
+      "udf_sql": "SELECT SUM(SUM(v)) AS b,COUNT(observed_arg(v)) AS a FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "volatile_before_window",
+      "scope": "sibling_structure_priority",
+      "sql": "SELECT COUNT(RAND()) AS a,COUNT(ROW_NUMBER() OVER(ORDER BY v)) AS b FROM VALUES(1),(2)t(v)",
+      "udf_sql": "SELECT COUNT(observed_arg(v)) AS a,COUNT(ROW_NUMBER() OVER(ORDER BY v)) AS b FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "window_before_volatile",
+      "scope": "sibling_structure_priority",
+      "sql": "SELECT COUNT(ROW_NUMBER() OVER(ORDER BY v)) AS b,COUNT(RAND()) AS a FROM VALUES(1),(2)t(v)",
+      "udf_sql": "SELECT COUNT(ROW_NUMBER() OVER(ORDER BY v)) AS b,COUNT(observed_arg(v)) AS a FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_before_window",
+      "scope": "sibling_structure_priority",
+      "sql": "SELECT SUM(SUM(v)) AS a,COUNT(ROW_NUMBER() OVER(ORDER BY v)) AS b FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "window_before_nested",
+      "scope": "sibling_structure_priority",
+      "sql": "SELECT COUNT(ROW_NUMBER() OVER(ORDER BY v)) AS b,SUM(SUM(v)) AS a FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    }
+  ]
+}

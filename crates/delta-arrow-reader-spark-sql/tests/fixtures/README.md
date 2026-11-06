@@ -1254,6 +1254,37 @@ cargo test --workspace --test single_row_correlated
 cargo test --workspace --test window_metadata
 ```
 
+## Global aggregate argument admission
+
+`global-aggregate-admission-spark.jsonl` records 498 independent Spark 4.2.0
+observations in UTC and both ANSI modes from the
+[case manifest](global-aggregate-admission-cases.json). The
+[admission tests](../global_aggregate_admission.rs) check error causes and phases,
+schema stages and rows at batch sizes 1 and 32. Volatile UDF variants check that
+rejected arguments invoke no callbacks; random-result controls compare fields
+and cardinality.
+
+Supplemental `global-aggregate-*` manifests and captures cover sibling error
+priority, NULL AVG/LISTAGG structure, scalar-subquery volatility and internal
+window ordering. The [priority tests](../global_aggregate_admission_priority.rs)
+locate these families and replay their deterministic scalar-subquery, window
+and native SQL controls.
+
+`global-aggregate-admission-staging-baseline.json` records 56 exact pre-existing
+facets: 28 Spark INTERNAL_ERROR/window defects, 24 nested collection field
+differences and four grouped volatile EXISTS differences, tracked by #142 and
+#156. The tests preserve these scoped baselines alongside raw Spark outcomes;
+none counts as a Spark compatibility pass.
+
+Recapture with the pinned Python 3.12, PySpark 4.2.0 and Java 21 setup above.
+The [main capture](capture_global_aggregate_admission_spark.py) writes the main
+and retained cases; the [priority](capture_global_aggregate_admission_priority_spark.py)
+and [argument-structure](capture_global_aggregate_argument_structure_spark.py)
+scripts capture their matching families. The
+[control capture](capture_global_aggregate_admission_controls_spark.py) accepts
+a supplemental manifest and a new output path. Use fresh output paths to keep
+the committed captures unchanged.
+
 ## COUNT_IF aggregate filters
 
 `count-if-spark.jsonl` contains 164 independent Spark 4.2.0 observations from
