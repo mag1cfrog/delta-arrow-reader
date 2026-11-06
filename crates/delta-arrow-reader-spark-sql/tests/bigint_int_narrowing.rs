@@ -378,8 +378,7 @@ fn contract_and_tracked_facets_match(
             .is_some_and(|owners| owners.contains(&json!(982)))
             && public_preserved);
     // Accept a real Spark improvement, or only these exact inherited stage/error facets.
-    let tracked_matches = if case["id"] == "c06_extract_implicit"
-        && facet["owners"] == json!([788])
+    let tracked_matches = if case["id"] == "c06_extract_implicit" && facet["owners"] == json!([788])
     {
         let mut tagged = facet["observation"].clone();
         let prefix = "Execution error: Spark `regexp_extract` function: ";
@@ -967,7 +966,10 @@ fn tracked_facets_keep_conversion_and_unlisted_differences_required() -> TestRes
         assert!(!required_contract_matches(case, &tagged));
         assert_eq!(tracked["exact_observation_preserved"], false);
         assert_eq!(tracked["bounded_spark_contract_matches"], false);
-        assert_eq!(tracked["source_profile_is_spark_compatibility_credit"], false);
+        assert_eq!(
+            tracked["source_profile_is_spark_compatibility_credit"],
+            false
+        );
         for changed_error in [
             error.replace("[INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] ", ""),
             error.replace("REGEX_GROUP_INDEX", "PATTERN"),
