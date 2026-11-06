@@ -433,6 +433,9 @@ mod tests {
         use crate::scalar::array::spark_array_filter::SparkArrayFilter;
         use crate::scalar::array::spark_array_forall::SparkArrayForall;
         use crate::scalar::array::spark_array_sort::SparkArraySort;
+        use crate::scalar::array::spark_sequence::{SparkSequence, SparkSequenceLazy};
+        use crate::scalar::collection::spark_concat::SparkConcat;
+        use crate::scalar::collection::spark_concat_runtime::SparkConcatRuntime;
         use crate::scalar::datetime::convert_tz::{ConvertTz, ConvertTzLazy};
         use crate::scalar::string::spark_substring::SparkSubstring;
 
@@ -449,9 +452,18 @@ mod tests {
                 .iter()
                 .all(|function| !function.supports_constant_folding())
         );
-        assert!(ArrayTransform::new().supports_constant_folding());
-        assert!(ConvertTzLazy::new(ConvertTz::new(false)).supports_constant_folding());
-        assert!(SparkSubstring::new().supports_constant_folding());
+        let folding: [&dyn HigherOrderUDFImpl; 5] = [
+            &ArrayTransform::new(),
+            &ConvertTzLazy::new(ConvertTz::new(false)),
+            &SparkSubstring::new(),
+            &SparkSequenceLazy::new(SparkSequence::new(Arc::from("UTC"), true)),
+            &SparkConcatRuntime::new(SparkConcat::new(), false),
+        ];
+        assert!(
+            folding
+                .iter()
+                .all(|function| function.supports_constant_folding())
+        );
         assert!(
             !HigherOrderUDF::new_from_impl(SparkArrayTransform::new()).supports_constant_folding()
         );

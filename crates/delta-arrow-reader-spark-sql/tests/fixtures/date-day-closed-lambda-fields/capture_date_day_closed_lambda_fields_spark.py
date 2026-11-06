@@ -4,7 +4,7 @@ Records analyzed, optimized and executed schemas, typed internal-row values and
 failing stages for DATE_ADD, DATEADD and DATE_SUB whose day operand is a closed
 higher-order expression (a lambda over constant arrays), with literal, NULL,
 registered-column, empty-table and near-maximum starts, literal-day controls and
-lambda results outside DATE arithmetic. Every query runs in both ANSI modes. Run
+higher-order results outside DATE arithmetic. Every query runs in both ANSI modes. Run
 from the crate root in the reference environment described in README.md; the
 output path must not exist.
 """
@@ -29,6 +29,8 @@ DAYS = [
     ("closed_filter", "element_at(filter(array('1', '2'), x -> x > '1'), 1)"),
     ("closed_int", "element_at(transform(array(1), x -> x + 1), 1)"),
     ("closed_aggregate", "aggregate(array(1, 2), 0, (acc, x) -> acc + x)"),
+    ("closed_sort", "element_at(array_sort(array('2', '1'), "
+                    "(l, r) -> CASE WHEN l < r THEN -1 WHEN l > r THEN 1 ELSE 0 END), 1)"),
     ("closed_missing_index", "element_at(transform(array('1'), x -> x), 2)"),
     ("literal_string", "'1'"),
     ("literal_int", "1"),
@@ -58,6 +60,21 @@ CONTROLS = [
     # The issue's reproduction, verbatim.
     ("issue_reproduction", "SELECT date_add(DATE '1970-01-01',\n"
                            "                element_at(transform(array('1'), x -> x), 1)) AS r"),
+    ("exists_nullable", "SELECT exists(array(1, NULL), x -> x > 1) AS r"),
+    ("forall_nullable", "SELECT forall(array(1, NULL), x -> x > 0) AS r"),
+    ("sort_comparator", "SELECT array_sort(array(2, 1), "
+                        "(l, r) -> CASE WHEN l < r THEN -1 WHEN l > r THEN 1 ELSE 0 END) AS r"),
+    # Spark plans ARRAY_SORT without a comparator as a lambda over a default comparator.
+    ("sort_default", "SELECT element_at(array_sort(array('1')), 1) AS r"),
+    ("sort_default_day", "SELECT date_add(DATE '1970-01-01', "
+                         "element_at(array_sort(array('1')), 1)) AS r"),
+    ("slice_transform", "SELECT slice(transform(array(1, 2), x -> x), 0, 1) AS r"),
+    # Constant subexpressions inside a lambda body still fold during optimization.
+    ("constant_body_error", "SELECT transform(array(1), x -> CAST('bad' AS INT)) AS r"),
+    ("constant_body_error_empty",
+     "SELECT transform(CAST(array() AS ARRAY<INT>), x -> CAST('bad' AS INT)) AS r"),
+    # LIMIT requires a foldable expression.
+    ("limit_lambda", "SELECT k FROM day_inputs LIMIT size(transform(array(1), x -> x))"),
 ]
 
 SCHEMA = {"type": "struct", "fields": [
@@ -84,6 +101,8 @@ def encode_value(row, index, data_type, types):
         return None
     if isinstance(data_type, (types.IntegerType, types.DateType)):
         return str(row.getInt(index))
+    if isinstance(data_type, types.BooleanType):
+        return row.getBoolean(index)
     if isinstance(data_type, types.StringType):
         return row.getUTF8String(index).toString()
     if isinstance(data_type, types.ArrayType):
@@ -94,9 +113,12 @@ def encode_value(row, index, data_type, types):
 
 
 def error_details(error, Py4JError):
-    """Return the innermost error condition, or the Java exception class without one."""
+    """Return the outermost error condition and the innermost Java exception class."""
     condition = getattr(error, "getCondition", lambda: None)()
     cause = getattr(error, "java_exception", None)
+    if cause is None:
+        # PySpark keeps the Java exception of a converted error in _origin.
+        cause = getattr(error, "_origin", None)
     exception = None
     while cause is not None:
         try:
@@ -174,7 +196,8 @@ def main():
             "java_version": spark.sparkContext._jvm.System.getProperty("java.version"),
             "python_version": sys.version.split()[0],
             "capture_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "value_encoding": "INT and DATE days as int; STRING as text; ARRAY as a list",
+            "value_encoding": "INT and DATE days as int; BOOLEAN as true or false; "
+                              "STRING as text; ARRAY as a list",
             "settings": {
                 "spark.sql.session.timeZone": spark.conf.get("spark.sql.session.timeZone"),
                 "spark.sql.optimizer.excludedRules":
