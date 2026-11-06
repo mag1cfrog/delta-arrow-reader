@@ -77,6 +77,12 @@ impl SparkArrayFilter {
 }
 
 impl HigherOrderUDFImpl for SparkArrayFilter {
+    /// Spark never folds a lambda function, so the result keeps its declared field and is
+    /// evaluated during execution.
+    fn supports_constant_folding(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "filter"
     }
