@@ -52,6 +52,7 @@ use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
 use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
+use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
 
 fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let mut arguments = input.arguments;
@@ -998,15 +999,13 @@ fn utc_ntz_timestamp_and_unit(
 ) -> PlanResult<(Expr, TimeUnit)> {
     let (ts, unit) = match ts.get_type(schema)? {
         DataType::Timestamp(unit, Some(_)) => (ts, unit),
-        DataType::Timestamp(unit, None) => {
-            let ts = cast(ts, DataType::Timestamp(unit, Some(session_tz.clone())));
-            (ts, unit)
-        }
-        DataType::Date32 | DataType::Date64 => {
-            let unit = TimeUnit::Microsecond;
-            let ts = cast(ts, DataType::Timestamp(unit, Some(session_tz.clone())));
-            (ts, unit)
-        }
+        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone, moving a local
+        // time skipped by a DST change forward and taking the earlier instant of a repeated one.
+        DataType::Timestamp(unit, None) => (cast_local_timestamp_expr_to_ltz(ts, session_tz), unit),
+        DataType::Date32 | DataType::Date64 => (
+            cast_local_timestamp_expr_to_ltz(ts, session_tz),
+            TimeUnit::Microsecond,
+        ),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
             let unit = TimeUnit::Microsecond;
             let ts = ScalarUDF::from(SparkTimestamp::try_new(

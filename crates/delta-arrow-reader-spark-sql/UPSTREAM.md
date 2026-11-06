@@ -452,6 +452,18 @@ cover temporal coercion, lazy fallbacks, modes and timezones.
 Named-zone conversion retains ConvertTz's documented Chrono range limit; full
 i64-microsecond timestamp parity remains separate work.
 
+TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP convert TIMESTAMP_NTZ and DATE arguments to
+the session zone with that same builder, so a local time or midnight skipped by a DST
+change moves forward and a repeated one takes its earlier instant, where Arrow's cast
+failed. The [UTC conversion references](tests/fixtures/README.md#utc-timestamp-conversions)
+cover the 2024 Los Angeles transitions and their neighbors and the Havana midnight
+changes. An explicit CAST from DATE still uses Arrow's cast (#1027). In named-zone
+and UTC sessions each row now runs ConvertTz, as an explicit TIMESTAMP_NTZ cast already
+does; fixed-offset sessions keep Arrow's cast. In a local debug-build
+timing of 1,000,000 TIMESTAMP_NTZ rows, execution took 159 ms instead of 147 ms in a
+Los Angeles session and 136 ms instead of 121 ms in a UTC session, with planning
+unchanged at about 1 ms.
+
 DATE casts and literals share the existing date parser. It trims surrounding
 ASCII controls and spaces, and only a complete date may discard a suffix after
 space or uppercase `T`. Partial dates and calendar validation retain their own
