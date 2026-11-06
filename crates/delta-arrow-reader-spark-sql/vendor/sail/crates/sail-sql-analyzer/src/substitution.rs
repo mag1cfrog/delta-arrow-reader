@@ -53,7 +53,10 @@ fn expand(
         output.push_str(&input[offset..matched.start()]);
         offset = matched.end();
         let prefix = captures.get(1).map(|value| value.as_str());
-        if !matches!(prefix, None | Some("spark" | "sparkconf" | "hivevar" | "hiveconf")) {
+        if !matches!(
+            prefix,
+            None | Some("spark" | "sparkconf" | "hivevar" | "hiveconf")
+        ) {
             output.push_str(matched.as_str());
             continue;
         }
@@ -61,7 +64,8 @@ fn expand(
             .get(2)
             .ok_or_else(|| SqlError::invalid("missing SQL configuration reference name"))?
             .as_str();
-        let reference = prefix.map_or_else(|| name.to_string(), |prefix| format!("{prefix}:{name}"));
+        let reference =
+            prefix.map_or_else(|| name.to_string(), |prefix| format!("{prefix}:{name}"));
         if used_references.contains(&reference) {
             return Err(SqlError::invalid(format!(
                 "java.lang.IllegalArgumentException: requirement failed: Circular reference in {input}: {reference}"
@@ -79,7 +83,10 @@ fn expand(
             };
             *redaction_patterns = Some([
                 compile("spark.sql.redaction.options.regex", "(?i)url")?,
-                compile("spark.redaction.regex", "(?i)secret|password|token|access[.]?key")?,
+                compile(
+                    "spark.redaction.regex",
+                    "(?i)secret|password|token|access[.]?key",
+                )?,
             ]);
         }
         let mut value = config_values.get(name).map_or("", String::as_str);
@@ -91,7 +98,13 @@ fn expand(
             }
         }
         used_references.push(reference);
-        let replacement = expand(value, config_values, references, redaction_patterns, used_references)?;
+        let replacement = expand(
+            value,
+            config_values,
+            references,
+            redaction_patterns,
+            used_references,
+        )?;
         used_references.pop();
         output.push_str(&replacement);
     }
@@ -107,8 +120,14 @@ mod tests {
     fn config_names_follow_java_reference_classes_and_namespaces() -> SqlResult<()> {
         let values = BTreeMap::from([
             ("x".into(), "X".into()),
-            ("m\u{e9}ta:key".into(), "unicode prefix is part of the name".into()),
-            ("a\u{a0}b".into(), "non-ASCII whitespace is part of the name".into()),
+            (
+                "m\u{e9}ta:key".into(),
+                "unicode prefix is part of the name".into(),
+            ),
+            (
+                "a\u{a0}b".into(),
+                "non-ASCII whitespace is part of the name".into(),
+            ),
         ]);
         for (input, expected) in [
             ("${x}", "X"),
@@ -126,7 +145,11 @@ mod tests {
             ("${m\u{e9}ta:key}", "unicode prefix is part of the name"),
             ("${a\u{a0}b}", "non-ASCII whitespace is part of the name"),
         ] {
-            assert_eq!(substitute_sql_variables(input, true, &values)?, expected, "{input}");
+            assert_eq!(
+                substitute_sql_variables(input, true, &values)?,
+                expected,
+                "{input}"
+            );
         }
         Ok(())
     }
@@ -146,11 +169,9 @@ mod tests {
 
     #[test]
     fn cycles_fail_only_when_substitution_is_enabled() -> SqlResult<()> {
-        let values = BTreeMap::from([
-            ("x".into(), "${y}".into()),
-            ("y".into(), "${x}".into()),
-        ]);
-        let error = substitute_sql_variables("${x}", true, &values).err()
+        let values = BTreeMap::from([("x".into(), "${y}".into()), ("y".into(), "${x}".into())]);
+        let error = substitute_sql_variables("${x}", true, &values)
+            .err()
             .ok_or_else(|| SqlError::invalid("cycle did not fail"))?;
         assert!(error.to_string().contains("Circular reference in ${x}: x"));
         assert_eq!(substitute_sql_variables("${x}", false, &values)?, "${x}");
@@ -172,13 +193,19 @@ mod tests {
             ("outer".into(), "${inner}".into()),
             ("inner".into(), "safe".into()),
         ]);
-        assert_eq!(substitute_sql_variables("${outer}", true, &before_recursion)?, REDACTED);
+        assert_eq!(
+            substitute_sql_variables("${outer}", true, &before_recursion)?,
+            REDACTED
+        );
         let unsupported = BTreeMap::from([
             ("spark.redaction.regex".into(), "(?<=private)value".into()),
             ("x".into(), "private value".into()),
         ]);
         assert!(substitute_sql_variables("${x}", true, &unsupported).is_err());
-        assert_eq!(substitute_sql_variables("${x}", false, &unsupported)?, "${x}");
+        assert_eq!(
+            substitute_sql_variables("${x}", false, &unsupported)?,
+            "${x}"
+        );
         Ok(())
     }
 }

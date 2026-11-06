@@ -228,10 +228,17 @@ pub(crate) async fn capture_observation_with_state(
     case: &Value,
     state: Option<SessionState>,
 ) -> TestResult<Value> {
-    let settings = case.get("settings").cloned().map(serde_json::from_value::<std::collections::BTreeMap<String, String>>)
-        .transpose()?.unwrap_or_default();
-    let variable_substitution_enabled = settings.get("spark.sql.variable.substitute")
-        .map(|value| value.parse::<bool>()).transpose()?.unwrap_or(true);
+    let settings = case
+        .get("settings")
+        .cloned()
+        .map(serde_json::from_value::<std::collections::BTreeMap<String, String>>)
+        .transpose()?
+        .unwrap_or_default();
+    let variable_substitution_enabled = settings
+        .get("spark.sql.variable.substitute")
+        .map(|value| value.parse::<bool>())
+        .transpose()?
+        .unwrap_or(true);
     let query = match plan_query(
         session,
         case["sql"].as_str().ok_or("missing SQL")?,
