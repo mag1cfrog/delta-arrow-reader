@@ -367,6 +367,33 @@ pub(crate) fn lower_runtime_regexp_extract(
     if function.args.len() != 3 {
         return Ok(Transformed::no(expression));
     }
+    let literal_int_cast = match &function.args[2] {
+        expr::Expr::Cast(index) if index.field.data_type() == &DataType::Int64 => {
+            let index = without_metadata_annotations(&index.expr);
+            let index = match index {
+                expr::Expr::Cast(identity) if identity.field.data_type() == &DataType::Int32 =>
+                    without_metadata_annotations(&identity.expr),
+                _ => index,
+            };
+            matches!(index, expr::Expr::ScalarFunction(conversion)
+            if conversion.func.inner().downcast_ref::<SparkCastBigintToInt>()
+                .is_some_and(|conversion| !conversion.is_try())
+            && matches!(conversion.args.as_slice(), [expr::Expr::Literal(ScalarValue::Int64(Some(_)), _)]))
+        }
+        _ => false,
+    };
+    if !local_values
+        && extract.requires_local_index_check()
+        && literal_int_cast
+        && function.args[..2].iter().all(|argument| {
+            matches!(literal_value_without_evaluation(argument),
+                Some(ScalarValue::Utf8(Some(_)) | ScalarValue::LargeUtf8(Some(_)) | ScalarValue::Utf8View(Some(_))))
+        })
+    {
+        // These non-NULL literals cannot discard the index. Keep the shared cast's
+        // planning failure outside the conditional argument lambda.
+        return Ok(Transformed::no(expression));
+    }
     let arguments = function
         .args
         .iter()
@@ -1008,6 +1035,52 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
         ("validate_utf8", F::custom(validate_utf8)),
         ("strpos", F::binary(expr_fn::strpos)),
     ]
+}
+
+#[test]
+fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanResult<()> {
+    for explicit in [true, false] {
+        let index = ScalarUDF::from(SparkCastBigintToInt::new(true, false))
+            .call(vec![lit(4294967296_i64)]);
+        let index = cast(if explicit {cast(index, DataType::Int32)} else {index}, DataType::Int64);
+        let extract = SparkRegexpExtract::new()
+            .with_null_short_circuit(false)
+            .with_local_index_check(true);
+        let expression = ScalarUDF::from(extract.clone())
+            .call(vec![lit("ab"), lit("(a)"), index.clone()]);
+        let bare = lower_runtime_regexp_extract(expression.clone(), false)?;
+        assert!(!bare.transformed);
+        let info = SimplifyContext::builder()
+            .with_schema(Arc::new(DFSchema::empty()))
+            .build();
+        let error = ExprSimplifier::new(info)
+            .simplify(bare.data)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.ends_with("Arrow error: Cast error: Can't cast value 4294967296 to type Int32"),
+            "{error}"
+        );
+        assert!(lower_runtime_regexp_extract(expression, true)?.transformed);
+        for arguments in [
+            vec![datafusion_expr::col("s"), lit("(a)"), index],
+            vec![lit("ab"), lit("(a)"), cast(lit(f64::NAN), DataType::Int64)],
+            vec![lit("ab"), lit("(a)"), cast(
+                ScalarUDF::from(SparkCastBigintToInt::new(true, true))
+                    .call(vec![lit(4294967296_i64)]),
+                DataType::Int64,
+            )],
+            vec![lit("ab"), lit("(a)"), cast(
+                ScalarUDF::from(SparkCastBigintToInt::new(true, false))
+                    .call(vec![datafusion_expr::col("i")]),
+                DataType::Int64,
+            )],
+        ] {
+            let expression = ScalarUDF::from(extract.clone()).call(arguments);
+            assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
+        }
+    }
+    Ok(())
 }
 
 #[test]
