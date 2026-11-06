@@ -24,6 +24,10 @@ fn decode_recorded_data_type(value: &Value) -> TestResult<DataType> {
         Some("long") => DataType::Int64,
         Some("string") => DataType::Utf8,
         Some("binary") => DataType::Binary,
+        Some("date") => DataType::Date32,
+        // A Delta TIMESTAMP column reaches the frontend as UTC-annotated microseconds.
+        Some("timestamp") => DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+        Some("timestamp_ntz") => DataType::Timestamp(TimeUnit::Microsecond, None),
         // Spark exports every year-month qualifier as one Arrow month count.
         Some("interval year" | "interval year to month" | "interval month") => {
             DataType::Interval(IntervalUnit::YearMonth)
@@ -123,6 +127,13 @@ fn decode_recorded_value(value: &Value, data_type: &DataType) -> TestResult<Scal
             ScalarValue::Int16(Some(value.as_str().ok_or("missing short")?.parse()?))
         }
         DataType::Int64 => ScalarValue::Int64(Some(value.as_str().ok_or("missing long")?.parse()?)),
+        DataType::Date32 => {
+            ScalarValue::Date32(Some(value.as_str().ok_or("missing day count")?.parse()?))
+        }
+        DataType::Timestamp(TimeUnit::Microsecond, timezone) => ScalarValue::TimestampMicrosecond(
+            Some(value.as_str().ok_or("missing microsecond count")?.parse()?),
+            timezone.clone(),
+        ),
         DataType::Interval(IntervalUnit::YearMonth) => ScalarValue::IntervalYearMonth(Some(
             value.as_str().ok_or("missing month count")?.parse()?,
         )),
@@ -328,5 +339,39 @@ fn recorded_void_children_decode_as_null() -> TestResult {
     };
     assert_eq!(values.value(0).data_type(), &DataType::Null);
     assert_eq!(values.value(0).len(), 1);
+    Ok(())
+}
+
+#[test]
+fn recorded_temporal_values_keep_days_and_microseconds() -> TestResult {
+    use serde_json::json;
+
+    let utc = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
+    let wall_clock = DataType::Timestamp(TimeUnit::Microsecond, None);
+    assert_eq!(decode_recorded_data_type(&json!("date"))?, DataType::Date32);
+    assert_eq!(decode_recorded_data_type(&json!("timestamp"))?, utc);
+    assert_eq!(
+        decode_recorded_data_type(&json!("timestamp_ntz"))?,
+        wall_clock
+    );
+    assert_eq!(
+        decode_recorded_value(&json!("-719162"), &DataType::Date32)?,
+        ScalarValue::Date32(Some(-719_162))
+    );
+    assert_eq!(
+        decode_recorded_value(&json!("-1"), &utc)?,
+        ScalarValue::TimestampMicrosecond(Some(-1), Some("UTC".into()))
+    );
+    assert_eq!(
+        decode_recorded_value(&json!("253402300799999999"), &wall_clock)?,
+        ScalarValue::TimestampMicrosecond(Some(253_402_300_799_999_999), None)
+    );
+    assert_eq!(
+        decode_recorded_value(&Value::Null, &utc)?,
+        ScalarValue::TimestampMicrosecond(None, Some("UTC".into()))
+    );
+    for (encoded, data_type) in [(json!(1), &DataType::Date32), (json!("1.5"), &wall_clock)] {
+        assert!(decode_recorded_value(&encoded, data_type).is_err());
+    }
     Ok(())
 }
