@@ -499,6 +499,92 @@ pub(crate) fn lower_runtime_regexp_extract(
         // planning failure outside the conditional argument lambda.
         return Ok(Transformed::no(expression));
     }
+    fn literal_cast_tree(expression: &expr::Expr) -> bool {
+        match without_metadata_annotations(expression) {
+            expr::Expr::Literal(value, _) => {
+                !value.is_null()
+                    && matches!(
+                        value.data_type(),
+                        DataType::Utf8
+                            | DataType::LargeUtf8
+                            | DataType::Utf8View
+                            | DataType::Int8
+                            | DataType::Int16
+                            | DataType::Int32
+                            | DataType::Int64
+                            | DataType::Float32
+                            | DataType::Float64
+                            | DataType::Decimal128(..)
+                            | DataType::Decimal256(..)
+                    )
+            }
+            expr::Expr::Alias(alias) => literal_cast_tree(&alias.expr),
+            expr::Expr::Cast(expr::Cast { expr, .. })
+            | expr::Expr::TryCast(expr::TryCast { expr, .. }) => literal_cast_tree(expr),
+            expr::Expr::ScalarFunction(function)
+                if function.func.inner().is::<SparkCastNumericToInteger>()
+                    || function.func.inner().is::<SparkCastStringToFloat>()
+                    || function.func.inner().is::<SparkCastStringToInteger>()
+                    || function.func.inner().is::<SparkDecimalCast>() =>
+            {
+                matches!(function.args.as_slice(), [argument] if literal_cast_tree(argument))
+            }
+            _ => false,
+        }
+    }
+    let literal_index = match &function.args[2] {
+        expr::Expr::Literal(ScalarValue::Int64(Some(_)), _) => true,
+        expr::Expr::Cast(index) if index.field.data_type() == &DataType::Int64 => {
+            let index = without_metadata_annotations(&index.expr);
+            let integer_conversion = match index {
+                expr::Expr::Literal(ScalarValue::Int32(Some(_)), _) => true,
+                expr::Expr::Cast(cast) => cast.field.data_type() == &DataType::Int32,
+                expr::Expr::ScalarFunction(function) => {
+                    function
+                        .func
+                        .inner()
+                        .downcast_ref::<SparkCastNumericToInteger>()
+                        .is_some_and(|cast| {
+                            cast.target_type() == &DataType::Int32 && !cast.is_try()
+                        })
+                        || function
+                            .func
+                            .inner()
+                            .downcast_ref::<SparkCastStringToInteger>()
+                            .is_some_and(|cast| cast.mode() != StringIntegerCastMode::Try)
+                        || function
+                            .func
+                            .inner()
+                            .downcast_ref::<SparkDecimalCast>()
+                            .is_some_and(|cast| cast.mode() != DecimalCastMode::Try)
+                }
+                _ => false,
+            };
+            integer_conversion
+                && literal_cast_tree(index)
+                && index
+                    .get_type(&DFSchema::empty())
+                    .is_ok_and(|data_type| data_type == DataType::Int32)
+        }
+        _ => false,
+    };
+    if !local_values
+        && literal_index
+        && function.args[..2].iter().all(|argument| {
+            matches!(
+                literal_value_without_evaluation(argument),
+                Some(
+                    ScalarValue::Utf8(Some(_))
+                        | ScalarValue::LargeUtf8(Some(_))
+                        | ScalarValue::Utf8View(Some(_))
+                )
+            )
+        })
+    {
+        // Keep closed literal casts visible to ordinary Spark preparation. This
+        // classification never invokes operands or compiles the pattern.
+        return Ok(Transformed::no(expression));
+    }
     let arguments = function
         .args
         .iter()
@@ -1185,6 +1271,7 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
             (DataType::Int16, ScalarValue::Float64(Some(f64::NAN))),
             (DataType::Int64, ScalarValue::Float64(Some(f64::NAN))),
         ] {
+            let closed_literal = target == DataType::Int32;
             let index = ScalarUDF::from(SparkCastNumericToInteger::try_new(target, true, false)?)
                 .call(vec![lit(value)]);
             let expression = ScalarUDF::from(extract.clone()).call(vec![
@@ -1192,7 +1279,10 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
                 lit("(a)"),
                 cast(index, DataType::Int64),
             ]);
-            assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
+            assert_eq!(
+                lower_runtime_regexp_extract(expression, false)?.transformed,
+                !closed_literal
+            );
         }
         for arguments in [
             vec![datafusion_expr::col("s"), lit("(a)"), index],
@@ -1228,6 +1318,143 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
             assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
         }
     }
+    Ok(())
+}
+
+#[test]
+fn regexp_extract_literal_simplification_requires_the_spark_marker() -> PlanResult<()> {
+    use datafusion_common::config::ConfigOptions;
+
+    let extract = SparkRegexpExtract::new().with_null_short_circuit(false);
+    let plain = SimplifyContext::default();
+    let mut options = ConfigOptions::default();
+    options
+        .extensions
+        .insert(crate::expression_errors::SparkSqlExpressionSemantics::default());
+    let spark = SimplifyContext::builder()
+        .with_config_options(Arc::new(options))
+        .build();
+    for (source, pattern, index, count, expected_index) in [
+        ("a", "(a)", Some(-1_i64), 1, -1),
+        ("a", "(a)", Some(2), 1, 2),
+        (
+            "a",
+            "(a)",
+            Some(i64::from(i32::MAX)),
+            1,
+            i64::from(i32::MAX),
+        ),
+        (
+            "a",
+            "(a)",
+            Some(i64::from(i32::MIN)),
+            1,
+            i64::from(i32::MIN),
+        ),
+        ("abc", "abc", None, 0, 1),
+    ] {
+        let mut arguments = vec![lit(source), lit(pattern)];
+        if let Some(index) = index {
+            arguments.push(lit(index));
+        }
+        assert!(matches!(
+            extract.simplify(arguments.clone(), &plain)?,
+            ExprSimplifyResult::Original(original) if original == arguments
+        ));
+        let error = extract.simplify(arguments, &spark).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            format!(
+                "Execution error: Spark `regexp_extract` function: [INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX] Expects group index between 0 and {count}, but got {expected_index}"
+            )
+        );
+    }
+    for arguments in [
+        vec![lit("b"), lit("(a)"), lit(-1_i64)],
+        vec![lit("a"), lit("(a)"), lit(0_i64)],
+        vec![lit("a"), lit("["), lit(1_i64)],
+        vec![lit("ab"), lit("(?<=a)(b)"), lit(1_i64)],
+        vec![lit("a"), lit("[")],
+        vec![lit("b"), lit("(a)")],
+    ] {
+        assert!(matches!(
+            extract.simplify(arguments.clone(), &spark)?,
+            ExprSimplifyResult::Original(original) if original == arguments
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn regexp_extract_literal_routing_keeps_nonliteral_arguments_lazy() -> PlanResult<()> {
+    use datafusion_expr::{Volatility, col, create_udf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let extract = ScalarUDF::from(
+        SparkRegexpExtract::new()
+            .with_null_short_circuit(false)
+            .with_local_index_check(true),
+    );
+    for index in [
+        lit(2_i64),
+        cast(lit(2_i32), DataType::Int64),
+        cast(cast(lit(2_i32), DataType::Int32), DataType::Int64),
+    ] {
+        let expression = extract.call(vec![lit("a"), lit("(a)"), index]);
+        assert!(!lower_runtime_regexp_extract(expression.clone(), false)?.transformed);
+        assert!(lower_runtime_regexp_extract(expression, true)?.transformed);
+    }
+    for ansi in [true, false] {
+        for argument in [
+            lit(2147483648_i64),
+            ScalarUDF::from(SparkCastStringToFloat::try_new(DataType::Float64, false)?)
+                .call(vec![lit("-1.9")]),
+            ScalarUDF::from(SparkCastStringToFloat::try_new(DataType::Float32, false)?)
+                .call(vec![lit("NaN")]),
+            ScalarUDF::from(SparkCastStringToFloat::try_new(DataType::Float64, false)?)
+                .call(vec![lit("Infinity")]),
+            cast(lit(2147483648_i64), DataType::Decimal128(10, 0)),
+        ] {
+            let index = cast_string_function_int(argument, &DFSchema::empty(), ansi, "index")?;
+            let expression = extract.call(vec![lit("a"), lit("(a)"), cast(index, DataType::Int64)]);
+            assert!(!lower_runtime_regexp_extract(expression.clone(), false)?.transformed);
+            assert!(lower_runtime_regexp_extract(expression, true)?.transformed);
+        }
+    }
+    for volatility in [Volatility::Immutable, Volatility::Volatile] {
+        let observed = Arc::clone(&calls);
+        let opaque = create_udf(
+            "regexp_literal_index_callback",
+            vec![DataType::Float64],
+            DataType::Float64,
+            volatility,
+            Arc::new(move |arguments| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(arguments[0].clone())
+            }),
+        );
+        for argument in [
+            opaque.call(vec![lit(1.9_f64)]),
+            lit(1.0_f64) + lit(0.9_f64),
+            col("i"),
+            expr_fn::random(),
+            array_element(
+                datafusion_functions_nested::expr_fn::make_array(vec![lit(1.9_f64)]),
+                lit(1_i64),
+            ),
+        ] {
+            let index = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32,
+                true,
+                false,
+            )?)
+            .call(vec![argument]);
+            let expression = extract.call(vec![lit("a"), lit("(a)"), cast(index, DataType::Int64)]);
+            assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
+        }
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
     Ok(())
 }
 

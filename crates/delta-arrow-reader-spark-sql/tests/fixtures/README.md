@@ -2280,32 +2280,33 @@ Required errors retain the independently captured Spark phase, condition and
 parameters alongside the measured native stage and exact missing/null field
 availability. A reviewed native boundary does not imply phase or cause equality.
 
-Every context must match strictly or preserve its complete reviewed native
-negative object and computed false facets in
-`regexp-extract-index-current-negative.jsonl`, with observed error boundaries in
-`regexp-extract-index-current-stages.json`. Unknown errors, changed fields,
-values, SQL or context keys, and missing, duplicate or unused profiles fail the
-regression gate. Preserved differences receive no Spark-match credit and retain
-`full_compatibility_pass=false`. Preservation does not waive a lost strict match
-or a newly introduced failure.
-
-The fixed `4847e810` capture, graded with the separate `ab858ce4` test contract,
-contains 960 strict matches and 48 phase-only negatives among the 1,008 index
-contexts. All 342 existing stage and availability contracts remain unchanged.
-The earlier `68f803d8` capture retains its historical 888-match result; frozen
-observer grades retain their own source comparison contract. Current counts
-report the complete saved replay, while the regression checks every context.
+Every context must match strictly against the frozen Spark reference and the
+reviewed native boundary in `regexp-extract-index-phase-stages.json`. The active
+`regexp-extract-index-phase-negative.jsonl` contains no negative observations.
+The complete focused replay records 1,008 strict index matches. Of the 342 error
+contracts, 48 use the measured physical-preparation stage and availability; the
+other 294 retain their earlier contracts. Unknown errors, changed fields, values,
+SQL or context keys, and missing, duplicate or unused profiles fail the gate.
 Legacy BIGINT narrowing preserves all 30 retained NULL/no-match loss contexts
 and their ANSI overflow partners. Both bad-VALUES queries require the inline-table
 wrapper, exact bad STRING-to-INT cause and resolve-stage availability across all
-12 ANSI contexts.
+12 ANSI contexts. Shared floating conversion preserves the frozen legacy NaN
+value and the required Infinity group-index cause for 2147483647.
 
-Shared floating conversion preserves the frozen legacy NaN value and the
-required Infinity group-index cause for 2147483647. Primitive overflow and group
-identifiers now match in this replay. The remaining phase differences stay under
-#788 and its #1036 work. The original
+The fixed `4847e810` capture and separate `ab858ce4` comparison contract are
+historical evidence: they record 960 strict matches and 48 phase-only negatives,
+with their original 342 stage contracts. The earlier `68f803d8` capture retains
+its historical 888-match result. The index fixtures `regexp-extract-index-current-negative.jsonl`,
+`regexp-extract-index-current-stages.json`,
 `regexp-extract-index-native-negative.jsonl` and
-`regexp-extract-index-native-stages.json` remain frozen historical evidence.
+`regexp-extract-index-native-stages.json` retain those historical objects and
+source attributions. The separate literal
+preparation supplement checks 46 SQL/ANSI cases in 276 query contexts and 552
+provider receipts, with 204 strict matches and 72 complete native regression
+controls. Those controls include local VALUES group failures tracked by #1049,
+which remains required before #1036/#788 can close. Preserved differences receive
+no Spark-match credit. These focused results do not establish full C06 acceptance
+or complete raw diagnostic parity; `full_compatibility_pass` remains false.
 
 The main capture includes 74 controls beside the index corpus: 32 selection,
 six async, 24 NoFold and 12 alias observations. The 62 native-only callback
@@ -3541,19 +3542,32 @@ statements in both ANSI modes, with the recorded inputs, settings and available
 schemas, values and structured errors.
 
 `substring_descendants.rs` records all 660 comparisons across three storage
-representations and batch sizes 1/32. The regression gate requires 648 meaningful
-matches and preserves 12 ARRAY_CONCAT alias differences. Its 33 divide references,
-exercised in 198 contexts, map Spark `optimized_schema` to native `physical` preparation with the exact
-DIVIDE_BY_ZERO cause; the stage names remain distinct. The native negative
-profiles and three mutation controls retain complete R4 receipts. Their raw
-Arrow schemas preserve storage details; internal aliases do not define public
-output names. Profiles are never used to construct actual schemas or values.
+representations and batch sizes 1/32. Its sessions explicitly use
+`spark_catalog.default` to match the captured resolution search path. The
+regression gate requires 660 meaningful matches, including 12 ARRAY_CONCAT
+resolution errors. In both ANSI modes, the
+Spark frontend rejects the absent builtin with UNRESOLVED_ROUTINE and SQLSTATE
+42883 before folding or execution. The checks require the complete Spark error
+condition, parameters and causes, the exact native resolution cause, and no
+available analyzed, optimized or physical schemas or rows. ARRAY_CONCAT can still
+resolve to a registered host UDF. Diagnostics use the host session's configured
+catalog and schema. Native DataFusion SQL keeps its existing behavior.
 
-Spark rejects the ARRAY_CONCAT alias with UNRESOLVED_ROUTINE. The native/Sail
-alias remains unchanged, so these 12 comparisons stay false and full
-compatibility remains false. This gate adds no ARRAY constructor implementation
-or general support decision. The shared helper only captures Boolean inputs and
-actual Arrow List fields and values.
+Its 33 divide references, exercised in 198 contexts, map Spark `optimized_schema`
+to native `physical` preparation with the exact DIVIDE_BY_ZERO cause; the stage
+names remain distinct. These phase mappings keep full compatibility false.
+This gate makes no general ARRAY support claim. The shared helper captures
+Boolean inputs and actual Arrow List fields and values.
+
+`substring-descendant-native-negative-profiles.jsonl` preserves the 12 historical
+ARRAY_CONCAT alias results unchanged. A separate history test checks the profile
+count and Spark reference identity, requires the complete 12-context set from the
+Spark references and declared matrix settings, and compares every captured
+expected object with its independent Spark reference. These profiles give no
+compatibility credit to the current gate. The profiles and three mutation
+controls retain complete R4 receipts.
+Their raw Arrow schemas preserve storage details; internal aliases do not define
+public output names. Profiles are never used to construct actual schemas or values.
 
 Replay these captures with `recapture_string_binary_spark.py --input <fixture>
 --output <fresh-output>`. Run the retained gate with:
@@ -3578,8 +3592,9 @@ mappings from two references. Three real R4 mutation controls retain native
 fields, rows and causes. Both positive gates reuse the descendant capture and
 comparison helpers and have no negative profiles. Together with the original
 110-reference gate, all 190 references and 1,140 contexts remain required. The
-original 12 ARRAY_CONCAT alias comparisons stay false; full family compatibility
-remains incomplete.
+12 ARRAY_CONCAT resolution errors remain required meaningful matches in the
+660-context gate. The retained preexecution phase mappings keep full family
+compatibility incomplete.
 
 ## LIKE escapes and pattern evaluation
 

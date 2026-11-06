@@ -766,12 +766,24 @@ Supported index arguments use the existing shared Spark INT conversion builder,
 then widen to the Int64 input required by the regex kernel. This adaptation is
 local to REGEXP_EXTRACT. Shared legacy BIGINT conversion uses Spark's low-32-bit
 narrowing, and ANSI conversion checks overflow. Floating indices, including
-legacy NaN and Infinity, also use the shared converter. Primitive overflow and
-group identifiers match in the fixed `4847e810` replay under the separate
-`ab858ce4` comparison contract. It measures 960 strict matches and 48 phase-only
-negatives among 1,008 index contexts, with all 342 existing stage contracts
-unchanged. Historical captures and their observer grades keep their original
-source attribution. The remaining phase work stays under #788/#1036.
+legacy NaN and Infinity, also use the shared converter. Bare non-NULL calls with
+closed built-in literal index casts remain visible to ordinary preparation.
+With the query-local Spark marker, literal simplification reuses the native
+matcher and reports a group-index error only after a successful match. Native
+parser and unsupported-pattern failures retain their existing path, and native
+DataFusion SQL keeps its existing behavior.
+
+The active phase fixtures require 1,008 strict index matches, as recorded by the
+complete focused replay. Of 342 error contracts, 48 use measured physical-stage
+boundaries and 294 retain their earlier contracts. The fixed `4847e810` capture
+and separate `ab858ce4` comparison contract remain historical evidence of 960
+strict matches and 48 phase-only negatives under their original stage contracts.
+Historical captures and observer grades keep their source attribution. The
+separate literal supplement records 276 query contexts and 552 provider receipts:
+204 query contexts match strictly and 72 preserve complete native controls.
+Local VALUES group failures remain under #1049, which must complete before
+#1036/#788 close. These focused results do not establish full C06 acceptance or
+complete raw diagnostic parity.
 
 Local VALUES inputs retain reached source work before index conversion. Bare
 known-NULL calls can prune unused arguments after type validation. Shared casts
@@ -1099,9 +1111,9 @@ code-point controls and the strict remaining compatibility differences.
 ### C06 CONCAT runtime argument order
 
 The STRING/BINARY registry selects a query-local ordered CONCAT mode while leaving
-ARRAY_CONCAT and other argument families on their existing path. Its NULL rewrite
-retains preceding work, with #883's constant-error guard preserved as a separate
-dependency. Folding-disabled extension descendants retain the whole-call NULL
+array-valued CONCAT and other argument families on their existing path. Its NULL
+rewrite retains preceding work, with #883's constant-error guard preserved as a
+separate dependency. Folding-disabled extension descendants retain the whole-call NULL
 boundary, including when an earlier operand depends on a column. Logical CONCAT
 remains visible for type-preserving flattening and eager CSE. Spark local/constant
 expression preparation retains its existing evaluator.
