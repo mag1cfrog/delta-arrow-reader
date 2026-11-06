@@ -160,6 +160,93 @@ fn reachable_opt_out_call_keeps_native_child_folding() -> Result<()> {
 }
 
 #[test]
+fn spark_closed_conditionals_evaluate_permitted_producers_once() -> Result<()> {
+    use datafusion::common::tree_node::TreeNode;
+    use datafusion::functions::expr_fn::coalesce;
+    use datafusion::logical_expr::expr_fn::when;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let producer = create_udf(
+        "conditional_counted_producer",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(move |args| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(args[0].clone())
+        }),
+    );
+    let failure = create_udf(
+        "conditional_counted_failure",
+        vec![DataType::Int32],
+        DataType::Int32,
+        Volatility::Immutable,
+        Arc::new(|_| exec_err!("deferred generic failure after permitted work")),
+    );
+    let child = producer.call(vec![lit(7_i32)]);
+    let failing_child = child.clone() + failure.call(vec![lit(0_i32)]);
+    for spark in [false, true] {
+        for (form, expr, fails) in [
+            (
+                "case",
+                when(lit(true), child.clone()).otherwise(lit(0_i32))?,
+                false,
+            ),
+            (
+                "coalesce",
+                coalesce(vec![lit(ScalarValue::Int32(None)), child.clone()]),
+                false,
+            ),
+            (
+                "nested_case",
+                when(
+                    lit(true),
+                    when(lit(true), child.clone()).otherwise(lit(0_i32))?,
+                )
+                .otherwise(lit(0_i32))?,
+                false,
+            ),
+            (
+                "failed_case",
+                when(lit(true), failing_child.clone()).otherwise(lit(0_i32))?,
+                true,
+            ),
+            (
+                "failed_coalesce",
+                coalesce(vec![failing_child.clone(), lit(0_i32)]),
+                true,
+            ),
+            (
+                "failed_nested_case",
+                when(
+                    lit(true),
+                    when(lit(true), failing_child.clone()).otherwise(lit(0_i32))?,
+                )
+                .otherwise(lit(0_i32))?,
+                true,
+            ),
+        ] {
+            calls.store(0, Ordering::SeqCst);
+            let result = simplify(expr, spark)?;
+            let count = calls.load(Ordering::SeqCst);
+            eprintln!("CONDITIONAL_FOLD_CALLBACK_COUNT form={form} spark={spark} calls={count}");
+            assert_eq!(count, 1, "{form}, Spark marker={spark}");
+            if fails {
+                assert!(
+                    result.exists(|expr| Ok(matches!(expr, Expr::ScalarFunction(function)
+                    if function.func.name() == "conditional_counted_failure")))?
+                );
+            } else {
+                assert_eq!(result, lit(7_i32), "{form}, Spark marker={spark}");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn spark_whole_nested_folding_retains_declarations_and_values() -> Result<()> {
     for spark in [false, true] {
         // Spark's cast declares nullable even when its literal input is valid.
@@ -382,5 +469,89 @@ fn concat_constant_descendants_keep_native_conditional_reachability() -> Result<
         }
     }
     assert_eq!(operand_calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn mixed_numeric_array_preparation_preserves_inherited_callback_limit() -> Result<()> {
+    use datafusion::execution::SessionStateBuilder;
+    use datafusion::physical_plan::collect;
+    use datafusion::prelude::{SessionConfig, SessionContext};
+    use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    struct CountedOptOut;
+    impl ScalarUDFImpl for CountedOptOut {
+        fn name(&self) -> &str {
+            "mixed_counted_producer"
+        }
+        fn signature(&self) -> &Signature {
+            static SIGNATURE: LazyLock<Signature> =
+                LazyLock::new(|| Signature::exact(vec![DataType::Int32], Volatility::Immutable));
+            &SIGNATURE
+        }
+        fn supports_constant_folding(&self) -> bool {
+            false
+        }
+        fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+            Ok(DataType::Int32)
+        }
+        fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+            Ok(args.args[0].clone())
+        }
+    }
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(
+            SessionStateBuilder::new()
+                .with_default_features()
+                .with_config(
+                    SessionConfig::new()
+                        .with_batch_size(1)
+                        .with_target_partitions(1),
+                ),
+        )
+        .build(),
+    );
+    session.register_udf(ScalarUDF::from(CountedOptOut));
+    let sql = "SELECT (1 DIV 0)+ARRAY(mixed_counted_producer(7))[1] AS r";
+    CALLS.store(0, Ordering::SeqCst);
+    let query = plan_query(&session, sql, &SparkSqlOptions::default()).await?;
+    let (phase, error) = match query.create_physical_plan(&session).await {
+        Err(error) => ("create_physical_plan", error),
+        Ok(physical) => (
+            "collect",
+            collect(physical, session.task_ctx())
+                .await
+                .err()
+                .ok_or_else(|| {
+                    datafusion::common::DataFusionError::Internal(
+                        "required numeric error disappeared".into(),
+                    )
+                })?,
+        ),
+    };
+    let count = CALLS.load(Ordering::SeqCst);
+    eprintln!(
+        "MIXED_NUMERIC_ARRAY_CALLBACK_OBSERVATION {}",
+        serde_json::json!({
+            "sql":sql,"phase":phase,"error":error.to_string(),"calls":count,
+            "supports_constant_folding":false,"volatility":"Immutable"
+        })
+    );
+    assert_eq!(phase, "create_physical_plan");
+    assert!(
+        error
+            .to_string()
+            .ends_with("Arrow error: Divide by zero error"),
+        "{error}"
+    );
+    // The accepted numeric precheck invoked this opt-out twice; #893 owns that inherited policy.
+    assert!(
+        count <= 2,
+        "existing numeric callback count increased: {count}"
+    );
     Ok(())
 }

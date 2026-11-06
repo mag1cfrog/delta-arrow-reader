@@ -14,6 +14,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 
 //! Hash aggregation
 
@@ -530,16 +531,6 @@ impl GroupedHashAggregateStream {
             AggregateMode::Partial,
         )?);
 
-        // Need to update the GROUP BY expressions to point to the correct column after schema change
-        let merging_group_by_expr = agg_group_by
-            .expr
-            .iter()
-            .enumerate()
-            .map(|(idx, (_, name))| {
-                (Arc::new(Column::new(name.as_str(), idx)) as _, name.clone())
-            })
-            .collect();
-
         let output_ordering = agg.cache.output_ordering();
 
         let spill_sort_exprs =
@@ -618,7 +609,7 @@ impl GroupedHashAggregateStream {
             spill_schema,
             is_stream_merging: false,
             merging_aggregate_arguments,
-            merging_group_by: PhysicalGroupBy::new_single(merging_group_by_expr),
+            merging_group_by: agg_group_by.as_final(),
             peak_mem_used: MetricBuilder::new(&agg.metrics)
                 .with_category(MetricCategory::Bytes)
                 .gauge("peak_mem_used", partition),

@@ -1,0 +1,1921 @@
+{
+  "format_version": 1,
+  "issue": 796,
+  "scope": "FLOAT/DOUBLE integer CAST Field stages; value/ANSI diagnostic policies897/922 stay separate",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "input_encoding": "Integers as decimal strings; FLOAT/DOUBLE as exact IEEE hex; original C06 strings retained verbatim.",
+  "settings": {
+    "spark.ui.enabled": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.adaptive.enabled": "false",
+    "spark.sql.shuffle.partitions": "1"
+  },
+  "native": {
+    "batch_sizes": [
+      1,
+      32
+    ],
+    "target_partitions": 2,
+    "input_partitions": 2,
+    "sliced_hidden_rows": [
+      [
+        "-1",
+        "7fc00001",
+        "7ff8000000000001"
+      ],
+      [
+        "2147483647",
+        "7f800000",
+        "7ff0000000000000"
+      ]
+    ]
+  },
+  "case_count": 132,
+  "observations": 264,
+  "case_counts": {
+    "original_c06": 9,
+    "integer_width_probe": 16,
+    "direct": 9,
+    "typed_null": 4,
+    "column": 20,
+    "coalesce": 8,
+    "int_function": 4,
+    "conditional": 6,
+    "integer_target_controls": 54,
+    "generated_names": 2
+  },
+  "original_references": [
+    {
+      "path": "trim-case-connected-spark.jsonl",
+      "sha256": "fa182b8b9f2c207a03bf359f8632ffb2b3639756253c13bbb0d937832340227b",
+      "selected_records": [
+        {
+          "line": 16,
+          "sha256": "199be4e15152a10bdf2ee19f7fda7fe33f7855df6d9e38c35a372b9e254cac03",
+          "id": "trim_cast_ascii_0_32_projected_coalesce",
+          "ansi": true
+        },
+        {
+          "line": 17,
+          "sha256": "bec227f7042bf7e983730d7f28a2d15a55c6e3195a35a107a8746b0ca122b9d5",
+          "id": "trim_cast_ascii_0_32_projected_coalesce",
+          "ansi": false
+        },
+        {
+          "line": 40,
+          "sha256": "6a6d33a5b042ce2579cfdc3d9b2734048883d4707c331b738497c055f6ad3907",
+          "id": "trim_cast_ascii_0_32_del_projected_coalesce",
+          "ansi": true
+        },
+        {
+          "line": 41,
+          "sha256": "0f3af3e76b882bf38955019b54b7fb7f8e0c5346321763cf0c2d68d3489c9f94",
+          "id": "trim_cast_ascii_0_32_del_projected_coalesce",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "path": "substring-arguments-spark.jsonl",
+      "sha256": "d885d1fa134a047b0eb5f73e87866795d53b186cc17ae39f284d94a62f3664eb",
+      "selected_records": [
+        {
+          "line": 72,
+          "sha256": "fb7928b668dd2171afa74f4843609116c93bec41b5d98d064b6746cf39deddfe",
+          "id": "double_fraction_direct_cast",
+          "ansi": true
+        },
+        {
+          "line": 73,
+          "sha256": "15f0a92b694390792f797e1bb2e63754ec0226d5131a0cc1f2edc42f8988196c",
+          "id": "double_fraction_direct_cast",
+          "ansi": false
+        },
+        {
+          "line": 74,
+          "sha256": "09a63e18084089a772720ac4603e36dc2f94b64e365e6277c4882a57a1ceffc0",
+          "id": "double_fraction_substring",
+          "ansi": true
+        },
+        {
+          "line": 75,
+          "sha256": "7812455aa8ca45c5d0cb12fe7c75b021da33d12333cca114966703c1c051c507",
+          "id": "double_fraction_substring",
+          "ansi": false
+        },
+        {
+          "line": 76,
+          "sha256": "9f66c0725e8ca3d295e4ca3b50c837b5b1bfb0b107d36203643188ef3d666112",
+          "id": "double_negative_fraction_direct_cast",
+          "ansi": true
+        },
+        {
+          "line": 77,
+          "sha256": "f907c2ee4d17a4b1bbc64272f8a46da4d40df145acd8c10cce5b8aa80a00fe3a",
+          "id": "double_negative_fraction_direct_cast",
+          "ansi": false
+        },
+        {
+          "line": 78,
+          "sha256": "acf53c229cf0335d0983426801bfd5e7e46f2c891b1fcb6f50de7d727f4d68f4",
+          "id": "double_negative_fraction_substring",
+          "ansi": true
+        },
+        {
+          "line": 79,
+          "sha256": "c44bf04429f92c068e4996459e0b131e220d14e8c6dc1d92896058220a7c4e96",
+          "id": "double_negative_fraction_substring",
+          "ansi": false
+        },
+        {
+          "line": 80,
+          "sha256": "df76c59ecbb70c92ca95723a6078245e510a9e98bea53be879dd27751e14c95f",
+          "id": "float_fraction_direct_cast",
+          "ansi": true
+        },
+        {
+          "line": 81,
+          "sha256": "d9ee15c6ae85e53cc8181f7f259e6d8d107963fbe71b0853bbded1010469620c",
+          "id": "float_fraction_direct_cast",
+          "ansi": false
+        },
+        {
+          "line": 82,
+          "sha256": "ee70428f58aa0d38b5a3e91ab8ad8b28b0a14c8aaefa775aea35f6141424a8e2",
+          "id": "float_fraction_substring",
+          "ansi": true
+        },
+        {
+          "line": 83,
+          "sha256": "f5ab9cafc0cf3b1880476adcfc18411579ed0d0b7fb39eea1063a25ed19287f2",
+          "id": "float_fraction_substring",
+          "ansi": false
+        }
+      ]
+    },
+    {
+      "path": "regexp-replace-position-int-spark.jsonl",
+      "sha256": "38e946032eab4b4d912f13c4a13695c21cf0f4aed43e6feeab911be3cd9728f0",
+      "selected_records": [
+        {
+          "line": 24,
+          "sha256": "2c83cc9c3d3919c05103d9f0f287afe1217983c119617e59195f2a15cf26ce7c",
+          "id": "double_fraction",
+          "ansi": true
+        },
+        {
+          "line": 79,
+          "sha256": "f32fa4ab7f1d0bad5bb7271d7dd68eeba972d6456595189ef2d17479100f999e",
+          "id": "double_fraction",
+          "ansi": false
+        }
+      ]
+    }
+  ],
+  "helper_sources": {
+    "bigint-int-narrowing/capture_bigint_int_narrowing.py": "793a798e9a3e6e5fe2b59b1c3630db61782fbcbeac27342c7af0be998c96420f",
+    "recapture_string_binary_spark.py": "3fa0da4a0a44fb7560097285442819f0e722af2c3791ce2622e02e64712d03b8",
+    "decimal-integer-cast/capture_decimal_to_integer_declarations.py": "c087cc168026d8742a3e5257506542dfeb05e2942978bbc699ec0c13e6f662a7"
+  },
+  "inputs": [
+    {
+      "name": "numeric_cast_required",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "numeric-cast-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "796-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "796-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "1",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "2",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "3",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "4",
+          "42f78000",
+          "405ef00000000000"
+        ],
+        [
+          "5",
+          "c2f78000",
+          "c05ef00000000000"
+        ],
+        [
+          "6",
+          "cf000000",
+          "c1e0000000000000"
+        ],
+        [
+          "7",
+          "4effffff",
+          "41dfffffffc00000"
+        ]
+      ]
+    },
+    {
+      "name": "numeric_cast_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "numeric-cast-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "796-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "796-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ],
+        [
+          "1",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "2",
+          null,
+          "bffe666666666666"
+        ],
+        [
+          "3",
+          "80000000",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "numeric_cast_all_null",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "numeric-cast-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": true,
+            "metadata": {
+              "source": "796-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": true,
+            "metadata": {
+              "source": "796-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "numeric_cast_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "numeric-cast-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "796-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "796-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": []
+    },
+    {
+      "name": "numeric_cast_sliced",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "numeric-cast-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "796-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "796-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "1",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "2",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "3",
+          "00000000",
+          "0000000000000000"
+        ]
+      ],
+      "native_slice": true
+    },
+    {
+      "name": "c06_775_trim_nullable",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "k",
+            "type": "string",
+            "nullable": false,
+            "metadata": {
+              "role": "row-order",
+              "origin": "775-raw-key"
+            }
+          },
+          {
+            "name": "s",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "purpose": "trim-and-existing-cast",
+              "origin": "775-raw-string"
+            }
+          },
+          {
+            "name": "peer",
+            "type": "string",
+            "nullable": true,
+            "metadata": {
+              "purpose": "nullable-arithmetic-sibling",
+              "origin": "775-raw-peer"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "bad",
+          null
+        ],
+        [
+          "1",
+          "\u0000\u001f 12  \u007f",
+          "2"
+        ],
+        [
+          "2",
+          null,
+          null
+        ],
+        [
+          "3",
+          "",
+          null
+        ],
+        [
+          "4",
+          "\u0000 0 \u001f",
+          "3"
+        ],
+        [
+          "5",
+          "\u007f-2\u007f",
+          null
+        ],
+        [
+          "6",
+          "\t+7\r",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": "numeric_cast_fitting",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "numeric-cast-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "796-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "796-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [
+        [
+          "0",
+          "3ff33333",
+          "3ffe666666666666"
+        ],
+        [
+          "1",
+          "bff33333",
+          "bffe666666666666"
+        ],
+        [
+          "2",
+          "80000000",
+          "8000000000000000"
+        ],
+        [
+          "3",
+          "00000000",
+          "0000000000000000"
+        ],
+        [
+          "4",
+          "42f78000",
+          "405ef00000000000"
+        ],
+        [
+          "5",
+          "c2f78000",
+          "c05ef00000000000"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "trim_cast_ascii_0_32_projected_coalesce",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS DOUBLE), CAST(v AS INT) / CAST(NULL AS INT), CAST(7 AS DOUBLE)) AS INT) AS r FROM (SELECT k, peer, TRIM(BOTH '\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f ' FROM s) AS v FROM c06_775_trim_nullable) t ORDER BY k",
+      "ordered": true,
+      "original_fixture": "trim-case-connected-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "trim_cast_ascii_0_32_del_projected_coalesce",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS DOUBLE), CAST(v AS INT) / CAST(NULL AS INT), CAST(7 AS DOUBLE)) AS INT) AS r FROM (SELECT k, peer, TRIM(BOTH '\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f' FROM s) AS v FROM c06_775_trim_nullable) t ORDER BY k",
+      "ordered": true,
+      "original_fixture": "trim-case-connected-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_fraction_direct_cast",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(CAST(1.9 AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "original_fixture": "substring-arguments-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_negative_fraction_direct_cast",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(CAST(-1.9 AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "original_fixture": "substring-arguments-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_fraction_direct_cast",
+      "domain": "original_c06",
+      "sql": "SELECT CAST(CAST(1.9 AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "original_fixture": "substring-arguments-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_fraction_substring",
+      "domain": "original_c06",
+      "sql": "SELECT substring('abcdef',CAST(1.9 AS DOUBLE),2) AS r",
+      "ordered": true,
+      "original_fixture": "substring-arguments-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_negative_fraction_substring",
+      "domain": "original_c06",
+      "sql": "SELECT substring('abcdef',CAST(-1.9 AS DOUBLE),2) AS r",
+      "ordered": true,
+      "original_fixture": "substring-arguments-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_fraction_substring",
+      "domain": "original_c06",
+      "sql": "SELECT substring('abcdef',CAST(1.9 AS FLOAT),2) AS r",
+      "ordered": true,
+      "original_fixture": "substring-arguments-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_fraction",
+      "domain": "original_c06",
+      "sql": "SELECT regexp_replace('a1a','a','X',CAST(2.9 AS DOUBLE)) AS r",
+      "ordered": true,
+      "original_fixture": "regexp-replace-position-int-spark.jsonl",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS FLOAT) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS FLOAT),CAST(7 AS FLOAT)) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS FLOAT) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS FLOAT),CAST(7 AS FLOAT)) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_int_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_int_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS FLOAT),CAST(7 AS FLOAT)) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS FLOAT) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS FLOAT),CAST(7 AS FLOAT)) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_negative",
+      "domain": "direct",
+      "sql": "SELECT CAST(CAST(-1.9 AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_negative_zero",
+      "domain": "direct",
+      "sql": "SELECT CAST(CAST('-0.0' AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_typed_null",
+      "domain": "typed_null",
+      "sql": "SELECT CAST(CAST(NULL AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_required",
+      "domain": "column",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM numeric_cast_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_nullable",
+      "domain": "column",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_all_null",
+      "domain": "column",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM numeric_cast_all_null ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_empty",
+      "domain": "column",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_sliced",
+      "domain": "column",
+      "sql": "SELECT id,CAST(f AS INT) AS r FROM numeric_cast_sliced ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_coalesce_column",
+      "domain": "coalesce",
+      "sql": "SELECT id,CAST(COALESCE(f,CAST(7 AS FLOAT)) AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_coalesce_null_divisor",
+      "domain": "coalesce",
+      "sql": "SELECT k,CAST(COALESCE(CAST(NULL AS FLOAT),CAST(CAST(s AS INT)/CAST(NULL AS INT) AS FLOAT),CAST(7 AS FLOAT)) AS INT) AS r FROM c06_775_trim_nullable ORDER BY k",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_positive",
+      "domain": "direct",
+      "sql": "SELECT TRY_CAST(CAST(1.9 AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_negative",
+      "domain": "direct",
+      "sql": "SELECT TRY_CAST(CAST(-1.9 AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_negative_zero",
+      "domain": "direct",
+      "sql": "SELECT TRY_CAST(CAST('-0.0' AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_typed_null",
+      "domain": "typed_null",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS FLOAT) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_required",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM numeric_cast_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_nullable",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_all_null",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM numeric_cast_all_null ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_empty",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_sliced",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(f AS INT) AS r FROM numeric_cast_sliced ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_coalesce_column",
+      "domain": "coalesce",
+      "sql": "SELECT id,TRY_CAST(COALESCE(f,CAST(7 AS FLOAT)) AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_try_cast_coalesce_null_divisor",
+      "domain": "coalesce",
+      "sql": "SELECT k,TRY_CAST(COALESCE(CAST(NULL AS FLOAT),CAST(CAST(s AS INT)/CAST(NULL AS INT) AS FLOAT),CAST(7 AS FLOAT)) AS INT) AS r FROM c06_775_trim_nullable ORDER BY k",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_int_function_literal",
+      "domain": "int_function",
+      "sql": "SELECT INT(CAST(1.9 AS FLOAT)) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_int_function_column",
+      "domain": "int_function",
+      "sql": "SELECT id,INT(f) AS r FROM numeric_cast_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_cast_null_predicate",
+      "domain": "conditional",
+      "sql": "SELECT id,CAST(f AS INT) IS NULL AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_dead_case_cast",
+      "domain": "conditional",
+      "sql": "SELECT CAST(CASE WHEN true THEN CAST(1.9 AS FLOAT) ELSE CAST('bad' AS FLOAT) END AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_dead_coalesce_cast",
+      "domain": "conditional",
+      "sql": "SELECT CAST(COALESCE(CAST(7 AS FLOAT),CAST('bad' AS FLOAT)) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS DOUBLE) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS DOUBLE),CAST(7 AS DOUBLE)) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS DOUBLE) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS DOUBLE),CAST(7 AS DOUBLE)) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_int_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_int_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS DOUBLE),CAST(7 AS DOUBLE)) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_literal_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(CAST(1.9 AS DOUBLE) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_coalesce_scope",
+      "domain": "integer_width_probe",
+      "sql": "SELECT CAST(COALESCE(CAST(NULL AS DOUBLE),CAST(7 AS DOUBLE)) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_negative_zero",
+      "domain": "direct",
+      "sql": "SELECT CAST(CAST('-0.0' AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_typed_null",
+      "domain": "typed_null",
+      "sql": "SELECT CAST(CAST(NULL AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_required",
+      "domain": "column",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM numeric_cast_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_nullable",
+      "domain": "column",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_all_null",
+      "domain": "column",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM numeric_cast_all_null ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_empty",
+      "domain": "column",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_sliced",
+      "domain": "column",
+      "sql": "SELECT id,CAST(d AS INT) AS r FROM numeric_cast_sliced ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_coalesce_column",
+      "domain": "coalesce",
+      "sql": "SELECT id,CAST(COALESCE(d,CAST(7 AS DOUBLE)) AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_coalesce_null_divisor",
+      "domain": "coalesce",
+      "sql": "SELECT k,CAST(COALESCE(CAST(NULL AS DOUBLE),CAST(CAST(s AS INT)/CAST(NULL AS INT) AS DOUBLE),CAST(7 AS DOUBLE)) AS INT) AS r FROM c06_775_trim_nullable ORDER BY k",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_positive",
+      "domain": "direct",
+      "sql": "SELECT TRY_CAST(CAST(1.9 AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_negative",
+      "domain": "direct",
+      "sql": "SELECT TRY_CAST(CAST(-1.9 AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_negative_zero",
+      "domain": "direct",
+      "sql": "SELECT TRY_CAST(CAST('-0.0' AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_typed_null",
+      "domain": "typed_null",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS DOUBLE) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_required",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM numeric_cast_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_nullable",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_all_null",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM numeric_cast_all_null ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_empty",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_sliced",
+      "domain": "column",
+      "sql": "SELECT id,TRY_CAST(d AS INT) AS r FROM numeric_cast_sliced ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_coalesce_column",
+      "domain": "coalesce",
+      "sql": "SELECT id,TRY_CAST(COALESCE(d,CAST(7 AS DOUBLE)) AS INT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_try_cast_coalesce_null_divisor",
+      "domain": "coalesce",
+      "sql": "SELECT k,TRY_CAST(COALESCE(CAST(NULL AS DOUBLE),CAST(CAST(s AS INT)/CAST(NULL AS INT) AS DOUBLE),CAST(7 AS DOUBLE)) AS INT) AS r FROM c06_775_trim_nullable ORDER BY k",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_int_function_literal",
+      "domain": "int_function",
+      "sql": "SELECT INT(CAST(1.9 AS DOUBLE)) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_int_function_column",
+      "domain": "int_function",
+      "sql": "SELECT id,INT(d) AS r FROM numeric_cast_required ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_cast_null_predicate",
+      "domain": "conditional",
+      "sql": "SELECT id,CAST(d AS INT) IS NULL AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_dead_case_cast",
+      "domain": "conditional",
+      "sql": "SELECT CAST(CASE WHEN true THEN CAST(1.9 AS DOUBLE) ELSE CAST('bad' AS DOUBLE) END AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_dead_coalesce_cast",
+      "domain": "conditional",
+      "sql": "SELECT CAST(COALESCE(CAST(7 AS DOUBLE),CAST('bad' AS DOUBLE)) AS INT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS TINYINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT CAST(CAST(NULL AS FLOAT) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_try_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS TINYINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_try_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS TINYINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_try_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS TINYINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_try_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS FLOAT) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_tinyint_function_column",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TINYINT(f) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS SMALLINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS SMALLINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS SMALLINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT CAST(CAST(NULL AS FLOAT) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_try_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS SMALLINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_try_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS SMALLINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_try_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS SMALLINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_try_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS FLOAT) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_smallint_function_column",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,SMALLINT(f) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS BIGINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS BIGINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(f AS BIGINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT CAST(CAST(NULL AS FLOAT) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_try_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS BIGINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_try_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS BIGINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_try_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(f AS BIGINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_try_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS FLOAT) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "float_bigint_function_column",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,BIGINT(f) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS TINYINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS TINYINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS TINYINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT CAST(CAST(NULL AS DOUBLE) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_try_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS TINYINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_try_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS TINYINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_try_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS TINYINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_try_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS DOUBLE) AS TINYINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_tinyint_function_column",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TINYINT(d) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS SMALLINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS SMALLINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS SMALLINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT CAST(CAST(NULL AS DOUBLE) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_try_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS SMALLINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_try_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS SMALLINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_try_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS SMALLINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_try_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS DOUBLE) AS SMALLINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_smallint_function_column",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,SMALLINT(d) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS BIGINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS BIGINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,CAST(d AS BIGINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT CAST(CAST(NULL AS DOUBLE) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_try_cast_required",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS BIGINT) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_try_cast_nullable",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS BIGINT) AS r FROM numeric_cast_nullable ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_try_cast_empty",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,TRY_CAST(d AS BIGINT) AS r FROM numeric_cast_empty ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_try_cast_typed_null",
+      "domain": "integer_target_controls",
+      "sql": "SELECT TRY_CAST(CAST(NULL AS DOUBLE) AS BIGINT) AS r",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "double_bigint_function_column",
+      "domain": "integer_target_controls",
+      "sql": "SELECT id,BIGINT(d) AS r FROM numeric_cast_fitting ORDER BY id",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "unaliased_cast_names",
+      "domain": "generated_names",
+      "sql": "SELECT CAST(CAST(1.9 AS FLOAT) AS TINYINT),CAST(CAST(1.9 AS DOUBLE) AS SMALLINT),CAST(CAST(1.9 AS FLOAT) AS INT),CAST(CAST(1.9 AS DOUBLE) AS BIGINT)",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "unaliased_type_function_names",
+      "domain": "generated_names",
+      "sql": "SELECT TINYINT(CAST(1.9 AS DOUBLE)),SMALLINT(CAST(1.9 AS FLOAT)),INT(CAST(1.9 AS DOUBLE)),BIGINT(CAST(1.9 AS FLOAT))",
+      "ordered": true,
+      "ansi_modes": [
+        true,
+        false
+      ]
+    }
+  ],
+  "width_probe_input_names": [
+    "numeric_cast_required",
+    "numeric_cast_nullable",
+    "numeric_cast_all_null",
+    "numeric_cast_empty",
+    "numeric_cast_sliced",
+    "c06_775_trim_nullable"
+  ]
+}

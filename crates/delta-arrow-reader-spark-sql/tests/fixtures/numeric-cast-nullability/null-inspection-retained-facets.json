@@ -1,0 +1,130 @@
+{
+  "scope": "Only exact eight ANSI error identities retained; all schemas and Legacy/success rows remain strict Spark.",
+  "proof_head": "8d317f38798ad9b6393e783b2529f6f2bfc2daa9",
+  "proof_value_parent": "5c1cd488daa994b30139e34ddffe50508d79f5de",
+  "proof_log_sha256": "73f2f68dd722fb2755ae5f7e226a0c7cea1397dde386b592ad68a995059faa1e",
+  "spark_reference_sha256": "d38a3a81ed7ba724785eb9415fc66964e86fcad65f6f5466289649d580c030eb",
+  "endpoint_baseline_proofs": [],
+  "contexts": [
+    {
+      "id": "double_huge_literal_is_null",
+      "ansi": true,
+      "batch": 1,
+      "sql": "SELECT CAST(1e100 AS INT) IS NULL AS r",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 1e100 to type Int32",
+        "native_phase": "create_physical_plan",
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 1e100 to type Int32"
+      }
+    },
+    {
+      "id": "float_nan_literal_is_null",
+      "ansi": true,
+      "batch": 1,
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) IS NULL AS r",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "native_phase": "create_physical_plan",
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32"
+      }
+    },
+    {
+      "id": "float_required_column_is_null",
+      "ansi": true,
+      "batch": 1,
+      "sql": "SELECT id,CAST(f AS INT) IS NULL AS r FROM floating_integer_required ORDER BY id",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Arrow error: Cast error: Can't cast value NaN to type Int32",
+        "native_phase": "collect",
+        "optimized_error": null
+      }
+    },
+    {
+      "id": "double_required_column_is_null",
+      "ansi": true,
+      "batch": 1,
+      "sql": "SELECT id,CAST(d AS INT) IS NULL AS r FROM floating_integer_required ORDER BY id",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Arrow error: Cast error: Can't cast value NaN to type Int32",
+        "native_phase": "collect",
+        "optimized_error": null
+      }
+    },
+    {
+      "id": "double_huge_literal_is_null",
+      "ansi": true,
+      "batch": 32,
+      "sql": "SELECT CAST(1e100 AS INT) IS NULL AS r",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 1e100 to type Int32",
+        "native_phase": "create_physical_plan",
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value 1e100 to type Int32"
+      }
+    },
+    {
+      "id": "float_nan_literal_is_null",
+      "ansi": true,
+      "batch": 32,
+      "sql": "SELECT CAST(CAST('NaN' AS FLOAT) AS INT) IS NULL AS r",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "native_phase": "create_physical_plan",
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32"
+      }
+    },
+    {
+      "id": "float_required_column_is_null",
+      "ansi": true,
+      "batch": 32,
+      "sql": "SELECT id,CAST(f AS INT) IS NULL AS r FROM floating_integer_required ORDER BY id",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Arrow error: Cast error: Can't cast value NaN to type Int32",
+        "native_phase": "collect",
+        "optimized_error": null
+      }
+    },
+    {
+      "id": "double_required_column_is_null",
+      "ansi": true,
+      "batch": 32,
+      "sql": "SELECT id,CAST(d AS INT) IS NULL AS r FROM floating_integer_required ORDER BY id",
+      "fields": [],
+      "availability": [],
+      "rows": [],
+      "error": {
+        "owner": 922,
+        "error": "Arrow error: Cast error: Can't cast value NaN to type Int32",
+        "native_phase": "collect",
+        "optimized_error": null
+      }
+    }
+  ]
+}

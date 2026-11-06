@@ -19,10 +19,6 @@ use sail_plan::error::PlanError;
 use serde_json::{Value, json};
 
 #[path = "support/spark_results.rs"]
-#[expect(
-    dead_code,
-    reason = "Only the shared schema and batch validators encode this Arrow contract."
-)]
 mod spark_results;
 use spark_results::TestResult;
 

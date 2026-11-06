@@ -5,6 +5,17 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Primitive CAST overflow conditions
+
+`reviewed-corrections.json` adds 93 exact ANSI error outcomes for #922. A complete
+25,180-observation replay found only the added `[CAST_OVERFLOW]` context in those
+outcomes; the other 25,087 retained their accepted contracts. Each correction
+inserts that context into the original expected error and preserves its complete
+cause, value, target, status and output names, including the existing analyzer-name
+normalization. The prior 2,542 correction entries, compressed corpus, provenance
+and parallel-error alternatives remain unchanged. The corpus continues to retain
+unresolved Spark differences.
+
 ## Unary negation result fields
 
 `unary-negate-fields/historical/spark-reference.jsonl` captures five exact
@@ -338,17 +349,33 @@ Consumers cover projections, NULL predicates, COALESCE, grouping and projected
 IN/NOT IN, including empty, limited and correlated subqueries.
 
 The raw Spark results remain in the fixture. Exact pre-existing differences are
-recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches:
-an unused invalid inline CAST is pruned before its required error (#722). The
-four `conditional_projection` and `conditional_empty` observations, in both ANSI
-modes, match Spark after the literal-TRUE CASE declaration repair (#721).
+recorded separately in `values-nullability-gaps.jsonl` and are not Spark matches.
+In ANSI mode, an unused invalid inline CAST raises its required
+`INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION` error during analysis
+(#722). The four `conditional_projection` and `conditional_empty` observations, in
+both ANSI modes, match Spark after the literal-TRUE CASE declaration repair (#721).
 Six projected-IN observations retain SQL three-valued results that differ from
 Spark, including
 NULL-left/empty-subquery behavior in legacy mode. These remain unresolved #142
-cases and do not extend its approved four-case historical policy. In total, 115
-observations match Spark and 7 retain exact baseline differences. The retained-gap
+cases and do not extend its approved four-case historical policy. In total, 116
+observations match Spark and 6 retain exact baseline differences. The retained-gap
 test checks their unchanged baseline behavior and fails if a gap is silently
 resolved without removing its entry.
+
+## Inline VALUES validation
+
+`inline-values-evaluation/spark-reference.jsonl` records 72 Spark observations for
+constant inline expressions, including errors preserved under filters, LIMIT 0
+and unused projections, row/column error order, CASE branches and NULL/TRY_CAST.
+`null-boundaries-spark.jsonl` adds eight NULL-operand observations, and
+`literal-null-divisors-spark.jsonl` adds six integral DIV, remainder and Decimal
+division observations with literal NULL divisors, all in the same directory.
+The tests compare complete Fields, rows, error conditions, causes and stages at
+batch sizes 1 and 32. Native session modes and nonfoldable functions have separate
+preservation controls.
+
+Computed NULL divisors remain open in [#990](https://github.com/mag1cfrog/delta-arrow-reader/issues/990),
+and NULLIF inline-table admission remains open in [#991](https://github.com/mag1cfrog/delta-arrow-reader/issues/991).
 
 ## Historical expression-schema corrections
 
@@ -693,16 +720,55 @@ schemas at each stage and failing stages at batch sizes 1 and 32. See the
 [separator fixture notes](timestamp-separators/README.md) for the inputs,
 encoding and capture command.
 
+## DATEDIFF fields
+
+`date-diff/date-diff-spark.jsonl` contains 216 Spark 4.2.0 observations of
+`datediff` and `date_diff` result fields and day counts for DATE, TIMESTAMP and
+TIMESTAMP_NTZ arguments at calendar boundaries and the DATE extremes, in both
+ANSI modes and in UTC and America/Los_Angeles. `date_diff.rs` compares names,
+fields and typed values at batch sizes 1 and 32. See the [DATEDIFF fixture
+notes](date-diff/README.md) for the encoding, the retained difference and its
+owner, and the capture command. `reviewed-corrections.json` replaces the four
+historical BIGINT DATEDIFF outcomes in the accepted runtime replay
+(`focused-arithmetic-cases/216` and `217`, both ANSI modes) with Spark's INT,
+recorded for their exact SQL as `history_date_add` and `history_date_sub`; only
+the result type changes.
+
+## Temporal formatting, parsing and type contracts
+
+`temporal-contracts/temporal-contracts-spark.jsonl` contains 6,020 Spark 4.2.0
+observations of DATE_FORMAT patterns, unformatted and formatted date/timestamp
+parsing with CAST, TRY_CAST, TO_*, TRY_TO_DATE and TRY_TO_TIMESTAMP, typed
+literals and casts between DATE, TIMESTAMP and TIMESTAMP_NTZ, for literals and
+registered columns in both ANSI modes, UTC and America/Los_Angeles (#153).
+`temporal_contracts.rs` compares names, fields at each stage, typed values and
+failing stages at batch sizes 1 and 32. See the [temporal fixture
+notes](temporal-contracts/README.md) for the inputs, accepted parser messages,
+the retained differences and their owners, and the capture command.
+
+## UTC timestamp conversions
+
+`utc-timestamp-conversions/utc-timestamp-conversions-spark.jsonl` contains 4,356
+Spark 4.2.0 observations of TO_UTC_TIMESTAMP and FROM_UTC_TIMESTAMP around the 2024
+Los Angeles spring gap and fall overlap and the Havana midnight changes (#154), with
+TIMESTAMP_NTZ, TIMESTAMP, STRING and DATE inputs, literal and registered-column
+values and zones, UTC and fixed-offset controls and NULL, invalid and legacy zones,
+in both ANSI modes and UTC, America/Los_Angeles and America/Havana sessions.
+`utc_timestamp_conversions.rs` compares names, fields at each stage, the executed
+zone, typed instants and failing stages at batch sizes 1 and 32. See the [UTC
+conversion fixture notes](utc-timestamp-conversions/README.md) for the retained
+differences and their owners, and the capture command.
+
 ## Interval qualifiers and generated names
 
-`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 614 Spark 4.2.0
+`interval-qualifiers/interval-qualifiers-spark.jsonl` contains 1948 Spark 4.2.0
 observations of interval literal names, signed and unit-syntax literals, storage
-limits, arithmetic and timestamp operand order, interval CASTs and RANGE
-offsets. The query corpus preserves the original #749 capture.
-`interval_qualifiers.rs` compares names, fields, typed values and errors at
-batch sizes 1 and 32. See the
-[interval fixture notes](interval-qualifiers/README.md) for the encoding, the
-retained differences and their owners, and the capture command.
+limits, arithmetic and timestamp operand order, year-month and day-time interval
+scaling and negation, interval CASTs and RANGE offsets. The query corpus
+preserves the original #749 capture. `interval_qualifiers.rs` compares names,
+fields, typed values and errors at batch sizes 1 and 32. See the [interval
+fixture notes](interval-qualifiers/README.md) for the encoding, the retained
+differences and their owners, and the capture command.
 
 ## String-to-BOOLEAN casts
 
@@ -1237,6 +1303,37 @@ python tests/fixtures/capture_single_row_correlated_nonnullable_spark.py "$singl
 cargo test --workspace --test single_row_correlated
 cargo test --workspace --test window_metadata
 ```
+
+## Global aggregate argument admission
+
+`global-aggregate-admission-spark.jsonl` records 498 independent Spark 4.2.0
+observations in UTC and both ANSI modes from the
+[case manifest](global-aggregate-admission-cases.json). The
+[admission tests](../global_aggregate_admission.rs) check error causes and phases,
+schema stages and rows at batch sizes 1 and 32. Volatile UDF variants check that
+rejected arguments invoke no callbacks; random-result controls compare fields
+and cardinality.
+
+Supplemental `global-aggregate-*` manifests and captures cover sibling error
+priority, NULL AVG/LISTAGG structure, scalar-subquery volatility and internal
+window ordering. The [priority tests](../global_aggregate_admission_priority.rs)
+locate these families and replay their deterministic scalar-subquery, window
+and native SQL controls.
+
+`global-aggregate-admission-staging-baseline.json` records 56 exact pre-existing
+facets: 28 Spark INTERNAL_ERROR/window defects, 24 nested collection field
+differences and four grouped volatile EXISTS differences, tracked by #142 and
+#156. The tests preserve these scoped baselines alongside raw Spark outcomes;
+none counts as a Spark compatibility pass.
+
+Recapture with the pinned Python 3.12, PySpark 4.2.0 and Java 21 setup above.
+The [main capture](capture_global_aggregate_admission_spark.py) writes the main
+and retained cases; the [priority](capture_global_aggregate_admission_priority_spark.py)
+and [argument-structure](capture_global_aggregate_argument_structure_spark.py)
+scripts capture their matching families. The
+[control capture](capture_global_aggregate_admission_controls_spark.py) accepts
+a supplemental manifest and a new output path. Use fresh output paths to keep
+the committed captures unchanged.
 
 ## COUNT_IF aggregate filters
 
@@ -1972,19 +2069,21 @@ loaded JAR hashes, available schemas, values and structured errors.
 
 `substring.rs` compares every one of these 656 records under Utf8/LargeUtf8/Utf8View
 and corresponding binary storage at batch sizes 1/32: 3,936 observations. The
-retained regression result has 3,774 strict receipt matches and 162 retained failures:
-12 invalid UTF8 sibling casts (#780), 30 legacy BIGINT outcomes (#813 and the
-unfinished legacy #778 adapter), 72 analyzed numeric CAST declarations (#796),
-24 legacy non-finite conversions (#897), and 24 overflow-notation comparisons.
+regression gate requires 3,900 strict receipt matches and 36 retained failures:
+12 invalid UTF8 sibling casts (#780) and 24 overflow-notation comparisons. The
+72 analyzed numeric CAST declarations repaired by #796 and 24 Legacy nonfinite
+conversions repaired by #897 require complete strict Spark fields and rows.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
 numeric value, SQL, available fields and exact native error are pinned; mutation
-controls reject changed values, signs, targets and causes. This distinction adds
-no Decimal defect or strict compatibility credit.
+controls reject changed values, signs, targets and causes. ANSI primitive errors
+require `[CAST_OVERFLOW]` together with the original Arrow cause. The remaining
+Infinity/inf and Decimal BD spelling differences keep their strict failures;
+recognizing their numeric cause adds no strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
-false. The separate meaningful-condition comparison has 3,798 matches and 138
+false. The separate meaningful-condition comparison requires 3,924 matches and 12
 differences, so compatibility remains incomplete by either measure. No fixture
 field is rewritten and no missing Spark physical field is invented.
 
@@ -2191,11 +2290,12 @@ source projections must retain their original metadata. Derived result fields
 are compared separately, including names, types, nullability and metadata.
 
 The older cross-family profiles retain their named metadata and invalid-byte
-observations. The substring profiles now use the retained outcomes at
-`92de8d551c000b16cf9e0746fcbf7f5ffa15db93`: repaired admission and ANSI errors
-must match their concrete causes, while the two remaining original legacy length
-differences retain the precise #813 values. The invalid-byte substring observer
-now requires exact analyzed fields. All original fixture bytes remain unchanged.
+observations. The substring baseline at
+`92de8d551c000b16cf9e0746fcbf7f5ffa15db93` is historical. Current checks require
+repaired admission and ANSI errors to match their concrete causes and legacy
+BIGINT length conversions to match Spark through the shared INT conversion.
+The invalid-byte substring observer requires exact analyzed fields. All original
+fixture bytes remain unchanged.
 No reference fields are rewritten or used to construct actual schemas.
 Unavailable physical stages remain unavailable. New fields, values, stages or
 causes fail the tests, and negative controls retain the reviewed synthetic
@@ -2230,9 +2330,7 @@ control, together with pure BINARY, valid Unicode/NUL, empty providers, NULL-fir
 CONCAT, NULL-separator CONCAT_WS and skipped casts. The explicit evaluated CAST
 before a trailing NULL has its own bounded profile; it does not exempt other
 NULL cases. Malformed STRING conversion errors and TRY_CAST NULL results keep
-strict compatibility false. Profiles and the capability decision remain
-provisional until final current-source replay and independent complete-diff
-review. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
+strict compatibility false. The [#780 representation decision](https://github.com/mag1cfrog/delta-arrow-reader/issues/780)
 and [#928 visible-slice repair](https://github.com/mag1cfrog/delta-arrow-reader/issues/928)
 retain their separate contracts.
 
@@ -3244,14 +3342,11 @@ and 76 observations; `replay.observations` records this capture's 66 observation
 
 Every successful record compares complete analyzed and physical schemas and
 ordered rows. `trim-case-native-dependency-profiles.jsonl` keeps all 48 original
-native negative records as historical evidence. Only the 24 analyzed numeric
-CAST differences under #796 remain active fallbacks. The 24 nested trim/case
-contexts repaired by #792 now require complete strict Spark fields and rows;
-the matcher rejects their retired profiles even when their old bytes match.
-The active profiles copy actual native schemas and rows from the recorded
-capture, with source and evidence hashes. An active negative match keeps
-`strict_match=false` and `full_compatibility_pass=false`. Other success
-differences fail.
+native negative records as historical evidence. The 24 analyzed numeric CAST
+contexts repaired by #796 and 24 nested trim/case contexts repaired by #792
+require complete strict Spark fields and rows. Their old profiles cannot serve
+as current fallbacks. The gate requires 1,932 strict successful observations;
+other success differences fail.
 
 The 36 zero-argument trim contexts under #795 require the exact observed native
 formatter fingerprint and also keep both compatibility flags false. The other
@@ -3649,3 +3744,33 @@ unrelated errors or establish those issues' acceptance.
 ```sh
 cargo test --locked --workspace --test nested_lambda_captures -- --nocapture
 ```
+
+### Floating integer CAST Fields
+
+`numeric-cast-nullability/spark.jsonl` preserves 264 independent Spark 4.2.0
+records, including all 18 original trim, substring and REGEXP_REPLACE consumer
+records. The source manifest and capture script remain unchanged.
+`floating_integer_cast_fields_match_recorded_stages` in
+`floating_cast_nullability.rs` compares all 528 batch contexts, separately
+requiring complete analyzed, optimized and physical Fields and ordered rows.
+The four exact #1019 type-function name controls keep their original complete
+observations, with only the independently required public nullable repair in an
+expected copy. They remain strict Spark differences.
+
+The value replay preserves all 352 `floating-integer-values/spark.jsonl` records
+at both batch sizes. Its gate requires 668 strict comparisons out of 704 and
+exactly 36 retained differences: 28 checked endpoint contexts (#1020), four DIV
+diagnostics (#865), and four later substring failures with extra native Fields
+(#1031). The immutable historical facet file keeps its original owner IDs; the
+current gate requires the added primitive overflow context without changing the
+original causes, Fields, rows or failure stages. A separate 24-context NULL
+inspection gate requires strict comparisons and exact native causes for its
+eight ANSI overflow contexts.
+
+The 110-record REGEXP_REPLACE position fixture requires all 660 comparisons to
+match its recorded contract. Its original 60 primitive-overflow contexts also
+require exact complete native objects derived from the frozen profiles by
+inserting only `[CAST_OVERFLOW]` and its cause context into the error. All original
+reference and profile bytes remain unchanged. These checks preserve native
+failure boundaries and available Fields; complete raw Spark diagnostic parity
+remains unverified.

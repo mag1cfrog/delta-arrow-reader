@@ -19,7 +19,7 @@ mod contracts;
 mod substring;
 
 #[test]
-fn substring_profiles_reject_changed_fields_values_and_error_causes() -> TestResult {
+fn substring_repaired_cast_fields_and_error_causes_stay_strict() -> TestResult {
     let records = include_str!("fixtures/substring-arguments-spark.jsonl")
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -28,26 +28,27 @@ fn substring_profiles_reject_changed_fields_values_and_error_causes() -> TestRes
         .iter()
         .find(|case| case["id"] == "double_fraction_direct_cast" && case["ansi"] == true)
         .ok_or("missing direct CAST reference")?;
-    // This native layout and row are recorded in the R2 capture, not a Spark overlay.
-    let actual = json!({
+    // The historical R2 analyzed declaration must no longer pass as a retained gap.
+    let mut actual = json!({
         "analyzed_schema":{"type":"struct","fields":[{"name":"r","type":"integer","nullable":false,"metadata":{}}]},
         "physical_schema":{"type":"struct","fields":[{"name":"r","type":"integer","nullable":false,"metadata":{}}]},
         "rows":[["1"]]
     });
     assert!(!substring::matches_reference(fractional, &actual));
-    assert_eq!(
-        substring::known_difference(fractional, &actual),
-        Some("open_796_float_integer_analyzed_nullable")
-    );
+    assert!(substring::known_difference(fractional, &actual).is_none());
+    actual["analyzed_schema"] = fractional["expected"]["analyzed_schema"].clone();
+    assert!(substring::matches_reference(fractional, &actual));
     for stage in ["analyzed_schema", "physical_schema"] {
         for property in ["name", "type", "nullable", "metadata"] {
             let mut changed = actual.clone();
             changed[stage]["fields"][0][property] = json!("unrelated");
+            assert!(!substring::matches_reference(fractional, &changed));
             assert!(substring::known_difference(fractional, &changed).is_none());
         }
     }
     let mut changed = actual;
     changed["rows"] = json!([["2"]]);
+    assert!(!substring::matches_reference(fractional, &changed));
     assert!(substring::known_difference(fractional, &changed).is_none());
     let overflow = records
         .iter()
@@ -55,11 +56,12 @@ fn substring_profiles_reject_changed_fields_values_and_error_causes() -> TestRes
         .ok_or("missing overflow reference")?;
     assert!(substring::meaningful_error(
         overflow,
-        "execute: Arrow error: Cast error: Can't cast value NaN to type Int32"
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32"
     ));
     for error in [
-        "execute: Arrow error: Cast error: Can't cast value 1 to type Int32",
-        "execute: Arrow error: Cast error: Can't cast value NaN to type Int64",
+        "execute: Arrow error: Cast error: Can't cast value NaN to type Int32",
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 1 to type Int32",
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int64",
         "execute: [UNRELATED] arbitrary failure",
     ] {
         assert!(!substring::meaningful_error(overflow, error));
@@ -77,13 +79,13 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
         (
             "double_infinity_direct_cast",
             "physical",
-            "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+            "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
             false,
         ),
         (
             "double_infinity_substring",
             "execute",
-            "execute: Arrow error: Cast error: Can't cast value inf to type Int32",
+            "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
             true,
         ),
         (
@@ -116,12 +118,25 @@ fn overflow_notation_comparison_is_literal_specific_and_keeps_strict_failure() -
             "physical_schema":null,"physical_arrow_schema":null,"error_stage":stage,"error":cause
         });
         if physical {
-            actual["physical_schema"] = json!({"type":"struct","fields":[{"name":"r","type":"string","nullable":false,"metadata":{}}]});
+            actual["physical_schema"] = json!({"type":"struct","fields":[{"name":"r","type":"string","nullable":true,"metadata":{}}]});
             actual["physical_arrow_schema"] = json!("synthetic Arrow schema for mutation controls");
         }
         assert!(!substring::matches_reference(case, &actual));
         assert!(substring::matches_meaningful_contract(case, &actual));
+        if physical {
+            for (component, wrong) in [
+                ("nullable", json!(false)),
+                ("name", json!("wrong")),
+                ("type", json!("integer")),
+                ("metadata", json!({"wrong":"metadata"})),
+            ] {
+                let mut changed = actual.clone();
+                changed["physical_schema"]["fields"][0][component] = wrong;
+                assert!(!substring::matches_meaningful_contract(case, &changed));
+            }
+        }
         for wrong in [
+            cause.replace("[CAST_OVERFLOW]", ""),
             cause
                 .replace("inf to", "-inf to")
                 .replace("2147483648", "-2147483648"),
@@ -289,17 +304,14 @@ async fn substring_retains_complete_spark_comparisons() -> TestResult {
     assert_eq!(
         profiles,
         BTreeMap::from([
-            ("full_spark_match", 3774),
+            ("full_spark_match", 3900),
             ("open_780_invalid_utf8", 12),
-            ("open_813_legacy_bigint", 30),
-            ("open_796_float_integer_analyzed_nullable", 72),
-            ("open_897_legacy_nonfinite_cast", 24),
             ("strict_172_infinity_literal_notation", 12),
             ("strict_decimal_literal_notation", 12),
         ])
     );
-    assert_eq!(strict_differences, 162);
-    assert_eq!(meaningful_differences, 138);
+    assert_eq!(strict_differences, 36);
+    assert_eq!(meaningful_differences, 12);
     assert!(
         !full_compatibility_pass,
         "the known failures remain incompatible"

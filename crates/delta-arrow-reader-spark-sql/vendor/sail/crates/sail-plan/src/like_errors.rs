@@ -27,15 +27,15 @@ use crate::expression_errors::{
 pub struct PreserveSparkLikeErrors;
 
 // AnalyzerRule receives options but no execution properties. Keep the actual
-// query clock in its cloned state without changing shared Spark declarations.
+// query start time in its cloned state without changing shared Spark declarations.
 #[derive(Clone, Debug)]
-struct SparkLikeQueryClock(Option<DateTime<Utc>>);
+struct SparkQueryStartTime(Option<DateTime<Utc>>);
 
-impl ConfigExtension for SparkLikeQueryClock {
+impl ConfigExtension for SparkQueryStartTime {
     const PREFIX: &'static str = "dar_spark_like_query_clock";
 }
 
-impl ExtensionOptions for SparkLikeQueryClock {
+impl ExtensionOptions for SparkQueryStartTime {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -57,10 +57,21 @@ impl ExtensionOptions for SparkLikeQueryClock {
     }
 }
 
-/// Retain this query state's execution clock for mandatory LIKE preparation.
-pub fn set_spark_like_query_clock(state: &mut SessionState) {
-    let clock = SparkLikeQueryClock(state.execution_props().query_execution_start_time);
-    state.config_mut().options_mut().extensions.insert(clock);
+/// Retain this query state's start time for Spark expression preparation.
+pub fn set_spark_query_start_time(state: &mut SessionState) {
+    let start_time = SparkQueryStartTime(state.execution_props().query_execution_start_time);
+    state
+        .config_mut()
+        .options_mut()
+        .extensions
+        .insert(start_time);
+}
+
+pub(crate) fn spark_query_start_time(options: &ConfigOptions) -> Option<DateTime<Utc>> {
+    options
+        .extensions
+        .get::<SparkQueryStartTime>()
+        .and_then(|start_time| start_time.0)
 }
 
 pub(crate) fn contains_spark_like(plan: &LogicalPlan) -> Result<bool> {
@@ -202,10 +213,7 @@ impl AnalyzerRule for PreserveSparkLikeErrors {
         // pure row evaluator; preserve its errors without materializing results.
         let mut props = ExecutionProps::new();
         props.config_options = Some(Arc::new(options.clone()));
-        props.query_execution_start_time = options
-            .extensions
-            .get::<SparkLikeQueryClock>()
-            .and_then(|clock| clock.0);
+        props.query_execution_start_time = spark_query_start_time(options);
         let local = consume_local_likes(plan, &props, false)?;
         // Keep early local-consumption marks in the real plan; later checks
         // and marks belong only to the discarded reachability copy.

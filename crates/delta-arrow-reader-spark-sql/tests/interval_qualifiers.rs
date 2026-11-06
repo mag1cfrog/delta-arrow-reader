@@ -34,7 +34,7 @@ fn interval_references() -> TestResult<Vec<Value>> {
         )
     );
     assert_eq!(records[0]["timezone"], "UTC");
-    assert_eq!(records.len() - 1, 614);
+    assert_eq!(records.len() - 1, 1948);
     Ok(records)
 }
 
@@ -49,6 +49,7 @@ fn spark_arrow_family(spark_type: &Value) -> TestResult<&'static str> {
             .as_str()
             .ok_or("expected a primitive Spark type")?
         {
+            "boolean" => "boolean",
             "integer" => "int32",
             "long" => "int64",
             "date" => "date32",
@@ -65,6 +66,7 @@ fn spark_arrow_family(spark_type: &Value) -> TestResult<&'static str> {
 
 fn dar_arrow_family(data_type: &DataType) -> TestResult<&'static str> {
     Ok(match data_type {
+        DataType::Boolean => "boolean",
         DataType::Int32 => "int32",
         DataType::Int64 => "int64",
         DataType::Date32 => "date32",
@@ -115,6 +117,7 @@ fn encode_typed_value(column: &dyn Array, row: usize) -> TestResult<Value> {
         return Ok(Value::Null);
     }
     Ok(match column.data_type() {
+        DataType::Boolean => json!(column.as_boolean().value(row).to_string()),
         DataType::Int32 => json!(column.as_primitive::<Int32Type>().value(row).to_string()),
         DataType::Int64 => json!(column.as_primitive::<Int64Type>().value(row).to_string()),
         DataType::Date32 => json!(column.as_primitive::<Date32Type>().value(row).to_string()),
@@ -212,19 +215,31 @@ async fn observe(session: &SessionContext, case: &Value) -> Value {
     observation
 }
 
+/// DAR must fail in Spark's phase, naming Spark's error condition as `[CONDITION]`. For a
+/// plain `java.lang.ArithmeticException`, which has no condition, DAR's error must end with
+/// the exception's whole message instead. A retained difference names DAR's current error.
 fn matches_expected_error(case: &Value, observation: &Value) -> bool {
     let expected_phase = match case["spark_error_phase"].as_str() {
         Some("sql") => "resolve",
         Some(phase) => phase,
         None => return false,
     };
-    let (Some(error), Some(condition)) = (
-        observation["error"].as_str(),
-        case["expected"]["condition"].as_str(),
-    ) else {
+    let expected = &case["expected"];
+    let Some(error) = observation["error"].as_str() else {
         return false;
     };
-    observation["error_phase"] == expected_phase && error.contains(condition)
+    let identified = if let Some(current) = expected["current_error"].as_str() {
+        error.contains(current)
+    } else if let Some(condition) = expected["condition"].as_str() {
+        error.contains(&format!("[{condition}]"))
+    } else if expected["exception"] == "java.lang.ArithmeticException"
+        && let Some(message) = expected["exception_message"].as_str()
+    {
+        error.ends_with(&format!(": {message}"))
+    } else {
+        false
+    };
+    observation["error_phase"] == expected_phase && identified
 }
 
 /// Compare every recorded stage, typed rows and the required error.
@@ -248,19 +263,6 @@ fn compare(case: &Value, observation: &Value) -> TestResult<Vec<&'static str>> {
     Ok(differences)
 }
 
-const YEAR_MONTH_QUALIFIERS: [&str; 3] = ["year", "year_month", "month"];
-const DAY_TIME_QUALIFIERS: [&str; 10] = [
-    "day",
-    "day_hour",
-    "day_minute",
-    "day_second",
-    "hour",
-    "hour_minute",
-    "hour_second",
-    "minute",
-    "minute_second",
-    "second",
-];
 /// DAR's current rows for the RANGE offsets retained under #947: a running sum.
 const CUMULATIVE_WINDOW_ROWS: [[&str; 2]; 4] = [["0", "2"], ["1", "5"], ["2", "5"], ["3", "10"]];
 /// DAR's current error for each literal that Spark rejects at or past a storage limit,
@@ -319,65 +321,35 @@ const LIMIT_ERRORS: [(&str, &str); 27] = [
     ),
 ];
 
+/// DAR's current value for each nested interval cast retained under #995: the source count,
+/// which Spark truncates to the target units.
+const NESTED_CAST_SOURCES: [(&str, &str); 4] = [
+    ("interval_cast_nested_array", "183845123456"),
+    ("interval_cast_nested_struct", "27"),
+    ("interval_cast_nested_map", "183840000000"),
+    ("interval_cast_nested_column_array", "9223372036854775807"),
+];
+
 /// Existing differences outside the qualifier-name contract, each with its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RetainedDifference {
-    /// #781: year-month interval scaling fails during planning.
-    YearMonthScaling,
-    /// #782: the public field of day-time negation or division is nullable.
-    PublicNullability,
-    /// #765: a narrowing interval CAST keeps the source value.
-    CastTruncation,
     /// #727: an unaliased window keeps its function-call name.
     WindowName,
     /// #947: RANGE offsets are not typed against the ORDER BY key.
     RangeOffsetTyping,
     /// #955: a literal at or past a storage limit fails without Spark's error condition.
     LimitErrorCondition,
+    /// #979: ANSI division by a zero constant fails without Spark's `DIVIDE_BY_ZERO`.
+    DivideByZeroCondition,
+    /// #995: an interval leaf of a nested cast keeps its source count.
+    NestedIntervalCast,
 }
 
 fn retained_difference(case: &Value) -> Option<RetainedDifference> {
     let id = case["id"].as_str()?;
-    let is_any = |qualifiers: &[&str], pattern: &dyn Fn(&str) -> String| {
-        qualifiers.iter().any(|qualifier| id == pattern(qualifier))
-    };
     match case["context"].as_str()? {
-        "arithmetic"
-            if is_any(&YEAR_MONTH_QUALIFIERS, &|q| format!("{q}_left_multiply"))
-                || is_any(&YEAR_MONTH_QUALIFIERS, &|q| format!("{q}_right_multiply"))
-                || is_any(&YEAR_MONTH_QUALIFIERS, &|q| format!("{q}_divide")) =>
-        {
-            Some(RetainedDifference::YearMonthScaling)
-        }
-        "timestamp"
-            if is_any(&YEAR_MONTH_QUALIFIERS, &|q| {
-                format!("timestamp_{q}_computed")
-            }) =>
-        {
-            Some(RetainedDifference::YearMonthScaling)
-        }
-        "literal" if is_any(&DAY_TIME_QUALIFIERS, &|q| format!("{q}_negative")) => {
-            Some(RetainedDifference::PublicNullability)
-        }
-        "arithmetic"
-            if is_any(&DAY_TIME_QUALIFIERS, &|q| format!("{q}_divide"))
-                || id == "arithmetic_fractional_divide" =>
-        {
-            Some(RetainedDifference::PublicNullability)
-        }
-        "cast"
-            if [
-                "cast_year",
-                "cast_day",
-                "cast_day_hour",
-                "cast_day_minute",
-                "cast_hour",
-                "cast_hour_minute",
-                "cast_minute",
-            ]
-            .contains(&id) =>
-        {
-            Some(RetainedDifference::CastTruncation)
+        "interval_cast" if NESTED_CAST_SOURCES.iter().any(|(nested, _)| id == *nested) => {
+            Some(RetainedDifference::NestedIntervalCast)
         }
         "window" | "window_alias" if id.starts_with("range_numeric") => {
             Some(RetainedDifference::RangeOffsetTyping)
@@ -403,6 +375,12 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
         "limit" if LIMIT_ERRORS.iter().any(|(limit, _)| id == *limit) => {
             Some(RetainedDifference::LimitErrorCondition)
         }
+        "scaling_operand" | "dt_scaling_operand"
+            if id.contains("_operand_number_divide_zero")
+                && case["expected"]["condition"] == "DIVIDE_BY_ZERO" =>
+        {
+            Some(RetainedDifference::DivideByZeroCondition)
+        }
         _ => None,
     }
 }
@@ -411,28 +389,6 @@ fn retained_difference(case: &Value) -> Option<RetainedDifference> {
 fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResult<Value> {
     let mut current = case.clone();
     match difference {
-        RetainedDifference::YearMonthScaling => {
-            current["schema_stages"] = json!({});
-            current["spark_error_phase"] = json!("sql");
-            current["expected"] = json!({"status": "error",
-                "condition": "Cannot get result type for temporal operation"});
-        }
-        RetainedDifference::PublicNullability => {
-            let field = &mut current["schema_stages"]["analyzed"]["fields"][0];
-            if field["nullable"] != false {
-                return Err(format!("expected a required public field: {field}").into());
-            }
-            field["nullable"] = json!(true);
-        }
-        RetainedDifference::CastTruncation => {
-            // The untruncated source: '2-3' YEAR TO MONTH or '2 03:04:05.123456' DAY TO SECOND.
-            let source = if case["id"] == "cast_year" {
-                "27"
-            } else {
-                "183845123456"
-            };
-            current["expected"]["rows"] = json!([[source]]);
-        }
         RetainedDifference::WindowName => {
             for stage in ["analyzed", "optimized", "executed"] {
                 current["schema_stages"][stage]["fields"][1]["name"] = json!("SUM(v)");
@@ -453,8 +409,19 @@ fn current_expectation(case: &Value, difference: RetainedDifference) -> TestResu
             if case["expected"]["status"] != "error" {
                 return Err(format!("expected a Spark error: {case}").into());
             }
-            current["expected"]["condition"] =
-                json!(format!("External error: invalid argument: {error}"));
+            current["expected"] = json!({"status": "error",
+                "current_error": format!("External error: invalid argument: {error}")});
+        }
+        RetainedDifference::NestedIntervalCast => {
+            let (_, source) = NESTED_CAST_SOURCES
+                .iter()
+                .find(|(nested, _)| case["id"] == *nested)
+                .ok_or("expected a pinned nested cast")?;
+            current["expected"]["rows"] = json!([[source]]);
+        }
+        RetainedDifference::DivideByZeroCondition => {
+            current["expected"] =
+                json!({"status": "error", "current_error": "Arrow error: Divide by zero error"});
         }
     }
     Ok(current)
@@ -472,12 +439,11 @@ async fn interval_qualifiers_match_spark() -> TestResult {
     assert_eq!(
         retained.into_iter().collect::<Vec<_>>(),
         [
-            (RetainedDifference::YearMonthScaling, 24),
-            (RetainedDifference::PublicNullability, 42),
-            (RetainedDifference::CastTruncation, 14),
             (RetainedDifference::WindowName, 12),
             (RetainedDifference::RangeOffsetTyping, 10),
             (RetainedDifference::LimitErrorCondition, 54),
+            (RetainedDifference::DivideByZeroCondition, 12),
+            (RetainedDifference::NestedIntervalCast, 8),
         ]
     );
     let mut differences = Vec::new();
@@ -569,5 +535,38 @@ async fn native_interval_sql_is_unchanged_by_spark_configuration() -> TestResult
     .await?;
     assert_eq!(plain, configured);
     assert_eq!(plain.len(), 1);
+    Ok(())
+}
+
+/// Spark configuration must not change how native DataFusion SQL scales intervals, whether
+/// DataFusion returns a value or an error.
+#[tokio::test]
+async fn native_interval_scaling_is_unchanged_by_spark_configuration() -> TestResult {
+    async fn outcome(session: &SessionContext, sql: &str) -> String {
+        match session.sql(sql).await {
+            Ok(frame) => match frame.collect().await {
+                Ok(batches) => datafusion::arrow::util::pretty::pretty_format_batches(&batches)
+                    .map_or_else(|error| error.to_string(), |table| table.to_string()),
+                Err(error) => error.to_string(),
+            },
+            Err(error) => error.to_string(),
+        }
+    }
+    let configured = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    for sql in [
+        "SELECT INTERVAL '2' YEAR * 2",
+        "SELECT 2 * INTERVAL '27' MONTH",
+        "SELECT INTERVAL '27' MONTH / 2",
+        "SELECT INTERVAL '2' DAY * 2",
+        "SELECT INTERVAL '2' SECOND / 3",
+    ] {
+        assert_eq!(
+            outcome(&SessionContext::new(), sql).await,
+            outcome(&configured, sql).await,
+            "{sql}"
+        );
+    }
     Ok(())
 }

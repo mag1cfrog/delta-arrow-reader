@@ -3240,7 +3240,7 @@ mod tests {
                 expr: col("id", &schema)?,
                 alias: "key".into(),
             }],
-            filter.clone(),
+            Arc::clone(&filter) as _,
         )?;
         let optimized = filter.try_swapping_with_projection(&projection)?.unwrap();
         assert!(optimized.is::<FilterExec>());

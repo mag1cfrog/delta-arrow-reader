@@ -1,0 +1,19 @@
+{
+  "input_version": 1,
+  "capture_kind": "aggregate_internal_window_ordering",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "cases": [
+    {
+      "id": "deterministic_scalar_subquery_window_with_sorted_input",
+      "scope": "internal_window_ordering_control",
+      "sql": "SELECT SUM((SELECT SUM(v) OVER () AS window_value FROM (SELECT v FROM VALUES(3)t(v) ORDER BY v) ordered_input)) AS result FROM VALUES(1),(2)outer_input(n)",
+      "success_assertions": "exact_schema_and_rows"
+    }
+  ]
+}

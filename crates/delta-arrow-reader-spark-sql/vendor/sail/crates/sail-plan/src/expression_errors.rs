@@ -15,6 +15,7 @@ use datafusion::optimizer::simplify_expressions::{ExprSimplifier, prune_null};
 use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
 use datafusion::physical_expr::create_physical_expr;
 use datafusion_common::config::{ConfigExtension, ConfigOptions};
+use datafusion_common::metadata::FieldMetadata;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
 use datafusion_expr::utils::{conjunction, split_conjunction_owned};
@@ -40,18 +41,27 @@ use crate::function::scalar::{
     preserve_local_case_conversion, simplify_projected_case_conversions,
 };
 use datafusion::functions::math::round::RoundFunc;
+use datafusion_expr::simplify::SparkArrayIndexError;
 use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::math::spark_abs::SparkAbs;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
+use sail_function::scalar::math::spark_negative::SparkNegative;
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
+    spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
+use sail_function::scalar::misc::raise_error::RaiseError;
+use sail_function::scalar::predicate::spark_like::SparkLike;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
+use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
+use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -79,6 +89,7 @@ fn null_literal(expr: &Expr) -> bool {
         Expr::ScalarFunction(f)
             if (f.func.inner().is::<SparkNullIfZero>()
                 || f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastNumericToInteger>()
                 || f.func.inner().is::<SparkNullIf>()
                 || f.func
                     .inner()
@@ -87,6 +98,30 @@ fn null_literal(expr: &Expr) -> bool {
             f.args.first().is_some_and(null_literal)
         }
         _ => false,
+    }
+}
+
+/// Local division and remainder inspect a NULL divisor before their dividend.
+pub(crate) fn prune_null_divisor(expr: Expr, schema: &DFSchemaRef) -> Result<Transformed<Expr>> {
+    let right = match &expr {
+        Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
+            Some(binary.right.as_ref())
+        }
+        Expr::ScalarFunction(f)
+            if f.func.inner().is::<SparkCheckedDivide>()
+                || f.func.inner().is::<SparkCheckedModulo>()
+                || f.func.inner().is::<FusedDecimalDivide>() =>
+        {
+            Some(&f.args[1])
+        }
+        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
+    };
+    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
+        Ok(Transformed::yes(lit(ScalarValue::try_new_null(
+            &expr.get_type(schema)?,
+        )?)))
+    } else {
+        Ok(Transformed::no(expr))
     }
 }
 
@@ -101,6 +136,7 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
                 || (f.func.inner().is::<NormalizeNestedFloatKeys>()
                     && f.func.inner().supports_constant_folding())
                 || f.func.inner().is::<SparkDecimalCast>()
+                || f.func.inner().is::<SparkCastNumericToInteger>()
                 || f.func.inner().is::<SparkComparisonFloat>() =>
         {
             match f.args.as_slice() {
@@ -153,6 +189,7 @@ fn null_discarded(expr: &Expr) -> bool {
                 || inner.is::<SparkCheckedDivide>()
                 || inner.is::<SparkCheckedModulo>()
                 || inner.is::<SparkCheckedArithmetic>()
+                || inner.is::<SparkIntervalScale>()
                 || inner.is::<SparkIntegerDivide>())
                 && f.args.iter().any(null_literal))
                 || null_round(expr)
@@ -174,12 +211,103 @@ fn arithmetic_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
         || matches!(expr, Expr::ScalarFunction(f)
             if f.func.inner().is::<SparkAbs>()
                 || f.func.inner().is::<SparkCheckedArithmetic>()
+                || f.func.inner().is::<SparkIntervalScale>()
+                || f.func.inner().is::<SparkIntervalNegate>()
                 || f.func.inner().is::<SparkCheckedDivide>()
                 || f.func.inner().is::<SparkCheckedModulo>()
                 || f.func.inner().downcast_ref::<SparkDecimalCast>()
                     .is_some_and(|cast| cast.mode() == DecimalCastMode::Ansi)
                 || f.func.inner().is::<FusedDecimalDivide>())
     ))
+}
+
+fn array_index_error_candidate(expr: &Expr) -> Result<bool> {
+    expr.exists(|expr| {
+        Ok(matches!(expr, Expr::ScalarFunction(function)
+        if function.func.inner().downcast_ref::<RaiseError>()
+            .is_some_and(RaiseError::is_array_index_error)))
+    })
+}
+
+fn preparation_error_candidate(
+    expr: &Expr,
+    schema: &DFSchemaRef,
+    spark_array_index_errors: bool,
+) -> Result<bool> {
+    Ok(arithmetic_candidate(expr, schema)?
+        || (spark_array_index_errors && array_index_error_candidate(expr)?))
+}
+
+fn permits_constant_preparation(expr: &Expr) -> Result<bool> {
+    Ok(!expr.exists(|expr| {
+        Ok(expr.is_volatile_node()
+            || matches!(expr, Expr::ScalarFunction(function)
+            if !function.func.inner().supports_constant_folding()))
+    })?)
+}
+
+fn input_permits_array_index_preparation(plan: &LogicalPlan) -> Result<bool> {
+    let mut allowed = true;
+    plan.apply(|node| {
+        node.apply_expressions(|expr| {
+            allowed &= permits_constant_preparation(expr)?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(if allowed {
+            TreeNodeRecursion::Continue
+        } else {
+            TreeNodeRecursion::Stop
+        })
+    })?;
+    Ok(allowed)
+}
+
+// Follow aliases or already-closed values on a preparation copy; dependent computations stay opaque.
+fn inline_closed_projection_bindings_for_array_check(
+    expr: Expr,
+    input: &LogicalPlan,
+) -> Result<Expr> {
+    Ok(expr
+        .transform_up(|expr| {
+            let Expr::Column(column) = &expr else {
+                return Ok(Transformed::no(expr));
+            };
+            let index = input.schema().index_of_column(column)?;
+            let source = match input {
+                LogicalPlan::Projection(project) => {
+                    let source = &project.expr[index];
+                    let mut body = source;
+                    while let Expr::Alias(alias) = body {
+                        body = &alias.expr;
+                    }
+                    if matches!(body, Expr::Column(_)) {
+                        inline_closed_projection_bindings_for_array_check(
+                            source.clone(),
+                            &project.input,
+                        )?
+                    } else if row_expression(source, false)?
+                        && permits_constant_preparation(source)?
+                    {
+                        source.clone()
+                    } else {
+                        return Ok(Transformed::no(expr));
+                    }
+                }
+                LogicalPlan::SubqueryAlias(alias) => {
+                    inline_closed_projection_bindings_for_array_check(
+                        Expr::Column(alias.input.schema().columns()[index].clone()),
+                        &alias.input,
+                    )?
+                }
+                _ => return Ok(Transformed::no(expr)),
+            };
+            if row_expression(&source, false)? && permits_constant_preparation(&source)? {
+                Ok(Transformed::yes(source))
+            } else {
+                Ok(Transformed::no(expr))
+            }
+        })?
+        .data)
 }
 
 // Spark reduces Boolean literals before pulling correlations, but folds
@@ -285,7 +413,7 @@ impl PrepareSparkExpressions {
             plan
         };
         let mut found = false;
-        let mut check_arithmetic = false;
+        let mut check_preparation_errors = false;
         let mut check_cast = false;
         let mut has_correlated_scalar = false;
         let mut check_groups = false;
@@ -319,7 +447,7 @@ impl PrepareSparkExpressions {
                 has_correlated_scalar |= is_spark_query && expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarSubquery(subquery) if !subquery.outer_ref_columns.is_empty()))
                 })?;
-                check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
+                check_preparation_errors |= preparation_error_candidate(expr, node.schema(), is_spark_query)?;
                 has_slice_parameters |= expr.exists(|expr| {
                     Ok(matches!(expr, Expr::ScalarFunction(f) if f.func.inner().is::<SparkArraySlice>()))
                 })?;
@@ -328,14 +456,14 @@ impl PrepareSparkExpressions {
                 })?;
                 Ok(TreeNodeRecursion::Continue)
             })?;
-            Ok(if found && check_arithmetic && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
+            Ok(if found && check_preparation_errors && check_cast && check_groups && has_null_sensitive_comparison && has_constant_struct && has_coalesce_declaration_casts && has_slice_parameters {
                 TreeNodeRecursion::Stop
             } else {
                 TreeNodeRecursion::Continue
             })
         })?;
         if !found
-            && !check_arithmetic
+            && !check_preparation_errors
             && !check_cast
             && !has_correlated_scalar
             && !check_groups
@@ -346,12 +474,19 @@ impl PrepareSparkExpressions {
         {
             return Ok(plan);
         }
+        // These checks reproduce Spark's interpreted evaluation of constants and local rows.
+        let mut evaluation_options = options.clone();
+        evaluation_options
+            .extensions
+            .insert(SparkInterpretedEvaluation::default());
         let mut props = ExecutionProps::new();
-        props.config_options = Some(Arc::new(options.clone()));
+        props.config_options = Some(Arc::new(evaluation_options));
+        props.query_execution_start_time = crate::like_errors::spark_query_start_time(options);
         let prepare = Prepare {
             props,
             has_groups,
             has_null_sensitive_comparison,
+            spark_array_index_errors: is_spark_query,
         };
         let plan = if has_constant_struct || has_coalesce_declaration_casts {
             prepare.prepare_nested_result_declarations(plan)?
@@ -364,7 +499,7 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        let plan = if check_cast || check_arithmetic {
+        let plan = if check_cast || check_preparation_errors {
             plan.transform_down_up_with_subqueries(|node| {
                 // Correlated EXISTS drops unused filter subqueries before their preparation.
                 let simplified = if is_spark_query {
@@ -464,8 +599,8 @@ impl PrepareSparkExpressions {
                                 _ => None,
                             };
                             if let Some(subquery) = predicate {
-                                if check_arithmetic {
-                                    prepare.check_arithmetic_expressions(&subquery.subquery, true)?;
+                                if check_preparation_errors {
+                                    prepare.check_preparation_error_expressions(&subquery.subquery, true)?;
                                 }
                                 let prepared = prepare.cast_reachability(
                                     Arc::unwrap_or_clone(Arc::clone(&subquery.subquery)),
@@ -479,8 +614,8 @@ impl PrepareSparkExpressions {
                                     datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation::new()
                                         .rewrite(node, &config)
                                 })?.data;
-                                if check_arithmetic {
-                                    prepare.check_arithmetic_plan(&prepared, options, true)?;
+                                if check_preparation_errors {
+                                    prepare.check_preparation_error_plan(&prepared, options, true)?;
                                 }
                                 subquery.subquery = Arc::new(prepared);
                                 if let Expr::InSubquery(in_subquery) = &mut expr
@@ -511,8 +646,8 @@ impl PrepareSparkExpressions {
                                 }
                                 // Preserve local arithmetic errors before CAST
                                 // preparation removes unused or empty projections.
-                                if check_arithmetic {
-                                    prepare.check_arithmetic_plan(&subquery.subquery, options, false)?;
+                                if check_preparation_errors {
+                                    prepare.check_preparation_error_plan(&subquery.subquery, options, false)?;
                                 }
                                 subquery.subquery = Arc::new(prepare.cast_reachability(
                                     Arc::unwrap_or_clone(subquery.subquery),
@@ -564,7 +699,7 @@ impl PrepareSparkExpressions {
         } else {
             plan
         };
-        if check_arithmetic {
+        if check_preparation_errors {
             // CAST preparation already checked these scalar plans before pruning.
             if !check_cast {
                 // Spark prepares subqueries before pruning their outer expressions.
@@ -577,7 +712,7 @@ impl PrepareSparkExpressions {
                                 // its arithmetic still follows the outer NULL/CASE rules.
                                 && one_row_exprs(&subquery.subquery)?.is_none()
                             {
-                                prepare.check_arithmetic_plan(
+                                prepare.check_preparation_error_plan(
                                     &subquery.subquery,
                                     options,
                                     false,
@@ -588,12 +723,12 @@ impl PrepareSparkExpressions {
                     })
                 })?;
             }
-            prepare.check_arithmetic_plan(&plan, options, false)?;
+            prepare.check_preparation_error_plan(&plan, options, false)?;
         }
 
         let plan = if check_cast {
             prepare.cast_reachability(plan, options, false)?
-        } else if check_arithmetic {
+        } else if check_preparation_errors {
             let prepared = prepare.prepare_distinct_limits(plan, 0)?;
             if prepared.transformed || has_groups || has_null_sensitive_comparison {
                 let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
@@ -837,6 +972,7 @@ struct Prepare {
     props: ExecutionProps,
     has_groups: bool,
     has_null_sensitive_comparison: bool,
+    spark_array_index_errors: bool,
 }
 
 // Preserve the early local row-evaluation boundary before logical folding.
@@ -911,6 +1047,7 @@ pub(crate) fn prune_retained_local_like_limits(
         props: props.clone(),
         has_groups: false,
         has_null_sensitive_comparison: false,
+        spark_array_index_errors: false,
     };
     Ok(plan
         .transform_down_with_subqueries(|node| {
@@ -986,6 +1123,7 @@ pub(crate) fn try_check_local_row_errors(
         props: props.clone(),
         has_groups: false,
         has_null_sensitive_comparison: false,
+        spark_array_index_errors: false,
     };
     let Some(batch) = prepare.local_batch(&input)? else {
         return Ok(false);
@@ -1149,6 +1287,7 @@ fn substring_precheck_keeps_computed_null_source_constants_reachable() -> Result
         props,
         has_groups: false,
         has_null_sensitive_comparison: false,
+        spark_array_index_errors: false,
     };
     let source = datafusion_expr::expr_fn::when(lit(true), lit(ScalarValue::Utf8(None)))
         .otherwise(col("s"))?;
@@ -1335,6 +1474,82 @@ fn preserve_local_case_conversions(plan: LogicalPlan) -> Result<LogicalPlan> {
             },
         )?
         .data)
+}
+
+#[test]
+fn array_binding_lookup_does_not_expand_dependent_projection_chains() -> Result<()> {
+    use datafusion::arrow::datatypes::Field;
+    use datafusion::datasource::{MemTable, TableProvider, provider_as_source};
+    use datafusion_expr::logical_plan::{Projection, SubqueryAlias};
+    use datafusion_expr::{LogicalPlanBuilder, ScalarUDF, col};
+    use sail_function::scalar::array::spark_array::SparkArray;
+
+    let provider: Arc<dyn TableProvider> = Arc::new(MemTable::try_new(
+        Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
+        vec![vec![]],
+    )?);
+    let scan =
+        LogicalPlanBuilder::scan("bounds_source", provider_as_source(provider), None)?.build()?;
+    let base = Arc::new(LogicalPlan::Projection(Projection::try_new(
+        vec![lit(1_i32).alias("v")],
+        Arc::new(scan),
+    )?));
+    let consumer = ScalarUDF::from(SparkArray::new()).call(vec![col("v")]);
+    let node_count = |expr: &Expr| -> Result<usize> {
+        let mut nodes = 0;
+        expr.apply(|_| {
+            nodes += 1;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(nodes)
+    };
+
+    let depth = 10;
+    let mut dependent = Arc::clone(&base);
+    for _ in 0..depth {
+        let alias = LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(dependent, "q")?);
+        dependent = Arc::new(LogicalPlan::Projection(Projection::try_new(
+            vec![(col("v") + col("v")).alias("v")],
+            Arc::new(alias),
+        )?));
+    }
+    let mut input_nodes = 0;
+    dependent.apply(|node| {
+        node.apply_expressions(|expr| {
+            input_nodes += node_count(expr)?;
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    assert_eq!(input_nodes, depth * 4 + 2);
+    let work = inline_closed_projection_bindings_for_array_check(consumer.clone(), &dependent)?;
+    assert!(
+        node_count(&work)? <= input_nodes,
+        "dependent projections expanded into the work copy"
+    );
+    assert_eq!(work, consumer, "dependent computations must remain opaque");
+
+    let alias_depth = 24;
+    let mut aliases = base;
+    for _ in 0..alias_depth {
+        let alias = LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(aliases, "q")?);
+        aliases = Arc::new(LogicalPlan::Projection(Projection::try_new(
+            vec![col("v").alias("v")],
+            Arc::new(alias),
+        )?));
+    }
+    let closed = inline_closed_projection_bindings_for_array_check(consumer, &aliases)?;
+    assert!(!closed.any_column_refs());
+    assert!(node_count(&closed)? <= alias_depth + 4);
+    let mut values = Vec::new();
+    closed.apply(|expr| {
+        if let Expr::Literal(value, _) = expr {
+            values.push(value.clone());
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    assert_eq!(values, vec![ScalarValue::Int32(Some(1))]);
+    Ok(())
 }
 
 #[test]
@@ -1535,6 +1750,8 @@ fn one_row_exprs(plan: &LogicalPlan) -> Result<Option<Vec<Expr>>> {
 
 fn has_cast(expr: &Expr) -> Result<bool> {
     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
+        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().downcast_ref::<SparkCastNumericToInteger>()
+            .is_some_and(|cast| !cast.is_try()))
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
             || f.func.inner().is::<SparkDecimalCast>()
@@ -1610,6 +1827,200 @@ fn known_empty(plan: &LogicalPlan) -> bool {
 }
 
 impl Prepare {
+    // Cache arguments after input checks, before current-expression previews can replay producers.
+    fn prepare_array_errors_in_string_calls(
+        &self,
+        node: LogicalPlan,
+    ) -> Result<Transformed<LogicalPlan>> {
+        if known_empty(&node)
+            || !node.inputs().iter().try_fold(true, |allowed, input| {
+                Ok::<_, datafusion_common::DataFusionError>(
+                    allowed && input_permits_array_index_preparation(input)?,
+                )
+            })?
+        {
+            return Ok(Transformed::no(node));
+        }
+        let schema = datafusion_expr::utils::merge_schema(&node.inputs());
+        let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+        node.map_expressions(|expr| {
+            let name = names.save(&expr);
+            self.prepare_array_errors_in_string_expression(expr, &schema)
+                .map(|prepared| prepared.update_data(|expr| name.restore(expr)))
+        })
+    }
+
+    fn prepare_array_errors_in_string_expression(
+        &self,
+        expr: Expr,
+        schema: &DFSchema,
+    ) -> Result<Transformed<Expr>> {
+        expr.transform_down(|expr| {
+            let string_call = substring_argument_bodies(&expr)?.is_some();
+            if null_discarded(&expr) || (expr.short_circuits() && !string_call) {
+                return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
+            }
+            if !string_call {
+                return Ok(Transformed::no(expr));
+            }
+            if !array_index_error_candidate(&expr)?
+                || expr.exists(|expr| {
+                    Ok(matches!(expr, Expr::ScalarFunction(function)
+                    if !function.func.inner().supports_constant_folding()))
+                })?
+            {
+                return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
+            }
+            let Expr::HigherOrderFunction(mut function) = expr else {
+                return Ok(Transformed::no(expr));
+            };
+            let mut changed = false;
+            for argument in &mut function.args {
+                let Expr::Lambda(lambda) = argument else {
+                    continue;
+                };
+                if null_literal(&lambda.body) {
+                    break;
+                }
+                let prepared = self.prepare_array_errors_in_string_expression(
+                    *std::mem::take(&mut lambda.body),
+                    schema,
+                )?;
+                changed |= prepared.transformed;
+                *lambda.body = prepared.data;
+                if !row_expression(&lambda.body, false)?
+                    || !permits_constant_preparation(&lambda.body)?
+                {
+                    if self.string_result_is_null_on_success(&lambda.body, schema)? {
+                        break;
+                    }
+                    continue;
+                }
+                let (_, field) = lambda.body.to_field(schema)?;
+                let value = match self.eval_constant(&lambda.body)? {
+                    ColumnarValue::Scalar(value) => value,
+                    ColumnarValue::Array(array) if array.len() == 1 => {
+                        ScalarValue::try_from_array(array.as_ref(), 0)?
+                    }
+                    _ => {
+                        return datafusion_common::internal_err!(
+                            "closed string argument returned a result other than one row"
+                        );
+                    }
+                };
+                let is_null = value.is_null();
+                let metadata =
+                    (!field.metadata().is_empty()).then(|| FieldMetadata::from(field.as_ref()));
+                let prepared = Expr::Literal(value, metadata);
+                changed |= prepared != *lambda.body;
+                *lambda.body = prepared;
+                if is_null {
+                    break;
+                }
+            }
+            Ok(Transformed::new(
+                Expr::HigherOrderFunction(function),
+                changed,
+                TreeNodeRecursion::Jump,
+            ))
+        })
+    }
+
+    // NULL on successful completion does not permit dropping earlier fallible or volatile work.
+    fn string_result_is_null_on_success(&self, expr: &Expr, schema: &DFSchema) -> Result<bool> {
+        let expr = without_metadata_annotations(expr);
+        if null_literal(expr) {
+            return Ok(true);
+        }
+        match expr {
+            Expr::Alias(alias) => self.string_result_is_null_on_success(&alias.expr, schema),
+            Expr::Cast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
+            Expr::TryCast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
+            Expr::Negative(input) | Expr::Not(input) => {
+                self.string_result_is_null_on_success(input, schema)
+            }
+            Expr::BinaryExpr(binary) if binary.op.returns_null_on_null() => Ok(self
+                .string_result_is_null_on_success(&binary.left, schema)?
+                || self.string_result_is_null_on_success(&binary.right, schema)?),
+            Expr::Like(like) | Expr::SimilarTo(like) => Ok(self
+                .string_result_is_null_on_success(&like.expr, schema)?
+                || self.string_result_is_null_on_success(&like.pattern, schema)?),
+            Expr::ScalarFunction(function)
+                if function.func.inner().is::<SparkCastStringToInteger>()
+                    || function.func.inner().is::<SparkCastNumericToInteger>()
+                    || function.func.inner().is::<SparkCastStringToFloat>()
+                    || function.func.inner().is::<SparkCastStringToDecimal>()
+                    || function.func.inner().is::<SparkCastStringToBoolean>()
+                    || function.func.inner().is::<SparkDecimalCast>()
+                    || function.func.inner().is::<SparkToUtf8>()
+                    || function.func.inner().is::<SparkToLargeUtf8>()
+                    || function.func.inner().is::<SparkToUtf8View>()
+                    || function.func.inner().is::<SparkNegative>() =>
+            {
+                match function.args.as_slice() {
+                    [input] => self.string_result_is_null_on_success(input, schema),
+                    _ => Ok(false),
+                }
+            }
+            Expr::ScalarFunction(function) => {
+                let inner = function.func.inner();
+                let mut proof = function.clone();
+                let mut all_null = !proof.args.is_empty();
+                for (index, argument) in proof.args.iter_mut().enumerate() {
+                    if self.string_result_is_null_on_success(argument, schema)? {
+                        if inner.short_circuits_on_any_null_argument()
+                            || (index == 0 && inner.short_circuits_on_null_first_arg())
+                            || (index == 1 && inner.is::<SparkLike>())
+                        {
+                            return Ok(true);
+                        }
+                        *argument = Expr::Literal(ScalarValue::Null, None);
+                    } else {
+                        all_null = false;
+                    }
+                }
+                Ok((inner.returns_first_non_null_argument() && all_null)
+                    || null_discarded(&Expr::ScalarFunction(proof)))
+            }
+            Expr::Case(case) => {
+                let mut all_null = true;
+                for (_, result) in &case.when_then_expr {
+                    if !self.string_result_is_null_on_success(result, schema)? {
+                        all_null = false;
+                        break;
+                    }
+                }
+                if all_null
+                    && case.else_expr.as_deref().map_or(Ok(true), |result| {
+                        self.string_result_is_null_on_success(result, schema)
+                    })?
+                {
+                    return Ok(true);
+                }
+                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                    .with_schema(Arc::new(schema.clone()))
+                    .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                    .build();
+                let prepared = ExprSimplifier::new(info).simplify_algebraic_once(expr.clone())?;
+                if prepared.transformed {
+                    self.string_result_is_null_on_success(&prepared.data, schema)
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => {
+                if let Some(bodies) = substring_argument_bodies(expr)? {
+                    for body in bodies {
+                        if self.string_result_is_null_on_success(body, schema)? {
+                            return Ok(true);
+                        }
+                    }
+                }
+                Ok(false)
+            }
+        }
+    }
+
     fn simplify_projected_null_comparisons(&self, plan: LogicalPlan) -> Result<LogicalPlan> {
         // Expose only known NULLs across aliases; leave other expressions in place
         // so pruning cannot duplicate them or change their evaluation order.
@@ -1944,6 +2355,47 @@ impl Prepare {
         Ok(Transformed::no(node))
     }
 
+    // Keep input folds and their expression-derived declarations before converting local rows.
+    fn simplify_local_input_expressions(
+        &self,
+        input: LogicalPlan,
+    ) -> Result<Transformed<LogicalPlan>> {
+        input.transform_down_up(
+            |node| {
+                let pruned = self.prune_limit_zero(node, true)?;
+                let recursion = if pruned.transformed {
+                    TreeNodeRecursion::Jump
+                } else {
+                    TreeNodeRecursion::Continue
+                };
+                Ok(Transformed::new(pruned.data, pruned.transformed, recursion))
+            },
+            |node| {
+                if known_empty(&node) {
+                    return Ok(Transformed::no(node));
+                }
+                let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
+                let info = datafusion_expr::simplify::SimplifyContext::builder()
+                    .with_schema(schema)
+                    .with_query_execution_start_time(self.props.query_execution_start_time)
+                    .with_config_options(self.props.config_options.clone().unwrap_or_default())
+                    .build();
+                let simplifier = ExprSimplifier::new(info).with_local_input_errors();
+                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                let prepared = node.map_expressions(|expr| {
+                    let name = names.save(&expr);
+                    simplifier
+                        .simplify_with_cycle_count_transformed(expr)
+                        .map(|(prepared, _)| prepared.update_data(|expr| name.restore(expr)))
+                })?;
+                Ok(Transformed::new_transformed(
+                    prepared.data.recompute_schema()?,
+                    prepared.transformed,
+                ))
+            },
+        )
+    }
+
     fn cast_reachability(
         &self,
         plan: LogicalPlan,
@@ -1958,62 +2410,149 @@ impl Prepare {
         // Local VALUES conversion precedes pruning. Empty local inputs never
         // evaluate their projection; nonempty ones preserve live CAST failures.
         let plan = plan
-            .transform_up(|node| {
-                if let LogicalPlan::Projection(project) = &node {
-                    let mut casts = false;
-                    let mut evaluable = true;
+            .transform_up(|mut node| {
+                let mut input_batch = None;
+                let mut casts = false;
+                let mut evaluable = true;
+                let mut retain_input = false;
+                let mut simplified_input = false;
+                if let LogicalPlan::Projection(project) = &mut node {
                     for expr in &project.expr {
                         casts |= early_cast(expr, project.input.schema(), is_spark_query)?;
                         evaluable &= row_expression(expr, true)?;
                     }
-                    if casts
-                        && (evaluable || is_spark_query)
-                        && let Some(batch) = self.local_batch(&project.input)?
+                    retain_input = is_spark_query
+                        && self.spark_array_index_errors
+                        && early_local_relation(&project.input)?
+                        && input_permits_array_index_preparation(&project.input)?
+                        && project.expr.iter().try_fold(false, |found, expr| {
+                            Ok::<_, datafusion_common::DataFusionError>(
+                                found
+                                    || expr.exists(|expr| {
+                                        Ok(substring_argument_bodies(expr)?.is_some()
+                                            && array_index_error_candidate(expr)?)
+                                    })?,
+                            )
+                        })?;
+                    if retain_input {
+                        let prepared = self.simplify_local_input_expressions(
+                            Arc::unwrap_or_clone(Arc::clone(&project.input)),
+                        )?;
+                        simplified_input = prepared.transformed;
+                        project.input = Arc::new(prepared.data);
+                    }
+                    if (casts && (evaluable || is_spark_query)) || retain_input {
+                        input_batch = self.local_batch(&project.input)?;
+                    }
+                    if let Some(batch) = &input_batch
+                        && batch.num_rows() == 0
                     {
-                        if batch.num_rows() == 0 {
-                            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
-                                EmptyRelation {
-                                    produce_one_row: false,
-                                    schema: Arc::clone(&project.schema),
-                                },
-                            )));
-                        }
-                        let info = datafusion_expr::simplify::SimplifyContext::builder()
-                            .with_schema(Arc::clone(project.input.schema()))
-                            .with_config_options(Arc::new(options.clone()))
-                            .build();
-                        let mut simplifier = ExprSimplifier::new(info);
-                        if is_spark_query {
-                            simplifier = simplifier.with_local_input_errors();
-                        }
-                        for expr in &project.expr {
-                            if !row_expression(expr, true)? {
-                                continue;
-                            }
-                            // Keep local comparisons while lowering other UDFs normally.
-                            let expr = expr
-                                .clone()
-                                .transform_up(|mut expr| {
-                                    if let Expr::ScalarFunction(f) = &mut expr
-                                        && let Some(nullif) =
-                                            f.func.inner().downcast_ref::<SparkNullIf>()
-                                    {
-                                        f.func = Arc::new(datafusion_expr::ScalarUDF::from(
-                                            nullif.for_local_values(),
-                                        ));
-                                        return Ok(Transformed::yes(expr));
-                                    }
-                                    Ok(Transformed::no(expr))
-                                })?
-                                .data;
-                            let expr = materialize_metadata_literals(expr)?.data;
-                            let expr = simplifier.simplify(expr)?;
-                            create_physical_expr(&expr, project.input.schema(), &self.props)?
-                                .evaluate(&batch)?;
-                        }
+                        return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
+                            EmptyRelation {
+                                produce_one_row: false,
+                                schema: Arc::clone(&project.schema),
+                            },
+                        )));
                     }
                 }
-                Ok(Transformed::no(node))
+                let mut retained = false;
+                if retain_input
+                    && let Some(batch) = &input_batch
+                    && let LogicalPlan::Projection(project) = &mut node
+                {
+                    let schema = Arc::clone(project.input.schema());
+                    // Consume local conversion once; later previews and execution use inert values.
+                    let input = if schema.fields().is_empty() {
+                        // Values requires a column; an empty projection preserves only row count.
+                        let carrier_schema = Arc::new(DFSchema::try_from(Schema::new(vec![
+                            datafusion::arrow::datatypes::Field::new(
+                                "__spark_input_row",
+                                DataType::Int32,
+                                false,
+                            ),
+                        ]))?);
+                        let carrier = LogicalPlan::Values(datafusion_expr::Values {
+                            schema: carrier_schema,
+                            values: (0..batch.num_rows()).map(|_| vec![lit(0_i32)]).collect(),
+                        });
+                        LogicalPlan::Projection(
+                            datafusion_expr::logical_plan::Projection::try_new_with_schema(
+                                vec![],
+                                Arc::new(carrier),
+                                schema,
+                            )?,
+                        )
+                    } else {
+                        let values = (0..batch.num_rows())
+                            .map(|row| {
+                                batch
+                                    .columns()
+                                    .iter()
+                                    .zip(schema.fields())
+                                    .map(|(column, field)| {
+                                        let value =
+                                            ScalarValue::try_from_array(column.as_ref(), row)?;
+                                        let metadata = (!field.metadata().is_empty())
+                                            .then(|| FieldMetadata::from(field.as_ref()));
+                                        Ok(Expr::Literal(value, metadata))
+                                    })
+                                    .collect::<Result<Vec<_>>>()
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        LogicalPlan::Values(datafusion_expr::Values { schema, values })
+                    };
+                    project.input = Arc::new(input);
+                    retained = true;
+                }
+                let prepared = if is_spark_query && self.spark_array_index_errors {
+                    self.prepare_array_errors_in_string_calls(node)?
+                } else {
+                    Transformed::no(node)
+                };
+                let node = prepared.data;
+                if let LogicalPlan::Projection(project) = &node
+                    && casts
+                    && (evaluable || is_spark_query)
+                    && let Some(batch) = &input_batch
+                {
+                    let info = datafusion_expr::simplify::SimplifyContext::builder()
+                        .with_schema(Arc::clone(project.input.schema()))
+                        .with_config_options(Arc::new(options.clone()))
+                        .build();
+                    let mut simplifier = ExprSimplifier::new(info);
+                    if is_spark_query {
+                        simplifier = simplifier.with_local_input_errors();
+                    }
+                    for expr in &project.expr {
+                        if !row_expression(expr, true)? {
+                            continue;
+                        }
+                        // Keep local comparisons while lowering other UDFs normally.
+                        let expr = expr
+                            .clone()
+                            .transform_up(|mut expr| {
+                                if let Expr::ScalarFunction(f) = &mut expr
+                                    && let Some(nullif) =
+                                        f.func.inner().downcast_ref::<SparkNullIf>()
+                                {
+                                    f.func = Arc::new(datafusion_expr::ScalarUDF::from(
+                                        nullif.for_local_values(),
+                                    ));
+                                    return Ok(Transformed::yes(expr));
+                                }
+                                Ok(Transformed::no(expr))
+                            })?
+                            .data;
+                        let expr = materialize_metadata_literals(expr)?.data;
+                        let expr = simplifier.simplify(expr)?;
+                        create_physical_expr(&expr, project.input.schema(), &self.props)?
+                            .evaluate(batch)?;
+                    }
+                }
+                Ok(Transformed::new_transformed(
+                    node,
+                    prepared.transformed || retained || simplified_input,
+                ))
             })?
             .data;
         let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
@@ -2223,27 +2762,11 @@ impl Prepare {
         Ok(expr
             .transform_down(|expr| {
                 let expr = if local {
-                    let right = match &expr {
-                        Expr::BinaryExpr(binary)
-                            if matches!(binary.op, Operator::Divide | Operator::Modulo) =>
-                        {
-                            Some(binary.right.as_ref())
-                        }
-                        Expr::ScalarFunction(f)
-                            if f.func.inner().is::<SparkCheckedDivide>()
-                                || f.func.inner().is::<SparkCheckedModulo>()
-                                || f.func.inner().is::<FusedDecimalDivide>() =>
-                        {
-                            Some(&f.args[1])
-                        }
-                        _ => integer_divide_args(&expr, schema).map(|(_, right, _)| right),
-                    };
-                    if right.is_some_and(null_literal) && !expr.contains_scalar_subquery() {
-                        return Ok(Transformed::yes(lit(ScalarValue::try_new_null(
-                            &expr.get_type(schema)?,
-                        )?)));
+                    let pruned = prune_null_divisor(expr, schema)?;
+                    if pruned.transformed {
+                        return Ok(pruned);
                     }
-                    expr
+                    pruned.data
                 } else if null_round(&expr) && !expr.contains_scalar_subquery() {
                     lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?)
                 } else {
@@ -2277,7 +2800,7 @@ impl Prepare {
                 // Do not simplify arithmetic or Boolean parents before checking it.
                 if !local
                     && matches!(expr, Expr::Case(_))
-                    && !arithmetic_candidate(&expr, schema)?
+                    && !preparation_error_candidate(&expr, schema, self.spark_array_index_errors)?
                     && let Ok(simplified) = ExprSimplifier::new(info.clone()).simplify(expr.clone())
                 {
                     return Ok(Transformed::yes(simplified));
@@ -2287,7 +2810,7 @@ impl Prepare {
             .data)
     }
 
-    fn check_arithmetic_plan(
+    fn check_preparation_error_plan(
         &self,
         plan: &LogicalPlan,
         options: &ConfigOptions,
@@ -2295,7 +2818,8 @@ impl Prepare {
     ) -> Result<()> {
         // Local VALUES are evaluated before column pruning and LIMIT 0.
         // Successful constants need no extra copy, simplification or pruning.
-        if self.check_arithmetic_expressions(plan, true)? {
+        let requires_pruned_check = self.check_preparation_error_expressions(plan, true)?;
+        if requires_pruned_check {
             let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
             // NULL parents and unused columns disappear before constant folding,
             // but Boolean/filter simplification must not erase arithmetic failures.
@@ -2317,15 +2841,20 @@ impl Prepare {
                 self.prepare_distinct_limits(pruned, 0)?.data
             };
             let pruned = self.prune_projections(pruned, &config, false)?;
-            self.check_arithmetic_expressions(&pruned, false)?;
+            self.check_preparation_error_expressions(&pruned, false)?;
         }
         Ok(())
     }
 
-    fn check_arithmetic_expressions(&self, plan: &LogicalPlan, local: bool) -> Result<bool> {
+    // True requests a second constant check after pruning; it is not an error verdict.
+    fn check_preparation_error_expressions(
+        &self,
+        plan: &LogicalPlan,
+        check_local_inputs: bool,
+    ) -> Result<bool> {
         let mut needs_pruning = false;
         plan.apply(|node| {
-            if !local
+            if !check_local_inputs
                 && let LogicalPlan::Limit(limit) = node
                 && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(0)
                 && !known_empty(&limit.input)
@@ -2334,7 +2863,21 @@ impl Prepare {
             }
             let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
             node.apply_expressions(|expr| {
-                if !arithmetic_candidate(expr, &schema)? {
+                let arithmetic = arithmetic_candidate(expr, &schema)?;
+                let array_index =
+                    self.spark_array_index_errors && array_index_error_candidate(expr)?;
+                if !arithmetic && !array_index {
+                    return Ok(TreeNodeRecursion::Continue);
+                }
+                if !arithmetic
+                    && array_index
+                    && (!permits_constant_preparation(expr)?
+                        || !node.inputs().iter().try_fold(true, |allowed, input| {
+                            Ok::<_, datafusion_common::DataFusionError>(
+                                allowed && input_permits_array_index_preparation(input)?,
+                            )
+                        })?)
+                {
                     return Ok(TreeNodeRecursion::Continue);
                 }
                 let local_node =
@@ -2347,7 +2890,11 @@ impl Prepare {
                     None
                 };
                 match batch {
-                    Some(batch) if local && batch.num_rows() > 0 && row_expression(expr, true)? => {
+                    Some(batch)
+                        if check_local_inputs
+                            && batch.num_rows() > 0
+                            && row_expression(expr, true)? =>
+                    {
                         let expr = self.precheck_expression(expr.clone(), &schema, true)?;
                         let error = match create_physical_expr(&expr, &schema, &self.props)?
                             .evaluate(&batch)
@@ -2355,11 +2902,17 @@ impl Prepare {
                             Ok(_) => return Ok(TreeNodeRecursion::Continue),
                             Err(error) => error,
                         };
+                        if !arithmetic {
+                            if SparkArrayIndexError::is(&error) {
+                                return Err(error);
+                            }
+                            return Ok(TreeNodeRecursion::Continue);
+                        }
                         // Match Spark's strict string-to-integer trimming
                         // only for this discarded local evaluation. The
                         // runtime expression and its physical plan stay intact.
                         let expr = expr.clone().transform_up(|expr| {
-                            if let Expr::Cast(mut cast) = expr {
+                            let expr = if let Expr::Cast(mut cast) = expr {
                                 if cast.field.data_type().is_signed_integer()
                                     && cast.expr.get_type(&schema)?.is_string()
                                 {
@@ -2371,32 +2924,51 @@ impl Prepare {
                                         Box::new(expr_fn::btrim(vec![*cast.expr, lit(trim)]));
                                     return Ok(Transformed::yes(Expr::Cast(cast)));
                                 }
-                                // Spark compares its floating input with a
-                                // floating Long.MaxValue, which rounds to
-                                // 2^63, then saturates that endpoint to MAX.
-                                if cast.field.data_type() == &DataType::Int64 {
-                                    let upper = match cast.expr.get_type(&schema)? {
-                                        DataType::Float32 => {
-                                            Some(ScalarValue::Float32(Some(i64::MAX as f32)))
-                                        }
-                                        DataType::Float64 => {
-                                            Some(ScalarValue::Float64(Some(i64::MAX as f64)))
-                                        }
+                                Expr::Cast(cast)
+                            } else {
+                                expr
+                            };
+                            let input = match &expr {
+                                Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
+                                    Some(cast.expr.as_ref())
+                                }
+                                Expr::ScalarFunction(f)
+                                    if f.func
+                                        .inner()
+                                        .downcast_ref::<SparkCastNumericToInteger>()
+                                        .is_some_and(|cast| {
+                                            !cast.is_try() && cast.target_type() == &DataType::Int64
+                                        }) =>
+                                {
+                                    match f.args.as_slice() {
+                                        [input] => Some(input),
                                         _ => None,
-                                    };
-                                    if let Some(upper) = upper {
-                                        let expr = datafusion_expr::expr_fn::when(
-                                            (*cast.expr).clone().eq(lit(upper)),
-                                            lit(i64::MAX),
-                                        )
-                                        .otherwise(Expr::Cast(cast))?;
-                                        return Ok(Transformed::yes(expr));
                                     }
                                 }
-                                Ok(Transformed::no(Expr::Cast(cast)))
-                            } else {
-                                Ok(Transformed::no(expr))
+                                _ => None,
+                            };
+                            // Spark rounds floating Long.MaxValue to 2^63,
+                            // then saturates that endpoint in this local check.
+                            if let Some(input) = input {
+                                let upper = match input.get_type(&schema)? {
+                                    DataType::Float32 => {
+                                        Some(ScalarValue::Float32(Some(i64::MAX as f32)))
+                                    }
+                                    DataType::Float64 => {
+                                        Some(ScalarValue::Float64(Some(i64::MAX as f64)))
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(upper) = upper {
+                                    let expr = datafusion_expr::expr_fn::when(
+                                        input.clone().eq(lit(upper)),
+                                        lit(i64::MAX),
+                                    )
+                                    .otherwise(expr)?;
+                                    return Ok(Transformed::yes(expr));
+                                }
                             }
+                            Ok(Transformed::no(expr))
                         })?;
                         if !expr.transformed {
                             return Err(error);
@@ -2404,11 +2976,28 @@ impl Prepare {
                         create_physical_expr(&expr.data, &schema, &self.props)?.evaluate(&batch)?;
                     }
                     None => {
-                        let expr = self.precheck_expression(expr.clone(), &schema, false)?;
-                        if local {
-                            needs_pruning |= self.check_expr(&expr, true).is_err();
+                        let expr = if !arithmetic
+                            && array_index
+                            && let LogicalPlan::Projection(project) = node
+                        {
+                            inline_closed_projection_bindings_for_array_check(
+                                expr.clone(),
+                                &project.input,
+                            )?
                         } else {
-                            self.check_expr(&expr, true)?;
+                            expr.clone()
+                        };
+                        let expr = self.precheck_expression(expr, &schema, false)?;
+                        let checked = match self.check_expr(&expr, true) {
+                            Err(error) if arithmetic || SparkArrayIndexError::is(&error) => {
+                                Err(error)
+                            }
+                            _ => Ok(()),
+                        };
+                        if check_local_inputs {
+                            needs_pruning |= checked.is_err();
+                        } else {
+                            checked?;
                         }
                     }
                     // Local projection/filter conversion consumes even empty inputs.
@@ -2477,7 +3066,7 @@ impl Prepare {
 
     // Evaluate only SQL VALUES and the operations Spark can perform locally.
     // Table scans, range execution, aggregates and joins are never executed.
-    // The batch is discarded; it exists to preserve early planning failures.
+    // ARRAY-bearing string preparation retains admitted local values in the actual input plan.
     fn local_batch(&self, plan: &LogicalPlan) -> Result<Option<RecordBatch>> {
         let inputs = plan
             .inputs()

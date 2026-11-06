@@ -1,0 +1,97 @@
+{
+  "input_version": 1,
+  "capture_kind": "aggregate_listagg_identity",
+  "spark_version": "4.2.0",
+  "spark_revision": "32f7299601108917fb01920a54e084595b7b3bf8",
+  "timezone": "UTC",
+  "ansi_modes": [
+    true,
+    false
+  ],
+  "registered_udf": {
+    "name": "observed_null",
+    "return_type": "void",
+    "volatility": "nondeterministic",
+    "constant_result": null
+  },
+  "cases": [
+    {
+      "id": "listagg_null_rows",
+      "scope": "null_input_control",
+      "sql": "SELECT LISTAGG(NULL, ',') AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "listagg_null_empty",
+      "scope": "null_input_control",
+      "sql": "SELECT LISTAGG(NULL, ',') AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "string_agg_null_rows",
+      "scope": "null_input_alias_control",
+      "sql": "SELECT STRING_AGG(NULL, ',') AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "nested_null_listagg",
+      "scope": "nested_null_aggregate",
+      "sql": "SELECT SUM(LENGTH(LISTAGG(NULL, ','))) AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "listagg_null_volatile_rows",
+      "scope": "null_volatile_aggregate_argument",
+      "sql": "SELECT LISTAGG(CASE WHEN RAND()>0.5 THEN NULL ELSE NULL END, ',') AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT LISTAGG(observed_null(v), ',') AS result FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "listagg_null_volatile_empty",
+      "scope": "null_volatile_aggregate_argument",
+      "sql": "SELECT LISTAGG(CASE WHEN RAND()>0.5 THEN NULL ELSE NULL END, ',') AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT LISTAGG(observed_null(v), ',') AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t"
+    },
+    {
+      "id": "listagg_null_volatile_grouped",
+      "scope": "null_volatile_aggregate_argument",
+      "sql": "SELECT LISTAGG(CASE WHEN RAND()>0.5 THEN NULL ELSE NULL END, ',') AS result FROM VALUES(1),(2)t(v) GROUP BY v",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT LISTAGG(observed_null(v), ',') AS result FROM VALUES(1),(2)t(v) GROUP BY v"
+    },
+    {
+      "id": "string_agg_null_volatile_rows",
+      "scope": "null_volatile_aggregate_argument",
+      "sql": "SELECT STRING_AGG(CASE WHEN RAND()>0.5 THEN NULL ELSE NULL END, ',') AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT STRING_AGG(observed_null(v), ',') AS result FROM VALUES(1),(2)t(v)"
+    },
+    {
+      "id": "string_agg_null_volatile_empty",
+      "scope": "null_volatile_aggregate_argument",
+      "sql": "SELECT STRING_AGG(CASE WHEN RAND()>0.5 THEN NULL ELSE NULL END, ',') AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT STRING_AGG(observed_null(v), ',') AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t"
+    },
+    {
+      "id": "string_agg_null_volatile_grouped",
+      "scope": "null_volatile_aggregate_argument",
+      "sql": "SELECT STRING_AGG(CASE WHEN RAND()>0.5 THEN NULL ELSE NULL END, ',') AS result FROM VALUES(1),(2)t(v) GROUP BY v",
+      "success_assertions": "exact_schema_and_rows",
+      "udf_sql": "SELECT STRING_AGG(observed_null(v), ',') AS result FROM VALUES(1),(2)t(v) GROUP BY v"
+    },
+    {
+      "id": "listagg_typed_null_rows",
+      "scope": "typed_null_control",
+      "sql": "SELECT LISTAGG(CAST(NULL AS STRING), ',') AS result FROM VALUES(1),(2)t(v)",
+      "success_assertions": "exact_schema_and_rows"
+    },
+    {
+      "id": "listagg_typed_null_empty",
+      "scope": "typed_null_control",
+      "sql": "SELECT LISTAGG(CAST(NULL AS STRING), ',') AS result FROM (SELECT * FROM VALUES(1),(2)t(v) WHERE false)t",
+      "success_assertions": "exact_schema_and_rows"
+    }
+  ]
+}

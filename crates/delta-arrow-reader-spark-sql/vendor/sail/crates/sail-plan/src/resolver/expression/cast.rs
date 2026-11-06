@@ -12,7 +12,9 @@ use sail_function::scalar::datetime::spark_date::SparkDate;
 use sail_function::scalar::datetime::spark_interval::{
     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
 };
+use sail_function::scalar::datetime::spark_interval_truncate::SparkIntervalTruncate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
@@ -94,6 +96,28 @@ impl PlanResolver<'_> {
             } => end_field.or(*start_field),
             _ => None,
         };
+        // Spark keeps only the target's units when it casts an interval to a qualifier of its
+        // family, truncating the stored count toward zero to the length of the target's end
+        // field. Only YEAR, DAY, HOUR and MINUTE span more than one stored month or microsecond.
+        let interval_unit_length: Option<i64> = match (&cast_to_type, day_time_interval_field) {
+            (
+                spec::DataType::Interval {
+                    interval_unit: spec::IntervalUnit::YearMonth,
+                    start_field,
+                    end_field,
+                },
+                _,
+            ) if end_field.or(*start_field) == Some(spec::IntervalFieldType::Year) => Some(12),
+            (
+                _,
+                Some(
+                    field @ (spec::IntervalFieldType::Day
+                    | spec::IntervalFieldType::Hour
+                    | spec::IntervalFieldType::Minute),
+                ),
+            ) => Some(day_time_field_to_microseconds(field)),
+            _ => None,
+        };
         let interval_type_name = match &cast_to_type {
             spec::DataType::Interval {
                 start_field: Some(start),
@@ -130,6 +154,18 @@ impl PlanResolver<'_> {
             named.name
         };
         let expr = named.expr;
+        // Equal Arrow types mean the source is an interval of the target's family; numeric,
+        // string and NULL sources keep their conversions below.
+        if let Some(unit_length) = interval_unit_length
+            && expr_type == cast_to_type
+        {
+            let expr =
+                ScalarUDF::new_from_impl(SparkIntervalTruncate::new(unit_length)).call(vec![expr]);
+            return Ok((
+                NamedExpr::new(name, drop_inherited_column_metadata(expr)),
+                named_input,
+            ));
+        }
         let override_string_cast = matches!(
             expr_type,
             DataType::Float32
@@ -338,6 +374,18 @@ impl PlanResolver<'_> {
                     DecimalCastMode::Legacy
                 };
                 ScalarUDF::from(SparkDecimalCast::to_integer(to, mode)?).call(vec![expr])
+            }
+            (from, to, is_try)
+                if (matches!(from, DataType::Float32 | DataType::Float64)
+                    && to.is_signed_integer())
+                    || (from == DataType::Int64 && to == DataType::Int32) =>
+            {
+                ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                    to,
+                    self.config.ansi_mode,
+                    is_try,
+                )?)
+                .call(vec![expr])
             }
             (_, to, true) => try_cast(expr, to),
             (_, to, _) => cast(expr, to),

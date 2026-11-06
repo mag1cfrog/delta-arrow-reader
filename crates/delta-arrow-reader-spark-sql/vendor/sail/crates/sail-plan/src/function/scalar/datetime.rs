@@ -41,16 +41,52 @@ use sail_function::scalar::datetime::spark_window_buckets::SparkWindowBuckets;
 use sail_function::scalar::datetime::spark_year::SparkYear;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::explode::{Explode, ExplodeKind};
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_sql_analyzer::literal::interval::IntervalValue;
 use sail_sql_analyzer::parser::parse_interval;
 
 use super::lambda::lambda_with_fresh_parameter;
 use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::without_metadata_annotations;
 use crate::function::common::{
     ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
+use crate::function::common::{literal_value_without_evaluation, without_metadata_annotations};
+use crate::function::temporal_coercion::cast_local_timestamp_expr_to_ltz;
+
+fn make_ym_interval(input: ScalarFunctionInput) -> PlanResult<Expr> {
+    let mut arguments = input.arguments;
+    let function = ScalarUDF::from(SparkMakeYmInterval::new());
+    let argument_types = arguments
+        .iter()
+        .map(|argument| argument.get_type(input.function_context.schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    if function.coerce_types(&argument_types).is_err() {
+        // Preserve the original argument types in native admission diagnostics.
+        return Ok(function.call(arguments));
+    }
+    let known_null = arguments.iter().any(|argument| {
+        literal_value_without_evaluation(argument).is_some_and(|value| value.is_null())
+    });
+    let mut bigint_argument = false;
+    for (argument, data_type) in arguments.iter_mut().zip(argument_types) {
+        if data_type == DataType::Int64 {
+            bigint_argument = true;
+            *argument = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                DataType::Int32,
+                input.function_context.plan_config.ansi_mode,
+                false,
+            )?)
+            .call(vec![argument.clone()]);
+        }
+    }
+    let interval = function.call(arguments);
+    if bigint_argument && known_null {
+        // Keep the original call available for type admission before NULL pruning.
+        return Ok(when(lit(true), lit(ScalarValue::IntervalYearMonth(None))).otherwise(interval)?);
+    }
+    Ok(interval)
+}
 
 fn integer_part(expr: Expr, part: &str) -> Expr {
     cast(
@@ -374,6 +410,19 @@ fn date_days_arithmetic(dt1: Expr, dt2: Expr, op: Operator) -> Expr {
     })
 }
 
+/// Spark's `DateDiff`: the INT number of days from `start` to `end`, computed as a Java `int`
+/// subtraction, which wraps at the DATE limits. TIMESTAMP arguments are cast to DATE. The
+/// three-argument DAY form instead uses `date_days_arithmetic`, which returns a BIGINT.
+fn date_diff_days(end: Expr, start: Expr) -> Expr {
+    let days = |date: Expr| cast(cast(date, DataType::Date32), DataType::Int32);
+    // A native integer subtraction wraps rather than failing on overflow.
+    Expr::BinaryExpr(BinaryExpr {
+        left: Box::new(days(end)),
+        op: Operator::Minus,
+        right: Box::new(days(start)),
+    })
+}
+
 fn timestamp_micros(expr: Expr) -> Expr {
     cast(
         cast(expr, DataType::Timestamp(TimeUnit::Microsecond, None)),
@@ -455,9 +504,9 @@ fn datediff(input: ScalarFunctionInput) -> PlanResult<Expr> {
     let args = input.arguments;
     match args.len() {
         2 => {
-            let [start, end] = <[Expr; 2]>::try_from(args)
+            let [end, start] = <[Expr; 2]>::try_from(args)
                 .map_err(|_| PlanError::invalid("datediff requires 2 or 3 arguments"))?;
-            Ok(date_days_arithmetic(start, end, Operator::Minus))
+            Ok(date_diff_days(end, start))
         }
         3 => {
             let [unit, start, end] = <[Expr; 3]>::try_from(args)
@@ -950,15 +999,13 @@ fn utc_ntz_timestamp_and_unit(
 ) -> PlanResult<(Expr, TimeUnit)> {
     let (ts, unit) = match ts.get_type(schema)? {
         DataType::Timestamp(unit, Some(_)) => (ts, unit),
-        DataType::Timestamp(unit, None) => {
-            let ts = cast(ts, DataType::Timestamp(unit, Some(session_tz.clone())));
-            (ts, unit)
-        }
-        DataType::Date32 | DataType::Date64 => {
-            let unit = TimeUnit::Microsecond;
-            let ts = cast(ts, DataType::Timestamp(unit, Some(session_tz.clone())));
-            (ts, unit)
-        }
+        // Spark casts TIMESTAMP_NTZ and DATE to TIMESTAMP in the session zone, moving a local
+        // time skipped by a DST change forward and taking the earlier instant of a repeated one.
+        DataType::Timestamp(unit, None) => (cast_local_timestamp_expr_to_ltz(ts, session_tz), unit),
+        DataType::Date32 | DataType::Date64 => (
+            cast_local_timestamp_expr_to_ltz(ts, session_tz),
+            TimeUnit::Microsecond,
+        ),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
             let unit = TimeUnit::Microsecond;
             let ts = ScalarUDF::from(SparkTimestamp::try_new(
@@ -1412,7 +1459,7 @@ pub(super) fn list_built_in_datetime_functions() -> Vec<(&'static str, ScalarFun
             "make_timestamp_ntz",
             F::custom(|input| make_timestamp_ntz(input.arguments, false)),
         ),
-        ("make_ym_interval", F::udf(SparkMakeYmInterval::new())),
+        ("make_ym_interval", F::custom(make_ym_interval)),
         ("minute", F::unary(|arg| integer_part(arg, "MINUTE"))),
         ("month", F::unary(|arg| integer_part(arg, "MONTH"))),
         (

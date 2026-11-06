@@ -12,7 +12,7 @@ use datafusion::physical_plan::collect;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use sail_plan::expression_errors::SparkSqlExpressionSemantics;
-use sail_plan::like_errors::set_spark_like_query_clock;
+use sail_plan::like_errors::set_spark_query_start_time;
 use serde_json::{Value, json};
 
 use crate::contracts::{complete_match, completed_stages_are_retained};
@@ -277,7 +277,7 @@ async fn stage_and_byte_repeat(session: &SessionContext, case: &Value) -> TestRe
     result["query_column_names"] = json!(query.column_names);
     result["analyzed_arrow_schema"] = json!(format!("{:?}", query.logical_plan.schema()));
     let mut state = session.state();
-    set_spark_like_query_clock(&mut state);
+    set_spark_query_start_time(&mut state);
     let extensions = &mut state.config_mut().options_mut().extensions;
     extensions.insert(SparkSqlExpressionSemantics::default());
     extensions.insert(PreserveAggregateStatisticsSchema::default());

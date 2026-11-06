@@ -1,3 +1,4 @@
+// Modified for the DAR Spark SQL runtime. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -17,14 +18,42 @@
 
 //! Structs to provide the information needed for expression simplification.
 
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use arrow::datatypes::DataType;
 use chrono::{DateTime, Utc};
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::{DFSchema, DFSchemaRef, Result};
+use datafusion_common::{DFSchema, DFSchemaRef, DataFusionError, Result};
 
 use crate::{Expr, ExprSchemable};
+
+/// An ARRAY subscript error whose provenance survives speculative constant evaluation.
+#[derive(Debug)]
+pub struct SparkArrayIndexError {
+    message: String,
+}
+
+impl SparkArrayIndexError {
+    /// Retain the existing bounds cause without interpreting its text.
+    pub fn new(message: String) -> Self {
+        Self { message }
+    }
+
+    /// Recognize this error through DataFusion and Arrow context wrappers.
+    pub fn is(error: &DataFusionError) -> bool {
+        matches!(error.find_root(), DataFusionError::External(error)
+            if error.downcast_ref::<Self>().is_some())
+    }
+}
+
+impl Display for SparkArrayIndexError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for SparkArrayIndexError {}
 
 /// Provides simplification information based on schema, query execution time,
 /// and configuration options.

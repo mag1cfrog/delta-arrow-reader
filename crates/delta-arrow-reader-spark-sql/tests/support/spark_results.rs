@@ -93,6 +93,10 @@ pub(crate) async fn capture_native_query_observation(
     )
 }
 
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared result observers."
+)]
 pub(crate) async fn capture_spark_query_result(
     session: &SessionContext,
     case: &Value,
@@ -100,6 +104,10 @@ pub(crate) async fn capture_spark_query_result(
     Ok(capture_spark_query_observation(session, case).await?["result"].take())
 }
 
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared result observers."
+)]
 pub(crate) async fn capture_spark_query_observation(
     session: &SessionContext,
     case: &Value,
@@ -406,6 +414,10 @@ fn scalar_subquery_condition_mapping_requires_the_exact_execution_error() {
     ));
 }
 
+#[allow(
+    dead_code,
+    reason = "Integration tests select individual shared result observers."
+)]
 pub(crate) fn validate_physical_schema(
     resolved: &Fields,
     names: &[String],

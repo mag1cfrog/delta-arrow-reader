@@ -254,7 +254,18 @@ fn assert_spark_result(query: &Value, actual: &Value) -> TestResult {
                 assert_eq!(actual["stage"], "planning", "{context}");
                 assert!(message.contains("does not support type Int32"), "{context}");
             }
-            "CAST_INVALID_INPUT" | "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION" => {
+            "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION" => {
+                assert_eq!(actual["stage"], expected["stage"], "{context}");
+                assert!(
+                    message.contains("[INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION]"),
+                    "{context}"
+                );
+                assert!(
+                    message.contains("[CAST_INVALID_INPUT]\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type"),
+                    "{context}"
+                );
+            }
+            "CAST_INVALID_INPUT" => {
                 assert!(
                     matches!(
                         actual["stage"].as_str(),

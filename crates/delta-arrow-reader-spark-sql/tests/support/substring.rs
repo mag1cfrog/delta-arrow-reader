@@ -11,8 +11,9 @@ pub(crate) fn meaningful_error(case: &Value, error: &str) -> bool {
             .as_str()
             .map(|value| value.trim_end_matches('L'))
             .is_some_and(|value| {
-                error.contains(&format!("Can't cast value {value} to type Int32"))
-                    || error.contains(&format!("value of {value} is out of range Int32"))
+                error.contains("[CAST_OVERFLOW]")
+                    && (error.contains(&format!("Can't cast value {value} to type Int32"))
+                        || error.contains(&format!("value of {value} is out of range Int32")))
             }),
         Some("CAST_INVALID_INPUT") if parameters["targetType"] == "\"INT\"" => {
             parameters["expression"].as_str().is_some_and(|value| {
@@ -146,12 +147,6 @@ fn single_field(schema: &Value, kind: &str, nullable: bool) -> bool {
         })
 }
 
-fn fields_equal_reference(case: &Value, actual: &Value) -> bool {
-    ["analyzed_schema", "physical_schema"]
-        .into_iter()
-        .all(|key| actual[key] == case["expected"][key])
-}
-
 pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static str> {
     let id = case["id"].as_str()?;
     let ansi = case["ansi"].as_bool()?;
@@ -168,104 +163,38 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
     {
         return Some("open_780_invalid_utf8");
     }
-    let legacy_rows = match (id, ansi) {
-        ("admission_substring_bigint_length_above_int" | "long_column_7", false) => Some("abcdef"),
-        ("admission_substring_bigint_length_below_int" | "long_column_6", false) => Some(""),
-        _ => None,
-    };
-    if let Some(value) = legacy_rows
-        && expected["status"] == "ok"
-        && fields_equal_reference(case, actual)
-        && actual.get("error").is_none()
-        && actual["rows"] == serde_json::json!([[value]])
-    {
-        return Some("open_813_legacy_bigint");
-    }
-    if id == "binary_long_column_4"
-        && !ansi
-        && expected["status"] == "ok"
-        && fields_equal_reference(case, actual)
-        && error_is(
-            actual,
-            "execute",
-            "execute: Execution error: substring position exceeds INT range",
-        )
-    {
-        return Some("open_813_legacy_bigint");
-    }
     if matches!(
         id,
-        "double_fraction_direct_cast"
-            | "double_negative_fraction_direct_cast"
-            | "float_fraction_direct_cast"
-            | "double_fraction_substring"
-            | "double_negative_fraction_substring"
-            | "float_fraction_substring"
-    ) && expected["status"] == "ok"
-        && actual.get("error").is_none()
-        && actual["rows"] == expected["rows"]
-        && actual["physical_schema"] == expected["physical_schema"]
-    {
-        let kind = if id.ends_with("direct_cast") {
-            "integer"
-        } else {
-            "string"
-        };
-        if single_field(&expected["analyzed_schema"], kind, true)
-            && single_field(&actual["analyzed_schema"], kind, false)
-        {
-            return Some("open_796_float_integer_analyzed_nullable");
-        }
-    }
-    if matches!(
-        id,
-        "float_nan_direct_cast"
-            | "float_nan_substring"
-            | "double_infinity_direct_cast"
-            | "double_infinity_substring"
-    ) && (!ansi || id.starts_with("double_infinity"))
+        "double_infinity_direct_cast" | "double_infinity_substring"
+    ) && ansi
     {
         let direct = id.ends_with("direct_cast");
         let kind = if direct { "integer" } else { "string" };
-        let value = if id.starts_with("float_nan") {
-            "NaN"
-        } else {
-            "inf"
-        };
-        let expected_matches = if ansi {
-            expected["condition"] == "CAST_OVERFLOW"
-                && expected["parameters"]["value"] == "Infinity"
-                && expected["parameters"]["sourceType"] == "\"DOUBLE\""
-                && expected["parameters"]["targetType"] == "\"INT\""
-                && expected["parameters"]["ansiConfig"] == "\"spark.sql.ansi.enabled\""
-        } else {
-            let expected_value = match (id.starts_with("float_nan"), direct) {
-                (true, true) => "0",
-                (true, false) => "ab",
-                (false, true) => "2147483647",
-                (false, false) => "",
-            };
-            expected["status"] == "ok"
-                && expected["rows"] == serde_json::json!([[expected_value]])
-                && single_field(&expected["physical_schema"], kind, false)
-        };
+        let value = "inf";
+        let expected_matches = expected["condition"] == "CAST_OVERFLOW"
+            && expected["parameters"]["value"] == "Infinity"
+            && expected["parameters"]["sourceType"] == "\"DOUBLE\""
+            && expected["parameters"]["targetType"] == "\"INT\""
+            && expected["parameters"]["ansiConfig"] == "\"spark.sql.ansi.enabled\"";
         let (stage, error) = if direct {
             (
                 "physical",
                 format!(
-                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
                 ),
             )
         } else {
             (
                 "execute",
-                format!("execute: Arrow error: Cast error: Can't cast value {value} to type Int32"),
+                format!(
+                    "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+                ),
             )
         };
         let physical_matches = if direct {
             actual["physical_schema"].is_null()
         } else {
-            single_field(&actual["physical_schema"], "string", false)
+            single_field(&actual["physical_schema"], "string", true)
         };
         if expected_matches
             && single_field(&expected["analyzed_schema"], kind, true)
@@ -273,11 +202,7 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
             && physical_matches
             && error_is(actual, stage, &error)
         {
-            return Some(if ansi {
-                "strict_172_infinity_literal_notation"
-            } else {
-                "open_897_legacy_nonfinite_cast"
-            });
+            return Some("strict_172_infinity_literal_notation");
         }
     }
     if matches!(

@@ -1928,7 +1928,7 @@ mod tests {
 
 #[cfg(test)]
 #[test]
-fn projected_join_preserves_output_column_mapping() -> datafusion_common::Result<()> {
+fn projected_join_preserves_output_column_mapping() -> Result<()> {
     use crate::{
         ExecutionPlan, empty::EmptyExec, joins::NestedLoopJoinExec,
         projection::ProjectionExec,
@@ -1973,7 +1973,7 @@ fn projected_join_preserves_output_column_mapping() -> datafusion_common::Result
                 .map(|(i, f)| {
                     (
                         Arc::new(Column::new(f.name(), i))
-                            as Arc<dyn datafusion_physical_expr::PhysicalExpr>,
+                            as Arc<dyn PhysicalExpr>,
                         if rename {
                             format!("output_{i}")
                         } else {
@@ -1982,7 +1982,7 @@ fn projected_join_preserves_output_column_mapping() -> datafusion_common::Result
                     )
                 })
                 .collect::<Vec<_>>();
-            let projection = ProjectionExec::try_new(expr, join.clone())?;
+            let projection = ProjectionExec::try_new(expr, Arc::clone(&join) as _)?;
             if let Some(rewritten) = join.try_swapping_with_projection(&projection)? {
                 assert_eq!(
                     rewritten.schema(),

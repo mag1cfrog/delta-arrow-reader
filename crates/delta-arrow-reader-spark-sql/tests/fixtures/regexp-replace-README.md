@@ -199,15 +199,24 @@ native resolution with no result schemas. The five direct CAST error references
 map separately to native physical planning, retaining analyzed fields and absent
 physical fields.
 
-The measured replay has 588 semantic matches and 72 value/field differences.
-Requiring the diagnostic condition identifier as well leaves 528 strict matches
-and 132 strict differences. Sixty otherwise matching primitive overflow errors
-lack Spark's `CAST_OVERFLOW` identifier. The native profile fixture preserves
-every known difference with its exact actual fields, raw Arrow schemas, rows or
-complete error body and stage. Legacy BIGINT narrowing (#813), legacy nonfinite
-conversion (#897), analyzed CAST nullability (#796) and primitive CAST condition
-identifiers (#922) remain separate shared work. Exact profile preservation gives no
-Spark compatibility credit, and complete raw diagnostic parity remains unverified.
+The regression gate requires 660 semantic and strict comparisons. Its 60 original
+primitive-overflow contexts require `[CAST_OVERFLOW]` together with each original
+numeric cause. Every complete native object must equal a copy of its frozen
+profile with only that context inserted into the error. Value, target, failure
+stage, raw Arrow schemas and explicit unavailable Fields remain exact. Removing
+only the marker must fail even when the numeric cause is unchanged.
+
+The seven legacy BIGINT contexts repaired by #813 require strict Spark fields,
+values and errors across all six layouts.
+The three Legacy nonfinite profiles repaired by #897 and two CAST Field profiles
+repaired by #796 also require strict Spark equality across all six layouts. All
+12 original failing objects remain in the unchanged native fixture as history
+for those 72 contexts and cannot serve as current waivers. Other profiles retain
+exact actual fields, raw Arrow schemas, rows or complete error bodies and stages.
+The original ten #922 overflow profiles remain unchanged as the source for those
+60 complete-object checks; their bare errors cannot serve as current waivers.
+Strict fixture comparison does not establish complete raw Spark diagnostic
+parity, which remains unverified.
 
 `regexp_replace_position_folding.rs` protects all 36 measured custom Rust UDF
 contexts, including all 24 standalone Spark-resolver/native-SQL controls. Newly

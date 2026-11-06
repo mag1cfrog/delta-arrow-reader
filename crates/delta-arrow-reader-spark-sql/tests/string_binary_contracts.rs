@@ -131,10 +131,6 @@ fn arity_cause_matches(case: &Value, actual: &Value) -> bool {
                 })))
 }
 
-fn substring_coercion_gap(case: &Value, actual: &Value) -> bool {
-    substring::known_difference(case, actual) == Some("open_813_legacy_bigint")
-}
-
 fn open_contract_outcome(
     case: &Value,
     actual: &Value,
@@ -155,8 +151,6 @@ fn open_contract_outcome(
         && substring::matches_reference(case, actual)
     {
         Some("substring_argument_cause")
-    } else if substring_coercion_gap(case, actual) {
-        Some("open_813_legacy_bigint")
     } else {
         None
     }
@@ -215,11 +209,14 @@ fn contract_gap_profiles_reject_new_fields_values_and_causes() -> TestResult {
             case["id"] == "admission_substring_bigint_length_above_int" && case["ansi"] == false
         })
         .ok_or("missing width reference")?;
+    // Constructed counterfactual with the obsolete wide-length result, not a native capture.
     let mut actual = json!({"analyzed_schema":case["expected"]["analyzed_schema"],
         "physical_schema":case["expected"]["analyzed_schema"],"rows":[["abcdef"]]});
-    assert!(substring_coercion_gap(case, &actual));
+    assert!(!substring::matches_reference(case, &actual));
+    assert!(substring::known_difference(case, &actual).is_none());
+    assert!(open_contract_outcome(case, &actual, 0, 1).is_none());
     actual["rows"] = json!([["unrelated"]]);
-    assert!(!substring_coercion_gap(case, &actual));
+    assert!(open_contract_outcome(case, &actual, 0, 1).is_none());
     Ok(())
 }
 
@@ -252,8 +249,19 @@ fn uncaptured_substring_errors_reject_the_review_counterexample() -> TestResult 
     assert!(!contracts::complete_match(&reviewed, &case["expected"]));
     assert!(open_contract_outcome(&case, &reviewed, 0, 1).is_none());
     let mut concrete_cause = reviewed.clone();
-    concrete_cause["error"] =
-        json!("execute: Arrow error: Cast error: Can't cast value 2147483648 to type Int32");
+    concrete_cause["error"] = json!(
+        "execute: [CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value 2147483648 to type Int32"
+    );
+    assert!(substring::meaningful_error(
+        &case,
+        concrete_cause["error"]
+            .as_str()
+            .ok_or("missing concrete cause")?
+    ));
+    assert!(!substring::meaningful_error(
+        &case,
+        "execute: Arrow error: Cast error: Can't cast value 2147483648 to type Int32"
+    ));
     assert!(!substring::matches_reference(&case, &concrete_cause));
     assert!(open_contract_outcome(&case, &concrete_cause, 0, 1).is_none());
 
