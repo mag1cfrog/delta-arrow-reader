@@ -53,6 +53,7 @@ use sail_function::scalar::math::{
     spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
 use sail_function::scalar::misc::raise_error::RaiseError;
+use sail_function::scalar::predicate::spark_like::SparkLike;
 use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
@@ -1969,6 +1970,7 @@ impl Prepare {
                     if self.string_result_is_null_on_success(argument, schema)? {
                         if inner.short_circuits_on_any_null_argument()
                             || (index == 0 && inner.short_circuits_on_null_first_arg())
+                            || (index == 1 && inner.is::<SparkLike>())
                         {
                             return Ok(true);
                         }

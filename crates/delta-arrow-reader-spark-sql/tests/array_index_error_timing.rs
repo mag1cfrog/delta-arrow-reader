@@ -1010,9 +1010,25 @@ async fn string_array_preparation_preserves_public_failure_boundaries() -> TestR
             true,
         ),
         (
-            "case_cast_failure_before_null_position",
-            "SELECT substring(CAST(rand() AS STRING),CASE WHEN CAST('bad' AS INT)>0 THEN CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT) ELSE CAST(NULL AS BIGINT) END,CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
-            Some("CAST_INVALID_INPUT"),
+            "composed_null_not_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(NOT CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BOOLEAN) AS INT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_like_subject_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST((substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) LIKE 'x') AS INT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
+            json!([[null]]),
+            true,
+            true,
+        ),
+        (
+            "composed_null_like_pattern_position_before_array_length",
+            "SELECT substring(CAST(rand() AS STRING),CAST(('x' LIKE substring(CAST(NULL AS STRING),CAST(rand() AS INT),1)) AS INT),CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+            None,
             json!([[null]]),
             true,
             true,
@@ -1238,6 +1254,69 @@ async fn string_array_preparation_preserves_public_failure_boundaries() -> TestR
                     *expected_rows,
                     "{id} ansi={ansi} batch={batch_size}"
                 );
+            }
+            // This CASE prefix already reports CAST during execution before #1022.
+            // Preserve its error priority without requiring that existing phase difference.
+            let query = plan_query(
+                &session,
+                "SELECT substring(CAST(rand() AS STRING),CASE WHEN CAST('bad' AS INT)>0 THEN CAST(substring(CAST(NULL AS STRING),CAST(rand() AS INT),1) AS BIGINT) ELSE CAST(NULL AS BIGINT) END,CAST(ARRAY(7)[1] AS INT)) AS r FROM VALUES(1) AS t(k)",
+                &SparkSqlOptions {
+                    ansi_mode: ansi,
+                    session_timezone: "UTC".into(),
+                    ..Default::default()
+                },
+            ).await?;
+            let expected_schema = json!({"type":"struct","fields":[{
+                "name":"r","type":"string","nullable":true,"metadata":{}
+            }]});
+            assert_eq!(
+                spark_results::capture_schema(
+                    query.logical_plan.schema().fields(),
+                    Some(&query.column_names)
+                )?,
+                expected_schema,
+                "CASE prefix ansi={ansi} batch={batch_size} analyzed"
+            );
+            let result = match query.create_physical_plan(&session).await {
+                Ok(physical) => {
+                    assert_eq!(
+                        spark_results::capture_schema(physical.schema().fields(), None)?,
+                        expected_schema,
+                        "CASE prefix ansi={ansi} batch={batch_size} physical"
+                    );
+                    collect(physical, session.task_ctx()).await
+                }
+                Err(error) => Err(error),
+            };
+            if ansi {
+                let error = result
+                    .err()
+                    .ok_or("required CASE prefix CAST failure was lost")?;
+                assert!(
+                    !SparkArrayIndexError::is(&error),
+                    "later ARRAY error won: {error}"
+                );
+                let message = error.to_string();
+                assert!(message.contains("[CAST_INVALID_INPUT]"), "{error}");
+                assert!(
+                    message.contains("Cannot cast string 'bad' to value of Int32 type"),
+                    "{error}"
+                );
+                assert!(!message.contains("[INVALID_ARRAY_INDEX]"), "{error}");
+            } else {
+                let batches = result?;
+                assert_eq!(
+                    batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                    1
+                );
+                for batch in batches {
+                    for row in 0..batch.num_rows() {
+                        assert_eq!(
+                            spark_results::encode_value(batch.column(0).as_ref(), row)?,
+                            Value::Null
+                        );
+                    }
+                }
             }
         }
     }
