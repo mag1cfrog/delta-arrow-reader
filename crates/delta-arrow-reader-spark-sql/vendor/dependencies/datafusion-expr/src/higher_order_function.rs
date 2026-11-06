@@ -756,10 +756,14 @@ pub trait HigherOrderUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
         false
     }
 
-    /// Returns true if the planner may evaluate this function during optimization when
-    /// all of its arguments and lambda bodies are constant. Functions whose results must
-    /// keep their declared field until execution, such as Spark's user lambdas, return
-    /// false.
+    /// Whether the optimizer may evaluate calls to this function whose arguments and
+    /// lambda bodies are constant. Lambda parameters count as constant, so `x -> x` over a
+    /// literal array qualifies.
+    ///
+    /// Returning `false` keeps the call, and ancestors that depend on it, unevaluated until
+    /// execution without changing its volatility; constant subexpressions inside its
+    /// arguments and lambda bodies may still be simplified. Spark's user lambda functions
+    /// return `false`. The default is `true`.
     fn supports_constant_folding(&self) -> bool {
         true
     }

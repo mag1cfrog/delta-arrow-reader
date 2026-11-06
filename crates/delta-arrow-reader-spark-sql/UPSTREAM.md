@@ -967,6 +967,22 @@ behavior remain. Logically removed sorts are not reconstructed. These APIs do
 not claim general row localization for CASE, arithmetic/cast kernels, or
 higher-order functions.
 
+### Higher-order constant folding
+
+Higher-order UDFs can opt out of constant folding, as scalar UDFs already can. Spark's
+user lambda functions (transform, filter, aggregate, exists, forall and comparator
+array_sort) opt out because Spark never folds a lambda function call: the call keeps
+its declared field through optimization and runs during execution, even over constant
+arrays or a constant lambda body. Constant subexpressions inside a lambda body still
+fold, so their errors keep Spark's optimization stage. DataFusion's own higher-order
+functions and DAR's internal lazy wrappers keep folding.
+
+ARRAY_SORT without a comparator still uses DataFusion's foldable array_sort, although
+Spark plans it as a lambda over a default comparator (#1038). A LIMIT over an
+unfolded lambda now fails during physical planning, where Spark rejects it during
+analysis (#1039). The [closed-lambda references](tests/fixtures/README.md#date-arithmetic-with-closed-lambda-day-operands)
+cover DATE arithmetic, plain higher-order results and both retained differences.
+
 ### ARRAY_COMPACT result fields
 
 Spark ARRAY_COMPACT declares its immediate output elements non-null and derives
@@ -996,13 +1012,6 @@ order until their conversions run. This covers ARRAY_COMPACT, ARRAY and STRUCT
 checks over VALUES. Later Spark NULL pruning uses a required operand's
 declaration to answer IS NULL and IS NOT NULL before constant folding visits its
 children.
-Higher-order UDFs can opt out of constant folding, as scalar UDFs already can. Spark's
-user lambda functions (transform, filter, aggregate, exists, forall and comparator
-array_sort) opt out because Spark never folds a lambda: their results keep the declared
-field through optimization and evaluate during execution, even over constant arrays and
-constant lambda bodies. DataFusion's own higher-order functions and DAR's internal lazy
-wrappers keep folding. The [closed-lambda references](tests/fixtures/README.md#date-arithmetic-with-closed-lambda-day-operands)
-cover DATE arithmetic and plain higher-order results.
 Scalar subqueries retain their separate preparation checks, and native
 DataFusion keeps its existing evaluation order. Direct and STRUCT consumers
 still require the compacted values and retain reachable cast errors. The
