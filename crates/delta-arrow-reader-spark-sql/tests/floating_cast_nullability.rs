@@ -644,6 +644,30 @@ fn floating_integer_scoped_contract_matches(
     batch: usize,
     facets: &Value,
 ) -> TestResult<bool> {
+    if case["ansi"] == true
+        && matches!(
+            case["id"].as_str(),
+            Some("float_nan_substring" | "double_infinity_substring")
+        )
+    {
+        // Keep all inherited facets as history. These four calls now require
+        // the complete measured preparation result, including unavailable stages.
+        if actual.as_object().is_none_or(|object| object.len() != 18) {
+            return Ok(false);
+        }
+        let current: Value = serde_json::from_str(include_str!(
+            "fixtures/substring-literal-preparation-current-native.json"
+        ))?;
+        return Ok(current["floating"]
+            .as_array()
+            .ok_or("missing current preparation controls")?
+            .iter()
+            .any(|record| {
+                record["reference"] == *case
+                    && record["batch"] == batch
+                    && record["observation"] == *actual
+            }));
+    }
     let Some(control) = facets["contexts"]
         .as_array()
         .ok_or("missing retained contexts")?
@@ -685,33 +709,13 @@ fn floating_integer_scoped_contract_matches(
         return Ok(false);
     }
     let mut normalized = actual.clone();
-    // #1031 retains only these exact later substring failures and extra native Fields.
-    let later_substring_error = case["ansi"] == true
-        && matches!(
-            case["id"].as_str(),
-            Some("float_nan_substring" | "double_infinity_substring")
-        );
     for kind in ["fields", "availability", "rows"] {
         for facet in control[kind].as_array().ok_or("missing retained facets")? {
             let key = facet["key"].as_str().ok_or("missing observed key")?;
             let owner = facet["owner"].as_u64().ok_or("missing facet owner")?;
             if kind == "availability" {
-                assert!(matches!(owner, 922 | 1020));
-                let mut expected_native = facet["inherited_dar"].clone();
-                if owner == 922 && later_substring_error {
-                    assert!(matches!(
-                        key,
-                        "optimized_schema" | "before_collect" | "physical_schema"
-                    ));
-                    assert_eq!(
-                        expected_native,
-                        json!({"type":"struct","fields":[{
-                            "name":"r","type":"string","nullable":false,"metadata":{}
-                        }]})
-                    );
-                    // Spark has no later schema here; retain the native boundary with the repaired declaration.
-                    expected_native["fields"][0]["nullable"] = json!(true);
-                }
+                assert_eq!(owner, 1020);
+                let expected_native = facet["inherited_dar"].clone();
                 if normalized[key] != expected_native {
                     return Ok(false);
                 }
@@ -776,12 +780,7 @@ fn floating_integer_scoped_contract_matches(
                 }
             }
         }
-        if later_substring_error {
-            assert_eq!(retained_error["owner"], 922);
-            assert_eq!(retained_error["native_phase"], "collect");
-            assert_eq!(case["spark_error_phase"], "optimized");
-        }
-        let error_matches = retained_error["owner"] == 922 && !later_substring_error;
+        let error_matches = retained_error["owner"] == 922;
         if ["error", "native_phase", "optimized_error"]
             .into_iter()
             .any(|key| actual[key] != expected_error[key])
@@ -1111,76 +1110,85 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
         )?);
     }
 
-    let case = records
-        .iter()
-        .find(|case| case["id"] == "double_infinity_substring" && case["ansi"] == true)
-        .ok_or("missing later native schema control")?;
-    let control = facets["contexts"]
+    let current: Value = serde_json::from_str(include_str!(
+        "fixtures/substring-literal-preparation-current-native.json"
+    ))?;
+    for record in current["floating"]
         .as_array()
-        .ok_or("missing retained contexts")?
-        .iter()
-        .find(|control| {
-            control["id"] == case["id"] && control["ansi"] == case["ansi"] && control["batch"] == 1
-        })
-        .ok_or("missing exact native schema boundary")?;
-    let error = &control["error"];
-    let mut actual = json!({
-        "public_schema":case["schema_stages"]["analyzed"],
-        "optimized_schema":null,"before_collect":null,"physical_schema":null,
-        "rows":null,"rows_raw":null,"native_phase":error["native_phase"],
-        "error":format!("[CAST_OVERFLOW]\ncaused by\n{}", error["error"].as_str().ok_or("missing later cause")?),
-        "optimized_error":error["optimized_error"],
-        "public_matches":true,"before_matches":true,"physical_matches":true,
-        "rows_match":true,"ordered_rows_match":true,"error_matches":false,
-        "matches":false,"optimized_matches":false,"optimized_observation":null,
-    });
-    for facet in control["availability"]
-        .as_array()
-        .ok_or("missing stage controls")?
+        .ok_or("missing preparation controls")?
     {
-        let key = facet["key"].as_str().ok_or("missing native schema key")?;
-        actual[key] = facet["inherited_dar"].clone();
-        actual[key]["fields"][0]["nullable"] = json!(true);
-    }
-    actual["optimized_observation"] = json!({
-        "raw_schema":actual["optimized_schema"],"schema":actual["optimized_schema"],"names_match":true,
-    });
-    assert!(floating_integer_scoped_contract_matches(
-        case, &actual, 1, &facets
-    )?);
-    let mut missing_marker = actual.clone();
-    missing_marker["error"] = json!(
-        actual["error"]
+        let case = &record["reference"];
+        assert!(records.iter().any(|original| original == case));
+        let batch = record["batch"].as_u64().ok_or("missing batch")? as usize;
+        let actual = &record["observation"];
+        assert!(floating_integer_scoped_contract_matches(
+            case, actual, batch, &facets
+        )?);
+        for key in actual.as_object().ok_or("missing observation")?.keys() {
+            let mut changed = actual.clone();
+            changed.as_object_mut().ok_or("missing object")?.remove(key);
+            assert!(!floating_integer_scoped_contract_matches(
+                case, &changed, batch, &facets
+            )?);
+        }
+        for (pointer, wrong) in [
+            ("/public_schema/fields/0/name", json!("wrong")),
+            ("/public_schema/fields/0/type", json!("integer")),
+            ("/public_schema/fields/0/nullable", json!(false)),
+            (
+                "/public_schema/fields/0/metadata",
+                json!({"wrong":"metadata"}),
+            ),
+            ("/native_phase", json!("collect")),
+            ("/before_collect", actual["public_schema"].clone()),
+            ("/physical_schema", actual["public_schema"].clone()),
+            ("/optimized_schema", actual["public_schema"].clone()),
+            ("/optimized_observation", json!({})),
+            ("/rows", json!([[null]])),
+            ("/rows_raw", json!([])),
+            ("/matches", json!(false)),
+            ("/optimized_matches", json!(false)),
+        ] {
+            let mut changed = actual.clone();
+            *changed
+                .pointer_mut(pointer)
+                .ok_or("missing preparation facet")? = wrong;
+            assert!(!floating_integer_scoped_contract_matches(
+                case, &changed, batch, &facets
+            )?);
+        }
+        let error = actual["error"]
             .as_str()
-            .ok_or("missing later cause")?
-            .replace("[CAST_OVERFLOW]", "")
-    );
-    assert!(!floating_integer_scoped_contract_matches(
-        case,
-        &missing_marker,
-        1,
-        &facets
-    )?);
-    for (pointer, wrong) in [
-        ("/physical_schema/fields/0/nullable", json!(false)),
-        ("/physical_schema/fields/0/name", json!("wrong")),
-        ("/physical_schema/fields/0/type", json!("integer")),
-        (
-            "/physical_schema/fields/0/metadata",
-            json!({"wrong":"metadata"}),
-        ),
-        ("/before_collect", Value::Null),
-        ("/native_phase", json!("create_physical_plan")),
-        ("/error", json!("[CAST_OVERFLOW] unrelated cause")),
-    ] {
-        let mut changed = actual.clone();
-        *changed
-            .pointer_mut(pointer)
-            .ok_or("missing stage mutation")? = wrong;
-        assert!(
-            !floating_integer_scoped_contract_matches(case, &changed, 1, &facets)?,
-            "accepted changed later native schema boundary at {pointer}"
-        );
+            .ok_or("missing preparation error")?;
+        for wrong in [
+            error.replace("[CAST_OVERFLOW]", ""),
+            error.replace("Int32", "Int64"),
+            error.replace("NaN", "0").replace("inf", "0"),
+            error.replace(
+                "Optimizer rule 'simplify_expressions' failed",
+                "different wrapper",
+            ),
+        ] {
+            assert_ne!(wrong, error);
+            for key in ["error", "optimized_error"] {
+                let mut changed = actual.clone();
+                changed[key] = json!(wrong);
+                assert!(!floating_integer_scoped_contract_matches(
+                    case, &changed, batch, &facets
+                )?);
+            }
+        }
+        let mut changed_case = case.clone();
+        changed_case["sql"] = json!("SELECT 99");
+        assert!(!floating_integer_scoped_contract_matches(
+            &changed_case,
+            actual,
+            batch,
+            &facets
+        )?);
+        assert!(!floating_integer_scoped_contract_matches(
+            case, actual, 2, &facets
+        )?);
     }
 
     let case = records
@@ -1314,6 +1322,100 @@ fn floating_integer_retained_facets_reject_unowned_changes() -> TestResult {
             !floating_integer_scoped_contract_matches(case, &changed, 1, &facets)?,
             "accepted an unproved endpoint value at {pointer}"
         );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn literal_substring_float_overflows_fail_during_preparation() -> TestResult {
+    let records = include_str!("fixtures/floating-integer-values/spark.jsonl")
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let cases = records
+        .iter()
+        .filter(|case| {
+            case["ansi"] == true
+                && matches!(
+                    case["id"].as_str(),
+                    Some("float_nan_substring" | "double_infinity_substring")
+                )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cases.len(), 2);
+    for batch_size in [1, 32] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new()
+                            .with_batch_size(batch_size)
+                            .with_target_partitions(2),
+                    ),
+            )
+            .build(),
+        );
+        for case in &cases {
+            let query = plan_query(
+                &session,
+                case["sql"].as_str().ok_or("missing SQL")?,
+                &SparkSqlOptions {
+                    ansi_mode: true,
+                    session_timezone: "UTC".into(),
+                    ..SparkSqlOptions::default()
+                },
+            )
+            .await?;
+            eprintln!(
+                "LITERAL_SUBSTRING_RESOLVED_DEBUG {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "logical_plan_debug":format!("{:#?}", query.logical_plan),
+                    "public_schema_debug":format!("{:?}", query.logical_plan.schema()),
+                })
+            );
+            let actual =
+                spark_results::compare_exact_spark_query_stages_with_optimized(&session, case)
+                    .await?;
+            eprintln!(
+                "LITERAL_SUBSTRING_PREPARATION_RESULT {}",
+                json!({
+                    "id":case["id"],"ansi":case["ansi"],"batch":batch_size,
+                    "reference":case,"observation":actual,
+                })
+            );
+            assert_eq!(actual["public_schema"], case["schema_stages"]["analyzed"]);
+            assert_eq!(actual["native_phase"], "create_physical_plan");
+            for key in [
+                "optimized_schema",
+                "optimized_observation",
+                "before_collect",
+                "physical_schema",
+                "rows",
+                "rows_raw",
+            ] {
+                assert_eq!(actual.get(key), Some(&Value::Null), "{key}: {actual}");
+            }
+            let error = actual["error"]
+                .as_str()
+                .ok_or("missing preparation error")?;
+            let value = if case["id"] == "float_nan_substring" {
+                "NaN"
+            } else {
+                "inf"
+            };
+            assert_eq!(error.matches("[CAST_OVERFLOW]").count(), 1, "{actual}");
+            assert!(
+                error.ends_with(&format!(
+                    "Arrow error: Cast error: Can't cast value {value} to type Int32"
+                )),
+                "{actual}"
+            );
+            assert_eq!(actual["optimized_error"], actual["error"]);
+            assert_eq!(actual["matches"], true);
+            assert_eq!(actual["optimized_matches"], true);
+        }
     }
     Ok(())
 }
@@ -1508,6 +1610,7 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
     let mut comparisons = 0;
     let mut strict_matches = 0;
     let mut retained_contexts = 0;
+    let mut active_retained_contexts = 0;
     for batch_size in [1, 32] {
         let session = SessionContext::new_with_state(
             configure_spark_sql(
@@ -1545,23 +1648,27 @@ async fn floating_integer_casts_match_recorded_stages() -> TestResult {
                 })
             );
             strict_matches += usize::from(matches);
-            retained_contexts += usize::from(retained_keys.contains(&(
+            let historically_retained = retained_keys.contains(&(
                 case["id"].to_string(),
                 case["ansi"].to_string(),
                 batch_size as u64,
-            )));
+            ));
+            retained_contexts += usize::from(historically_retained);
+            active_retained_contexts += usize::from(historically_retained && !matches);
             comparisons += 1;
         }
     }
     assert_eq!(comparisons, 704);
     assert_eq!(historical_keys.len(), 260);
     assert_eq!(retained_contexts, 36);
-    assert_eq!(strict_matches, 668);
+    assert_eq!(active_retained_contexts, 32);
+    assert_eq!(strict_matches, 672);
     eprintln!(
         "FLOATING_INTEGER_VALUE_SUMMARY {}",
         json!({
             "comparisons":comparisons,"strict_reference_matches":strict_matches,
-            "historical_contexts":historical_keys.len(),"retained_contexts":retained_contexts,
+            "historical_contexts":historical_keys.len(),"historically_retained_contexts":retained_contexts,
+            "retained_contexts":active_retained_contexts,
             "unexpected_differences":differences.len(),
             "full_compatibility_pass":strict_matches==comparisons,
         })

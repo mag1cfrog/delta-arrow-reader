@@ -1,0 +1,818 @@
+{
+  "format_version": 1,
+  "purpose": "Complete measured native literal SUBSTRING preparation mutation controls; not a Spark oracle.",
+  "source_commit": "5ca1b9d461dcaec1c883f17e9a0ae1212a5a8f23",
+  "source_tree": "e3a7a6ff5bd44079b6855bb6dc3c431896cbaaa0",
+  "capture_receipt_sha256": "f21f6c76a3882b9c71c6aa2da6001f3f5aa53fff9726c1fa9d384dcdf5120ee0",
+  "capture_log_sha256": "43504cbf044c3ee395423d00dae6b6790a640f37c8b5fcdcdab7a528a29f7030",
+  "independent_review_seal_sha256": "d4dcbd28244722af79c0da690194fce04c7d09b528803cb4ad5d3caccc3b5fa7",
+  "comparison_flags": "Whole records retain their pre-reconciliation 5ca grading flags and profile labels. Only the actual observations are current regression inputs.",
+  "floating": [
+    {
+      "id": "float_nan_substring",
+      "ansi": true,
+      "batch": 1,
+      "domain": "original_c06",
+      "reference": {
+        "id": "float_nan_substring",
+        "domain": "original_c06",
+        "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+        "ordered": false,
+        "original_fixture": "substring-arguments-spark.jsonl",
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcdef, cast(cast(NaN as float) as int), 2) AS r#609]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "NaN",
+            "sourceType": "\"FLOAT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value NaN of the type \"FLOAT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value NaN of the type \"FLOAT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "NaN",
+                "sourceType": "\"FLOAT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": true,
+        "optimized_matches": true,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32"
+      },
+      "strict_reference_match": true,
+      "owned_897_and_retained_facets_match": false
+    },
+    {
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "batch": 1,
+      "domain": "original_c06",
+      "reference": {
+        "id": "double_infinity_substring",
+        "domain": "original_c06",
+        "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+        "ordered": false,
+        "original_fixture": "substring-arguments-spark.jsonl",
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcdef, cast(cast(Infinity as double) as int), 2) AS r#613]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "Infinity",
+            "sourceType": "\"DOUBLE\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value Infinity of the type \"DOUBLE\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value Infinity of the type \"DOUBLE\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "Infinity",
+                "sourceType": "\"DOUBLE\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": true,
+        "optimized_matches": true,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32"
+      },
+      "strict_reference_match": true,
+      "owned_897_and_retained_facets_match": false
+    },
+    {
+      "id": "float_nan_substring",
+      "ansi": true,
+      "batch": 32,
+      "domain": "original_c06",
+      "reference": {
+        "id": "float_nan_substring",
+        "domain": "original_c06",
+        "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+        "ordered": false,
+        "original_fixture": "substring-arguments-spark.jsonl",
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcdef, cast(cast(NaN as float) as int), 2) AS r#609]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "NaN",
+            "sourceType": "\"FLOAT\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value NaN of the type \"FLOAT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value NaN of the type \"FLOAT\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "NaN",
+                "sourceType": "\"FLOAT\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": true,
+        "optimized_matches": true,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32"
+      },
+      "strict_reference_match": true,
+      "owned_897_and_retained_facets_match": false
+    },
+    {
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "batch": 32,
+      "domain": "original_c06",
+      "reference": {
+        "id": "double_infinity_substring",
+        "domain": "original_c06",
+        "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+        "ordered": false,
+        "original_fixture": "substring-arguments-spark.jsonl",
+        "ansi": true,
+        "schema_stages": {
+          "analyzed": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "r",
+                "type": "string",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          }
+        },
+        "plans": {
+          "analyzed": "Project [substring(abcdef, cast(cast(Infinity as double) as int), 2) AS r#613]\n+- OneRowRelation\n"
+        },
+        "dataframe_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "expected": {
+          "condition": "CAST_OVERFLOW"
+        },
+        "spark_error_phase": "optimized",
+        "spark_error_details": {
+          "status": "error",
+          "phase": "optimized",
+          "condition": "CAST_OVERFLOW",
+          "parameters": {
+            "value": "Infinity",
+            "sourceType": "\"DOUBLE\"",
+            "targetType": "\"INT\"",
+            "ansiConfig": "\"spark.sql.ansi.enabled\""
+          },
+          "sql_state": "22003",
+          "message": "[CAST_OVERFLOW] The value Infinity of the type \"DOUBLE\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+          "python_class": "pyspark.errors.exceptions.captured.ArithmeticException",
+          "java_causes": [
+            {
+              "class": "org.apache.spark.SparkArithmeticException",
+              "message": "[CAST_OVERFLOW] The value Infinity of the type \"DOUBLE\" cannot be cast to \"INT\" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. SQLSTATE: 22003",
+              "condition": "CAST_OVERFLOW",
+              "parameters": {
+                "value": "Infinity",
+                "sourceType": "\"DOUBLE\"",
+                "targetType": "\"INT\"",
+                "ansiConfig": "\"spark.sql.ansi.enabled\""
+              }
+            }
+          ]
+        },
+        "settings": {
+          "spark.ui.enabled": "false",
+          "spark.sql.session.timeZone": "UTC",
+          "spark.sql.adaptive.enabled": "false",
+          "spark.sql.shuffle.partitions": "1",
+          "spark.sql.ansi.enabled": "true"
+        }
+      },
+      "observation": {
+        "public_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "before_collect": null,
+        "physical_schema": null,
+        "rows": null,
+        "rows_raw": null,
+        "native_phase": "create_physical_plan",
+        "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "public_matches": true,
+        "before_matches": true,
+        "physical_matches": true,
+        "rows_match": true,
+        "ordered_rows_match": true,
+        "error_matches": true,
+        "matches": true,
+        "optimized_matches": true,
+        "optimized_schema": null,
+        "optimized_observation": null,
+        "optimized_error": "Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32"
+      },
+      "strict_reference_match": true,
+      "owned_897_and_retained_facets_match": false
+    }
+  ],
+  "substring": [
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "float_nan_substring",
+      "ansi": true,
+      "representation": 0,
+      "batch_size": 1,
+      "matches_reference": true,
+      "meaningful_contract_match": true,
+      "profile": "full_spark_match",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "representation": 0,
+      "batch_size": 1,
+      "matches_reference": false,
+      "meaningful_contract_match": false,
+      "profile": "unexpected_difference",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "float_nan_substring",
+      "ansi": true,
+      "representation": 0,
+      "batch_size": 32,
+      "matches_reference": true,
+      "meaningful_contract_match": true,
+      "profile": "full_spark_match",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "representation": 0,
+      "batch_size": 32,
+      "matches_reference": false,
+      "meaningful_contract_match": false,
+      "profile": "unexpected_difference",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "float_nan_substring",
+      "ansi": true,
+      "representation": 1,
+      "batch_size": 1,
+      "matches_reference": true,
+      "meaningful_contract_match": true,
+      "profile": "full_spark_match",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "representation": 1,
+      "batch_size": 1,
+      "matches_reference": false,
+      "meaningful_contract_match": false,
+      "profile": "unexpected_difference",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "float_nan_substring",
+      "ansi": true,
+      "representation": 1,
+      "batch_size": 32,
+      "matches_reference": true,
+      "meaningful_contract_match": true,
+      "profile": "full_spark_match",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "representation": 1,
+      "batch_size": 32,
+      "matches_reference": false,
+      "meaningful_contract_match": false,
+      "profile": "unexpected_difference",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "float_nan_substring",
+      "ansi": true,
+      "representation": 2,
+      "batch_size": 1,
+      "matches_reference": true,
+      "meaningful_contract_match": true,
+      "profile": "full_spark_match",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "representation": 2,
+      "batch_size": 1,
+      "matches_reference": false,
+      "meaningful_contract_match": false,
+      "profile": "unexpected_difference",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "float_nan_substring",
+      "ansi": true,
+      "representation": 2,
+      "batch_size": 32,
+      "matches_reference": true,
+      "meaningful_contract_match": true,
+      "profile": "full_spark_match",
+      "sql": "SELECT substring('abcdef',CAST('NaN' AS FLOAT),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value NaN to type Int32",
+        "error_stage": "physical"
+      }
+    },
+    {
+      "run_label": "retained",
+      "fixture": "/Users/hanbowang/Documents/repos/delta-arrow-reader-mac-validator/crates/delta-arrow-reader-spark-sql/tests/fixtures/substring-arguments-spark.jsonl",
+      "id": "double_infinity_substring",
+      "ansi": true,
+      "representation": 2,
+      "batch_size": 32,
+      "matches_reference": false,
+      "meaningful_contract_match": false,
+      "profile": "unexpected_difference",
+      "sql": "SELECT substring('abcdef',CAST('Infinity' AS DOUBLE),2) AS r",
+      "actual": {
+        "analyzed_schema": {
+          "type": "struct",
+          "fields": [
+            {
+              "name": "r",
+              "type": "string",
+              "nullable": true,
+              "metadata": {}
+            }
+          ]
+        },
+        "analyzed_arrow_schema": "DFSchema { inner: Schema { fields: [Field { name: \"#0\", data_type: Utf8, nullable: true }], metadata: {} }, field_qualifiers: [None], functional_dependencies: FunctionalDependencies { deps: [] } }",
+        "physical_schema": null,
+        "physical_arrow_schema": null,
+        "error": "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value inf to type Int32",
+        "error_stage": "physical"
+      }
+    }
+  ]
+}
