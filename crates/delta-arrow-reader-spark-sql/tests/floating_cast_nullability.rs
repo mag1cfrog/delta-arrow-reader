@@ -652,7 +652,7 @@ fn floating_integer_scoped_contract_matches(
     {
         // Keep all inherited facets as history. These four calls now require
         // the complete measured preparation result, including unavailable stages.
-        if !actual.as_object().is_some_and(|object| object.len() == 18) {
+        if actual.as_object().is_none_or(|object| object.len() != 18) {
             return Ok(false);
         }
         let current: Value = serde_json::from_str(include_str!(
