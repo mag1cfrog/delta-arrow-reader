@@ -15,6 +15,9 @@ use datafusion::prelude::{SessionConfig, SessionContext};
 use delta_arrow_reader_spark_sql::{SparkSqlOptions, configure_spark_sql, plan_query};
 use serde_json::{Value, json};
 
+#[allow(dead_code, reason = "This suite uses the shared native query observer.")]
+#[path = "support/spark_results.rs"]
+mod spark_results;
 #[path = "support/string_binary.rs"]
 mod string_binary;
 use string_binary::{TestResult, capture_observation, capture_result, register_inputs};
@@ -392,6 +395,11 @@ async fn trim_arity_preserves_native_sql() -> TestResult {
             for function in ["trim", "ltrim", "rtrim"] {
                 for arguments in ["", "'a','a','a'"] {
                     let sql = format!("SELECT {function}({arguments}) AS r");
+                    let plain_before =
+                        spark_results::capture_native_query_observation(&plain, &sql).await?;
+                    let configured_before =
+                        spark_results::capture_native_query_observation(&configured, &sql).await?;
+                    assert_eq!(configured_before, plain_before, "{sql}, before Spark");
                     assert!(
                         plan_query(
                             &configured,
@@ -404,17 +412,22 @@ async fn trim_arity_preserves_native_sql() -> TestResult {
                         .await
                         .is_err()
                     );
-                    let expected = plain
-                        .sql(&sql)
-                        .await
-                        .err()
-                        .ok_or("native SQL admitted an invalid trim count")?;
-                    let actual = configured
-                        .sql(&sql)
-                        .await
-                        .err()
-                        .ok_or("configured native SQL admitted an invalid trim count")?;
-                    assert_eq!(actual.to_string(), expected.to_string(), "{sql}");
+                    let plain_after =
+                        spark_results::capture_native_query_observation(&plain, &sql).await?;
+                    let configured_after =
+                        spark_results::capture_native_query_observation(&configured, &sql).await?;
+                    eprintln!(
+                        "trim arity native observation: {}",
+                        json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,
+                            "plain_before":plain_before,"configured_before":configured_before,
+                            "plain_after":plain_after,"configured_after":configured_after})
+                    );
+                    assert_eq!(plain_after, plain_before, "{sql}, plain after Spark");
+                    assert_eq!(
+                        configured_after, configured_before,
+                        "{sql}, configured after Spark"
+                    );
+                    assert_eq!(configured_after, plain_after, "{sql}, after Spark");
                 }
             }
             for sql in [
