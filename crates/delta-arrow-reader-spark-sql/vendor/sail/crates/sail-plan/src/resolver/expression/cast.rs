@@ -14,7 +14,7 @@ use sail_function::scalar::datetime::spark_interval::{
 };
 use sail_function::scalar::datetime::spark_interval_truncate::SparkIntervalTruncate;
 use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
-use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
@@ -375,9 +375,17 @@ impl PlanResolver<'_> {
                 };
                 ScalarUDF::from(SparkDecimalCast::to_integer(to, mode)?).call(vec![expr])
             }
-            (DataType::Int64, DataType::Int32, is_try) => {
-                ScalarUDF::from(SparkCastBigintToInt::new(self.config.ansi_mode, is_try))
-                    .call(vec![expr])
+            (from, to, is_try)
+                if (matches!(from, DataType::Float32 | DataType::Float64)
+                    && to.is_signed_integer())
+                    || (from == DataType::Int64 && to == DataType::Int32) =>
+            {
+                ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                    to,
+                    self.config.ansi_mode,
+                    is_try,
+                )?)
+                .call(vec![expr])
             }
             (_, to, true) => try_cast(expr, to),
             (_, to, _) => cast(expr, to),

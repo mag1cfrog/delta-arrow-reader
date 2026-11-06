@@ -51,7 +51,7 @@ use sail_function::scalar::math::{
     spark_interval_negate::SparkIntervalNegate, spark_interval_scale::SparkIntervalScale,
 };
 use sail_function::scalar::misc::raise_error::RaiseError;
-use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_boolean::SparkCastStringToBoolean;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
@@ -84,7 +84,7 @@ fn null_literal(expr: &Expr) -> bool {
         Expr::ScalarFunction(f)
             if (f.func.inner().is::<SparkNullIfZero>()
                 || f.func.inner().is::<SparkDecimalCast>()
-                || f.func.inner().is::<SparkCastBigintToInt>()
+                || f.func.inner().is::<SparkCastNumericToInteger>()
                 || f.func.inner().is::<SparkNullIf>()
                 || f.func
                     .inner()
@@ -131,7 +131,7 @@ fn projected_null(expr: &Expr, input: &LogicalPlan) -> Result<bool> {
                 || (f.func.inner().is::<NormalizeNestedFloatKeys>()
                     && f.func.inner().supports_constant_folding())
                 || f.func.inner().is::<SparkDecimalCast>()
-                || f.func.inner().is::<SparkCastBigintToInt>()
+                || f.func.inner().is::<SparkCastNumericToInteger>()
                 || f.func.inner().is::<SparkComparisonFloat>() =>
         {
             match f.args.as_slice() {
@@ -1744,7 +1744,7 @@ fn one_row_exprs(plan: &LogicalPlan) -> Result<Option<Vec<Expr>>> {
 
 fn has_cast(expr: &Expr) -> Result<bool> {
     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
-        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().downcast_ref::<SparkCastBigintToInt>()
+        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().downcast_ref::<SparkCastNumericToInteger>()
             .is_some_and(|cast| !cast.is_try()))
         || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
             || f.func.inner().is::<SparkCastStringToDecimal>()
@@ -2584,7 +2584,7 @@ impl Prepare {
                         // only for this discarded local evaluation. The
                         // runtime expression and its physical plan stay intact.
                         let expr = expr.clone().transform_up(|expr| {
-                            if let Expr::Cast(mut cast) = expr {
+                            let expr = if let Expr::Cast(mut cast) = expr {
                                 if cast.field.data_type().is_signed_integer()
                                     && cast.expr.get_type(&schema)?.is_string()
                                 {
@@ -2596,32 +2596,51 @@ impl Prepare {
                                         Box::new(expr_fn::btrim(vec![*cast.expr, lit(trim)]));
                                     return Ok(Transformed::yes(Expr::Cast(cast)));
                                 }
-                                // Spark compares its floating input with a
-                                // floating Long.MaxValue, which rounds to
-                                // 2^63, then saturates that endpoint to MAX.
-                                if cast.field.data_type() == &DataType::Int64 {
-                                    let upper = match cast.expr.get_type(&schema)? {
-                                        DataType::Float32 => {
-                                            Some(ScalarValue::Float32(Some(i64::MAX as f32)))
-                                        }
-                                        DataType::Float64 => {
-                                            Some(ScalarValue::Float64(Some(i64::MAX as f64)))
-                                        }
+                                Expr::Cast(cast)
+                            } else {
+                                expr
+                            };
+                            let input = match &expr {
+                                Expr::Cast(cast) if cast.field.data_type() == &DataType::Int64 => {
+                                    Some(cast.expr.as_ref())
+                                }
+                                Expr::ScalarFunction(f)
+                                    if f.func
+                                        .inner()
+                                        .downcast_ref::<SparkCastNumericToInteger>()
+                                        .is_some_and(|cast| {
+                                            !cast.is_try() && cast.target_type() == &DataType::Int64
+                                        }) =>
+                                {
+                                    match f.args.as_slice() {
+                                        [input] => Some(input),
                                         _ => None,
-                                    };
-                                    if let Some(upper) = upper {
-                                        let expr = datafusion_expr::expr_fn::when(
-                                            (*cast.expr).clone().eq(lit(upper)),
-                                            lit(i64::MAX),
-                                        )
-                                        .otherwise(Expr::Cast(cast))?;
-                                        return Ok(Transformed::yes(expr));
                                     }
                                 }
-                                Ok(Transformed::no(Expr::Cast(cast)))
-                            } else {
-                                Ok(Transformed::no(expr))
+                                _ => None,
+                            };
+                            // Spark rounds floating Long.MaxValue to 2^63,
+                            // then saturates that endpoint in this local check.
+                            if let Some(input) = input {
+                                let upper = match input.get_type(&schema)? {
+                                    DataType::Float32 => {
+                                        Some(ScalarValue::Float32(Some(i64::MAX as f32)))
+                                    }
+                                    DataType::Float64 => {
+                                        Some(ScalarValue::Float64(Some(i64::MAX as f64)))
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(upper) = upper {
+                                    let expr = datafusion_expr::expr_fn::when(
+                                        input.clone().eq(lit(upper)),
+                                        lit(i64::MAX),
+                                    )
+                                    .otherwise(expr)?;
+                                    return Ok(Transformed::yes(expr));
+                                }
                             }
+                            Ok(Transformed::no(expr))
                         })?;
                         if !expr.transformed {
                             return Err(error);

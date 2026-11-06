@@ -22,6 +22,126 @@ mod spark_results;
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 #[tokio::test]
+async fn floating_integer_conversion_evaluates_its_input_once() -> TestResult {
+    use datafusion::common::ScalarValue;
+    use datafusion::logical_expr::{ColumnarValue, Volatility, create_udf};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    for (name, source) in [
+        ("count_float_input", ScalarValue::Float32(Some(1.9))),
+        ("count_double_input", ScalarValue::Float64(Some(1.9))),
+    ] {
+        let observed_calls = Arc::clone(&calls);
+        session.register_udf(create_udf(
+            name,
+            vec![],
+            source.data_type(),
+            Volatility::Volatile,
+            Arc::new(move |_| {
+                observed_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(ColumnarValue::Scalar(source.clone()))
+            }),
+        ));
+        for ansi_mode in [false, true] {
+            for function in ["CAST", "TRY_CAST"] {
+                for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
+                    let before = calls.load(Ordering::SeqCst);
+                    let query = plan_query(
+                        &session,
+                        &format!("SELECT {function}({name}() AS {target}) AS r"),
+                        &SparkSqlOptions {
+                            ansi_mode,
+                            ..SparkSqlOptions::default()
+                        },
+                    )
+                    .await?;
+                    let physical = query.create_physical_plan(&session).await?;
+                    assert_eq!(calls.load(Ordering::SeqCst), before);
+                    let batches = collect(physical, session.task_ctx()).await?;
+                    assert_eq!(calls.load(Ordering::SeqCst), before + 1);
+                    assert_eq!(
+                        batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                        1
+                    );
+                    let batch = batches
+                        .iter()
+                        .find(|batch| batch.num_rows() == 1)
+                        .ok_or("missing result row")?;
+                    assert_eq!(
+                        ScalarValue::try_from_array(batch.column(0), 0)?
+                            .cast_to(&DataType::Int64)?,
+                        ScalarValue::Int64(Some(1))
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn floating_try_cast_propagates_producer_errors() -> TestResult {
+    use datafusion::common::DataFusionError;
+    use datafusion::logical_expr::{Volatility, create_udf};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let session = SessionContext::new_with_state(
+        configure_spark_sql(SessionStateBuilder::new().with_default_features()).build(),
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    for (name, source) in [
+        ("failing_float_producer", DataType::Float32),
+        ("failing_double_producer", DataType::Float64),
+    ] {
+        let observed_calls = Arc::clone(&calls);
+        session.register_udf(create_udf(
+            name,
+            vec![],
+            source,
+            Volatility::Volatile,
+            Arc::new(move |_| {
+                observed_calls.fetch_add(1, Ordering::SeqCst);
+                Err(DataFusionError::Execution(format!(
+                    "{name} failed before conversion"
+                )))
+            }),
+        ));
+        for ansi_mode in [true, false] {
+            for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
+                let before = calls.load(Ordering::SeqCst);
+                let query = plan_query(
+                    &session,
+                    &format!("SELECT TRY_CAST({name}() AS {target}) AS r"),
+                    &SparkSqlOptions {
+                        ansi_mode,
+                        ..SparkSqlOptions::default()
+                    },
+                )
+                .await?;
+                let physical = query.create_physical_plan(&session).await?;
+                assert_eq!(calls.load(Ordering::SeqCst), before);
+                let error = collect(physical, session.task_ctx())
+                    .await
+                    .err()
+                    .ok_or("TRY_CAST swallowed a producer error")?;
+                assert!(
+                    matches!(error.find_root(), DataFusionError::Execution(message)
+                    if message == &format!("{name} failed before conversion"))
+                );
+                assert_eq!(calls.load(Ordering::SeqCst), before + 1);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn floating_integer_casts_match_recorded_stages() -> TestResult {
     let manifest: Value = serde_json::from_str(include_str!(
         "fixtures/floating-integer-values/sources/897-floating-integer-inputs-current-v1-manifest.json"

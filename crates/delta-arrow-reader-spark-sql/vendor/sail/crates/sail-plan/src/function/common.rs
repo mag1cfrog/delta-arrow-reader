@@ -17,7 +17,7 @@ use datafusion_expr::{
     WindowFrame, WindowFunctionDefinition, WindowUDF, cast, expr, lit,
 };
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::spark_cast_bigint_to_int::SparkCastBigintToInt;
+use sail_function::scalar::spark_cast_numeric_to_integer::SparkCastNumericToInteger;
 use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
@@ -225,16 +225,80 @@ pub(crate) fn literal_value_without_evaluation(expression: &expr::Expr) -> Optio
             }
         }
         expr::Expr::ScalarFunction(function)
-            if function.func.inner().is::<SparkCastBigintToInt>() =>
+            if function.func.inner().is::<SparkCastNumericToInteger>() =>
         {
+            let cast = function
+                .func
+                .inner()
+                .downcast_ref::<SparkCastNumericToInteger>()?;
             let [input] = function.args.as_slice() else {
                 return None;
             };
             let value = literal_value_without_evaluation(input)?;
-            matches!(value, ScalarValue::Int64(None)).then_some(ScalarValue::Int32(None))
+            cast.return_type(&[value.data_type()]).ok()?;
+            if value.is_null() {
+                ScalarValue::try_new_null(cast.target_type()).ok()
+            } else {
+                None
+            }
         }
         _ => None,
     }
+}
+
+#[test]
+fn numeric_integer_typed_null_lookup_does_not_evaluate_producers() -> datafusion_common::Result<()>
+{
+    use datafusion_expr::create_udf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed_calls = Arc::clone(&calls);
+    let producer = create_udf(
+        "numeric_integer_lookup_producer",
+        vec![],
+        DataType::Float64,
+        Volatility::Immutable,
+        Arc::new(move |_| {
+            observed_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(ColumnarValue::Scalar(ScalarValue::Float64(Some(1.9))))
+        }),
+    );
+    for target in [
+        DataType::Int8,
+        DataType::Int16,
+        DataType::Int32,
+        DataType::Int64,
+    ] {
+        for (ansi, is_try) in [(false, false), (true, false), (true, true)] {
+            let cast = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                target.clone(),
+                ansi,
+                is_try,
+            )?);
+            for source in [ScalarValue::Float32(None), ScalarValue::Float64(None)] {
+                assert_eq!(
+                    literal_value_without_evaluation(&cast.call(vec![lit(source)])),
+                    Some(ScalarValue::try_new_null(&target)?),
+                );
+            }
+            assert_eq!(
+                literal_value_without_evaluation(&cast.call(vec![producer.call(vec![])])),
+                None
+            );
+        }
+    }
+    let bigint = ScalarUDF::from(SparkCastNumericToInteger::try_new(
+        DataType::Int32,
+        false,
+        false,
+    )?);
+    assert_eq!(
+        literal_value_without_evaluation(&bigint.call(vec![lit(ScalarValue::Int64(None))])),
+        Some(ScalarValue::Int32(None))
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    Ok(())
 }
 
 pub(crate) fn without_metadata_annotations(mut expression: &expr::Expr) -> &expr::Expr {
@@ -499,13 +563,16 @@ impl ScalarFunctionBuilder {
                       function_context,
                   }| {
                 let arg = arguments.one()?;
-                if data_type == DataType::Int32
-                    && arg.get_type(function_context.schema)? == DataType::Int64
+                let source = arg.get_type(function_context.schema)?;
+                if (matches!(source, DataType::Float32 | DataType::Float64)
+                    && data_type.is_signed_integer())
+                    || (source == DataType::Int64 && data_type == DataType::Int32)
                 {
-                    return Ok(ScalarUDF::from(SparkCastBigintToInt::new(
+                    return Ok(ScalarUDF::from(SparkCastNumericToInteger::try_new(
+                        data_type.clone(),
                         function_context.plan_config.ansi_mode,
                         false,
-                    ))
+                    )?)
                     .call(vec![arg]));
                 }
                 if let DataType::Decimal128(precision, scale) = data_type {
@@ -575,7 +642,7 @@ fn numeric_literal(value: &expr::Expr) -> Option<ScalarValue> {
             let cast = function
                 .func
                 .inner()
-                .downcast_ref::<SparkCastBigintToInt>()?;
+                .downcast_ref::<SparkCastNumericToInteger>()?;
             let [input] = function.args.as_slice() else {
                 return None;
             };
