@@ -703,7 +703,7 @@ async fn generated_interval_window_names_match_original_spark_stages() -> TestRe
             observations.push(json!({
                 "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
                 "reference":case, "matches":matches,
-                "actual":actual.map_or_else(|error| json!({"error":error.to_string()}), |result| result),
+                "actual":actual.unwrap_or_else(|error| json!({"error":error.to_string()})),
             }));
         }
     }
@@ -841,7 +841,7 @@ async fn generated_window_names_cover_source_boundaries() -> TestResult {
             observations.push(json!({
                 "id":case["id"], "ansi":case["ansi"], "batch":batch_size,
                 "reference":case, "matches":matches,
-                "actual":actual.map_or_else(|error| json!({"error":error.to_string()}), |result| result),
+                "actual":actual.unwrap_or_else(|error| json!({"error":error.to_string()})),
                 "accepted":accepted,"disposition":disposition,"owned_gap":gap_owner,
                 "negation_overflow_matches":negation_overflow_matches,
             }));
