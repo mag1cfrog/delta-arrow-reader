@@ -1,0 +1,40 @@
+{
+  "inputs": [
+    {
+      "name": "floating_integer_empty",
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "metadata": {
+              "role": "floating-integer-order"
+            }
+          },
+          {
+            "name": "f",
+            "type": "float",
+            "nullable": false,
+            "metadata": {
+              "source": "897-float",
+              "unit": "binary-floating"
+            }
+          },
+          {
+            "name": "d",
+            "type": "double",
+            "nullable": false,
+            "metadata": {
+              "source": "897-double",
+              "unit": "binary-floating"
+            }
+          }
+        ]
+      },
+      "rows": [],
+      "native_slice": false
+    }
+  ]
+}
