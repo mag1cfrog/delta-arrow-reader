@@ -1,4 +1,4 @@
-//! Complete substring descendant comparisons and a separately retained alias boundary.
+//! Complete substring descendant comparisons and historical alias receipts.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -38,7 +38,8 @@ const FIXTURES: [(&str, &str, &str, usize); 2] = [
 ];
 const DIVIDE_ERROR: &str =
     "physical: preserve_spark_expression_errors\ncaused by\nArrow error: Divide by zero error";
-const ARRAY_ALIAS_SQL: &str = "SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(CAST(1/0 AS INT))) AS r FROM substring_descendant_input";
+const ARRAY_CONCAT_SQL: &str = "SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(CAST(1/0 AS INT))) AS r FROM substring_descendant_input";
+const UNRESOLVED_ARRAY_CONCAT: &str = "[UNRESOLVED_ROUTINE] Cannot resolve routine `array_concat` on search path [`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]. SQLSTATE: 42883";
 
 fn records(source: &str) -> TestResult<Vec<Value>> {
     Ok(source
@@ -119,6 +120,9 @@ fn matches_collection_error(case: &Value, actual: &Value) -> bool {
 }
 
 fn matches_meaningful_contract(case: &Value, actual: &Value) -> TestResult<bool> {
+    if case["expected"]["condition"] == "UNRESOLVED_ROUTINE" {
+        return Ok(matches_array_concat_resolution(case, actual));
+    }
     if !contracts::completed_stages_are_retained(actual)
         || !has_arrow_receipt(actual, "analyzed_arrow_schema")
         || ["analyzed_schema", "physical_schema"]
@@ -148,15 +152,37 @@ fn matches_meaningful_contract(case: &Value, actual: &Value) -> TestResult<bool>
     })
 }
 
+fn matches_array_concat_resolution(case: &Value, actual: &Value) -> bool {
+    let parameters = json!({
+        "routineName":"`array_concat`",
+        "searchPath":"[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    });
+    let message = format!("{UNRESOLVED_ARRAY_CONCAT}; line 1 pos 7");
+    case["expected"]
+        == json!({
+            "status":"error","phase":"sql","condition":"UNRESOLVED_ROUTINE",
+            "parameters":parameters,"sql_state":"42883","message":message,
+            "python_class":"pyspark.errors.exceptions.captured.AnalysisException",
+            "java_causes":[{"class":"org.apache.spark.sql.AnalysisException",
+                "message":message,"condition":"UNRESOLVED_ROUTINE","parameters":parameters}]
+        })
+        && *actual
+            == json!({
+                "error":format!("resolve: External error: analysis error: {UNRESOLVED_ARRAY_CONCAT}"),
+                "error_stage":"resolve","analyzed_schema":null,"physical_schema":null,
+                "analyzed_arrow_schema":null,"physical_arrow_schema":null
+            })
+}
+
 fn context(matrix: &str, case: &Value, representation: usize, batch_size: usize) -> Value {
     json!({"matrix":matrix,"id":case["id"],"ansi":case["ansi"],"sql":case["sql"],
         "representation":representation,"batch_size":batch_size,"input_partitions":2,
         "target_partitions":2,"timezone":"UTC"})
 }
 
-fn is_array_alias_boundary(case: &Value) -> bool {
+fn is_array_concat_reference(case: &Value) -> bool {
     case["id"] == "substring_descendant_array_boundary"
-        && case["sql"] == ARRAY_ALIAS_SQL
+        && case["sql"] == ARRAY_CONCAT_SQL
         && case["expected"]["status"] == "error"
         && case["expected"]["phase"] == "sql"
         && case["expected"]["condition"] == "UNRESOLVED_ROUTINE"
@@ -184,7 +210,7 @@ fn matches_retained_alias(
     actual: &Value,
     profiles: &[Value],
 ) -> TestResult<bool> {
-    if !is_array_alias_boundary(case)
+    if !is_array_concat_reference(case)
         || matches_meaningful_contract(case, actual)?
         || !contracts::completed_stages_are_retained(actual)
         || !has_arrow_receipt(actual, "analyzed_arrow_schema")
@@ -221,7 +247,8 @@ fn session(batch_size: usize) -> SessionContext {
                 .with_config(
                     SessionConfig::new()
                         .with_batch_size(batch_size)
-                        .with_target_partitions(2),
+                        .with_target_partitions(2)
+                        .with_default_catalog_and_schema("spark_catalog", "default"),
                 ),
         )
         .build(),
@@ -250,16 +277,12 @@ async fn capture_case(
 
 #[tokio::test]
 async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
-    let profile_records = records(include_str!(
-        "fixtures/substring-descendant-native-negative-profiles.jsonl"
-    ))?;
-    let profiles = &profile_records[1..];
     let mut reference_keys = HashSet::new();
     let mut sql_statements = HashSet::new();
     let mut expected_contexts = HashSet::new();
-    let mut expected_alias_contexts = HashSet::new();
+    let mut expected_unresolved_contexts = HashSet::new();
     let mut seen_contexts = HashSet::new();
-    let mut retained_contexts = HashSet::new();
+    let mut unresolved_contexts = HashSet::new();
     let mut failures = Vec::new();
     let mut references = 0;
     let mut divide_references = 0;
@@ -267,7 +290,7 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
     let mut capture_failures = 0;
     let mut meaningful_matches = 0;
     let mut preexecution_divides = 0;
-    let mut retained_aliases = 0;
+    let mut unresolved_routines = 0;
     let mut constant_parent_null_matches = 0;
     let mut local_parent_null_matches = 0;
     for (matrix, name, source, count) in FIXTURES {
@@ -290,8 +313,8 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
                 for batch_size in [1, 32] {
                     let key = context(matrix, case, representation, batch_size).to_string();
                     expected_contexts.insert(key.clone());
-                    if is_array_alias_boundary(case) {
-                        expected_alias_contexts.insert(key);
+                    if is_array_concat_reference(case) {
+                        expected_unresolved_contexts.insert(key);
                     }
                 }
             }
@@ -323,10 +346,10 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
                         Ok((
                             matches_meaningful_contract(case, &actual)?,
                             matches_preexecution_divide(case, &actual),
-                            matches_retained_alias(&context, case, &actual, profiles)?,
+                            matches_array_concat_resolution(case, &actual),
                         ))
                     })();
-                    let (meaningful, divide, retained) = match comparison {
+                    let (meaningful, divide, unresolved) = match comparison {
                         Ok(value) => value,
                         Err(error) => {
                             failures.push(
@@ -339,9 +362,9 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
                     capture_failures += usize::from(capture_failure);
                     meaningful_matches += usize::from(meaningful);
                     preexecution_divides += usize::from(divide);
-                    retained_aliases += usize::from(retained);
-                    if retained {
-                        retained_contexts.insert(key);
+                    unresolved_routines += usize::from(unresolved);
+                    if unresolved {
+                        unresolved_contexts.insert(key);
                     }
                     if meaningful && matrix == "parent_null" {
                         if case["id"]
@@ -359,24 +382,20 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
                         "spark_error_phase":case["expected"].get("phase"),
                         "native_error_stage":actual.get("error_stage"),
                         "public_phase_names_equal":if divide { Some(false) } else { None },
-                        "retained_native_alias_match":retained,
+                        "unresolved_routine_match":unresolved,
                         "fields_match_when_reference_available":{
                             "analyzed_schema":case["expected"].get("analyzed_schema").map(|schema| actual.get("analyzed_schema") == Some(schema)),
                             "physical_schema":case["expected"].get("physical_schema").map(|schema| actual.get("physical_schema") == Some(schema))},
                         "ordered_rows_equal_when_available":case["expected"].get("rows").zip(actual.get("rows")).map(|(expected,actual)| expected == actual),
-                        "regression_invariant_pass":!capture_failure && (meaningful || retained)});
+                        "regression_invariant_pass":!capture_failure && meaningful});
                     eprintln!("c06 substring permanent descendant observation: {observation}");
-                    if capture_failure || (!meaningful && !retained) {
+                    if capture_failure || !meaningful {
                         failures.push(observation);
                     }
                 }
             }
         }
     }
-    let profile_contexts = profiles
-        .iter()
-        .map(|profile| profile["context"].to_string())
-        .collect::<HashSet<_>>();
     let complete = failures.is_empty()
         && references == 110
         && reference_keys.len() == 110
@@ -386,23 +405,19 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
         && seen_contexts.len() == 660
         && seen_contexts == expected_contexts
         && capture_failures == 0
-        && meaningful_matches == 648
+        && meaningful_matches == 660
         && preexecution_divides == 198
-        && retained_aliases == 12
+        && unresolved_routines == 12
         && constant_parent_null_matches == 36
         && local_parent_null_matches == 36
-        && profiles.len() == 12
-        && profile_records[0]["profile_count"] == 12
-        && profile_contexts.len() == 12
-        && profile_contexts == expected_alias_contexts
-        && retained_contexts == expected_alias_contexts;
+        && unresolved_contexts == expected_unresolved_contexts;
     eprintln!(
         "c06 substring permanent descendant summary: {}",
         json!({
         "references":references,"distinct_sql_statements":sql_statements.len(),
         "observations":observations,"unique_contexts":seen_contexts.len(),"capture_failures":capture_failures,
         "meaningful_matches":meaningful_matches,"named_preexecution_divide_mappings":preexecution_divides,
-        "retained_native_aliases_without_compatibility_credit":retained_aliases,
+        "unresolved_routine_matches":unresolved_routines,
         "constant_parent_null_matches":constant_parent_null_matches,"local_parent_null_matches":local_parent_null_matches,
         "full_compatibility_pass":observations == 660 && meaningful_matches == 660 && preexecution_divides == 0,
         "regression_invariant_pass":complete,"unexpected":failures.len()})
@@ -421,16 +436,12 @@ async fn substring_descendants_retain_all_660_comparisons() -> TestResult {
     assert_eq!(seen_contexts.len(), 660);
     assert_eq!(seen_contexts, expected_contexts);
     assert_eq!(capture_failures, 0);
-    assert_eq!(meaningful_matches, 648);
+    assert_eq!(meaningful_matches, 660);
     assert_eq!(preexecution_divides, 198);
-    assert_eq!(retained_aliases, 12);
+    assert_eq!(unresolved_routines, 12);
     assert_eq!(constant_parent_null_matches, 36);
     assert_eq!(local_parent_null_matches, 36);
-    assert_eq!(profile_records[0]["profile_count"], 12);
-    assert_eq!(profiles.len(), 12);
-    assert_eq!(profile_contexts.len(), 12);
-    assert_eq!(profile_contexts, expected_alias_contexts);
-    assert_eq!(retained_contexts, expected_alias_contexts);
+    assert_eq!(unresolved_contexts, expected_unresolved_contexts);
     assert!(failures.is_empty(), "{failures:#?}");
     Ok(())
 }
@@ -541,16 +552,55 @@ fn descendant_comparisons_reject_changed_fields_rows_causes_and_stages() -> Test
 }
 
 #[test]
-fn retained_alias_profiles_reject_changed_public_results_and_contexts() -> TestResult {
-    let records = records(include_str!(
+fn historical_alias_profiles_reject_changed_public_results_and_contexts() -> TestResult {
+    let profile_records = records(include_str!(
         "fixtures/substring-descendant-native-negative-profiles.jsonl"
     ))?;
-    let profiles = &records[1..];
+    let references = records(FIXTURES[0].2)?;
+    let cases = references[1..]
+        .iter()
+        .filter(|case| is_array_concat_reference(case))
+        .collect::<Vec<_>>();
+    assert_eq!(references[0]["spark_version"], "4.2.0");
+    assert_eq!(references[0]["timezone"], "UTC");
+    assert_eq!(cases.len(), 2);
+    assert!(cases.iter().any(|case| case["ansi"] == false));
+    assert!(cases.iter().any(|case| case["ansi"] == true));
+    let mut expected_contexts = HashSet::new();
+    for case in &cases {
+        for representation in 0..3 {
+            for batch_size in [1, 32] {
+                assert!(
+                    expected_contexts.insert(
+                        context(FIXTURES[0].0, case, representation, batch_size).to_string()
+                    )
+                );
+            }
+        }
+    }
+    let profiles = &profile_records[1..];
+    let profile_contexts = profiles
+        .iter()
+        .map(|profile| profile["context"].to_string())
+        .collect::<HashSet<_>>();
+    assert_eq!(profile_records[0]["profile_count"], 12);
+    assert_eq!(
+        profile_records[0]["spark_reference_sha256"],
+        "5929b4eaba7f058a23160ef41ac6f216177af27b8f6fa987a5ece87195fbd4b3"
+    );
     assert_eq!(profiles.len(), 12);
+    assert_eq!(profile_contexts.len(), 12);
+    assert_eq!(profile_contexts, expected_contexts);
     for profile in profiles {
         let context = &profile["context"];
-        let case = &profile["captured_observation"];
-        let actual = &case["actual"];
+        let case = cases
+            .iter()
+            .copied()
+            .find(|case| case["id"] == context["id"] && case["ansi"] == context["ansi"])
+            .ok_or("missing authoritative historical alias reference")?;
+        let captured = &profile["captured_observation"];
+        assert_eq!(captured["expected"], case["expected"]);
+        let actual = &captured["actual"];
         assert!(!matches_meaningful_contract(case, actual)?);
         assert!(matches_retained_alias(context, case, actual, profiles)?);
         for stage in ["analyzed_schema", "physical_schema"] {
@@ -615,6 +665,22 @@ fn retained_alias_profiles_reject_changed_public_results_and_contexts() -> TestR
             profiles
         )?);
         assert!(!matches_retained_alias(context, case, actual, &[])?);
+        let mut changed_profile = profile.clone();
+        changed_profile["context"]["target_partitions"] = json!(99);
+        assert!(!matches_retained_alias(
+            context,
+            case,
+            actual,
+            &[changed_profile]
+        )?);
+        let mut changed_profile = profile.clone();
+        changed_profile["captured_observation"]["expected"]["message"] = json!("wrong message");
+        assert!(!matches_retained_alias(
+            context,
+            case,
+            actual,
+            &[changed_profile]
+        )?);
         let mut duplicates = profiles.to_vec();
         duplicates.push(profile.clone());
         assert!(!matches_retained_alias(context, case, actual, &duplicates)?);
@@ -638,6 +704,76 @@ fn retained_alias_profiles_reject_changed_public_results_and_contexts() -> TestR
             actual,
             &changed_profiles
         )?);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn unresolved_routine_comparisons_reject_changed_causes_and_available_stages() -> TestResult {
+    let references = records(FIXTURES[0].2)?;
+    let case = references[1..]
+        .iter()
+        .find(|case| is_array_concat_reference(case))
+        .ok_or("missing ARRAY_CONCAT reference")?;
+    let session = session(1);
+    register_inputs(&session, &references[0], 0, 1)?;
+    let actual = capture_observation(&session, case).await?;
+    assert!(matches_meaningful_contract(case, &actual)?, "{actual}");
+    for (key, value) in [
+        ("error", json!("resolve: unrelated routine")),
+        ("error_stage", json!("physical")),
+        ("analyzed_schema", json!({})),
+        ("analyzed_arrow_schema", json!("fabricated analyzed schema")),
+        ("optimized_schema", json!({})),
+        ("physical_schema", json!({})),
+        ("physical_arrow_schema", json!("fabricated physical schema")),
+        ("rows", json!([])),
+    ] {
+        let mut changed = actual.clone();
+        changed[key] = value;
+        assert!(!matches_meaningful_contract(case, &changed)?, "{key}");
+    }
+    for key in actual
+        .as_object()
+        .ok_or("missing native resolution object")?
+        .keys()
+    {
+        let mut changed = actual.clone();
+        changed
+            .as_object_mut()
+            .ok_or("missing changed observation")?
+            .remove(key);
+        assert!(!matches_meaningful_contract(case, &changed)?, "{key}");
+    }
+    for (key, value) in [
+        ("condition", json!("UNRELATED")),
+        ("phase", json!("optimized_schema")),
+        ("sql_state", json!("00000")),
+        ("message", json!("unrelated resolution cause")),
+        ("python_class", json!("unrelated exception class")),
+        ("java_causes", json!([])),
+        ("parameters", json!({"routineName":"`other`"})),
+        ("analyzed_schema", Value::Null),
+        ("optimized_schema", Value::Null),
+        ("physical_schema", Value::Null),
+        ("rows", json!([])),
+    ] {
+        let mut changed = case.clone();
+        changed["expected"][key] = value;
+        assert!(!matches_meaningful_contract(&changed, &actual)?, "{key}");
+    }
+    for parameter in ["routineName", "searchPath"] {
+        let mut changed = case.clone();
+        changed["expected"]["parameters"][parameter] = json!("wrong parameter");
+        assert!(
+            !matches_meaningful_contract(&changed, &actual)?,
+            "{parameter}"
+        );
+    }
+    for key in ["class", "message", "condition", "parameters"] {
+        let mut changed = case.clone();
+        changed["expected"]["java_causes"][0][key] = json!("wrong cause");
+        assert!(!matches_meaningful_contract(&changed, &actual)?, "{key}");
     }
     Ok(())
 }

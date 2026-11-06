@@ -3544,19 +3544,32 @@ statements in both ANSI modes, with the recorded inputs, settings and available
 schemas, values and structured errors.
 
 `substring_descendants.rs` records all 660 comparisons across three storage
-representations and batch sizes 1/32. The regression gate requires 648 meaningful
-matches and preserves 12 ARRAY_CONCAT alias differences. Its 33 divide references,
-exercised in 198 contexts, map Spark `optimized_schema` to native `physical` preparation with the exact
-DIVIDE_BY_ZERO cause; the stage names remain distinct. The native negative
-profiles and three mutation controls retain complete R4 receipts. Their raw
-Arrow schemas preserve storage details; internal aliases do not define public
-output names. Profiles are never used to construct actual schemas or values.
+representations and batch sizes 1/32. Its sessions explicitly use
+`spark_catalog.default` to match the captured resolution search path. The
+regression gate requires 660 meaningful matches, including 12 ARRAY_CONCAT
+resolution errors. In both ANSI modes, the
+Spark frontend rejects the absent builtin with UNRESOLVED_ROUTINE and SQLSTATE
+42883 before folding or execution. The checks require the complete Spark error
+condition, parameters and causes, the exact native resolution cause, and no
+available analyzed, optimized or physical schemas or rows. ARRAY_CONCAT can still
+resolve to a registered host UDF. Diagnostics use the host session's configured
+catalog and schema. Native DataFusion SQL keeps its existing behavior.
 
-Spark rejects the ARRAY_CONCAT alias with UNRESOLVED_ROUTINE. The native/Sail
-alias remains unchanged, so these 12 comparisons stay false and full
-compatibility remains false. This gate adds no ARRAY constructor implementation
-or general support decision. The shared helper only captures Boolean inputs and
-actual Arrow List fields and values.
+Its 33 divide references, exercised in 198 contexts, map Spark `optimized_schema`
+to native `physical` preparation with the exact DIVIDE_BY_ZERO cause; the stage
+names remain distinct. These phase mappings keep full compatibility false.
+This gate makes no general ARRAY support claim. The shared helper captures
+Boolean inputs and actual Arrow List fields and values.
+
+`substring-descendant-native-negative-profiles.jsonl` preserves the 12 historical
+ARRAY_CONCAT alias results unchanged. A separate history test checks the profile
+count and Spark reference identity, requires the complete 12-context set from the
+Spark references and declared matrix settings, and compares every captured
+expected object with its independent Spark reference. These profiles give no
+compatibility credit to the current gate. The profiles and three mutation
+controls retain complete R4 receipts.
+Their raw Arrow schemas preserve storage details; internal aliases do not define
+public output names. Profiles are never used to construct actual schemas or values.
 
 Replay these captures with `recapture_string_binary_spark.py --input <fixture>
 --output <fresh-output>`. Run the retained gate with:
@@ -3581,8 +3594,9 @@ mappings from two references. Three real R4 mutation controls retain native
 fields, rows and causes. Both positive gates reuse the descendant capture and
 comparison helpers and have no negative profiles. Together with the original
 110-reference gate, all 190 references and 1,140 contexts remain required. The
-original 12 ARRAY_CONCAT alias comparisons stay false; full family compatibility
-remains incomplete.
+12 ARRAY_CONCAT resolution errors remain required meaningful matches in the
+660-context gate. The retained preexecution phase mappings keep full family
+compatibility incomplete.
 
 ## LIKE escapes and pattern evaluation
 

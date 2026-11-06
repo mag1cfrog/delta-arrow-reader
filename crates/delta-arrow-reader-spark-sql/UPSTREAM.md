@@ -1096,9 +1096,9 @@ code-point controls and the strict remaining compatibility differences.
 ### C06 CONCAT runtime argument order
 
 The STRING/BINARY registry selects a query-local ordered CONCAT mode while leaving
-ARRAY_CONCAT and other argument families on their existing path. Its NULL rewrite
-retains preceding work, with #883's constant-error guard preserved as a separate
-dependency. Folding-disabled extension descendants retain the whole-call NULL
+array-valued CONCAT and other argument families on their existing path. Its NULL
+rewrite retains preceding work, with #883's constant-error guard preserved as a
+separate dependency. Folding-disabled extension descendants retain the whole-call NULL
 boundary, including when an earlier operand depends on a column. Logical CONCAT
 remains visible for type-preserving flattening and eager CSE. Spark local/constant
 expression preparation retains its existing evaluator.

@@ -156,6 +156,184 @@ async fn native_observation(session: &SessionContext, sql: &str) -> TestResult<N
 }
 
 #[tokio::test]
+async fn array_concat_resolution_preserves_native_sql_and_registered_udfs() -> TestResult {
+    use arrow::datatypes::DataType;
+
+    let resolution_error = |routine: &str, namespace: &str| {
+        json!({
+            "error":format!("resolve: External error: analysis error: [UNRESOLVED_ROUTINE] Cannot resolve routine `{routine}` on search path [`system`.`builtin`, `system`.`session`, {namespace}]. SQLSTATE: 42883"),
+            "error_stage":"resolve","analyzed_schema":null,"physical_schema":null,
+            "analyzed_arrow_schema":null,"physical_arrow_schema":null
+        })
+    };
+    let mut failures = Vec::new();
+    for batch_size in [1, 32] {
+        let config = SessionConfig::new()
+            .with_batch_size(batch_size)
+            .with_target_partitions(2);
+        let plain = SessionContext::new_with_config(config.clone());
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(config),
+            )
+            .build(),
+        );
+        let native_sql = [
+            "SELECT array_concat(make_array(1,2),make_array(3)) AS r",
+            "SELECT array_concat(CAST(NULL AS INTEGER[]),make_array(1)) AS r",
+            "SELECT array_concat(CAST(NULL AS INTEGER[]),make_array(CAST(1/0 AS INT))) AS r",
+        ];
+        let mut before = Vec::new();
+        for sql in native_sql {
+            before.push((
+                native_observation(&plain, sql).await?,
+                native_observation(&session, sql).await?,
+            ));
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        session.register_udf(create_udf(
+            "array_concat_probe",
+            vec![],
+            DataType::Int32,
+            Volatility::Immutable,
+            Arc::new(move |_| {
+                counted.fetch_add(1, Ordering::SeqCst);
+                datafusion::common::exec_err!("array_concat child must not execute")
+            }),
+        ));
+        for ansi in [false, true] {
+            for (sql, routine) in [
+                (
+                    "SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(CAST(1/0 AS INT))) AS r",
+                    "array_concat",
+                ),
+                (
+                    "SELECT ARRAY_CONCAT(array(1),array(2)) AS r",
+                    "ARRAY_CONCAT",
+                ),
+                (
+                    "SELECT array_concat(CAST(NULL AS ARRAY<INT>),array(array_concat_probe())) AS r",
+                    "array_concat",
+                ),
+            ] {
+                let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+                let expected = resolution_error(routine, "`datafusion`.`public`");
+                let receipt = json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,
+                    "actual":actual,"expected":expected,"calls":calls.load(Ordering::SeqCst)});
+                eprintln!("array_concat resolution control: {receipt}");
+                if actual != expected || calls.load(Ordering::SeqCst) != 0 {
+                    failures.push(receipt);
+                }
+            }
+            let sql = "SELECT concat(array(1),array(2)) AS r";
+            let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+            if actual["rows"] != json!([[["1", "2"]]]) {
+                failures
+                    .push(json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,"actual":actual}));
+            }
+        }
+        for (index, (sql, (plain_before, configured_before))) in
+            native_sql.iter().zip(before).enumerate()
+        {
+            let plain_after = native_observation(&plain, sql).await?;
+            let configured_after = native_observation(&session, sql).await?;
+            let receipt = json!({"sql":sql,"batch_size":batch_size,
+                "plain_before":plain_before.receipt(),"plain_after":plain_after.receipt(),
+                "configured_before":configured_before.receipt(),"configured_after":configured_after.receipt()});
+            eprintln!("array_concat native control: {receipt}");
+            let expected_outcome = match index {
+                0 => plain_before.fields["rows"] == json!([["[1, 2, 3]"]]),
+                1 => plain_before.fields["rows"] == json!([["[1]"]]),
+                _ => plain_before
+                    .error
+                    .as_ref()
+                    .is_some_and(is_native_divide_by_zero),
+            };
+            if !expected_outcome
+                || !native_public_observations_match(&configured_before, &plain_before)
+                || !native_public_observations_match(&configured_after, &plain_after)
+                || plain_before.receipt() != plain_after.receipt()
+                || configured_before.receipt() != configured_after.receipt()
+            {
+                failures.push(receipt);
+            }
+        }
+        session.deregister_udf("array_concat");
+        for ansi in [false, true] {
+            let sql = "SELECT array_concat(array(1),array(2)) AS r";
+            let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+            let receipt = json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,"actual":actual});
+            eprintln!("array_concat absent native routine control: {receipt}");
+            if actual != resolution_error("array_concat", "`datafusion`.`public`") {
+                failures.push(receipt);
+            }
+        }
+        let counted = Arc::clone(&calls);
+        session.register_udf(
+            create_udf(
+                "array_concat",
+                vec![DataType::Utf8],
+                DataType::Utf8,
+                Volatility::Volatile,
+                Arc::new(move |arguments| {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    Ok(arguments[0].clone())
+                }),
+            )
+            .with_aliases(["registered_array_concat"]),
+        );
+        for ansi in [false, true] {
+            for routine in ["array_concat", "ARRAY_CONCAT", "registered_array_concat"] {
+                calls.store(0, Ordering::SeqCst);
+                let sql = format!("SELECT {routine}('host') AS r");
+                let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+                let receipt = json!({"sql":sql,"ansi":ansi,"batch_size":batch_size,
+                    "actual":actual,"calls":calls.load(Ordering::SeqCst)});
+                eprintln!("array_concat registered routine control: {receipt}");
+                if actual["rows"] != json!([["host"]]) || calls.load(Ordering::SeqCst) != 1 {
+                    failures.push(receipt);
+                }
+            }
+        }
+    }
+    for (catalog, schema, namespace) in [
+        ("spark_catalog", "p", "`spark_catalog`.`p`"),
+        (
+            "catalog`name",
+            "schema`name",
+            "`catalog``name`.`schema``name`",
+        ),
+    ] {
+        let session = SessionContext::new_with_state(
+            configure_spark_sql(
+                SessionStateBuilder::new()
+                    .with_default_features()
+                    .with_config(
+                        SessionConfig::new().with_default_catalog_and_schema(catalog, schema),
+                    ),
+            )
+            .build(),
+        );
+        for ansi in [false, true] {
+            let sql = "SELECT array_concat(array(1),array(2)) AS r";
+            let actual = capture_observation(&session, &json!({"sql":sql,"ansi":ansi})).await?;
+            let expected = resolution_error("array_concat", namespace);
+            let receipt = json!({"sql":sql,"ansi":ansi,"catalog":catalog,"schema":schema,
+                "actual":actual,"expected":expected});
+            eprintln!("array_concat namespace control: {receipt}");
+            if actual != expected {
+                failures.push(receipt);
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}
+
+#[tokio::test]
 async fn concat_preparation_preserves_native_queries_and_computed_operands() -> TestResult {
     use arrow::datatypes::DataType;
     for batch_size in [1, 32] {
@@ -565,7 +743,7 @@ async fn concat_preparation_respects_folding_opt_out_and_reachability() -> TestR
             ] {
                 assert_null(
                     &session,
-                    &format!("SELECT array_concat({operands}) AS r"),
+                    &format!("SELECT concat({operands}) AS r"),
                     ansi,
                     1,
                     DataType::List(Arc::new(Field::new_list_field(DataType::Float64, true))),
