@@ -176,21 +176,12 @@ pub(crate) fn known_difference(case: &Value, actual: &Value) -> Option<&'static 
             && expected["parameters"]["sourceType"] == "\"DOUBLE\""
             && expected["parameters"]["targetType"] == "\"INT\""
             && expected["parameters"]["ansiConfig"] == "\"spark.sql.ansi.enabled\"";
-        let (stage, error) = if direct {
-            (
-                "physical",
-                format!(
-                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
-                ),
-            )
-        } else {
-            (
-                "physical",
-                format!(
-                    "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
-                ),
-            )
-        };
+        let (stage, error) = (
+            "physical",
+            format!(
+                "physical: Optimizer rule 'simplify_expressions' failed\ncaused by\n[CAST_OVERFLOW]\ncaused by\nArrow error: Cast error: Can't cast value {value} to type Int32"
+            ),
+        );
         let physical_matches = if direct {
             actual["physical_schema"].is_null()
         } else {
