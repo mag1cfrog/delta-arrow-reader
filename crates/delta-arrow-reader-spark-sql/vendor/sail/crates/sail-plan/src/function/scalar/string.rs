@@ -299,12 +299,15 @@ fn substr(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     // native NULL selection. Async calls keep their existing extraction path.
     if !async_arguments && !known_null && crate::expression_errors::row_expression(&logical, false)?
     {
-        return substring_lambdas(logical).map(|value| value.data);
+        return substring_lambdas(logical, false).map(|value| value.data);
     }
     Ok(logical)
 }
 
-fn substring_lambdas(expression: expr::Expr) -> PlanResult<Transformed<expr::Expr>> {
+fn substring_lambdas(
+    expression: expr::Expr,
+    pruned_empty_input: bool,
+) -> PlanResult<Transformed<expr::Expr>> {
     let expr::Expr::ScalarFunction(function) = &expression else {
         return Ok(Transformed::no(expression));
     };
@@ -325,7 +328,7 @@ fn substring_lambdas(expression: expr::Expr) -> PlanResult<Transformed<expr::Exp
     })? {
         return Ok(Transformed::no(expression));
     }
-    if literal_substring_overflow(&function.args)? {
+    if !pruned_empty_input && literal_substring_overflow(&function.args)? {
         // Keep the checked cast visible to ordinary optimization. Resolving
         // the call must still return its real public declaration first.
         return Ok(Transformed::no(expression));
@@ -438,8 +441,20 @@ fn literal_substring_overflow(arguments: &[expr::Expr]) -> PlanResult<bool> {
 
 pub(crate) fn lower_runtime_substring(
     expression: expr::Expr,
+    pruned_empty_input: bool,
 ) -> PlanResult<Transformed<expr::Expr>> {
-    substring_lambdas(expression)
+    if pruned_empty_input {
+        let expr::Expr::ScalarFunction(function) = &expression else {
+            return Ok(Transformed::no(expression));
+        };
+        if !function.func.inner().downcast_ref::<SparkSubstring>()
+            .is_some_and(SparkSubstring::has_logical_arguments)
+            || !literal_substring_overflow(&function.args)?
+        {
+            return Ok(Transformed::no(expression));
+        }
+    }
+    substring_lambdas(expression, pruned_empty_input)
 }
 
 pub(crate) fn lower_runtime_regexp_extract(
@@ -1583,11 +1598,11 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
     }
     let malformed = function.call(vec![col("s"), lit(1_i64)]);
     assert!(
-        !substring_lambdas(malformed)
+        !substring_lambdas(malformed, false)
             .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
             .transformed
     );
-    let lowered = substring_lambdas(logical)
+    let lowered = substring_lambdas(logical, false)
         .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
     assert!(lowered.transformed);
     let Expr::HigherOrderFunction(runtime) = &lowered.data else {
@@ -1623,13 +1638,18 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
         let length = cast(cast(lit(2_i32), DataType::Int32), DataType::Int64);
         let literal_args = vec![lit("abcdef"), position.clone(), length.clone()];
         let literal = function.call(literal_args.clone());
-        let lowered = substring_lambdas(literal.clone())
+        let lowered = substring_lambdas(literal.clone(), false)
             .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
         assert!(!lowered.transformed);
         assert_eq!(lowered.data, literal);
+        let empty = lower_runtime_substring(literal.clone(), true)
+            .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?;
+        assert!(empty.transformed);
+        assert!(matches!(empty.data, Expr::HigherOrderFunction(_)));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
         let length_overflow = function.call(vec![lit("abcdef"), length.clone(), position.clone()]);
         assert!(
-            !substring_lambdas(length_overflow)
+            !substring_lambdas(length_overflow, false)
                 .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
                 .transformed
         );
@@ -1672,7 +1692,7 @@ fn substring_logical_visibility_and_runtime_lowering_do_not_invoke_operands()
             ],
         ] {
             assert!(
-                substring_lambdas(function.call(arguments))
+                substring_lambdas(function.call(arguments), false)
                     .map_err(|error| datafusion_common::DataFusionError::External(Box::new(error)))?
                     .transformed
             );
