@@ -729,9 +729,10 @@ Async arguments retain their existing extraction and eager scalar evaluation pat
 The shared FLOAT/DOUBLE conversion covers TINYINT, SMALLINT, INT and BIGINT.
 Legacy conversion maps NaN to zero, saturates at INT/LONG bounds, and narrows
 TINYINT/SMALLINT from the INT result. Floating casts conservatively declare
-analyzed results nullable; ordinary folding may refine those Fields. Checked
-overflow identity (#922) and the checked +2^63 BIGINT endpoint (#1020) remain
-separate.
+analyzed results nullable; ordinary folding may refine those Fields. ANSI
+conversion adds `[CAST_OVERFLOW]` to checked Arrow failures while preserving the
+original cause, value, target and failure boundary. The checked +2^63 BIGINT
+endpoint remains a separate value-policy gap in #1020.
 The [substring references](tests/fixtures/README.md#string-and-binary-substring)
 retain all 656 references and 3,936 native observations, plus the separate
 84-observation competing-error supplement, native SQL and fixed-binary controls.
@@ -1176,9 +1177,13 @@ The focused position fixture retains 110 independent Spark references and all
 660 native configurations. BIGINT narrowing and FLOAT/DOUBLE positions use the
 shared numeric INT conversion. Its Legacy floating policy covers all four signed
 integer targets and its floating casts retain Spark's conservative analyzed
-nullable declaration. Checked overflow identity (#922) and the checked +2^63
-BIGINT endpoint (#1020) retain separate contracts. The
-replacement kernel and native DataFusion SQL behavior remain unchanged.
+nullable declaration. All 60 original primitive-overflow configurations require
+`[CAST_OVERFLOW]` and strict fixture comparison. Each complete native object must
+equal its frozen original with only that condition context added to the error;
+causes, stages and explicit unavailable Fields stay pinned. The full 660-context
+fixture comparison does not establish complete raw Spark diagnostic parity.
+The checked +2^63 BIGINT endpoint remains #1020. The replacement kernel and native
+DataFusion SQL behavior remain unchanged.
 
 REGEXP_REPLACE constructs that INT coercion before testing position foldability,
 so unsupported types report `UNEXPECTED_INPUT_TYPE` even for provider expressions

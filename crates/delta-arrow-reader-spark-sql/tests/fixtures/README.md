@@ -5,6 +5,17 @@ including its unresolved Spark differences. `import_accepted_runtime.py`
 reconstructs it from the source archive named in `accepted-runtime.json`.
 Importing the fixture does not run Spark or certify compatibility.
 
+## Primitive CAST overflow conditions
+
+`reviewed-corrections.json` adds 93 exact ANSI error outcomes for #922. A complete
+25,180-observation replay found only the added `[CAST_OVERFLOW]` context in those
+outcomes; the other 25,087 retained their accepted contracts. Each correction
+inserts that context into the original expected error and preserves its complete
+cause, value, target, status and output names, including the existing analyzer-name
+normalization. The prior 2,542 correction entries, compressed corpus, provenance
+and parallel-error alternatives remain unchanged. The corpus continues to retain
+unresolved Spark differences.
+
 ## Unary negation result fields
 
 `unary-negate-fields/historical/spark-reference.jsonl` captures five exact
@@ -2065,8 +2076,10 @@ conversions repaired by #897 require complete strict Spark fields and rows.
 The last group retains the measured strict failure while a separate narrow
 predicate recognizes the same numeric overflow cause. Its source/target types,
 numeric value, SQL, available fields and exact native error are pinned; mutation
-controls reject changed values, signs, targets and causes. This distinction adds
-no Decimal defect or strict compatibility credit.
+controls reject changed values, signs, targets and causes. ANSI primitive errors
+require `[CAST_OVERFLOW]` together with the original Arrow cause. The remaining
+Infinity/inf and Decimal BD spelling differences keep their strict failures;
+recognizing their numeric cause adds no strict compatibility credit.
 
 The normal Cargo gate is a complete regression invariant. It records every full
 comparison, pins the exact known profiles and reports `full_compatibility_pass`
@@ -3742,5 +3755,22 @@ records. The source manifest and capture script remain unchanged.
 requiring complete analyzed, optimized and physical Fields and ordered rows.
 The four exact #1019 type-function name controls keep their original complete
 observations, with only the independently required public nullable repair in an
-expected copy. They remain strict Spark differences. The value replay in the
-same file preserves the separate #897/#922/#1020 contracts.
+expected copy. They remain strict Spark differences.
+
+The value replay preserves all 352 `floating-integer-values/spark.jsonl` records
+at both batch sizes. Its gate requires 668 strict comparisons out of 704 and
+exactly 36 retained differences: 28 checked endpoint contexts (#1020), four DIV
+diagnostics (#865), and four later substring failures with extra native Fields
+(#1031). The immutable historical facet file keeps its original owner IDs; the
+current gate requires the added primitive overflow context without changing the
+original causes, Fields, rows or failure stages. A separate 24-context NULL
+inspection gate requires strict comparisons and exact native causes for its
+eight ANSI overflow contexts.
+
+The 110-record REGEXP_REPLACE position fixture requires all 660 comparisons to
+match its recorded contract. Its original 60 primitive-overflow contexts also
+require exact complete native objects derived from the frozen profiles by
+inserting only `[CAST_OVERFLOW]` and its cause context into the error. All original
+reference and profile bytes remain unchanged. These checks preserve native
+failure boundaries and available Fields; complete raw Spark diagnostic parity
+remains unverified.

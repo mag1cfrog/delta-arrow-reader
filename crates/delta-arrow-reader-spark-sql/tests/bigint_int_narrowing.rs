@@ -232,6 +232,9 @@ fn matches_expected_error_cause(case: &Value, error: &str) -> bool {
     };
     let cause = match case["expected"]["condition"].as_str() {
         Some("CAST_OVERFLOW") if parameters["sourceType"] == "\"BIGINT\"" => {
+            if !error.contains("[CAST_OVERFLOW]") {
+                return false;
+            }
             let Some(value) = parameters["value"].as_str() else {
                 return false;
             };
@@ -765,6 +768,10 @@ async fn bigint_int_conversion_evaluates_its_input_once() -> TestResult {
                 error.to_string().lines().any(|line| line == expected_error),
                 "{sql}: {error}"
             );
+            assert!(
+                error.to_string().contains("[CAST_OVERFLOW]"),
+                "{sql}: {error}"
+            );
             assert_eq!(final_invocations, 1, "{sql}");
         } else {
             result?;
@@ -871,10 +878,12 @@ fn overflow_comparison_requires_the_exact_input_and_target() -> TestResult {
     let mut case = original[1].clone();
     case["spark_error_details"] = case["expected"].clone();
     let exact = "Arrow error: Cast error: Can't cast value 4294967296 to type Int32";
-    assert!(matches_expected_error_cause(&case, exact));
+    assert!(!matches_expected_error_cause(&case, exact));
+    let annotated = format!("[CAST_OVERFLOW]\ncaused by\n{exact}");
+    assert!(matches_expected_error_cause(&case, &annotated));
     assert!(matches_expected_error_cause(
         &case,
-        &format!("External error: error in DataFusion: {exact}")
+        &format!("External error: error in DataFusion: {annotated}")
     ));
     for wrong in [
         "Arrow error: Cast error: Can't cast value 2147483648 to type Int32",
@@ -886,7 +895,10 @@ fn overflow_comparison_requires_the_exact_input_and_target() -> TestResult {
         "External error: error in DataFusion: Arrow error: Cast error: Can't cast value 4294967296 to type Int32 (different cause)",
         "Other wrapper: Arrow error: Cast error: Can't cast value 4294967296 to type Int32",
     ] {
-        assert!(!matches_expected_error_cause(&case, wrong));
+        assert!(!matches_expected_error_cause(
+            &case,
+            &format!("[CAST_OVERFLOW]\ncaused by\n{wrong}")
+        ));
     }
     Ok(())
 }

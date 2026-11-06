@@ -10,11 +10,12 @@ The test changes only the expected public nullable leaves to the independent
 Spark declaration. Other Fields, names, values and stages stay exact.
 
 `null-inspection-spark.jsonl` preserves the existing 12-record regression capture,
-replayed as 24 batch contexts. All Legacy and successful ANSI results require
-strict stage and row equality. `null-inspection-retained-facets.json` binds only
-eight ANSI error causes and phases from the prior root proof; its Fields and
-stage availability already match Spark. Missing #922 condition identifiers
-receive no Spark compatibility credit.
+replayed as 24 batch contexts. All 24 require strict comparison, including the
+eight ANSI overflow contexts. `null-inspection-retained-facets.json` preserves
+their original Arrow causes and phases from the prior root proof. The test adds
+only the required `[CAST_OVERFLOW]` context to those expected error copies;
+Fields and stage availability remain exact. A missing marker can no longer pass
+as a retained #922 difference.
 
 The exact original NULL-inspection capture, manifest and observation-only Rust
 probe are retained in `sources/` as provenance. Their historical machine paths
