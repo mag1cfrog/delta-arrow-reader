@@ -371,8 +371,9 @@ pub(crate) fn lower_runtime_regexp_extract(
         expr::Expr::Cast(index) if index.field.data_type() == &DataType::Int64 => {
             let index = without_metadata_annotations(&index.expr);
             let index = match index {
-                expr::Expr::Cast(identity) if identity.field.data_type() == &DataType::Int32 =>
-                    without_metadata_annotations(&identity.expr),
+                expr::Expr::Cast(identity) if identity.field.data_type() == &DataType::Int32 => {
+                    without_metadata_annotations(&identity.expr)
+                }
                 _ => index,
             };
             matches!(index, expr::Expr::ScalarFunction(conversion)
@@ -386,8 +387,14 @@ pub(crate) fn lower_runtime_regexp_extract(
         && extract.requires_local_index_check()
         && literal_int_cast
         && function.args[..2].iter().all(|argument| {
-            matches!(literal_value_without_evaluation(argument),
-                Some(ScalarValue::Utf8(Some(_)) | ScalarValue::LargeUtf8(Some(_)) | ScalarValue::Utf8View(Some(_))))
+            matches!(
+                literal_value_without_evaluation(argument),
+                Some(
+                    ScalarValue::Utf8(Some(_))
+                        | ScalarValue::LargeUtf8(Some(_))
+                        | ScalarValue::Utf8View(Some(_))
+                )
+            )
         })
     {
         // These non-NULL literals cannot discard the index. Keep the shared cast's
@@ -1040,14 +1047,21 @@ pub(super) fn list_built_in_string_functions() -> Vec<(&'static str, ScalarFunct
 #[test]
 fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanResult<()> {
     for explicit in [true, false] {
-        let index = ScalarUDF::from(SparkCastBigintToInt::new(true, false))
-            .call(vec![lit(4294967296_i64)]);
-        let index = cast(if explicit {cast(index, DataType::Int32)} else {index}, DataType::Int64);
+        let index =
+            ScalarUDF::from(SparkCastBigintToInt::new(true, false)).call(vec![lit(4294967296_i64)]);
+        let index = cast(
+            if explicit {
+                cast(index, DataType::Int32)
+            } else {
+                index
+            },
+            DataType::Int64,
+        );
         let extract = SparkRegexpExtract::new()
             .with_null_short_circuit(false)
             .with_local_index_check(true);
-        let expression = ScalarUDF::from(extract.clone())
-            .call(vec![lit("ab"), lit("(a)"), index.clone()]);
+        let expression =
+            ScalarUDF::from(extract.clone()).call(vec![lit("ab"), lit("(a)"), index.clone()]);
         let bare = lower_runtime_regexp_extract(expression.clone(), false)?;
         assert!(!bare.transformed);
         let info = SimplifyContext::builder()
@@ -1065,16 +1079,24 @@ fn regexp_extract_mandatory_literal_int_cast_keeps_preparation_error() -> PlanRe
         for arguments in [
             vec![datafusion_expr::col("s"), lit("(a)"), index],
             vec![lit("ab"), lit("(a)"), cast(lit(f64::NAN), DataType::Int64)],
-            vec![lit("ab"), lit("(a)"), cast(
-                ScalarUDF::from(SparkCastBigintToInt::new(true, true))
-                    .call(vec![lit(4294967296_i64)]),
-                DataType::Int64,
-            )],
-            vec![lit("ab"), lit("(a)"), cast(
-                ScalarUDF::from(SparkCastBigintToInt::new(true, false))
-                    .call(vec![datafusion_expr::col("i")]),
-                DataType::Int64,
-            )],
+            vec![
+                lit("ab"),
+                lit("(a)"),
+                cast(
+                    ScalarUDF::from(SparkCastBigintToInt::new(true, true))
+                        .call(vec![lit(4294967296_i64)]),
+                    DataType::Int64,
+                ),
+            ],
+            vec![
+                lit("ab"),
+                lit("(a)"),
+                cast(
+                    ScalarUDF::from(SparkCastBigintToInt::new(true, false))
+                        .call(vec![datafusion_expr::col("i")]),
+                    DataType::Int64,
+                ),
+            ],
         ] {
             let expression = ScalarUDF::from(extract.clone()).call(arguments);
             assert!(lower_runtime_regexp_extract(expression, false)?.transformed);
