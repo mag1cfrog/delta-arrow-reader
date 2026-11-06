@@ -46,6 +46,7 @@ use sail_function::scalar::array::array_contains::ArrayContains;
 use sail_function::scalar::datetime::timestamp_now::TimestampNow;
 use sail_function::scalar::math::spark_abs::SparkAbs;
 use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
+use sail_function::scalar::math::spark_negative::SparkNegative;
 use sail_function::scalar::math::{
     spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
     spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
@@ -59,6 +60,7 @@ use sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat;
 use sail_function::scalar::spark_cast_string_to_integer::SparkCastStringToInteger;
 use sail_function::scalar::spark_decimal_cast::{DecimalCastMode, SparkDecimalCast};
 use sail_function::scalar::spark_evaluation::SparkInterpretedEvaluation;
+use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
 use sail_function::scalar::string::spark_substring::SparkSubstring;
 use sail_function::scalar::struct_function::StructFunction;
 
@@ -1933,20 +1935,66 @@ impl Prepare {
             Expr::Alias(alias) => self.string_result_is_null_on_success(&alias.expr, schema),
             Expr::Cast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
             Expr::TryCast(cast) => self.string_result_is_null_on_success(&cast.expr, schema),
+            Expr::Negative(input) | Expr::Not(input) => {
+                self.string_result_is_null_on_success(input, schema)
+            }
+            Expr::BinaryExpr(binary) if binary.op.returns_null_on_null() => Ok(self
+                .string_result_is_null_on_success(&binary.left, schema)?
+                || self.string_result_is_null_on_success(&binary.right, schema)?),
+            Expr::Like(like) | Expr::SimilarTo(like) => Ok(self
+                .string_result_is_null_on_success(&like.expr, schema)?
+                || self.string_result_is_null_on_success(&like.pattern, schema)?),
             Expr::ScalarFunction(function)
                 if function.func.inner().is::<SparkCastStringToInteger>()
                     || function.func.inner().is::<SparkCastNumericToInteger>()
                     || function.func.inner().is::<SparkCastStringToFloat>()
                     || function.func.inner().is::<SparkCastStringToDecimal>()
                     || function.func.inner().is::<SparkCastStringToBoolean>()
-                    || function.func.inner().is::<SparkDecimalCast>() =>
+                    || function.func.inner().is::<SparkDecimalCast>()
+                    || function.func.inner().is::<SparkToUtf8>()
+                    || function.func.inner().is::<SparkToLargeUtf8>()
+                    || function.func.inner().is::<SparkToUtf8View>()
+                    || function.func.inner().is::<SparkNegative>() =>
             {
                 match function.args.as_slice() {
                     [input] => self.string_result_is_null_on_success(input, schema),
                     _ => Ok(false),
                 }
             }
-            Expr::Case(_) => {
+            Expr::ScalarFunction(function) => {
+                let inner = function.func.inner();
+                let mut proof = function.clone();
+                let mut all_null = !proof.args.is_empty();
+                for (index, argument) in proof.args.iter_mut().enumerate() {
+                    if self.string_result_is_null_on_success(argument, schema)? {
+                        if inner.short_circuits_on_any_null_argument()
+                            || (index == 0 && inner.short_circuits_on_null_first_arg())
+                        {
+                            return Ok(true);
+                        }
+                        *argument = Expr::Literal(ScalarValue::Null, None);
+                    } else {
+                        all_null = false;
+                    }
+                }
+                Ok((inner.returns_first_non_null_argument() && all_null)
+                    || null_discarded(&Expr::ScalarFunction(proof)))
+            }
+            Expr::Case(case) => {
+                let mut all_null = true;
+                for (_, result) in &case.when_then_expr {
+                    if !self.string_result_is_null_on_success(result, schema)? {
+                        all_null = false;
+                        break;
+                    }
+                }
+                if all_null
+                    && case.else_expr.as_deref().map_or(Ok(true), |result| {
+                        self.string_result_is_null_on_success(result, schema)
+                    })?
+                {
+                    return Ok(true);
+                }
                 let info = datafusion_expr::simplify::SimplifyContext::builder()
                     .with_schema(Arc::new(schema.clone()))
                     .with_config_options(self.props.config_options.clone().unwrap_or_default())
