@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
-use datafusion::common::{ScalarValue, ToDFSchema};
 use datafusion::common::metadata::FieldMetadata;
+use datafusion::common::{ScalarValue, ToDFSchema};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::simplify::SimplifyContext;
 use datafusion::logical_expr::{Case, Expr, LogicalPlanBuilder, col, lit, scalar_subquery};
@@ -24,12 +24,10 @@ use spark_results::TestResult;
 const REFERENCE: &str = include_str!("fixtures/case-result-tails-spark.jsonl");
 const VOLATILE_SUBQUERIES: &str =
     include_str!("fixtures/case-result-tails-volatile-subqueries-spark.jsonl");
-const RANGE_SUBQUERY: &str =
-    include_str!("fixtures/case-result-tails-range-subquery-spark.jsonl");
+const RANGE_SUBQUERY: &str = include_str!("fixtures/case-result-tails-range-subquery-spark.jsonl");
 const VOLATILE_FLOATS: &str =
     include_str!("fixtures/case-result-tails-volatile-floats-spark.jsonl");
-const RAW_FLOATS: &str =
-    include_str!("fixtures/case-result-tails-raw-floats-spark.jsonl");
+const RAW_FLOATS: &str = include_str!("fixtures/case-result-tails-raw-floats-spark.jsonl");
 
 fn references(source: &str, count: usize) -> TestResult<Vec<Value>> {
     let records = source
@@ -138,20 +136,24 @@ fn case_tail_algebraic_boundaries_preserve_required_work() -> TestResult {
 
     let volatile = datafusion::functions::expr_fn::uuid();
     let subquery = scalar_subquery(Arc::new(
-        LogicalPlanBuilder::empty(true).project(vec![lit(1_i32)])?.build()?,
+        LogicalPlanBuilder::empty(true)
+            .project(vec![lit(1_i32)])?
+            .build()?,
     ));
     let volatile_subquery = scalar_subquery(Arc::new(
-        LogicalPlanBuilder::empty(true).project(vec![volatile.clone()])?.build()?,
+        LogicalPlanBuilder::empty(true)
+            .project(vec![volatile.clone()])?
+            .build()?,
     ));
-    let opaque_subquery = scalar_subquery(Arc::new(datafusion::logical_expr::LogicalPlan::Extension(
-        datafusion::logical_expr::Extension {
+    let opaque_subquery = scalar_subquery(Arc::new(
+        datafusion::logical_expr::LogicalPlan::Extension(datafusion::logical_expr::Extension {
             node: Arc::new(sail_logical_plan::monotonic_id::MonotonicIdNode::try_new(
                 Arc::new(LogicalPlanBuilder::empty(true).build()?),
                 "sequence".to_owned(),
                 sail_logical_plan::monotonic_id::MonotonicIdPurpose::SqlFunction,
             )?),
-        },
-    )));
+        }),
+    ));
     for protected in [
         volatile.clone().eq(lit("")),
         volatile_subquery.clone().eq(lit("")),
@@ -178,23 +180,39 @@ fn case_tail_algebraic_boundaries_preserve_required_work() -> TestResult {
         vec![branch(subquery.clone().eq(lit(1_i32)), result.clone())],
         Some(Box::new(result.clone())),
     );
-    assert_eq!(simplifier.simplify_algebraic_once(deterministic_subquery_guard)?.data, result);
+    assert_eq!(
+        simplifier
+            .simplify_algebraic_once(deterministic_subquery_guard)?
+            .data,
+        result
+    );
     let deterministic_subquery_results = marked(
         vec![branch(guard.clone(), subquery.clone())],
         Some(Box::new(subquery.clone())),
     );
-    assert_eq!(simplifier.simplify_algebraic_once(deterministic_subquery_results)?.data, subquery);
+    assert_eq!(
+        simplifier
+            .simplify_algebraic_once(deterministic_subquery_results)?
+            .data,
+        subquery
+    );
     let distinct = marked(
         vec![branch(guard.clone(), lit(2_i32))],
         Some(Box::new(result.clone())),
     );
-    assert_eq!(simplifier.simplify_algebraic_once(distinct.clone())?.data, distinct);
+    assert_eq!(
+        simplifier.simplify_algebraic_once(distinct.clone())?.data,
+        distinct
+    );
     let native = Expr::Case(Case::new(
         None,
         vec![branch(guard, result.clone())],
         Some(Box::new(result)),
     ));
-    assert_eq!(simplifier.simplify_algebraic_once(native.clone())?.data, native);
+    assert_eq!(
+        simplifier.simplify_algebraic_once(native.clone())?.data,
+        native
+    );
     Ok(())
 }
 
@@ -228,17 +246,27 @@ fn case_tail_result_identity_uses_spark_floats_and_preserves_metadata() -> TestR
         assert_eq!(simplifier.simplify_algebraic_once(case)?.data, fallback);
     }
     let case = Expr::Case(Case::new_spark_searched(
-        vec![(Box::new(col("id").eq(lit(0_i32))), Box::new(col("id").alias("left")))],
+        vec![(
+            Box::new(col("id").eq(lit(0_i32))),
+            Box::new(col("id").alias("left")),
+        )],
         Some(Box::new(col("id").alias("right"))),
     ));
     assert_eq!(simplifier.simplify_algebraic_once(case.clone())?.data, case);
     let annotated = |source: &str| {
-        col("id").alias_with_metadata("value", Some(FieldMetadata::from(
-            std::collections::HashMap::from([("source".to_owned(), source.to_owned())]),
-        )))
+        col("id").alias_with_metadata(
+            "value",
+            Some(FieldMetadata::from(std::collections::HashMap::from([(
+                "source".to_owned(),
+                source.to_owned(),
+            )]))),
+        )
     };
     let case = Expr::Case(Case::new_spark_searched(
-        vec![(Box::new(col("id").eq(lit(0_i32))), Box::new(annotated("left")))],
+        vec![(
+            Box::new(col("id").eq(lit(0_i32))),
+            Box::new(annotated("left")),
+        )],
         Some(Box::new(annotated("right"))),
     ));
     assert_eq!(simplifier.simplify_algebraic_once(case.clone())?.data, case);
@@ -263,7 +291,11 @@ async fn spark_case_tail_rules_preserve_native_case_and_if() -> TestResult {
                 &SparkSqlOptions::default(),
             )
             .await?;
-            collect(query.create_physical_plan(&configured).await?, configured.task_ctx()).await?;
+            collect(
+                query.create_physical_plan(&configured).await?,
+                configured.task_ctx(),
+            )
+            .await?;
         }
         for sql in [
             "SELECT CASE WHEN 1/id=0 THEN required ELSE required END AS r FROM case_parent_mixed",
